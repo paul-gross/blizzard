@@ -719,7 +719,7 @@ def claim_route(
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
         return problem_response(problems.pinned_graph_missing_problem(instance=instance))
-    change = chunk_events.ChunkChanged.before(services, chunk.chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk.chunk_id)
     try:
         result = services.claim.claim(
             chunk,
@@ -829,7 +829,7 @@ def release_chunk(
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         return problem_response(problems.chunk_not_found_problem(chunk_id, instance=http_request.url.path))
-    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
     try:
         released_id = services.release.release(
             chunk,
@@ -867,7 +867,7 @@ def submit_completion(
         raise ProblemHTTPException(problems.pinned_graph_missing_problem)
     completion = node_steps.completion_of(submission, runner_id=runner_id)
     targets = _migration_targets(services, chunk, graph, completion, follow_latest_default=fleet.follow_latest)
-    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
     result = services.apply.apply(
         chunk,
         graph,
@@ -910,7 +910,7 @@ def submit_decision(
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
         raise ProblemHTTPException(problems.pinned_graph_missing_problem)
-    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
     result = services.decisions.submit(
         chunk,
         graph,

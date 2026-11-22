@@ -41,6 +41,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
+from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.auth.auth_state import IWriteAuthStateRepository
@@ -91,6 +92,9 @@ from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ingest import IngestService
 from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
@@ -371,6 +375,8 @@ class TenantServices:
     #: Wakes the hosted hub's flow driver; nothing elsewhere.
     hub_step_wake: StepWake
     events: EventBroker
+    #: The reads a ``chunk-changed`` frame is enriched from, over ``events``.
+    chunk_frames: ChunkFrameLoader
     #: The one event-log recorder every hub-side authoring site shares.
     event_log: EventLogService
     clock: IClock
@@ -1040,6 +1046,24 @@ def event_log_leaf(chunks: ChunkStores, events: EventBroker) -> EventLogService:
     return EventLogService(events=chunks.events, publisher=events)
 
 
+def chunk_facts_leaf(chunks: ChunkStores) -> IReadChunkFactsRepository:
+    """The tenant's chunk-facts reads, projected from its chunk stores — a legacy leaf the chunk operations area owns
+    until it adopts it."""
+    return chunks.facts
+
+
+def chunk_record_leaf(chunks: ChunkStores) -> IReadChunkRecordRepository:
+    """The tenant's chunk-record reads, projected from its chunk stores — a legacy leaf the chunk operations area owns
+    until it adopts it."""
+    return chunks.record
+
+
+def chunk_route_leaf(chunks: ChunkStores) -> IReadChunkRouteRepository:
+    """The tenant's chunk-route reads, projected from its chunk stores — a legacy leaf the chunk operations area owns
+    until it adopts it."""
+    return chunks.route
+
+
 def register_legacy(registry: LegacyRegistry) -> None:
     """Declare the legacy bridge's leaves, each built as the legacy builder built it, over the store's adapters: the
     process services a request's admission reads before its tenant is known, and the transitional ports the adapters
@@ -1072,7 +1096,12 @@ def register_legacy(registry: LegacyRegistry) -> None:
     registry.alias(port(IReadUrgencyRepository), tenant.of(UrgencyStore))
     registry.alias(port(IReadUrgencyOrder), tenant.of(UrgencyOrderStore))
     registry.alias(port(IReadTenantSettings), tenant.of(TenantSettingsStore))
+    # The reads a chunk-changed frame is enriched from.
+    registry.alias(port(IReadRunnerRegistry), tenant.of(RunnerRegistryStore))
     for leaf in (
+        chunk_facts_leaf,
+        chunk_record_leaf,
+        chunk_route_leaf,
         delete_leaf,
         tenant_default_leaf,
         work_item_edits_leaf,
@@ -1097,6 +1126,10 @@ _LEGACY_TENANT_KEYS: tuple[type[Any], ...] = (
     IReadUrgencyRepository,
     IReadUrgencyOrder,
     IReadTenantSettings,
+    IReadRunnerRegistry,
+    IReadChunkFactsRepository,
+    IReadChunkRecordRepository,
+    IReadChunkRouteRepository,
     DeleteService,
     TenantDefault,
     WorkItemEditService,
@@ -1220,9 +1253,9 @@ class TenantServiceParts:
     #: The config a turn binds: the settings graph's resolution, or the boot config without one.
     pass_config: Callable[[], HubConfig]
     step_wake: StepWake
-    #: Publishes a committed cadence mint's frames through the tenant's services — handed in by the hub's app,
-    #: which owns the frames.
-    announce_minted: Callable[[TenantServices, MintedErrand], None]
+    #: Publishes a committed cadence mint's frames through the tenant's chunk-frame loader — handed in by the hub's
+    #: app, which owns the frames.
+    announce_minted: Callable[[ChunkFrameLoader, MintedErrand], None]
 
 
 def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, events: EventBroker) -> ServedTenant:
@@ -1586,6 +1619,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         host_retirement=host_retirement,
         hub_step_wake=parts.step_wake,
         events=events,
+        chunk_frames=tenant.get(ChunkFrameLoader),
         event_log=event_log,
         clock=clock,
         default_graph_doc=default_graph_file.doc,
@@ -1791,7 +1825,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             runs=errand_runs_store,
             planning=services.errand_planning,
             mint=services.cadence_mint,
-            announce=lambda minted: parts.announce_minted(services, minted),
+            announce=lambda minted: parts.announce_minted(services.chunk_frames, minted),
             clock=clock,
         ),
         annotation=TenantAnnotation(
@@ -1825,7 +1859,7 @@ def build_services(
     extractors: Sequence[ITurnEventExtractor],
     action_pass_grace: timedelta = ACTION_PASS_GRACE,
     cadences_on: Callable[[], bool],
-    announce_minted: Callable[[TenantServices, MintedErrand], None],
+    announce_minted: Callable[[ChunkFrameLoader, MintedErrand], None],
 ) -> HubServices:
     """Construct and wire the hub-level services over the shared :class:`HubCore`, and have its
     tenant cache serve each tenant's services (:func:`build_tenant_services`). The sweeps and exports

@@ -83,14 +83,14 @@ class IngestBroadcast:
         """One pre-mutation snapshot per distinct chunk, reused across the batch — this is the
         hot path."""
         chunk_ids = [chunk_id for fact in batch.facts if isinstance(chunk_id := fact.payload.get("chunk_id"), str)]
-        changes = ChunkChanged.before_many(services, chunk_ids)
+        changes = ChunkChanged.before_many(services.chunk_frames, chunk_ids)
         return cls(services=services, runner_id=runner_id, batch=batch, changes=changes, runner_name=runner_name)
 
     def publish(self, result: FactIngestResult) -> None:
         applied = set(result.applied)
         applied_facts = [fact for fact in self.batch.facts if fact.seq in applied]
         chunk_ids = [cid for fact in applied_facts if (cid := self.chunk_arm_id(fact)) is not None]
-        states = load_frame_states(self.services, chunk_ids)
+        states = load_frame_states(self.services.chunk_frames, chunk_ids)
         for fact in applied_facts:
             self._publish_one(fact, result.row_id_by_seq.get(fact.seq), states)
 

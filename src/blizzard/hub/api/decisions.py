@@ -110,7 +110,7 @@ def resolve_decision(
         raise ProblemHTTPException(
             partial(problems_chunks.decision_not_found_problem, f"unknown decision {decision_id}")
         )
-    change = chunk_events.ChunkChanged.before(services, pre_decision.chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, pre_decision.chunk_id)
     try:
         result = services.decisions.resolve(
             pre_decision, choice=request.choice, resolved_by=identity.username, note=request.note
@@ -132,16 +132,16 @@ def resolve_decision(
         )
     if decision is not None:
         key = f"decision_resolutions:{decision_id}"
-        state = chunk_events.ChunkFrameState.load(services, decision.chunk_id)
+        state = chunk_events.ChunkFrameState.load(services.chunk_frames, decision.chunk_id)
         services.events.publish_decision_resolved(
             decision.chunk_id,
             decision_id,
             key=key,
             project_id=state.chunk.project_id if state.chunk is not None else None,
         )
-        chunk_events.ChunkChanged.of(services, decision.chunk_id, prev_status=change.prev_status).publish_from(
-            state, cause="decision-resolved", status="running", key=key
-        )
+        chunk_events.ChunkChanged.of(
+            services.chunk_frames, decision.chunk_id, prev_status=change.prev_status
+        ).publish_from(state, cause="decision-resolved", status="running", key=key)
     assert result.resolved and result.resolved_by
     return DecisionResolutionResponse(
         decision_id=decision_id,

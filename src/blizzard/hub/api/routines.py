@@ -746,7 +746,7 @@ def run_routine(
     except IngestConflict as exc:
         raise ingest_conflict_refusal(services, exc) from exc
     # The chunk is minted `not_ready`, so its post-write status reads `not_ready`.
-    chunk_events.ChunkChanged.of(services, result.chunk_id, prev_status=None).publish(
+    chunk_events.ChunkChanged.of(services.chunk_frames, result.chunk_id, prev_status=None).publish(
         cause="minted", key=f"chunks:{result.chunk_id}"
     )
     services.events.publish_queue_changed()  # the mint adds the chunk to the backlog list

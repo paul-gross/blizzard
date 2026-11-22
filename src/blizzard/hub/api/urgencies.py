@@ -285,8 +285,8 @@ def retire_urgency(
     except ConfigRevisionConflict as exc:
         raise _revision_conflict(exc) from exc
     if retired.moved:
-        for chunk_id, state in load_frame_states(services, retired.moved).items():
-            ChunkChanged.of(services, chunk_id, prev_status=state.facts.status().value).publish_from(
+        for chunk_id, state in load_frame_states(services.chunk_frames, retired.moved).items():
+            ChunkChanged.of(services.chunk_frames, chunk_id, prev_status=state.facts.status().value).publish_from(
                 state, cause="edited"
             )
         services.events.publish_queue_changed()

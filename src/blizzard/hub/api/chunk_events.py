@@ -10,6 +10,7 @@ from datetime import datetime
 
 from blizzard.foundation.hub_event_types import ChunkChangeCause
 from blizzard.foundation.roles import dto
+from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.delivery.flow_driver import ITurnRunner
 from blizzard.hub.domain.cadence.mint import MintedErrand
@@ -37,28 +38,28 @@ class ChunkFrameState:
     released_by: str | None = None
 
     @classmethod
-    def load(cls, services: TenantServices, chunk_id: str) -> ChunkFrameState:
+    def load(cls, frames: ChunkFrameLoader, chunk_id: str) -> ChunkFrameState:
         """The singular reads a single-chunk write verb's ``publish`` issues."""
-        facts = ChunkFacts.or_default(services.chunks.facts.load_facts(chunk_id))
-        chunk = services.chunks.record.get(chunk_id)
-        graph = services.graphs.get(chunk.graph_id) if chunk is not None else None
+        facts = ChunkFacts.or_default(frames.facts.load_facts(chunk_id))
+        chunk = frames.record.get(chunk_id)
+        graph = frames.graphs.get(chunk.graph_id) if chunk is not None else None
         if chunk is None or graph is None:
             return cls(facts=facts, chunk=chunk, graph=graph, from_graph=None, route=None)
 
         off_pin = facts.transition_graph_off_pin(graph.graph_id)
-        from_graph = services.graphs.get(off_pin) if off_pin is not None else None
+        from_graph = frames.graphs.get(off_pin) if off_pin is not None else None
 
-        route = services.chunks.route.route_of(chunk_id)
-        runner_name = services.registry.names_for([route.runner_id]).get(route.runner_id) if route is not None else None
+        route = frames.route.route_of(chunk_id)
+        runner_name = frames.registry.names_for([route.runner_id]).get(route.runner_id) if route is not None else None
         return cls(facts=facts, chunk=chunk, graph=graph, from_graph=from_graph, route=route, runner_name=runner_name)
 
 
-def load_frame_states(services: TenantServices, chunk_ids: Sequence[str]) -> dict[str, ChunkFrameState]:
+def load_frame_states(frames: ChunkFrameLoader, chunk_ids: Sequence[str]) -> dict[str, ChunkFrameState]:
     """`ChunkFrameState.load`'s batched sibling (`bzh:bulk-reconstitution`) — one snapshot per distinct
     requested id, with a bounded number of reads regardless of batch size."""
     ids = list(dict.fromkeys(chunk_ids))
-    facts_by_id = services.chunks.facts.load_facts_for(ids)
-    chunks_by_id = services.chunks.record.get_many(ids)
+    facts_by_id = frames.facts.load_facts_for(ids)
+    chunks_by_id = frames.record.get_many(ids)
 
     graph_ids: set[str] = {chunk.graph_id for chunk in chunks_by_id.values()}
     for chunk_id in ids:
@@ -66,9 +67,9 @@ def load_frame_states(services: TenantServices, chunk_ids: Sequence[str]) -> dic
         transition = facts.newest_transition() if facts is not None else None
         if transition is not None and transition.graph_id is not None:
             graph_ids.add(transition.graph_id)
-    graphs_by_id = services.graphs.get_many(list(graph_ids))
-    routes_by_id = services.chunks.route.routes_for(ids)
-    runner_names = services.registry.names_for(route.runner_id for route in routes_by_id.values())
+    graphs_by_id = frames.graphs.get_many(list(graph_ids))
+    routes_by_id = frames.route.routes_for(ids)
+    runner_names = frames.registry.names_for(route.runner_id for route in routes_by_id.values())
 
     states: dict[str, ChunkFrameState] = {}
     for chunk_id in ids:
@@ -98,38 +99,38 @@ class ChunkChanged:
     Built before the write, so :attr:`prev_status` is a derivation over the facts as they
     stood then (``bzh:facts-not-status``), and published after."""
 
-    services: TenantServices
+    frames: ChunkFrameLoader
     chunk_id: str
     prev_status: str | None
     #: The pre-write facts `before()` loaded, for a domain gate to reuse; unset from `of()`.
     facts: ChunkFacts | None = None
 
     @classmethod
-    def before(cls, services: TenantServices, chunk_id: str) -> ChunkChanged:
+    def before(cls, frames: ChunkFrameLoader, chunk_id: str) -> ChunkChanged:
         """The chunk's status right now, and the facts it derives from — ``status`` is
         ``None`` and ``facts`` unset when the chunk does not yet exist."""
-        facts = services.chunks.facts.load_facts(chunk_id)
-        return cls(services, chunk_id, None if facts is None else facts.status().value, facts)
+        facts = frames.facts.load_facts(chunk_id)
+        return cls(frames, chunk_id, None if facts is None else facts.status().value, facts)
 
     @classmethod
-    def before_many(cls, services: TenantServices, chunk_ids: Sequence[str]) -> dict[str, ChunkChanged]:
+    def before_many(cls, frames: ChunkFrameLoader, chunk_ids: Sequence[str]) -> dict[str, ChunkChanged]:
         """`before`'s batched sibling (`bzh:bulk-reconstitution`) — one snapshot per
         distinct requested id, through the narrowed `status_facts_for`. A snapshot
         carries ``prev_status`` only: ``facts`` stays ``None`` so a narrowed projection is
         never reused as the wide one. An id the plural drops gets ``prev_status=None``,
         exactly as `before` does for a missing chunk."""
         ids = list(dict.fromkeys(chunk_ids))
-        facts_by_id = services.chunks.facts.status_facts_for(ids)
+        facts_by_id = frames.facts.status_facts_for(ids)
         result: dict[str, ChunkChanged] = {}
         for chunk_id in ids:
             facts = facts_by_id.get(chunk_id)
-            result[chunk_id] = cls(services, chunk_id, None if facts is None else facts.status().value)
+            result[chunk_id] = cls(frames, chunk_id, None if facts is None else facts.status().value)
         return result
 
     @classmethod
-    def of(cls, services: TenantServices, chunk_id: str, *, prev_status: str | None) -> ChunkChanged:
+    def of(cls, frames: ChunkFrameLoader, chunk_id: str, *, prev_status: str | None) -> ChunkChanged:
         """A frame whose "before" the caller already holds — a mint, or facts already loaded."""
-        return cls(services, chunk_id, prev_status)
+        return cls(frames, chunk_id, prev_status)
 
     def publish(
         self,
@@ -147,9 +148,9 @@ class ChunkChanged:
         ``{chunk_id, status}`` frame rather than raising. ``released_by`` names the runner a
         release just freed the route of, since the post-write state holds no route to name it;
         ``reason`` is that release's own."""
-        state = ChunkFrameState.load(self.services, self.chunk_id)
+        state = ChunkFrameState.load(self.frames, self.chunk_id)
         if released_by is not None and state.route is None:
-            names = self.services.registry.names_for([released_by])
+            names = self.frames.registry.names_for([released_by])
             state = replace(state, released_by=released_by, runner_name=names.get(released_by))
         return self.publish_from(state, cause=cause, status=status, by=by, key=key, reason=reason)
 
@@ -169,7 +170,7 @@ class ChunkChanged:
         resolved_status = status if status is not None else facts.status().value
         project_id = state.chunk.project_id if state.chunk is not None else None
         if state.chunk is None or state.graph is None:
-            self.services.events.publish_chunk_changed(
+            self.frames.events.publish_chunk_changed(
                 self.chunk_id,
                 resolved_status,
                 prev_status=self.prev_status,
@@ -190,7 +191,7 @@ class ChunkChanged:
             cause=cause,
             from_graph=state.from_graph,
         )
-        self.services.events.publish_chunk_changed(
+        self.frames.events.publish_chunk_changed(
             self.chunk_id,
             resolved_status,
             prev_status=change.prev_status,
@@ -219,12 +220,12 @@ class AnnouncedTurns:
     turns: ITurnRunner
 
     async def take(self, turn: Turn, submission: Submission) -> None:
-        change = await asyncio.to_thread(ChunkChanged.before, self.services, submission.chunk_id)
+        change = await asyncio.to_thread(ChunkChanged.before, self.services.chunk_frames, submission.chunk_id)
         await self.turns.take(turn, submission)
         await asyncio.to_thread(self._announce, change)
 
     def _announce(self, change: ChunkChanged) -> None:
-        state = ChunkFrameState.load(self.services, change.chunk_id)
+        state = ChunkFrameState.load(self.services.chunk_frames, change.chunk_id)
         before = change.facts
         if before is not None:
             frames = new_keyed_frames(before, state.facts)
@@ -257,9 +258,9 @@ def new_keyed_frames(before: ChunkFacts, after: ChunkFacts) -> list[tuple[str, C
     return [(key, cause) for _, key, cause in found]
 
 
-def announce_minted(services: TenantServices, minted: MintedErrand) -> None:
+def announce_minted(frames: ChunkFrameLoader, minted: MintedErrand) -> None:
     """Publish a committed cadence mint as a hand-started run's mint is published: its chunk's ``minted`` frame,
     and the queue's change, since the chunk joins a list."""
     chunk_id = minted.chunk.chunk_id
-    ChunkChanged.of(services, chunk_id, prev_status=None).publish(cause="minted", key=f"chunks:{chunk_id}")
-    services.events.publish_queue_changed()
+    ChunkChanged.of(frames, chunk_id, prev_status=None).publish(cause="minted", key=f"chunks:{chunk_id}")
+    frames.events.publish_queue_changed()

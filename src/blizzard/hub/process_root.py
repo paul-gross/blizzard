@@ -25,6 +25,7 @@ from blizzard.foundation.registry.internal.translation import HUB_LIFETIMES, bui
 from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import OwnedChild, Resolver, ScopeValue, ScopeValues, supply
 from blizzard.foundation.roles import collaborator
+from blizzard.hub.api import wiring as api
 from blizzard.hub.composition import register_legacy, register_legacy_absent
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery import wiring as delivery
@@ -111,6 +112,7 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
         live_config.register(registry)
         forge.register_tenant(registry)
         work_sources.register(registry)
+        api.register(registry)
     else:
         register_legacy_absent(registry)
         secrets.register_absent(registry)
@@ -124,6 +126,7 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
         live_config.register_absent(registry)
         forge.register_tenant_absent(registry)
         work_sources.register_absent(registry)
+        api.register_absent(registry)
     if store_backed and settings:
         settings_wiring.register(registry)
     else:

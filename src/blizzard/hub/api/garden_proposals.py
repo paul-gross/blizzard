@@ -266,7 +266,7 @@ def accept_garden_proposal(
     if accepted.chunk_id is not None:
         # A freshly minted chunk rests `not_ready`, exactly as a `POST
         # /work-sources/hub/items` mint does.
-        chunk_events.ChunkChanged.of(services, accepted.chunk_id, prev_status=None).publish(
+        chunk_events.ChunkChanged.of(services.chunk_frames, accepted.chunk_id, prev_status=None).publish(
             cause="minted", key=f"chunks:{accepted.chunk_id}"
         )
         services.events.publish_queue_changed()  # mint adds the chunk to the backlog list

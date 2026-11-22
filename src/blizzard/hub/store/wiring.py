@@ -76,7 +76,6 @@ from blizzard.hub.tenancy import STORE_UNAVAILABLE, StoreScope
 
 #: Every other tenant adapter built as a service over the tenant's connections (one also takes the link port).
 _TENANT_SERVICES: tuple[type[Any], ...] = (
-    RunnerRegistryStore,
     HostRegistryStore,
     GardenProposalStore,
     GardenProposalClosureStore,
@@ -128,6 +127,7 @@ _TENANT_ALIASED: tuple[type[Any], ...] = (
     UrgencyStore,
     UrgencyOrderStore,
     TenantSettingsStore,
+    RunnerRegistryStore,
 )
 
 #: The configured-record adapters, whose ``Ref`` the config area aliases its ports onto.

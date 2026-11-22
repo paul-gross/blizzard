@@ -468,7 +468,7 @@ def create_work_item(
     except IngestConflict as exc:
         raise ingest_conflict_refusal(services, exc) from exc
     # A freshly minted chunk rests `not_ready`, exactly as a `POST /chunks` ingest does.
-    chunk_events.ChunkChanged.of(services, created.chunk_id, prev_status=None).publish(
+    chunk_events.ChunkChanged.of(services.chunk_frames, created.chunk_id, prev_status=None).publish(
         cause="minted", key=f"chunks:{created.chunk_id}"
     )
     services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
@@ -606,7 +606,7 @@ def _publish_holder_deletion(services: TenantServices, withdrawn: WithdrawnWorkI
     if withdrawn.deleted_chunk_id is None:
         return
     chunk_events.ChunkChanged.of(
-        services, withdrawn.deleted_chunk_id, prev_status=withdrawn.deleted_chunk_status
+        services.chunk_frames, withdrawn.deleted_chunk_id, prev_status=withdrawn.deleted_chunk_status
     ).publish(
         cause="deleted",
         key=f"chunk_deleted:{withdrawn.deleted_chunk_fact_id}",
