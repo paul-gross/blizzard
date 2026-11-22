@@ -10,10 +10,18 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
+from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support.scaffolding import HubHarness, build_hub, default_project, hub_store_connections, stamp
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    default_project,
+    default_tenant,
+    hub_store_connections,
+    stamp,
+)
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
@@ -127,7 +135,7 @@ def test_accepting_with_the_default_graph_retired_is_503_and_closes_nothing(tmp_
     graph = hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
-    hub.services.graph_lifecycle.retire(graph, by="operator")
+    hub.resolve(default_tenant(hub.engine), GraphLifecycleService).retire(graph, by="operator")
 
     resp = hub.client.post("/api/garden-proposals/gprop_1/accept", json={"mint_work_item": True})
 

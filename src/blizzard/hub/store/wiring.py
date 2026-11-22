@@ -99,7 +99,6 @@ _TENANT_SERVICES: tuple[type[Any], ...] = (
     TenantSettingsStore,
     UrgencyChunksStore,
     ConfigRevisionsStore,
-    GraphStore,
     TranscriptSegmentStore,
     TranscriptEventStore,
     AnalyticsEventQueryStore,
@@ -206,3 +205,13 @@ def register_findings(registry: Registry) -> Ref[FindingStore]:
 def register_findings_absent(registry: Registry) -> None:
     """Declare the tenant's finding adapter absent, for the store-free graph."""
     registry.absent(port(FindingStore), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
+
+
+def register_graphs(registry: Registry) -> Ref[GraphStore]:
+    """Declare the tenant's graph adapter."""
+    return registry.service(GraphStore, lifetime=Lifetime.TENANT)
+
+
+def register_graphs_absent(registry: Registry) -> None:
+    """Declare the tenant's graph adapter absent, for the store-free graph."""
+    registry.absent(port(GraphStore), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)

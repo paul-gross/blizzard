@@ -154,7 +154,6 @@ from blizzard.hub.domain.garden.runs.sweeps import GardenSweepsService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
 from blizzard.hub.domain.graph.authoring import DefaultGraphService, GraphMintService
-from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.domain.graph.model import GraphDoc, IReadGraphBodies, IReadGraphRepository, IReadNodeExecutors
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.observability.analytics.derivation import (
@@ -367,7 +366,6 @@ class TenantServices:
     default_graph: DefaultGraphService
     #: The YAML binding of the config codec a graph definition is decoded and stored through.
     graph_yaml: IConfigCodec
-    graph_lifecycle: GraphLifecycleService
     questions: QuestionService
     queue: QueueService
     group: GroupService
@@ -388,9 +386,6 @@ class TenantServices:
     clock: IClock
     default_graph_doc: GraphDoc
     default_graph_yaml: str
-    #: The published ``ArtifactScope.SYSTEM`` set — the loader itself, so a read through it
-    #: stays fresh (``bzh:system-scope-reads-live``); injected rather than a module singleton.
-    system_artifacts: PackagedSystemArtifacts
     work_sources: IWorkSourceRegistry
     #: Each repository's forge roles, built from its records.
     forges: ForgeRegistry
@@ -1291,8 +1286,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     )
     host_report = HostReportService(hosts=host_store, clock=clock)
     host_retirement = HostRetirementService(hosts=host_store, runners=registry_store, fleet=fleet, clock=clock)
-    graph_mint = GraphMintService(graphs=graph_store, clock=clock, catalogue=catalogue)
-    default_graph = DefaultGraphService(mint=graph_mint, graphs=graph_store, transactions=stores.transactions)
+    graph_mint = tenant.get(GraphMintService)
+    default_graph = tenant.get(DefaultGraphService)
     default_graph_yaml = default_graph_file.inlined_yaml(graph_yaml)
     scope_store = tenant.get(ScopeStore)
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
@@ -1574,7 +1569,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         graph_mint=graph_mint,
         default_graph=default_graph,
         graph_yaml=graph_yaml,
-        graph_lifecycle=GraphLifecycleService(graphs=graph_store, clock=clock),
         questions=QuestionService(
             questions=chunk_questions, facts=chunk_facts, transactions=stores.transactions, clock=clock
         ),
@@ -1608,7 +1602,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         clock=clock,
         default_graph_doc=default_graph_file.doc,
         default_graph_yaml=default_graph_yaml,
-        system_artifacts=tenant.get(PackagedSystemArtifacts),
         work_sources=work_sources,
         users=parts.users,
         transcripts=transcript_store,

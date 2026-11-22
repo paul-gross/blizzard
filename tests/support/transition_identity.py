@@ -16,6 +16,13 @@ from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository, IWriteFindingRepository
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
+from blizzard.hub.domain.graph.authoring import DefaultGraphService, GraphMintService
+from blizzard.hub.domain.graph.model import (
+    IReadGraphBodies,
+    IReadGraphRepository,
+    IReadNodeExecutors,
+    IWriteGraphRepository,
+)
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
@@ -93,6 +100,7 @@ ADAPTER_PORTS: Mapping[type[Any], tuple[type[Any], ...]] = {
     UrgencyChunksStore: (),
     ConfigRevisionsStore: (),
     FindingStore: (IReadFindingRepository, IWriteFindingRepository),
+    GraphStore: (IReadGraphRepository, IWriteGraphRepository, IReadGraphBodies, IReadNodeExecutors),
 }
 
 
@@ -152,7 +160,8 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantServices.findings", services.findings, IReadFindingRepository),
         ("TenantServices.finding_bucket", services.finding_bucket, FindingBucketReader),
         ("TenantServices.graph_yaml", services.graph_yaml, IConfigCodec),
-        ("TenantServices.system_artifacts", services.system_artifacts, PackagedSystemArtifacts),
+        ("TenantServices.graph_mint", services.graph_mint, GraphMintService),
+        ("TenantServices.default_graph", services.default_graph, DefaultGraphService),
     )
     problems = [
         f"{name} is not its container instance" for name, field, key in retained if field is not tenant.get(key)

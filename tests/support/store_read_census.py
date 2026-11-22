@@ -142,6 +142,7 @@ from blizzard.hub.domain.garden.run_context import IReadRunContextRepository, Ru
 from blizzard.hub.domain.garden.runs.history import IReadGardenRunRepository
 from blizzard.hub.domain.garden.runs.sweeps import IReadGardenSweepsRepository
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
+from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.domain.graph.model import (
     Graph,
     IReadGraphBodies,
@@ -1470,12 +1471,14 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     assert minted.status_code == 201, minted.text
     graph = hub.services.graphs.get_enabled_by_name(_HUB_GRAPH_NAME)
     assert graph is not None
-    hub.services.graph_lifecycle.set_follow_latest(graph, follow_latest=True, by="operator")
+    hub.resolve(default_tenant(hub.engine), GraphLifecycleService).set_follow_latest(
+        graph, follow_latest=True, by="operator"
+    )
     minted_retiree = hub.client.post("/api/graphs", json={"definition_yaml": _HUB_RETIRED_GRAPH_YAML})
     assert minted_retiree.status_code == 201, minted_retiree.text
     retired_graph = hub.services.graphs.get_enabled_by_name(_HUB_RETIRED_GRAPH_NAME)
     assert retired_graph is not None
-    hub.services.graph_lifecycle.retire(retired_graph, by="operator")
+    hub.resolve(default_tenant(hub.engine), GraphLifecycleService).retire(retired_graph, by="operator")
     build_node = next(n for n in graph.nodes if n.name == "build")
     deliver_node = next(n for n in graph.nodes if n.name == "deliver")
 

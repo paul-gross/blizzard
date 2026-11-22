@@ -27,6 +27,7 @@ from blizzard.hub.delivery import wiring as delivery
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.documents import wiring as documents
 from blizzard.hub.domain.garden.findings import wiring as findings
+from blizzard.hub.domain.graph import wiring as graph_area
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
 from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.scopes import wiring as scopes
@@ -75,10 +76,13 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
         delivery.register(registry)
         register_legacy(registry)
         findings.register(registry, store.register_findings(registry))
+        graph_area.register(registry, store.register_graphs(registry))
     else:
         register_legacy_absent(registry)
         store.register_findings_absent(registry)
         findings.register_absent(registry)
+        store.register_graphs_absent(registry)
+        graph_area.register_absent(registry)
     if store_backed and settings:
         settings_wiring.register(registry)
     else:

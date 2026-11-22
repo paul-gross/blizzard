@@ -102,6 +102,7 @@ def _direct_mismatches(endpoint: Any, owners: dict[str, set[str]]) -> set[str]:
 
 def _direct_helper_calls(endpoint: Any) -> set[str]:
     """Resolve direct global/module calls; typed FleetRequest methods are explicit."""
+    endpoint = getattr(endpoint, "__dishka_orig_func__", endpoint)
     tree = ast.parse(textwrap.dedent(inspect.getsource(endpoint)))
     found: set[str] = set()
     for node in ast.walk(tree):

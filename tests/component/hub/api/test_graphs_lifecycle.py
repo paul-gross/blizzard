@@ -15,7 +15,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
-from tests.support.scaffolding import HubHarness, build_hub, count_queries
+from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
+from tests.support.scaffolding import HubHarness, build_hub, count_queries, default_tenant
 
 _GRAPH_A = """
 name: alpha
@@ -229,7 +230,7 @@ def test_retiring_every_version_of_the_default_graph_survives_a_restart(tmp_path
     hub = build_hub(tmp_path)
     doc = hub.services.default_graph_doc
     graph = hub.services.default_graph.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)
-    hub.services.graph_lifecycle.retire(graph, by="operator")
+    hub.resolve(default_tenant(hub.engine), GraphLifecycleService).retire(graph, by="operator")
     assert hub.services.graphs.get_enabled_by_name(doc.name) is None
 
     # A second "boot": a fresh HubServices over the same sqlite file — never the same
@@ -262,7 +263,7 @@ def test_ensure_default_disambiguates_a_retirement_with_a_cheap_existence_probe_
         _mint(hub, _GRAPH_A.replace("name: alpha", f"name: other-{i}"))
     doc = hub.services.default_graph_doc
     graph = hub.services.default_graph.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)
-    hub.services.graph_lifecycle.retire(graph, by="operator")
+    hub.resolve(default_tenant(hub.engine), GraphLifecycleService).retire(graph, by="operator")
 
     def _retry() -> None:
         with pytest.raises(DefaultGraphRetired):

@@ -14,10 +14,11 @@ import yaml
 from typing_extensions import TypeIs
 
 from blizzard.hub.documents import YAML_CODEC
+from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.domain.graph.model import GraphArtifact, GraphDoc
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncOutcome, GraphSyncStatus
 from blizzard.hub.graphs import PACKAGED
-from tests.support.scaffolding import HubHarness, build_hub
+from tests.support.scaffolding import HubHarness, build_hub, default_tenant
 
 _GRAPH_YAML = """
 name: {name}
@@ -342,7 +343,7 @@ def _retire_all(hub: HubHarness, name: str) -> None:
         if summary.name == name:
             graph = hub.services.graphs.get(summary.graph_id)
             assert graph is not None
-            hub.services.graph_lifecycle.retire(graph, by="operator")
+            hub.resolve(default_tenant(hub.engine), GraphLifecycleService).retire(graph, by="operator")
 
 
 def test_reconciling_a_fully_retired_name_with_an_unchanged_definition_mints_nothing(tmp_path: Path) -> None:
