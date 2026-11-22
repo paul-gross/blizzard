@@ -242,7 +242,7 @@ from blizzard.hub.forge.commit_links import LandedCommitLinks
 from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
-from blizzard.hub.graphs import PackagedGraphs
+from blizzard.hub.graphs import PackagedGraphs, packaged_default_yaml
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.settings.footing import HubSettingsFooting
 from blizzard.hub.settings.graph import HubSettingsGraph
@@ -1358,7 +1358,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     host_retirement = HostRetirementService(hosts=host_store, runners=registry_store, fleet=fleet, clock=clock)
     graph_mint = tenant.get(GraphMintService)
     default_graph = tenant.get(DefaultGraphService)
-    default_graph_yaml = default_graph_file.inlined_yaml(graph_yaml)
+    default_graph_yaml = packaged_default_yaml()
     scope_store = tenant.get(ScopeStore)
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
     routine_store = tenant.get(RoutineStore)

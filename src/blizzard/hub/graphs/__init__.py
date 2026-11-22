@@ -8,11 +8,12 @@ definition file through the config codec and inlines prompt *file* references, o
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.untyped import as_list, as_table
-from blizzard.hub.documents import accepted_extensions, codec_for_path
+from blizzard.hub.documents import YAML_CODEC, accepted_extensions, codec_for_path
 from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.graph.model import GraphDoc
 
@@ -152,3 +153,9 @@ class PackagedGraphs:
 
 
 PACKAGED = PackagedGraphs(Path(__file__).resolve().parent)
+
+
+@cache
+def packaged_default_yaml() -> str:
+    """The packaged default graph's inlined YAML, derived once for every reader."""
+    return PACKAGED.default.inlined_yaml(YAML_CODEC)
