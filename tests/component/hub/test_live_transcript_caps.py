@@ -7,24 +7,18 @@ from typing import Any
 
 import pytest
 
-from blizzard.foundation.flags import FlagRegistry
 from blizzard.foundation.settings_record.vocabulary import Change
-from blizzard.hub.composition import build_hub_settings
-from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps, TranscriptIngestResult, TranscriptSlice
-from blizzard.hub.settings.footing import HubSettingsFooting
 from tests.support.hub_request_auth import ingest_chunk
-from tests.support.scaffolding import build_hub, hub_level_connections
+from tests.support.scaffolding import build_hub
 
 
 def test_committed_caps_reach_next_ingest_but_not_in_flight_request(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    hub = build_hub(tmp_path)
+    hub = build_hub(tmp_path, with_settings=True)
     assert hub.app is not None
-    footing = HubSettingsFooting(tmp_path, None, None, False, FlagRegistry(), False, HUB_REGISTRY, {})
-    settings = build_hub_settings(hub_level_connections(hub.engine), hub.clock, footing)
-    hub.app.state.hub_settings = settings
+    settings = hub.app.state.hub_settings
     chunk = ingest_chunk(hub)
     service = hub.services.transcript_ingest
     ingest = service.ingest

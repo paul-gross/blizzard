@@ -38,7 +38,7 @@ from typing_extensions import TypeIs
 from blizzard import __version__
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock, IClock
-from blizzard.foundation.flags import Flags
+from blizzard.foundation.flags import FlagRegistry, Flags
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.landing_policy import LandingPolicy
@@ -70,12 +70,14 @@ from blizzard.hub.composition import (
     TenantStores,
     build_flow_driver,
     build_hub_core,
+    build_hub_settings,
     build_services,
     connections_for_engine,
     default_forge_registry,
 )
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH, AuthConfig, HubConfig, LoginThrottleConfig
 from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
+from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE
 from blizzard.hub.delivery.action_registry import SHIPPED_ACTIONS, TEST_ACTIONS, HubActions
 from blizzard.hub.delivery.flow_driver import FlowDriver, TickResult
@@ -160,6 +162,7 @@ from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.readiness import ICredentialProbe
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.secrets import hub_key_provider
+from blizzard.hub.settings.footing import HubSettingsFooting
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
@@ -1742,6 +1745,7 @@ def build_hub(
     action_pass_grace: timedelta = ACTION_PASS_GRACE,
     forges: ForgeRegistryFactory = default_forge_registry,
     credential_probes: Mapping[str, ICredentialProbe] | None = None,
+    with_settings: bool = False,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
@@ -1749,7 +1753,8 @@ def build_hub(
     ``work_sources=None`` defaults to one fake source, while ``{}`` is a deliberately **empty** registry;
     each fake source is stored as a configured record linked to the tenant's only project, and each seeded
     repository is linked to it too, while ``link=False`` leaves the sources unstored, serving no project, as a
-    file-configured source is, and the repositories stored but unlinked; ``hub_version`` and ``version_window`` default to the installed and packaged; ``credential_probes`` replaces every forge kind's credential check."""
+    file-configured source is, and the repositories stored but unlinked; ``hub_version`` and ``version_window`` default to the installed and packaged; ``credential_probes`` replaces every forge kind's credential check; ``with_settings`` supplies the hub's settings
+    graph to the container as ``hub host`` does, and leaves the ports absent otherwise."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(
         root=tmp_path,
@@ -1784,7 +1789,17 @@ def build_hub(
     # The built-in `hub` source is seated as a source, an editor and a closer unconditionally,
     # mirroring `WorkSourceEntry.registry`'s production wiring.
     closers: dict[str, IWorkCloser] = {}
-    core = build_hub_core(connections_for_engine(engine), clock=clock)
+    connections = connections_for_engine(engine)
+    settings = (
+        build_hub_settings(
+            connections,
+            clock,
+            HubSettingsFooting(tmp_path, None, None, False, FlagRegistry(), False, HUB_REGISTRY, {}),
+        )
+        if with_settings
+        else None
+    )
+    core = build_hub_core(connections, clock=clock, settings=settings)
     default = StoreScope(default_tenant(engine))
     default_stores = core.open(default)
     hub_source = HubWorkSource(
@@ -1843,6 +1858,7 @@ def build_hub(
     hub_services.tenants.open_tenants.refresh()
     services = hub_services.tenants.open_services(default)
     app = create_hub_app(config, services=hub_services, flags=flags)
+    app.state.hub_settings = settings
     client = RunnerFleetClient(app, services=services, register_claimants=auto_register_claimants)
     # Warm FastAPI's per-router route-resolution cache: it lazily caches routes on first
     # use, which is thread-unsafe under the component tier's OS-thread races.

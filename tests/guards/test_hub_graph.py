@@ -5,6 +5,7 @@ Each gate runs over the real hub registration and over that registration with a 
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from dishka.integrations.fastapi import FromDishka, inject_sync
@@ -12,6 +13,7 @@ from fastapi import APIRouter, Depends, FastAPI
 
 from blizzard.cli.config_inputs import packaged_flag_registry
 from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.foundation.flags import FlagRegistry
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.registry.interface import Lifetime, port
 from blizzard.foundation.registry.internal.translation import HUB_LIFETIMES, build_container
@@ -20,10 +22,13 @@ from blizzard.foundation.registry.scopes import OwnedChild, ScopeValues, supply
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.api.auth_session import tenant_bound
 from blizzard.hub.app import create_app_for_export
-from blizzard.hub.composition import memberships_leaf
+from blizzard.hub.composition import build_hub_settings, memberships_leaf
+from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.process_root import register_hub
+from blizzard.hub.settings.footing import HubSettingsFooting
+from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from tests.support.container_guards import (
@@ -38,9 +43,9 @@ from tests.support.legacy_inventory import LEGACY_INVENTORY, inventory_violation
 from tests.support.route_resolution import RouteDependency, route_dependencies, unresolved_route_dependencies
 
 
-def _hub(*, store_backed: bool) -> LegacyRegistry:
+def _hub(*, store_backed: bool, settings: bool = False) -> LegacyRegistry:
     registry = LegacyRegistry()
-    register_hub(registry, store_backed=store_backed)
+    register_hub(registry, store_backed=store_backed, settings=settings)
     return registry
 
 
@@ -63,9 +68,13 @@ def _second_open_tenants(reads: HubScopedReads) -> OpenTenants:
     return OpenTenants(reads.tenants.open_tenants)
 
 
-@pytest.mark.parametrize("store_backed", [True, False], ids=["store-backed", "store-free"])
-def test_the_hub_graph_builds_and_keeps_every_registration_rule(store_backed: bool) -> None:
-    registry = _hub(store_backed=store_backed)
+@pytest.mark.parametrize(
+    ("store_backed", "settings"),
+    [(True, True), (True, False), (False, False)],
+    ids=["store-backed", "store-backed-settings-less", "store-free"],
+)
+def test_the_hub_graph_builds_and_keeps_every_registration_rule(store_backed: bool, settings: bool) -> None:
+    registry = _hub(store_backed=store_backed, settings=settings)
     assert graph_builds(registry, HUB_LIFETIMES, ScopeValues()) == []
     assert duplicate_owners(registry) == []
     assert lifetime_violations(registry, HUB_LIFETIMES) == []
@@ -113,11 +122,19 @@ def _hub_routes() -> list[RouteDependency]:
 def _process() -> Iterator[OwnedChild]:
     engine = create_engine_from_url("sqlite://")
     connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("test")))
+    clock = SystemClock()
+    footing = HubSettingsFooting(Path(), None, None, False, FlagRegistry(), False, HUB_REGISTRY, {})
     owner = build_container(
-        _hub(store_backed=True),
+        _hub(store_backed=True, settings=True),
         HUB_LIFETIMES,
         owner="guard",
-        values=ScopeValues((supply(port(HubStoreConnections), connections), supply(port(IClock), SystemClock()))),
+        values=ScopeValues(
+            (
+                supply(port(HubStoreConnections), connections),
+                supply(port(IClock), clock),
+                supply(port(HubSettingsGraph), build_hub_settings(connections, clock, footing)),
+            )
+        ),
     )
     try:
         yield owner

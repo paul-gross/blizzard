@@ -5,7 +5,8 @@ from __future__ import annotations
 from functools import partial
 from typing import Annotated, Any, NoReturn, Protocol, cast
 
-from fastapi import APIRouter, Depends, Header, Query, Request
+from dishka.integrations.fastapi import FromDishka, inject_sync
+from fastapi import APIRouter, Depends, Header, Query
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.config_keys import TABLE, ConfigRegistry, Lifetime
@@ -19,8 +20,16 @@ from blizzard.hub.api.door import RequestDoor
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problems_admin import setting_not_live_problem, setting_unknown_problem, settings_invalid_problem
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.settings.footing import SettingNotLive, SettingUnknown, require_settable, settable_declarations
-from blizzard.hub.settings.graph import HubSettingsGraph
+from blizzard.hub.settings.footing import (
+    HubSettingsFooting,
+    SettingNotLive,
+    SettingUnknown,
+    require_settable,
+    settable_declarations,
+)
+from blizzard.hub.settings.model import IReadHubSettingsAdmin
+from blizzard.hub.settings.reader import HubSettingsReader
+from blizzard.hub.settings.service import HubSettingsAuthoring
 from blizzard.hub.settings.values import thaw
 from blizzard.wire.config import ConfigApplyOutcome, ConfigApplyResponse, FieldChangeView
 from blizzard.wire.hub_settings import (
@@ -37,14 +46,10 @@ router = APIRouter(prefix="/api/admin/settings", tags=["admin"], dependencies=[D
 Admin = Annotated[ResolvedIdentity, Depends(require_hub(Permission.SETTINGS_ADMIN))]
 
 
-def graph(request: Request) -> HubSettingsGraph:
-    settings = getattr(request.app.state, "hub_settings", None)
-    if settings is None:
-        raise ProblemHTTPException(problems.hub_store_unavailable_problem)
-    return cast(HubSettingsGraph, settings)
-
-
-Settings = Annotated[HubSettingsGraph, Depends(graph)]
+Store = FromDishka[IReadHubSettingsAdmin]
+Reader = FromDishka[HubSettingsReader]
+Authoring = FromDishka[HubSettingsAuthoring]
+Footing = FromDishka[HubSettingsFooting]
 
 
 class _ProblemBuilder(Protocol):
@@ -55,19 +60,19 @@ def _refuse(builder: _ProblemBuilder, message: str, errors: dict[str, str] | Non
     raise ProblemHTTPException(partial(builder, message, errors or {}))
 
 
-def _check_keys(settings: HubSettingsGraph, keys: set[str]) -> None:
+def _check_keys(footing: HubSettingsFooting, keys: set[str]) -> None:
     try:
-        require_settable(settings.footing.key_registry, keys)
+        require_settable(footing.key_registry, keys)
     except SettingUnknown as exc:
         _refuse(setting_unknown_problem, str(exc))
     except SettingNotLive as exc:
         _refuse(setting_not_live_problem, str(exc))
 
 
-def _view(settings: HubSettingsGraph) -> HubSettingsView:
-    snapshot, provenance = settings.store.view()
+def _view(store: IReadHubSettingsAdmin, footing: HubSettingsFooting) -> HubSettingsView:
+    snapshot, provenance = store.view()
     rows: list[HubSettingRow] = []
-    for key in settable_declarations(settings.footing.key_registry):
+    for key in settable_declarations(footing.key_registry):
         entry = snapshot.entries.get(key.path)
         source = "entry" if entry is not None and not entry.at_default else "default"
         metadata = provenance.get(key.path)
@@ -102,44 +107,50 @@ def _effective(entry: Entry | None, default: object) -> object:
 
 
 @router.get("", response_model=HubSettingsView)
-def get_settings(identity: Admin, settings: Settings) -> HubSettingsView:
-    return _view(settings)
+@inject_sync
+def get_settings(identity: Admin, store: Store, footing: Footing) -> HubSettingsView:
+    return _view(store, footing)
 
 
 @router.patch("", response_model=HubSettingsView)
+@inject_sync
 def patch_settings(
     body: HubSettingsWrite,
     identity: Admin,
     door: RequestDoor,
-    settings: Settings,
+    store: Store,
+    authoring: Authoring,
+    footing: Footing,
     if_match: Annotated[int | None, Header()] = None,
 ) -> HubSettingsView:
-    _check_keys(settings, set(body.sets) | set(body.unset))
+    _check_keys(footing, set(body.sets) | set(body.unset))
     if any(value is None for value in body.sets.values()):
         _refuse(settings_invalid_problem, "null is not a setting value; use the unset list")
     try:
         change = Change("edit", sets=body.sets, unsets=frozenset(body.unset))
         # The shared vocabulary names the page door "page"; the HTTP header names it "board".
         actual_door: Door = "page" if door.value == "board" else "cli" if door.value == "cli" else "api"
-        settings.authoring.apply(change, if_match=if_match, door=actual_door, actor=identity.user_id)
+        authoring.apply(change, if_match=if_match, door=actual_door, actor=identity.user_id)
     except ValueError as exc:
         _refuse(settings_invalid_problem, str(exc))
     except SettingsRevisionConflict as exc:
         raise ProblemHTTPException(partial(problems.revision_conflict_problem, str(exc))) from exc
     except SettingsInvalid as exc:
         _invalid(exc)
-    return _view(settings)
+    return _view(store, footing)
 
 
 @router.get("/changes", response_model=HubSettingsChanges)
+@inject_sync
 def changes(
     identity: Admin,
-    settings: Settings,
+    store: Store,
+    footing: Footing,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     before: Annotated[int | None, Query(ge=1)] = None,
 ) -> HubSettingsChanges:
-    rows, next_before = settings.store.changes(limit, before)
-    registry = settings.footing.key_registry
+    rows, next_before = store.changes(limit, before)
+    registry = footing.key_registry
     return HubSettingsChanges(
         changes=[
             HubSettingsChange(
@@ -158,8 +169,8 @@ def changes(
     )
 
 
-def _document(settings: HubSettingsGraph, document: dict[str, object]) -> dict[str, object]:
-    registry = settings.footing.key_registry
+def _document(footing: HubSettingsFooting, document: dict[str, object]) -> dict[str, object]:
+    registry = footing.key_registry
     result: dict[str, object] = {}
 
     def walk(table: dict[str, object], prefix: str = "") -> None:
@@ -172,20 +183,21 @@ def _document(settings: HubSettingsGraph, document: dict[str, object]) -> dict[s
                 result[path] = value
 
     walk(document)
-    _check_keys(settings, set(result))
+    _check_keys(footing, set(result))
     return result
 
 
 @router.post("/apply", response_model=ConfigApplyResponse)
+@inject_sync
 def apply_document(
-    document: dict[str, object], identity: Admin, settings: Settings, dry_run: bool = False
+    document: dict[str, object], identity: Admin, authoring: Authoring, footing: Footing, dry_run: bool = False
 ) -> ConfigApplyResponse:
-    entries = _document(settings, document)
+    entries = _document(footing, document)
     if any(value is None for value in entries.values()):
         _refuse(settings_invalid_problem, "null is not a setting value; use settings unset")
     change = Change("edit", sets=entries)
     try:
-        apply_id, diff = settings.authoring.apply_document(change, actor=identity.user_id, dry_run=dry_run)
+        apply_id, diff = authoring.apply_document(change, actor=identity.user_id, dry_run=dry_run)
     except SettingsInvalid as exc:
         _invalid(exc)
     moved = {field.key: field for field in diff}
@@ -197,17 +209,18 @@ def apply_document(
                 kind="hub",
                 key=key,
                 op="edit" if field else "unchanged",
-                diff=[_field_view(settings.footing.key_registry, field)] if field else [],
+                diff=[_field_view(footing.key_registry, field)] if field else [],
             )
         )
     return ConfigApplyResponse(dry_run=dry_run, apply_id=apply_id, outcomes=outcomes)
 
 
 @router.get("/export", response_model=SettingsExportDocument)
-def export_document(identity: Admin, settings: Settings) -> SettingsExportDocument:
+@inject_sync
+def export_document(identity: Admin, reader: Reader, footing: Footing) -> SettingsExportDocument:
     document: SettingsExportDocument = {}
-    for key, entry in settings.reader.snapshot().entries.items():
-        declaration = settings.footing.key_registry.key(key)
+    for key, entry in reader.snapshot().entries.items():
+        declaration = footing.key_registry.key(key)
         if declaration is not None and declaration.lifetime == Lifetime.PASS and not entry.at_default:
             parts = key.split(".")
             table = document

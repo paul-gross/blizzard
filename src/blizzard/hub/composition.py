@@ -1107,11 +1107,15 @@ def register_legacy_absent(registry: LegacyRegistry) -> None:
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
 
 
-def build_hub_core(store_connections: HubStoreConnections, *, clock: IClock) -> HubCore:
-    """Build the :class:`HubCore` over the hub's process container, opened here; the core's ``process`` closes it."""
+def build_hub_core(
+    store_connections: HubStoreConnections, *, clock: IClock, settings: HubSettingsGraph | None = None
+) -> HubCore:
+    """Build the :class:`HubCore` over the hub's process container, opened here; the core's ``process`` closes it.
+    ``settings`` is the borrowed settings graph the container serves the settings ports from; a core built without one
+    declares them absent."""
     from blizzard.hub.process_root import open_store_backed  # the root registers this module's leaves
 
-    process = open_store_backed(store_connections, clock=clock)
+    process = open_store_backed(store_connections, clock=clock, settings=settings)
     store_errors = store_connections.errors
     resolver = process.resolver
     hub_scoped_reads = resolver.get(HubScopedReads)
