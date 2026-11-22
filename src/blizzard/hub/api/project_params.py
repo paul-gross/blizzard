@@ -23,7 +23,6 @@ from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth_session import AdmittedTenant, tenant_request
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problem_rendering import declared_problem_response
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.projects.model import (
     IReadProjectRepository,
     Project,
@@ -96,10 +95,10 @@ def query_project(
 QueryProject = Annotated[ProjectId | None, Depends(query_project)]
 
 
-def body_project(value: str, services: TenantServices, *, field: str = "project") -> Project:
+def body_project(value: str, projects: IReadProjectRepository, *, field: str = "project") -> Project:
     """The project a body's ``field`` names, by id, slug or former slug; ``422`` naming the field when it names
     none."""
-    found = services.projects.resolve(value)
+    found = projects.resolve(value)
     if found is None:
         raise _unprocessable("body", field, value)
     return found

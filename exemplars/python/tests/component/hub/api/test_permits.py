@@ -1,48 +1,65 @@
 """The permit routes over a fully wired hub and a migrated store (component tier)."""
 
-# exemplar: bzh:domain-orchestration-split. Production mounts the router in ``create_app`` and builds the services
-# in ``build_hub``; ``_hub`` mounts it over ``build_hub``'s app and serves every route the stand-in services.
+# exemplar: bzh:domain-orchestration-split. Production mounts the router in ``create_app`` and registers the area in
+# the process root; ``hub`` mounts it over ``build_hub``'s app and serves every request through the stand-in root.
 
 from __future__ import annotations
 
 import importlib
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from fastapi.testclient import TestClient
 
-from blizzard.hub.api import deps as hub_deps
+from blizzard.auth_core import Role
+from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.tenancy import StoreScope
-from exemplar.hub.api import deps, permits
+from exemplar.hub.api import permits
 from exemplar.hub.api.permit_params import path_permit
-from exemplar.hub.composition import build_tenant_services, build_tenant_stores
+from exemplar.hub.domain.permits.model import IReadPermitRepository
+from exemplar.hub.process_root import open_store_backed
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     default_project,
     default_tenant,
     seed_runner,
+    seed_session,
+    seed_user,
 )
 
 _PERMITS = importlib.import_module("exemplar.hub.store.migrations.versions.20261015_0900_permits")
 _PERMIT_REVISION = importlib.import_module("exemplar.hub.store.migrations.versions.20261103_0900_permit_revision")
 
 
-def _hub(tmp_path: Path) -> HubHarness:
-    hub = build_hub(tmp_path)
-    assert hub.app is not None
+@pytest.fixture
+def hub(tmp_path: Path) -> Iterator[HubHarness]:
+    yield from _mounted(build_hub(tmp_path))
+
+
+@pytest.fixture
+def oauth_hub(tmp_path: Path) -> Iterator[HubHarness]:
+    yield from _mounted(build_hub(tmp_path, auth_mode=AUTH_MODE_OAUTH))
+
+
+def _mounted(hub: HubHarness) -> Iterator[HubHarness]:
+    assert hub.app is not None and hub.core is not None
     with hub.engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
         _PERMITS.upgrade()
         _PERMIT_REVISION.upgrade()
-    tenant = hub.hub_services.process.tenants.open(StoreScope(default_tenant(hub.engine)))
-    stores = build_tenant_stores(tenant.resolver, clock=hub.clock)
-    hub.app.state.tenant_services = build_tenant_services(stores, hub.services)
-    hub.app.dependency_overrides[hub_deps.tenant_services] = deps.tenant_services
+    process = open_store_backed(hub.core.store_connections, clock=hub.clock)
+    hub.app.state.hub_process = process
     hub.app.include_router(permits.router)
     routes = hub.app.router.routes
     routes.insert(0, routes.pop())  # ahead of the embedded frontend's catch-all
-    return hub
+    try:
+        yield hub
+    finally:
+        process.close()
 
 
 def _request(hub: HubHarness, holder: str = "ada", capability: str = "deploy") -> dict[str, Any]:
@@ -51,8 +68,7 @@ def _request(hub: HubHarness, holder: str = "ada", capability: str = "deploy") -
     return resp.json()
 
 
-def test_a_request_answers_201_in_the_only_project_with_its_labels_and_legal_verbs(tmp_path: Path) -> None:
-    hub = _hub(tmp_path)
+def test_a_request_answers_201_in_the_only_project_with_its_labels_and_legal_verbs(hub: HubHarness) -> None:
 
     view = _request(hub)
 
@@ -62,8 +78,7 @@ def test_a_request_answers_201_in_the_only_project_with_its_labels_and_legal_ver
     assert view["verbs"] == ["grant", "revoke"]
 
 
-def test_a_repeated_request_answers_409(tmp_path: Path) -> None:
-    hub = _hub(tmp_path)
+def test_a_repeated_request_answers_409(hub: HubHarness) -> None:
     _request(hub)
 
     resp = hub.client.post("/api/permits", json={"holder": "ada", "capability": "deploy"})
@@ -78,15 +93,13 @@ def test_a_repeated_request_answers_409(tmp_path: Path) -> None:
     )
 
 
-def test_an_unknown_permit_answers_404_on_read_and_on_a_verb(tmp_path: Path) -> None:
-    hub = _hub(tmp_path)
+def test_an_unknown_permit_answers_404_on_read_and_on_a_verb(hub: HubHarness) -> None:
 
     assert hub.client.get("/api/permits/pm_missing").status_code == 404
     assert hub.client.post("/api/permits/pm_missing/grant").status_code == 404
 
 
-def test_each_verb_moves_the_state_and_the_view_tracks_its_legal_verbs(tmp_path: Path) -> None:
-    hub = _hub(tmp_path)
+def test_each_verb_moves_the_state_and_the_view_tracks_its_legal_verbs(hub: HubHarness) -> None:
     permit_id = _request(hub)["permit_id"]
 
     granted = hub.client.post(f"/api/permits/{permit_id}/grant").json()
@@ -100,19 +113,18 @@ def test_each_verb_moves_the_state_and_the_view_tracks_its_legal_verbs(tmp_path:
     assert (revoked["state"], revoked["verbs"], revoked["revocation_note"]) == ("revoked", [], "left the team")
 
 
-def test_a_verb_the_state_refuses_answers_409(tmp_path: Path) -> None:
-    hub = _hub(tmp_path)
+def test_a_verb_the_state_refuses_answers_409(hub: HubHarness) -> None:
     permit_id = _request(hub)["permit_id"]
 
     assert hub.client.post(f"/api/permits/{permit_id}/resume").status_code == 409
 
 
-def test_a_verb_decided_on_a_copy_another_write_moved_answers_409_and_lands_nothing(tmp_path: Path) -> None:
+def test_a_verb_decided_on_a_copy_another_write_moved_answers_409_and_lands_nothing(hub: HubHarness) -> None:
     """One operator grants the requested permit; the other's revoke, resolved before that grant landed, is refused."""
-    hub = _hub(tmp_path)
     assert hub.app is not None
     permit_id = _request(hub)["permit_id"]
-    read_before = hub.app.state.tenant_services.permits.get(permit_id)
+    tenant = hub.app.state.hub_process.tenants.open(StoreScope(default_tenant(hub.engine)))
+    read_before = tenant.resolver.get(IReadPermitRepository).get(permit_id)
     assert hub.client.post(f"/api/permits/{permit_id}/grant").status_code == 200
     hub.app.dependency_overrides[path_permit] = lambda: read_before
 
@@ -123,8 +135,7 @@ def test_a_verb_decided_on_a_copy_another_write_moved_answers_409_and_lands_noth
     assert hub.client.get(f"/api/permits/{permit_id}").json()["state"] == "granted"
 
 
-def test_a_blank_revocation_note_answers_422_and_records_nothing(tmp_path: Path) -> None:
-    hub = _hub(tmp_path)
+def test_a_blank_revocation_note_answers_422_and_records_nothing(hub: HubHarness) -> None:
     permit_id = _request(hub)["permit_id"]
 
     resp = hub.client.post(f"/api/permits/{permit_id}/revoke", json={"note": "   "})
@@ -133,8 +144,7 @@ def test_a_blank_revocation_note_answers_422_and_records_nothing(tmp_path: Path)
     assert hub.client.get(f"/api/permits/{permit_id}").json()["state"] == "requested"
 
 
-def test_the_list_pages_by_id_descending_at_one_instant_through_next_cursor(tmp_path: Path) -> None:
-    hub = _hub(tmp_path)
+def test_the_list_pages_by_id_descending_at_one_instant_through_next_cursor(hub: HubHarness) -> None:
     ids = [_request(hub, capability=f"cap-{n}")["permit_id"] for n in range(3)]
 
     first = hub.client.get("/api/permits", params={"limit": 2}).json()
@@ -144,8 +154,7 @@ def test_the_list_pages_by_id_descending_at_one_instant_through_next_cursor(tmp_
     assert second["next_cursor"] is None
 
 
-def test_a_malformed_cursor_answers_422_malformed_cursor(tmp_path: Path) -> None:
-    hub = _hub(tmp_path)
+def test_a_malformed_cursor_answers_422_malformed_cursor(hub: HubHarness) -> None:
 
     resp = hub.client.get("/api/permits", params={"cursor": "not-a-cursor"})
 
@@ -153,11 +162,41 @@ def test_a_malformed_cursor_answers_422_malformed_cursor(tmp_path: Path) -> None
     assert resp.json() == {"detail": "malformed cursor"}
 
 
-def test_a_runner_token_answers_403_on_every_permit_route(tmp_path: Path) -> None:
-    hub = _hub(tmp_path)
+def test_a_runner_token_answers_403_on_every_permit_route(hub: HubHarness) -> None:
     permit_id = _request(hub)["permit_id"]
     runner = {"Authorization": f"Bearer {seed_runner(hub, 'r1')}"}
 
     assert hub.client.get("/api/permits", headers=runner).status_code == 403
     assert hub.client.get(f"/api/permits/{permit_id}", headers=runner).status_code == 403
     assert hub.client.post(f"/api/permits/{permit_id}/grant", headers=runner).status_code == 403
+
+
+def test_a_holders_live_permits_answer_through_the_area_wired_reader_and_skip_the_revoked(hub: HubHarness) -> None:
+    kept = _request(hub, capability="deploy")["permit_id"]
+    revoked = _request(hub, capability="rollback")["permit_id"]
+    _request(hub, holder="grace")
+    hub.client.post(f"/api/permits/{revoked}/revoke", json={"note": "left the team"})
+
+    resp = hub.client.get("/api/holders/ada/permits")
+
+    assert resp.status_code == 200
+    assert [p["permit_id"] for p in resp.json()["permits"]] == [kept]
+
+
+def test_a_signed_in_member_reaches_both_permit_services_through_the_authenticated_route(
+    oauth_hub: HubHarness,
+) -> None:
+    """Under session auth, a member's request resolves the permit verbs and its holder read the holder reader, each
+    through the admitted tenant's request scope; a signed-out caller is refused before either resolves."""
+    assert oauth_hub.app is not None
+    member = seed_user(oauth_hub, username="ada", role=Role.ADMIN)
+    signed_in = {"Authorization": f"Bearer {seed_session(oauth_hub, member)}"}
+    client = TestClient(oauth_hub.app)
+
+    requested = client.post("/api/permits", json={"holder": "ada", "capability": "deploy"}, headers=signed_in)
+    held = client.get("/api/holders/ada/permits", headers=signed_in)
+    signed_out = client.get("/api/holders/ada/permits")
+
+    assert requested.status_code == 201, requested.text
+    assert [p["permit_id"] for p in held.json()["permits"]] == [requested.json()["permit_id"]]
+    assert signed_out.status_code == 401
