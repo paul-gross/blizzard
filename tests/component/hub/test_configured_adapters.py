@@ -226,23 +226,14 @@ def test_one_adapters_aliases_and_bag_field_share_identity_within_a_tenant_and_d
 
 
 class _RecordingTracing(DisabledPlatformTracing):
-    """The disabled tracing handle, noting any close a container might wrongly make of a borrowed value."""
+    """The disabled tracing handle, noting any shutdown a container might wrongly make of a borrowed value."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.closed = False
+        self.shut_down = False
 
-    def close(self) -> None:
-        self.closed = True
-
-
-class _ClosingSource(FakeWorkSource):
-    """A fake work source that notes its close."""
-
-    closed = False
-
-    def close(self) -> None:
-        self.closed = True
+    def shutdown(self, timeout: float) -> None:
+        self.shut_down = True
 
 
 def _hosted(
@@ -292,8 +283,8 @@ def test_eviction_and_shutdown_close_owned_clients_on_the_running_loop_and_leave
 ) -> None:
     adapters = _Adapters()
     tracing = _RecordingTracing()
-    source = _ClosingSource()
-    core, services, scope = _hosted(tmp_path, adapters, tracing, WorkSourceRegistry({"default": source}))
+    borrowed = WorkSourceRegistry({"default": FakeWorkSource()})
+    core, services, scope = _hosted(tmp_path, adapters, tracing, borrowed)
     app = create_hub_app(HubConfig(root=tmp_path, db_url="sqlite://"), services=services)
 
     with TestClient(app):
@@ -305,7 +296,7 @@ def test_eviction_and_shutdown_close_owned_clients_on_the_running_loop_and_leave
 
         _build_adapter(services, scope)
         assert adapters.transports[1].closed_on is None
+        assert core.process.tenants.open(scope).resolver.get(IWorkSourceRegistry) is borrowed
 
     assert adapters.transports[1].closed_on == _LOOP_THREAD
-    assert not source.closed
-    assert not tracing.closed
+    assert not tracing.shut_down
