@@ -8,6 +8,7 @@ import asyncio
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -311,7 +312,7 @@ class _FakeServices:
     """A minimal stand-in for ``HubServices`` — only the attributes ``lifespan``
     reads: ``sweeps`` (the roster over ``annotation``, when given, ``close_drain``, ``event_derivation`` and
     ``tenant_teardown_sweep``, with no trace or egress export), ``action_loop`` (started and stopped around the
-    sweeps), and ``close_tenant_objects`` (run before the loop stops)."""
+    sweeps), and ``process.tenants`` (closed before the loop stops)."""
 
     def __init__(
         self,
@@ -327,7 +328,7 @@ class _FakeServices:
         self.tenant_teardown_sweep = _CountingReconciler()
         self.annotation = annotation
         self.action_loop = ActionLoop()
-        self.close_tenant_objects = lambda: None
+        self.process = SimpleNamespace(tenants=SimpleNamespace(close=lambda: None))
 
     @property
     def sweeps(self) -> SweepRoster:

@@ -11,6 +11,7 @@ engine and the connections are borrowed process values the entrypoint supplies."
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
@@ -77,36 +78,15 @@ from blizzard.hub.tenancy import STORE_UNAVAILABLE, StoreScope
 _TENANT_SERVICES: tuple[type[Any], ...] = (
     RunnerRegistryStore,
     HostRegistryStore,
-    WorkItemStore,
     GardenProposalStore,
     GardenProposalClosureStore,
-    SecretStore,
-    WorkSourceRecordStore,
-    RepositoryRecordStore,
-    ForgeRecordStore,
-    CredentialRecordStore,
-    SecretReferrersStore,
-    ForgeReferrersStore,
-    CredentialReferrersStore,
-    ConfigChangeStore,
     ChunkTargetsStore,
-    ProjectPositionStore,
-    ConfigApplyStore,
-    ConfigImportStore,
     InvitationStore,
-    UrgencyStore,
-    UrgencyOrderStore,
-    TenantSettingsStore,
     UrgencyChunksStore,
-    ConfigRevisionsStore,
     TranscriptSegmentStore,
     TranscriptEventStore,
     AnalyticsEventQueryStore,
     AnalyticsOperationalStore,
-    ScopeStore,
-    RoutineStore,
-    RoutineScopeStore,
-    CadenceStore,
     ErrandRunsStore,
     FindingSetStore,
     RunContextStore,
@@ -119,8 +99,52 @@ _TENANT_SERVICES: tuple[type[Any], ...] = (
     ForgeAnnotationStore,
 )
 
-#: The tenant services a transitional alias targets, registered apart so their ``Ref`` is handed back.
-_TENANT_ALIASED: tuple[type[Any], ...] = (HubTransactions, ProjectStore, ProjectLinkStore)
+
+class StoreRefs:
+    """The ``Ref`` of each adapter a registration handed back, by its class — what an adopted area or the legacy
+    bridge aliases its own ports onto."""
+
+    def __init__(self, refs: Mapping[type[Any], Ref[Any]]) -> None:
+        self._refs = dict(refs)
+
+    def of[T](self, adapter: type[T]) -> Ref[T]:
+        """The ``Ref`` of ``adapter``'s one registration."""
+        return self._refs[adapter]
+
+
+#: The tenant services a transitional alias of the legacy bridge targets, registered apart so their ``Ref`` is handed
+#: back.
+_TENANT_ALIASED: tuple[type[Any], ...] = (
+    HubTransactions,
+    ProjectStore,
+    ProjectLinkStore,
+    ProjectPositionStore,
+    WorkItemStore,
+    GraphStore,
+    ScopeStore,
+    RoutineStore,
+    RoutineScopeStore,
+    CadenceStore,
+    UrgencyStore,
+    UrgencyOrderStore,
+    TenantSettingsStore,
+)
+
+#: The configured-record adapters, whose ``Ref`` the config area aliases its ports onto.
+_CONFIG_SERVICES: tuple[type[Any], ...] = (
+    SecretStore,
+    WorkSourceRecordStore,
+    RepositoryRecordStore,
+    ForgeRecordStore,
+    CredentialRecordStore,
+    SecretReferrersStore,
+    ForgeReferrersStore,
+    CredentialReferrersStore,
+    ConfigChangeStore,
+    ConfigApplyStore,
+    ConfigImportStore,
+    ConfigRevisionsStore,
+)
 
 #: The tenant keys registered as factories rather than services.
 _TENANT_FACTORY_KEYS: tuple[type[Any], ...] = (ScopedConnections, ChunkStores, FlowStore)
@@ -131,18 +155,16 @@ def scoped_connections(connections: HubStoreConnections, scope: StoreScope) -> S
     return connections.scoped(scope)
 
 
-def register_tenant(registry: Registry) -> tuple[Ref[HubTransactions], Ref[ProjectStore], Ref[ProjectLinkStore]]:
-    """Declare every tenant adapter once per tenant, handing back the ``Ref`` of the transactions, the projects and the
-    links, which the legacy bridge's ports alias."""
+def register_tenant(registry: Registry) -> StoreRefs:
+    """Declare every tenant adapter but the configured records' once per tenant, handing back the ``Ref`` of each
+    adapter the legacy bridge's ports alias."""
     registry.factory(scoped_connections, lifetime=Lifetime.TENANT)
     registry.factory(build_chunk_stores, lifetime=Lifetime.TENANT)
     registry.factory(tenant_flows, lifetime=Lifetime.TENANT)
-    transactions = registry.service(HubTransactions, lifetime=Lifetime.TENANT)
-    projects = registry.service(ProjectStore, lifetime=Lifetime.TENANT)
-    project_links = registry.service(ProjectLinkStore, lifetime=Lifetime.TENANT)
+    aliased = StoreRefs({each: registry.service(each, lifetime=Lifetime.TENANT) for each in _TENANT_ALIASED})
     for each in _TENANT_SERVICES:
         registry.service(each, lifetime=Lifetime.TENANT)
-    return transactions, projects, project_links
+    return aliased
 
 
 def register_tenant_absent(registry: Registry) -> None:
@@ -195,6 +217,18 @@ def register_process_absent(registry: Registry) -> None:
     """Declare every hub-level adapter absent, for the store-free graph."""
     for missing in _PROCESS_KEYS:
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+
+
+def register_config(registry: Registry) -> StoreRefs:
+    """Declare the tenant's configured-record adapters, handing back the ``Ref`` of each, which the config area's ports
+    alias."""
+    return StoreRefs({each: registry.service(each, lifetime=Lifetime.TENANT) for each in _CONFIG_SERVICES})
+
+
+def register_config_absent(registry: Registry) -> None:
+    """Declare the tenant's configured-record adapters absent, for the store-free graph."""
+    for missing in _CONFIG_SERVICES:
+        registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
 
 
 def register_findings(registry: Registry) -> Ref[FindingStore]:

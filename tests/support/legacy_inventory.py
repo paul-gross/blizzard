@@ -14,7 +14,12 @@ from blizzard.hub.auth.internal.membership_repository import MembershipRepositor
 from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.flow_driver import StepWake
+from blizzard.hub.domain.chunk.event_log import EventLogService
+from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
+from blizzard.hub.domain.operations.delete import DeleteService
 from blizzard.hub.domain.projects.color import ColorPick
+from blizzard.hub.domain.urgency.services import TenantDefault
+from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.open_tenants import OpenTenants
 
 #: Each legacy key the hub registry declares, and the area that owns it until it adopts it. A key is a class, or a
@@ -28,6 +33,11 @@ LEGACY_INVENTORY: Mapping[object, str] = {
     ActionLoop: "hub lifecycle",
     StepWake: "hub lifecycle",
     ColorPick: "projects",
+    DeleteService: "chunk operations",
+    WorkItemEditService: "chunk operations",
+    EventLogService: "chunk operations",
+    TenantDefault: "projects and urgency",
+    GardenProposalDeliveryResolution: "garden authoring",
 }
 
 

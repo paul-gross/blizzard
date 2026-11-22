@@ -17,9 +17,7 @@ import pytest
 from sqlalchemy import update
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.composition import build_hub_core, build_live_config, connections_for_engine
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.config.credential_naming import CredentialId
 from blizzard.hub.domain.config.credentials import CredentialDraft
@@ -40,11 +38,12 @@ from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSour
 from tests.support.forge_auth import sent_header
 from tests.support.scaffolding import (
     OP,
-    TEST_HUB_ACTIONS,
     config_authoring,
+    configured_core,
     default_tenant,
     migrated_hub_at,
     seed_forge,
+    tenant_live,
 )
 
 _NOW = datetime(2026, 11, 13, 12, 0, 0, tzinfo=UTC)
@@ -85,7 +84,7 @@ class _World:
         self.engine = create_engine_from_url(db_url)
         keys = hub_key_provider({}, data_dir=tmp_path / "data")
         clock = FixedClock(_NOW)
-        core = build_hub_core(connections_for_engine(self.engine), clock=clock, actions=TEST_HUB_ACTIONS)
+        core = configured_core(self.engine, tmp_path, clock=clock)
         self.stores = core.open(StoreScope(default_tenant(self.engine)))
         self.authoring = config_authoring(self.engine, keys=keys, clock=clock)
         self.authoring.create_secret(SecretName.parse("gh"), "tok-1", OP)
@@ -100,7 +99,7 @@ class _World:
             ),
             OP,
         ).work_source_id
-        live = build_live_config(self.stores, cipher=secret_cipher(keys))
+        live = tenant_live(self.stores)
         self.requests: list[httpx2.Request] = []
         self.headers: dict[str, str] = {}
         self.bindings: dict[str, ForgeBinding] = {}

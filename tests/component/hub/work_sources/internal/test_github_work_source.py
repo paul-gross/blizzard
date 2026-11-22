@@ -15,8 +15,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.secrets.factories import secret_cipher
-from blizzard.hub.composition import TenantStores, build_hub_core, build_live_config, connections_for_engine
+from blizzard.hub.composition import TenantStores
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace, TraceLanding
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.work_sources import WorkAnnotateError, WorkCloseError, WorkItemGoneError
@@ -38,16 +37,17 @@ from tests.support.forge_auth import sent_header
 from tests.support.scaffolding import (
     OMIT_TITLE,
     OP,
-    TEST_HUB_ACTIONS,
     ForgeDouble,
     ForgeIssue,
     WorkSourceRegistry,
     config_authoring,
+    configured_core,
     default_tenant,
     forge_state,
     github_double,
     migrate_to,
     seed_forge,
+    tenant_live,
 )
 
 
@@ -81,7 +81,7 @@ def _registry_world(
     engine = migrate_to(tmp_path, "head")[1]
     clock = FixedClock(datetime(2026, 1, 1, tzinfo=UTC))
     keys = hub_key_provider({}, data_dir=tmp_path / "data")
-    core = build_hub_core(connections_for_engine(engine), clock=clock, actions=TEST_HUB_ACTIONS)
+    core = configured_core(engine, tmp_path, clock=clock)
     stores = core.open(StoreScope(default_tenant(engine)))
     authoring = config_authoring(engine, keys=keys, clock=clock)
     for secret, value in (tokens or {"gh": "token"}).items():
@@ -92,7 +92,7 @@ def _registry_world(
         ).work_source_id
         for slug, source in sources
     }
-    live = build_live_config(stores, cipher=secret_cipher(keys))
+    live = tenant_live(stores)
     registry = WorkSourceEntry.registry(
         records=stores.work_source_records,
         forges=stores.forge_records,
@@ -332,9 +332,7 @@ def test_a_source_whose_credential_builds_no_authorization_raises_work_source_er
     engine = migrate_to(tmp_path, "head")[1]
     clock = FixedClock(datetime(2026, 1, 1, tzinfo=UTC))
     keys = hub_key_provider({}, data_dir=tmp_path / "data")
-    stores = build_hub_core(connections_for_engine(engine), clock=clock, actions=TEST_HUB_ACTIONS).open(
-        StoreScope(default_tenant(engine))
-    )
+    stores = configured_core(engine, tmp_path, clock=clock).open(StoreScope(default_tenant(engine)))
     authoring = config_authoring(engine, keys=keys, clock=clock)
     authoring.create_secret(SecretName.parse("gh"), "token", OP)
     record = authoring.create_work_source("one", None, _github("acme/one").fields(seed_forge(engine)), OP)
@@ -345,7 +343,7 @@ def test_a_source_whose_credential_builds_no_authorization_raises_work_source_er
         secret = stores.secrets.get("gh")
         assert secret is not None
         authoring.retire_secret(secret, OP)
-    live = build_live_config(stores, cipher=secret_cipher(keys))
+    live = tenant_live(stores)
 
     with pytest.raises(WorkSourceError, match=said):
         WorkSourceEntry.built(

@@ -130,9 +130,6 @@ from blizzard.hub.auth.memberships import MembershipRoleRefused
 from blizzard.hub.composition import (
     HubServices,
     HubSettingsGraph,
-    LiveConfig,
-    TenantStores,
-    build_config_authoring,
     build_flow_driver,
     build_hub_core,
     build_hub_flags,
@@ -151,6 +148,7 @@ from blizzard.hub.config import (
 )
 from blizzard.hub.delivery.action_registry import build_hub_actions
 from blizzard.hub.delivery.flow_driver import FlowDriver
+from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.carry_over import ExistingConfig, ImportResult, LegacyStart, LegacyStartRefused
 from blizzard.hub.domain.config.forge_check import ForgeCheck
 from blizzard.hub.domain.config.oauth_providers import ProvidersOrphaned, require_providers_configured
@@ -171,23 +169,16 @@ from blizzard.hub.domain.runners.registration import RunnerRetired
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.sweeps.locks import SweepInProgress
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
-from blizzard.hub.forge.auth import ForgeScope, ScopedAuthorizations
-from blizzard.hub.forge.budget import ForgeBudgets
-from blizzard.hub.forge.internal.factory import build_forge_registry
-from blizzard.hub.forge.refusals import refusal_reader
-from blizzard.hub.forge.registry import ForgeRegistry, WriteLocks
 from blizzard.hub.layout import SIGNING_KEYS_PARTS, remove_retired_workdirs
 from blizzard.hub.process_root import open_store_free
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.settings.pass_config import bind_pass_config
-from blizzard.hub.settings.source import HubConfigSource, resolve_live_config
+from blizzard.hub.settings.source import resolve_live_config
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreError
 from blizzard.hub.store.forge_check_reads import UnreadableStore, read_forge_addresses
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
-from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
-from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from blizzard.wire.components import HUB_SCHEMA_COMPONENTS
 
 #: The transcript-event derivation sweep's own interval.
@@ -458,14 +449,17 @@ def import_legacy_config(
     legacy = read_legacy_keys(config.config_path, environ, strict=config.strict)
     engine, connections = open_hub_store(config.db_url)
     try:
-        core = build_process_core(connections, actions=build_hub_actions(environ))
+        core = build_hub_core(
+            connections,
+            clock=build_system_clock(),
+            actions=build_hub_actions(environ),
+            config=config,
+            environ=environ,
+        )
         with contextlib.closing(core.process):
             target = _legacy_import_tenant(core.open_tenants(), named=tenant)
             stores = core.open(StoreScope(target))
-            authoring = build_config_authoring(
-                stores,
-                cipher=secret_cipher(hub_key_provider(environ, data_dir=config.data_dir)),
-            )
+            authoring = stores.tenant.get(ConfigAuthoring)
             existing = ExistingConfig(
                 secrets=frozenset(secret.name for secret in stores.secrets.list_all()),
                 work_sources=tuple(stores.work_source_records.list_all(include_retired=True)),
@@ -579,7 +573,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         else:
             if services is not None:
                 cleanup.callback(services.action_loop.stop)
-                cleanup.callback(services.close_tenant_objects)
+                cleanup.callback(services.process.tenants.close)
             else:
                 cleanup.callback(app.state.hub_process.close)
         try:
@@ -799,40 +793,6 @@ def build_hosted_app(
         # Minted here on first start when no key source exists yet.
         secret_keys = core.process.resolver.get(IRotatableKeyProvider)
         remove_retired_workdirs(config.data_dir)
-        config_source = core.process.resolver.get(HubConfigSource)
-
-        def work_source_registry(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> IWorkSourceRegistry:
-            return WorkSourceEntry.registry(
-                records=stores.work_source_records,
-                forges=stores.forge_records,
-                credentials=stores.credential_records,
-                objects=live.objects,
-                authorizations=ScopedAuthorizations(live.authorizations, ForgeScope.WORK_SOURCE),
-                users=core.users,
-                work_item_store=stores.work_item_store,
-                edits=stores.work_item_edits,
-                resolution=stores.garden_proposal_resolution,
-                budgets=budgets,
-                refusals=refusal_reader,
-                close_forge_writes_enabled=lambda: config_source.current().close_forge_writes_enabled,
-                instrument_client=platform_tracing.instrument_client,
-            )
-
-        def forge_registry(
-            stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets, write_locks: WriteLocks
-        ) -> ForgeRegistry:
-            return build_forge_registry(
-                records=stores.repository_records,
-                forges=stores.forge_records,
-                credentials=stores.credential_records,
-                objects=live.objects,
-                authorizations=live.authorizations,
-                clock=stores.clock,
-                budgets=budgets,
-                write_locks=write_locks,
-                instrument=platform_tracing.instrument_client,
-            )
-
         tracing = TracingSettings.of(os.environ)
 
         # The provider-login seam is built only under `oauth`: under `none`
@@ -851,8 +811,6 @@ def build_hosted_app(
         flags = build_hub_flags(config)
         services = build_services(
             core,
-            work_sources=work_source_registry,
-            forges=forge_registry,
             public_url=config.public_url,
             follow_latest_default=config.follow_latest,
             oauth_providers=oauth_providers,
@@ -878,8 +836,10 @@ def build_hosted_app(
             cadences_on=lambda: flags.on("cadences"),
             announce_minted=announce_minted,
         )
+        # Closed before the action loop stops: each tenant scope's finalizer closes the configured clients its
+        # records built on the loop they run on.
         cleanup.callback(services.action_loop.stop)
-        cleanup.callback(services.close_tenant_objects)
+        cleanup.callback(core.process.tenants.close)
         # Only once the store is at the expected schema head: a store mid-migration must
         # fail *readiness*, not *boot* (pinned:
         # `tests/component/test_readiness.py::test_ready_probe_false_on_unmigrated_store`).

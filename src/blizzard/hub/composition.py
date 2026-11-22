@@ -22,7 +22,7 @@ import httpx2
 from sqlalchemy import Engine
 
 from blizzard import __version__
-from blizzard.foundation.clock import IClock, IMonotonicClock, SystemClock
+from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.flags import (
     Flags,
     resolve_flags,
@@ -37,7 +37,6 @@ from blizzard.foundation.registry.interface import Lifetime, port
 from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import Resolver
 from blizzard.foundation.roles import collaborator
-from blizzard.foundation.secrets.sealing import ISecretCipher
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
@@ -96,7 +95,7 @@ from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
 from blizzard.hub.domain.config.credentials import ICredentialReferences, IReadCredentialRepository
-from blizzard.hub.domain.config.forges import ForgeKindOffers, IReadForgeRepository
+from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.config.secrets import ISecretCatalog
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
@@ -200,6 +199,7 @@ from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
 from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
+from blizzard.hub.domain.projects.order import IReadProjectPositions
 from blizzard.hub.domain.projects.targets import ChunkTargetCapture, ChunkTargets
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.host import IReadHostRegistry
@@ -213,6 +213,7 @@ from blizzard.hub.domain.sweeps.names import SweepName
 from blizzard.hub.domain.sweeps.roster import SweepRoster
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.domain.tenancy.teardown import TenantTeardown, TenantTeardownSweep
+from blizzard.hub.domain.urgency.ports import IReadTenantSettings, IReadUrgencyOrder, IReadUrgencyRepository
 from blizzard.hub.domain.urgency.services import (
     TenantDefault,
     TenantSettingsService,
@@ -224,30 +225,22 @@ from blizzard.hub.domain.urgency.services import (
 )
 from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentDrainer
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
+from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
 from blizzard.hub.egress.factory import ConfiguredWriter, EgressUnavailable, build_egress_writer
 from blizzard.hub.egress.space import free_bytes
 from blizzard.hub.egress.writer import EgressWriterSettings, mint_process_token
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
-from blizzard.hub.forge.auth import IForgeAuthorizations
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.commit_check import SeamCommitResolver
 from blizzard.hub.forge.commit_links import LandedCommitLinks
-from blizzard.hub.forge.internal.factory import (
-    build_forge_authorizations,
-    build_forge_registry,
-    build_installation_tokens,
-)
-from blizzard.hub.forge.rates import rate_dialect
-from blizzard.hub.forge.readiness import CredentialReadiness, ICredentialProbe
-from blizzard.hub.forge.registry import ForgeRegistry, WriteLocks
+from blizzard.hub.forge.readiness import CredentialReadiness
+from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
 from blizzard.hub.graphs import PackagedGraphs
-from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.open_tenants import OpenTenants
-from blizzard.hub.secrets import StoreSecretReader
 from blizzard.hub.settings.footing import HubSettingsFooting
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.settings.reader import HubSettingsReader
@@ -263,7 +256,6 @@ from blizzard.hub.store.internal.chunk_targets_store import ChunkTargetsStore
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
-from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
 from blizzard.hub.store.internal.credential_referrers import CredentialReferrersStore
 from blizzard.hub.store.internal.egress_store import EgressStore
@@ -548,8 +540,6 @@ class HubServices:
     action_loop: ActionLoop
     #: What every tenant's services wake the flow driver through, once ``build_flow_driver`` binds it.
     step_wake: StepWake
-    #: Closes every served tenant's configured objects at shutdown, while the action loop still runs.
-    close_tenant_objects: Callable[[], None]
     #: The hub's own occurrences — its exports', its startup — recorded in ``hub_event_log``, published to no stream.
     hub_event_log: HubEventLogService
     #: Every tenant's live event broker — what ends a logged-out session's streams in every tenant.
@@ -689,37 +679,20 @@ class TenantStores:
 
 
 def build_tenant_stores(tenant: Resolver, *, clock: IClock) -> TenantStores:
-    """Build the :class:`TenantStores` of the tenant whose container scope ``tenant`` resolves through: every adapter is
-    the scope's instance, and only the concept services over them are assembled here."""
-    transactions = tenant.get(HubTransactions)
-    finding_store = tenant.get(FindingStore)
-    work_item_store = tenant.get(WorkItemStore)
-    chunk_stores = tenant.get(ChunkStores)
-    delete = DeleteService(
-        items=work_item_store,
-        clock=clock,
-        facts=chunk_stores.facts,
-        record=chunk_stores.record,
-        dependencies=chunk_stores.dependencies,
-        transactions=transactions,
-    )
-    garden_proposal_store = tenant.get(GardenProposalStore)
-    garden_proposal_closure_store = tenant.get(GardenProposalClosureStore)
-    urgencies = tenant.get(UrgencyStore)
-    tenant_settings = tenant.get(TenantSettingsStore)
-    tenant_default = TenantDefault(settings=tenant_settings, urgencies=urgencies)
+    """Build the :class:`TenantStores` of the tenant whose container scope ``tenant`` resolves through: every adapter
+    and every concept service over them is the scope's instance."""
     return TenantStores(
         tenant=tenant,
         connections=tenant.get(ScopedConnections),
-        transactions=transactions,
+        transactions=tenant.get(HubTransactions),
         registry=tenant.get(RunnerRegistryStore),
         hosts=tenant.get(HostRegistryStore),
-        work_item_store=work_item_store,
-        chunk_stores=chunk_stores,
-        delete=delete,
-        finding_store=finding_store,
-        garden_proposal_store=garden_proposal_store,
-        garden_proposal_closure_store=garden_proposal_closure_store,
+        work_item_store=tenant.get(WorkItemStore),
+        chunk_stores=tenant.get(ChunkStores),
+        delete=tenant.get(DeleteService),
+        finding_store=tenant.get(FindingStore),
+        garden_proposal_store=tenant.get(GardenProposalStore),
+        garden_proposal_closure_store=tenant.get(GardenProposalClosureStore),
         secrets=tenant.get(SecretStore),
         work_source_records=tenant.get(WorkSourceRecordStore),
         repository_records=tenant.get(RepositoryRecordStore),
@@ -737,28 +710,13 @@ def build_tenant_stores(tenant: Resolver, *, clock: IClock) -> TenantStores:
         config_apply=tenant.get(ConfigApplyStore),
         config_import=tenant.get(ConfigImportStore),
         invitations=tenant.get(InvitationStore),
-        urgencies=urgencies,
+        urgencies=tenant.get(UrgencyStore),
         urgency_order=tenant.get(UrgencyOrderStore),
-        tenant_settings=tenant_settings,
+        tenant_settings=tenant.get(TenantSettingsStore),
         urgency_chunks=tenant.get(UrgencyChunksStore),
-        tenant_default=tenant_default,
-        work_item_edits=WorkItemEditService(
-            items=work_item_store,
-            work_refs=chunk_stores.work_refs,
-            record=chunk_stores.record,
-            chunks=chunk_stores.record,
-            facts=chunk_stores.facts,
-            clock=clock,
-            delete=delete,
-            default=tenant_default,
-            transactions=transactions,
-        ),
-        garden_proposal_resolution=GardenProposalDeliveryResolution(
-            closures=garden_proposal_closure_store,
-            proposals=garden_proposal_store,
-            findings=finding_store,
-            exits=tenant.get(FindingExitService),
-        ),
+        tenant_default=tenant.get(TenantDefault),
+        work_item_edits=tenant.get(WorkItemEditService),
+        garden_proposal_resolution=tenant.get(GardenProposalDeliveryResolution),
         clock=clock,
     )
 
@@ -812,23 +770,10 @@ class TenantCache:
         return served.sweeps
 
     def evict(self, tenant: TenantId) -> None:
-        """Drop ``tenant``'s entry, if cached — closing the objects its configured records built and
-        dropping its event broker; the tenant's deletion calls this when it closes."""
+        """Drop ``tenant``'s entry, if cached; the tenant's deletion calls this when it closes, once its container
+        scope — which closes the objects its configured records built and drops its event broker — is evicted."""
         with self._lock:
-            entry = self._entries.pop(tenant, None)
-            serving = self._serving
-        if serving is not None:
-            serving.brokers.drop(tenant)
-        if entry is not None and entry.served is not None:
-            entry.served.live.objects.close()
-
-    def close_served(self) -> None:
-        """Close the objects every served tenant's configured records built, keeping the entries — the hub is
-        shutting down, and each forge adapter's client must close while the action loop still runs."""
-        with self._lock:
-            served = [entry.served for entry in self._entries.values() if entry.served is not None]
-        for each in served:
-            each.live.objects.close()
+            self._entries.pop(tenant, None)
 
     def _entry(self, scope: StoreScope) -> _TenantEntry:
         with self._lock:
@@ -863,22 +808,19 @@ class TenantSweeps:
 
 @dataclass(frozen=True)
 class ServedTenant:
-    """What serving one tenant builds over its :class:`TenantStores`: its services, its sweeps, and
-    the live configuration its work sources build through."""
+    """What serving one tenant builds over its :class:`TenantStores`: its services and its sweeps."""
 
     services: TenantServices
     sweeps: TenantSweeps
-    live: LiveConfig
 
 
 @collaborator
 @dataclass(frozen=True)
 class TenantServing:
     """How a :class:`TenantCache` serves its tenants: ``build`` wires a tenant's services over its
-    stores and the broker its container scope holds, which ``brokers`` owns."""
+    stores and the broker its container scope holds."""
 
     build: Callable[[TenantStores, EventBroker], ServedTenant]
-    brokers: TenantBrokers
 
     def serve(self, tenant: TenantId, stores: TenantStores) -> ServedTenant:
         """What serving ``tenant`` builds over its ``stores``, publishing to its scope's broker."""
@@ -946,56 +888,12 @@ class HubCore:
         return opened
 
 
-@dataclass(frozen=True)
-class LiveConfig:
-    """One tenant's built-object cache and its forge authorization boundary, the one holder of the secret reader its
-    builders authenticate through (``bzh:secret-write-only``) and of the tenant's installation tokens, minted on the
-    tenant's clock."""
-
-    objects: ConfigObjectCache
-    authorizations: IForgeAuthorizations
-
-
 def build_hub_settings(
     connections: HubStoreConnections, clock: IClock, footing: HubSettingsFooting
 ) -> HubSettingsGraph:
     store = HubSettingsStore(connections, clock, footing.validate)
     reader = HubSettingsReader(store)
     return HubSettingsGraph(store, reader, HubSettingsAuthoring(reader, store, footing.validate), footing)
-
-
-def build_live_config(stores: TenantStores, *, cipher: ISecretCipher) -> LiveConfig:
-    """The :class:`LiveConfig` of the tenant ``stores`` serve."""
-    return LiveConfig(
-        objects=ConfigObjectCache(stores.tenant.get(ConfigRevisionsStore)),
-        authorizations=build_forge_authorizations(
-            StoreSecretReader(catalog=stores.secrets, sealed=stores.secrets, cipher=cipher),
-            forges=stores.forge_records,
-            tokens=build_installation_tokens(stores.clock),
-        ),
-    )
-
-
-def build_config_authoring(stores: TenantStores, *, cipher: ISecretCipher) -> ConfigAuthoring:
-    """The one configured-record writer of the tenant ``stores`` serve, sealing with ``cipher`` and checking a
-    repository's landing policy against what its forge's kind offers — configuration, never the runtime offer, so a
-    write reveals no secret."""
-    return ConfigAuthoring(
-        work_sources=stores.work_source_records,
-        repositories=stores.repository_records,
-        forges=stores.forge_records,
-        credentials=stores.credential_records,
-        offers=ForgeKindOffers(),
-        secrets=stores.secrets,
-        cipher=cipher,
-        apply_writer=stores.config_apply,
-        import_writer=stores.config_import,
-        transactions=stores.transactions,
-        secret_references=stores.secret_referrers,
-        forge_references=stores.forge_referrers,
-        credential_references=stores.credential_referrers,
-        clock=stores.clock,
-    )
 
 
 def build_hub_flags(config: HubConfig) -> Flags:
@@ -1084,6 +982,64 @@ def color_pick_leaf() -> ColorPick:
     return random.Random().choice
 
 
+def delete_leaf(
+    items: WorkItemStore, clock: IClock, chunks: ChunkStores, transactions: HubTransactions
+) -> DeleteService:
+    """The tenant's unacquired-chunk delete, a legacy leaf the chunk operations area owns until it adopts it."""
+    return DeleteService(
+        items=items,
+        clock=clock,
+        facts=chunks.facts,
+        record=chunks.record,
+        dependencies=chunks.dependencies,
+        transactions=transactions,
+    )
+
+
+def tenant_default_leaf(settings: TenantSettingsStore, urgencies: UrgencyStore) -> TenantDefault:
+    """The tenant's default urgency, read under every mint's locks, a legacy leaf the urgency area owns until it adopts
+    it."""
+    return TenantDefault(settings=settings, urgencies=urgencies)
+
+
+def work_item_edits_leaf(
+    items: WorkItemStore,
+    chunks: ChunkStores,
+    clock: IClock,
+    delete: DeleteService,
+    default: TenantDefault,
+    transactions: HubTransactions,
+) -> WorkItemEditService:
+    """The tenant's hub work-item writes, a legacy leaf the chunk operations area owns until it adopts it."""
+    return WorkItemEditService(
+        items=items,
+        work_refs=chunks.work_refs,
+        record=chunks.record,
+        chunks=chunks.record,
+        facts=chunks.facts,
+        clock=clock,
+        delete=delete,
+        default=default,
+        transactions=transactions,
+    )
+
+
+def garden_proposal_resolution_leaf(
+    closures: GardenProposalClosureStore,
+    proposals: GardenProposalStore,
+    findings: FindingStore,
+    exits: FindingExitService,
+) -> GardenProposalDeliveryResolution:
+    """What closes a delivered proposal's findings, a legacy leaf the garden authoring area owns until it adopts it."""
+    return GardenProposalDeliveryResolution(closures=closures, proposals=proposals, findings=findings, exits=exits)
+
+
+def event_log_leaf(chunks: ChunkStores, events: EventBroker) -> EventLogService:
+    """The one event-log recorder every hub-side authoring site of the tenant shares, publishing on its broker as it
+    records (``bzh:operational-event-log``) — a legacy leaf the chunk operations area owns until it adopts it."""
+    return EventLogService(events=chunks.events, publisher=events)
+
+
 def register_legacy(registry: LegacyRegistry) -> None:
     """Declare the legacy bridge's leaves, each built as the legacy builder built it, over the store's adapters: the
     process services a request's admission reads before its tenant is known, and the transitional ports the adapters
@@ -1101,10 +1057,52 @@ def register_legacy(registry: LegacyRegistry) -> None:
     registry.leaf(color_pick_leaf, lifetime=Lifetime.PROCESS)
     hub_events = store_wiring.register_process(registry)
     registry.alias(port(IReadHubEventLog), hub_events)
-    transactions, projects, project_links = store_wiring.register_tenant(registry)
-    registry.alias(port(IHubTransactions), transactions)
-    registry.alias(port(IReadProjectRepository), projects)
-    registry.alias(port(IReadProjectLinks), project_links)
+    tenant = store_wiring.register_tenant(registry)
+    registry.alias(port(IHubTransactions), tenant.of(HubTransactions))
+    registry.alias(port(IReadProjectRepository), tenant.of(ProjectStore))
+    registry.alias(port(IReadProjectLinks), tenant.of(ProjectLinkStore))
+    registry.alias(port(IReadWorkItemRepository), tenant.of(WorkItemStore))
+    # The reads a declarative apply resolves its entries against.
+    registry.alias(port(IReadProjectPositions), tenant.of(ProjectPositionStore))
+    registry.alias(port(IReadGraphRepository), tenant.of(GraphStore))
+    registry.alias(port(IReadScopeRepository), tenant.of(ScopeStore))
+    registry.alias(port(IReadRoutineRepository), tenant.of(RoutineStore))
+    registry.alias(port(IReadRoutineScopeRepository), tenant.of(RoutineScopeStore))
+    registry.alias(port(IReadCadenceRepository), tenant.of(CadenceStore))
+    registry.alias(port(IReadUrgencyRepository), tenant.of(UrgencyStore))
+    registry.alias(port(IReadUrgencyOrder), tenant.of(UrgencyOrderStore))
+    registry.alias(port(IReadTenantSettings), tenant.of(TenantSettingsStore))
+    for leaf in (
+        delete_leaf,
+        tenant_default_leaf,
+        work_item_edits_leaf,
+        garden_proposal_resolution_leaf,
+        event_log_leaf,
+    ):
+        registry.leaf(leaf, lifetime=Lifetime.TENANT)
+
+
+#: The transitional tenant ports and leaves :func:`register_legacy` declares, for the store-free graph.
+_LEGACY_TENANT_KEYS: tuple[type[Any], ...] = (
+    IHubTransactions,
+    IReadProjectRepository,
+    IReadProjectLinks,
+    IReadWorkItemRepository,
+    IReadProjectPositions,
+    IReadGraphRepository,
+    IReadScopeRepository,
+    IReadRoutineRepository,
+    IReadRoutineScopeRepository,
+    IReadCadenceRepository,
+    IReadUrgencyRepository,
+    IReadUrgencyOrder,
+    IReadTenantSettings,
+    DeleteService,
+    TenantDefault,
+    WorkItemEditService,
+    GardenProposalDeliveryResolution,
+    EventLogService,
+)
 
 
 def register_legacy_absent(registry: LegacyRegistry) -> None:
@@ -1127,7 +1125,7 @@ def register_legacy_absent(registry: LegacyRegistry) -> None:
     registry.absent(port(cast("type[Any]", ColorPick)), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
     store_wiring.register_process_absent(registry)
     store_wiring.register_tenant_absent(registry)
-    for missing in (IHubTransactions, IReadProjectRepository, IReadProjectLinks):
+    for missing in _LEGACY_TENANT_KEYS:
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
 
 
@@ -1204,29 +1202,6 @@ def _backfill_writers(config: EgressConfig, settings: EgressWriterSettings) -> C
     return writer
 
 
-#: Builds a tenant's work-source registry over its stores and its live configuration.
-type WorkSourceRegistryFactory = Callable[[TenantStores, LiveConfig, ForgeBudgets], IWorkSourceRegistry]
-
-#: Builds a tenant's forge registry over its stores, its live configuration, and its rate budgets.
-type ForgeRegistryFactory = Callable[[TenantStores, LiveConfig, ForgeBudgets, WriteLocks], ForgeRegistry]
-
-
-def default_forge_registry(
-    stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets, write_locks: WriteLocks
-) -> ForgeRegistry:
-    """A tenant's forge registry with every forge kind's adapter, uninstrumented."""
-    return build_forge_registry(
-        records=stores.repository_records,
-        forges=stores.forge_records,
-        credentials=stores.credential_records,
-        objects=live.objects,
-        authorizations=live.authorizations,
-        clock=stores.clock,
-        budgets=budgets,
-        write_locks=write_locks,
-    )
-
-
 @dataclass(frozen=True)
 class TenantServiceParts:
     """The process-scoped inputs every tenant's services are wired from — one set, shared by every
@@ -1234,12 +1209,6 @@ class TenantServiceParts:
 
     clock: IClock
     users: IReadUserRepository
-    secret_cipher: ISecretCipher
-    work_sources: WorkSourceRegistryFactory
-    forges: ForgeRegistryFactory
-    #: Each forge kind's read-only credential check, by kind.
-    credential_probes: Mapping[str, ICredentialProbe]
-    action_loop: ActionLoop
     public_url: str | None
     follow_latest_default: bool
     transcript_caps: TranscriptCaps | None
@@ -1257,8 +1226,8 @@ class TenantServiceParts:
 
 
 def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, events: EventBroker) -> ServedTenant:
-    """Construct and wire one tenant's services, sweeps and live configuration over its
-    :class:`TenantStores`, publishing to ``events`` — the tenant's broker."""
+    """Construct and wire one tenant's services and sweeps over its :class:`TenantStores`, publishing to ``events`` —
+    the tenant's broker. Every configured adapter is the tenant scope's instance."""
     clock = parts.clock
     tenant = stores.tenant
     actions = tenant.get(HubActions)
@@ -1287,11 +1256,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     chunk_delivery = chunk_stores.delivery
     chunk_hub_exec = chunk_stores.hub_exec
     chunk_dependencies = chunk_stores.dependencies
-    live = build_live_config(stores, cipher=parts.secret_cipher)
-    # Held per tenant outside the adapter cache, so an edit that rebuilds an adapter keeps the budget it spends.
-    forge_budgets = ForgeBudgets(clock=clock, dialects=rate_dialect)
-    work_sources = parts.work_sources(stores, live, forge_budgets)
-    forges = parts.forges(stores, live, forge_budgets, WriteLocks())
+    forge_budgets = tenant.get(ForgeBudgets)
+    work_sources = tenant.get(IWorkSourceRegistry)
+    forges = tenant.get(ForgeRegistry)
     transcript_caps = parts.transcript_caps
     graph_store = tenant.get(GraphStore)
     transcript_store = tenant.get(TranscriptSegmentStore)
@@ -1301,9 +1268,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     )
     analytics_event_queries = tenant.get(AnalyticsEventQueryStore)
     operational_analytics = tenant.get(AnalyticsOperationalStore)
-    # One event-authoring service publishes on the shared broker as it records
-    # (``bzh:operational-event-log``).
-    event_log = EventLogService(events=chunk_events, publisher=events)
+    event_log = tenant.get(EventLogService)
     detach = DetachService(route=chunk_route, facts=chunk_facts, transactions=stores.transactions, clock=clock)
     # One id-keyed retired-runner refusal, shared by every runner-contact operation.
     retired = RetiredRunnerGuard(registry=registry_store)
@@ -1339,7 +1304,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     cadence_store = tenant.get(CadenceStore)
     urgency_references = UrgencyReferences(urgencies=stores.urgencies, transactions=stores.transactions)
     errand_runs_store = tenant.get(ErrandRunsStore)
-    config_authoring = build_config_authoring(stores, cipher=parts.secret_cipher)
+    config_authoring = tenant.get(ConfigAuthoring)
     finding_set_store = tenant.get(FindingSetStore)
     run_context_store = tenant.get(RunContextStore)
     garden_delivery_store = tenant.get(GardenDeliveryStore)
@@ -1349,19 +1314,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     garden_run_store = tenant.get(GardenRunStore)
     finding_bucket = tenant.get(FindingBucketReader)
     garden_formats = GardenFormats()
-    commit_links = LandedCommitLinks(
-        project_links=stores.project_links,
-        repository_records=stores.repository_records,
-        forge_records=stores.forge_records,
-    )
+    commit_links = tenant.get(LandedCommitLinks)
     # A project to a plain `delivery.validation.ICommitResolver` callable.
-    commit_resolver_for = SeamCommitResolver(
-        repositories=stores.repository_records,
-        forge_records=stores.forge_records,
-        links=stores.project_links,
-        forges=forges,
-        loop=parts.action_loop,
-    ).for_project
+    commit_resolver_for = tenant.get(SeamCommitResolver).for_project
     # Built before the executor, which writes a delivering action's record through them.
     garden_delivery = GardenDeliveryRecorder(
         artifacts=chunk_artifacts,
@@ -1441,7 +1396,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         work_sources=work_sources,
         pass_config=parts.pass_config,
     )
-    work_ref_label: WorkRefLabel = work_sources.label
+    work_ref_label: WorkRefLabel = tenant.get(WorkRefLabel)
     flow_line_factory = FlowLineFactory(facts=chunk_facts, record=chunk_record, graphs=graph_store)
     tenant_default = stores.tenant_default
     cadence_attention = CadenceAttention(
@@ -1450,17 +1405,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     services = TenantServices(
         forges=forges,
         forge_budgets=forge_budgets,
-        credential_readiness=CredentialReadiness(
-            repositories=stores.repository_records,
-            work_sources=stores.work_source_records,
-            forges=stores.forge_records,
-            authorizations=live.authorizations,
-            budgets=forge_budgets,
-            probes=parts.credential_probes,
-            event_log=event_log,
-            clock=clock,
-            monotonic=tenant.get(IMonotonicClock),
-        ),
+        credential_readiness=tenant.get(CredentialReadiness),
         work_ref_label=work_ref_label,
         chunks=ChunkReadStores(
             facts=chunk_facts,
@@ -1657,28 +1602,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         secret_catalog=stores.secrets,
         secret_references=stores.secret_referrers,
         config_authoring=config_authoring,
-        config_application=ConfigApplication(
-            authoring=config_authoring,
-            repositories=stores.repository_records,
-            work_sources=stores.work_source_records,
-            forges=stores.forge_records,
-            credentials=stores.credential_records,
-            projects=stores.projects,
-            links=stores.project_links,
-            positions=stores.project_positions,
-            scopes=scope_store,
-            routines=routine_store,
-            routine_scopes=routine_scope_store,
-            cadences=cadence_store,
-            graphs=graph_store,
-            secrets=stores.secrets,
-            tenant_id=stores.scope.tenant,
-            urgencies=stores.urgencies,
-            urgency_order=stores.urgency_order,
-            tenant_settings=stores.tenant_settings,
-            pick=parts.color_pick,
-            clock=clock,
-        ),
+        config_application=tenant.get(ConfigApplication),
         work_source_records=stores.work_source_records,
         repository_records=stores.repository_records,
         forge_records=stores.forge_records,
@@ -1878,14 +1802,12 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             clock=clock,
         ),
     )
-    return ServedTenant(services=services, sweeps=sweeps, live=live)
+    return ServedTenant(services=services, sweeps=sweeps)
 
 
 def build_services(
     core: HubCore,
     *,
-    work_sources: WorkSourceRegistryFactory,
-    forges: ForgeRegistryFactory = default_forge_registry,
     public_url: str | None = None,
     follow_latest_default: bool,
     oauth_providers: Sequence[OAuthProviderConfig] = (),
@@ -1909,10 +1831,9 @@ def build_services(
     tenant cache serve each tenant's services (:func:`build_tenant_services`). The sweeps and exports
     are one pass per hub, each acting on a row through the services of the row's tenant, opened from
     the cache. Every live config read goes through the process container's :class:`HubConfigSource`, and the core's
-    container supplies the process collaborators. ``work_sources`` builds a tenant's
-    work-source registry, ``forges`` its forge registry; an explicit ``oauth_registry`` wins over
-    ``oauth_providers``; ``hub_version`` defaults to the installed one; ``extractors`` are the turn-event
-    extractors the derivation runs, and a pass is bounded by the live
+    container supplies the process collaborators and each tenant's scope its configured adapters; an explicit
+    ``oauth_registry`` wins over ``oauth_providers``; ``hub_version`` defaults to the installed one; ``extractors`` are
+    the turn-event extractors the derivation runs, and a pass is bounded by the live
     ``action_pass_seconds``, its caller letting go ``action_pass_grace`` later. ``cadences_on`` answers, each
     cadence pass, whether the ``cadences`` flag lets it mint, and
     ``announce_minted`` publishes each mint it commits."""
@@ -1931,11 +1852,6 @@ def build_services(
     parts = TenantServiceParts(
         clock=clock,
         users=core.users,
-        secret_cipher=process.get(ISecretCipher),
-        work_sources=work_sources,
-        forges=forges,
-        credential_probes=process.get(Mapping[str, ICredentialProbe]),
-        action_loop=action_loop,
         public_url=public_url,
         follow_latest_default=follow_latest_default,
         transcript_caps=transcript_caps,
@@ -1948,9 +1864,7 @@ def build_services(
         step_wake=step_wake,
         announce_minted=announce_minted,
     )
-    core.tenants.serve(
-        TenantServing(build=lambda stores, events: build_tenant_services(stores, parts, events=events), brokers=brokers)
-    )
+    core.tenants.serve(TenantServing(build=lambda stores, events: build_tenant_services(stores, parts, events=events)))
     hub_events = core.hub_events
     hub_event_log = core.hub_event_log
     open_tenants = core.process.resolver.get(OpenTenants)
@@ -2137,7 +2051,7 @@ def build_services(
     def forget_closed(tenant: TenantId) -> None:
         # A closed tenant's container scope, its cached stores and services, and its broker go first; the in-memory
         # open set is read again after, so a request resolving the tenant meanwhile misses both caches and is refused
-        # by the store. The legacy entry alone closes the tenant's configured clients.
+        # by the store. The container scope's finalizers close the tenant's configured clients and drop its broker.
         core.process.tenants.evict(tenant)
         core.tenants.evict(tenant)
         open_tenants.refresh()
@@ -2192,7 +2106,6 @@ def build_services(
         tenant_registry=lambda tenant: core.open(scope_of(tenant)).registry,
         tenant_hosts=lambda tenant: core.open(scope_of(tenant)).hosts,
         action_loop=action_loop,
-        close_tenant_objects=core.tenants.close_served,
         hub_event_log=hub_event_log,
         event_brokers=brokers,
         hub_events=hub_events,

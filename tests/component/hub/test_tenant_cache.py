@@ -25,7 +25,6 @@ from blizzard.hub.api.chunk_events import announce_minted
 from blizzard.hub.composition import (
     HubCore,
     HubServices,
-    LiveConfig,
     TenantCache,
     TenantStores,
     build_hub_core,
@@ -35,14 +34,11 @@ from blizzard.hub.composition import (
 )
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.analytics.extraction import shipped_extractors
-from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantClosed, TenantId, UnknownTenant
-from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from tests.support.config_inputs import VERSION_WINDOW
 from tests.support.scaffolding import (
     TEST_HUB_ACTIONS,
-    WorkSourceRegistry,
     add_tenant,
     close_tenant,
     count_queries,
@@ -236,12 +232,8 @@ def test_hub_scoped_reads_mark_every_statement_they_issue(tmp_path: Path) -> Non
 
 
 def _served(core: HubCore) -> HubServices:
-    def work_sources(_stores: TenantStores, _live: LiveConfig, _budgets: ForgeBudgets) -> IWorkSourceRegistry:
-        return WorkSourceRegistry({})
-
     return build_services(
         core,
-        work_sources=work_sources,
         follow_latest_default=False,
         version_window=VERSION_WINDOW,
         extractors=shipped_extractors(),

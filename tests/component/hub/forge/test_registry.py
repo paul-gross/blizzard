@@ -20,37 +20,39 @@ import pytest
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.composition import LiveConfig, TenantStores, build_hub_core, build_live_config, connections_for_engine
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.config.capabilities import Capability
-from blizzard.hub.domain.config.credentials import CredentialUnavailable
-from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, ConfiguredForge, ForgeEdit
+from blizzard.hub.domain.config.credentials import CredentialUnavailable, IReadCredentialRepository
+from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, ConfiguredForge, ForgeEdit, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
+    IReadRepositoryRecordRepository,
     RepositoryDraft,
     RepositoryEdit,
     RepositoryId,
 )
 from blizzard.hub.domain.config.secrets import SecretName
+from blizzard.hub.forge.auth import IForgeAuthorizations
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgetLow, ForgeBudgets, ForgePriority, IForgeRateDialect
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.landing import ForgeCapabilityMissing, ForgeRateLimited, MergeMethod
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, TurnCutOff, WriteLocks
+from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.tenancy import StoreScope
 from tests.support.scaffolding import (
     OP,
-    TEST_HUB_ACTIONS,
     build_hub,
     config_authoring,
+    configured_core,
     default_tenant,
     hub_store_connections,
     migrated_hub_at,
     seed_forge,
+    tenant_live,
 )
 
 _NOW = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
@@ -111,14 +113,12 @@ class _World:
         engine = create_engine_from_url(db_url)
         keys = hub_key_provider({}, data_dir=tmp_path / "data")
         clock = FixedClock(_NOW)
-        self.stores = build_hub_core(connections_for_engine(engine), clock=clock, actions=TEST_HUB_ACTIONS).open(
-            StoreScope(default_tenant(engine))
-        )
+        self.stores = configured_core(engine, tmp_path, clock=clock).open(StoreScope(default_tenant(engine)))
         self.authoring = config_authoring(engine, keys=keys, clock=clock)
         self.authoring.create_secret(SecretName.parse("gh"), "tok", OP)
         self.forge_id = seed_forge(engine, "http://forge.fixture")
         self.repository = self.authoring.create_repository("widget", None, _DRAFT.on(self.forge_id), OP).repository_id
-        live = build_live_config(self.stores, cipher=secret_cipher(keys))
+        live = tenant_live(self.stores)
         self.transports: list[_Transport] = []
         self.bindings: list[ForgeBinding] = []
         self.hold_next = False
@@ -231,13 +231,21 @@ def test_an_unchanged_record_hands_out_the_same_adapter(world: _World, loop: Act
 def test_a_hub_shut_down_closes_its_cached_adapters_before_the_action_loop_stops(tmp_path: Path) -> None:
     transport = _Transport()
 
-    def forges(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets, write_locks: WriteLocks) -> ForgeRegistry:
+    def forges(
+        records: IReadRepositoryRecordRepository,
+        forge_records: IReadForgeRepository,
+        credentials: IReadCredentialRepository,
+        objects: ConfigObjectCache,
+        authorizations: IForgeAuthorizations,
+        budgets: ForgeBudgets,
+        write_locks: WriteLocks,
+    ) -> ForgeRegistry:
         return ForgeRegistry(
-            records=stores.repository_records,
-            forges=stores.forge_records,
-            credentials=stores.credential_records,
-            objects=live.objects,
-            authorizations=live.authorizations,
+            records=records,
+            forges=forge_records,
+            credentials=credentials,
+            objects=objects,
+            authorizations=authorizations,
             build=lambda binding: GitHubLanding(binding, clock=FixedClock(_NOW), transport=transport),
             capabilities=FORGE_KIND_CAPABILITIES,
             budgets=budgets,

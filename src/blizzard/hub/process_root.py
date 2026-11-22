@@ -30,12 +30,15 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery import wiring as delivery
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.documents import wiring as documents
+from blizzard.hub.domain.config import wiring as config_wiring
+from blizzard.hub.domain.config_apply import wiring as config_apply
 from blizzard.hub.domain.garden.findings import wiring as findings
 from blizzard.hub.domain.graph import wiring as graph_area
 from blizzard.hub.events import wiring as events
 from blizzard.hub.forge import wiring as forge
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
 from blizzard.hub.graphs import PackagedGraphs
+from blizzard.hub.live_config import wiring as live_config
 from blizzard.hub.scopes import wiring as scopes
 from blizzard.hub.scopes.environ import HubEnviron
 from blizzard.hub.scopes.tenants import TenantContainers
@@ -44,10 +47,23 @@ from blizzard.hub.settings import wiring as settings_wiring
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store import wiring as store
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
+from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
+from blizzard.hub.store.internal.config_import_store import ConfigImportStore
+from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
+from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
+from blizzard.hub.store.internal.credential_referrers import CredentialReferrersStore
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
+from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
+from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
+from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
+from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import TenantId, UnknownTenant
+from blizzard.hub.work_sources import wiring as work_sources
 
 #: The process scope's owner id.
 HUB_OWNER = "hub"
@@ -90,6 +106,11 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
         secrets.register(registry)
         findings.register(registry, store.register_findings(registry))
         graph_area.register(registry, store.register_graphs(registry))
+        _register_config(registry)
+        config_apply.register(registry)
+        live_config.register(registry)
+        forge.register_tenant(registry)
+        work_sources.register(registry)
     else:
         register_legacy_absent(registry)
         secrets.register_absent(registry)
@@ -97,10 +118,37 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
         findings.register_absent(registry)
         store.register_graphs_absent(registry)
         graph_area.register_absent(registry)
+        store.register_config_absent(registry)
+        config_wiring.register_absent(registry)
+        config_apply.register_absent(registry)
+        live_config.register_absent(registry)
+        forge.register_tenant_absent(registry)
+        work_sources.register_absent(registry)
     if store_backed and settings:
         settings_wiring.register(registry)
     else:
         settings_wiring.register_absent(registry)
+
+
+def _register_config(registry: LegacyRegistry) -> None:
+    """The configured-record adapters, and the config area's ports over them."""
+    refs = store.register_config(registry)
+    config_wiring.register(
+        registry,
+        work_sources=refs.of(WorkSourceRecordStore),
+        repositories=refs.of(RepositoryRecordStore),
+        forges=refs.of(ForgeRecordStore),
+        credentials=refs.of(CredentialRecordStore),
+        secrets=refs.of(SecretStore),
+        sealed=refs.of(SecretStore),
+        secret_references=refs.of(SecretReferrersStore),
+        forge_references=refs.of(ForgeReferrersStore),
+        credential_references=refs.of(CredentialReferrersStore),
+        changes=refs.of(ConfigChangeStore),
+        apply_writer=refs.of(ConfigApplyStore),
+        import_writer=refs.of(ConfigImportStore),
+        revisions=refs.of(ConfigRevisionsStore),
+    )
 
 
 def _inputs(

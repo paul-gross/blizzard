@@ -145,7 +145,7 @@ def test_a_deleted_tenant_leaves_no_scope_closes_its_clients_once_and_refuses_th
 
     hub.hub_services.tenant_teardown.delete(tenant, by="usr_deleter")
     (deleted,) = closed
-    hub.hub_services.close_tenant_objects()
+    hub.hub_services.process.tenants.close()
 
     with pytest.raises(TenantClosed):
         before.resolver.get(StoreScope)
