@@ -65,7 +65,7 @@ def permit_view(permit: Permit, labels: ProjectLabelFields) -> PermitView:
 
 
 def _labelled(services: TenantServices, permit: Permit) -> PermitView:
-    return permit_view(permit, ProjectLabels.read(services, [permit.project_id]).fields(permit.project_id))
+    return permit_view(permit, ProjectLabels.read(services.projects, [permit.project_id]).fields(permit.project_id))
 
 
 @router.post(
@@ -82,7 +82,9 @@ def request_permit(
     """Request a permit for ``holder`` in the project named, or the tenant's only one: 201, 409 when the project already
     holds one for the holder and capability, 422 on a project the tenant does not hold or one left open
     (``project_required``)."""
-    project = body_project(request.project, services) if request.project is not None else project_of_call(services)
+    project = (
+        body_project(request.project, services) if request.project is not None else project_of_call(services.projects)
+    )
     try:
         permit = services.permit_service.request(
             project=project, holder=request.holder, capability=request.capability, by=identity.user_id
@@ -106,7 +108,7 @@ def list_permits(
         page = services.permits.list_page(project=project, holder=holder, limit=limit, cursor=cursor)
     except MalformedCursor as exc:
         raise unprocessable("malformed cursor") from exc
-    labels = ProjectLabels.read(services, (p.project_id for p in page.permits))
+    labels = ProjectLabels.read(services.projects, (p.project_id for p in page.permits))
     return PermitListResponse(
         permits=[permit_view(p, labels.fields(p.project_id)) for p in page.permits], next_cursor=page.next_cursor
     )

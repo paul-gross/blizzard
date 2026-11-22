@@ -15,15 +15,22 @@ from __future__ import annotations
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
 from blizzard.hub.api import problems, problems_admin
-from blizzard.hub.api.deps import Services
+from blizzard.hub.api.auth_session import AdmittedTenant, tenant_request
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problem_rendering import declared_problem_response
 from blizzard.hub.composition import TenantServices
-from blizzard.hub.domain.projects.model import Project, ProjectId, ProjectRequired, sole_project
+from blizzard.hub.domain.projects.model import (
+    IReadProjectRepository,
+    Project,
+    ProjectId,
+    ProjectRequired,
+    sole_project,
+)
 from blizzard.wire.project import ProjectRef, ProjectRequiredBody
 
 PROJECT_REQUIRED = "project_required"
@@ -31,15 +38,20 @@ PROJECT_REQUIRED = "project_required"
 UNKNOWN_PROJECT = "unknown_project"
 
 
-def project_of_call(services: TenantServices) -> Project:
+#: The admitted tenant a project dependency resolves its reads beneath — its request scope is open once this resolves.
+_Admitted = Annotated[AdmittedTenant, Depends(tenant_request)]
+
+
+def project_of_call(projects: IReadProjectRepository) -> Project:
     """The project a call naming none acts in — the tenant's only one; :class:`ProjectRequired` otherwise. For an
     edge that needs a project only for part of what it was sent."""
-    return sole_project(services.projects.list_all())
+    return sole_project(projects.list_all())
 
 
-def call_project(services: Services) -> Project:
+@inject_sync
+def call_project(_tenant: _Admitted, projects: FromDishka[IReadProjectRepository]) -> Project:
     """The project of a call that needs one (:func:`project_of_call`), as a dependency."""
-    return project_of_call(services)
+    return project_of_call(projects)
 
 
 CallProject = Annotated[Project, Depends(call_project)]
@@ -55,9 +67,10 @@ def _unprocessable(where: str, field: str, value: str) -> HTTPException:
     return ProblemHTTPException(partial(problems_admin.unknown_body_project_problem, field, value))
 
 
-def path_project(project: str, services: Services) -> Project:
+@inject_sync
+def path_project(project: str, _tenant: _Admitted, projects: FromDishka[IReadProjectRepository]) -> Project:
     """The project the ``{project}`` path segment names, by id, slug or former slug; ``404`` when it names none."""
-    found = services.projects.resolve(project)
+    found = projects.resolve(project)
     if found is None:
         raise ProblemHTTPException(partial(problems_admin.project_not_found_problem, _unknown(project)))
     return found
@@ -66,12 +79,15 @@ def path_project(project: str, services: Services) -> Project:
 PathProject = Annotated[Project, Depends(path_project)]
 
 
-def query_project(services: Services, project: str | None = None) -> ProjectId | None:
+@inject_sync
+def query_project(
+    _tenant: _Admitted, projects: FromDishka[IReadProjectRepository], project: str | None = None
+) -> ProjectId | None:
     """The project ``?project=`` narrows a read to — ``None`` when the query names none, so the read takes the whole
     tenant; ``422`` when it names a project the tenant does not hold."""
     if project is None:
         return None
-    found = services.projects.resolve(project)
+    found = projects.resolve(project)
     if found is None:
         raise _unprocessable("query", "project", project)
     return found.project_id

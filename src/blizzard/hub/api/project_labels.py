@@ -9,8 +9,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from blizzard.hub.api.project_label_fields import ProjectLabelFields, project_label_fields
-from blizzard.hub.composition import TenantServices
-from blizzard.hub.domain.projects.model import Project, ProjectId
+from blizzard.hub.domain.projects.model import IReadProjectRepository, Project, ProjectId
 
 
 class ProjectLabels:
@@ -20,10 +19,10 @@ class ProjectLabels:
         self._projects = projects
 
     @classmethod
-    def read(cls, services: TenantServices, project_ids: Iterable[str | None]) -> ProjectLabels:
+    def read(cls, projects: IReadProjectRepository, project_ids: Iterable[str | None]) -> ProjectLabels:
         """One batched read of every project ``project_ids`` names."""
         ids = sorted({ProjectId(project_id) for project_id in project_ids if project_id is not None})
-        return cls(services.projects.get_many(ids) if ids else {})
+        return cls(projects.get_many(ids) if ids else {})
 
     @classmethod
     def of_project(cls, project: Project) -> ProjectLabels:

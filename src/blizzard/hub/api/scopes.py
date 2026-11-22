@@ -134,7 +134,7 @@ def _set_retired(
 
 def _listing(services: TenantServices, project_id: str | None) -> list[ScopeView]:
     scopes = services.scopes.list_all(project_id)
-    labels = ProjectLabels.read(services, (s.project_id for s in scopes))
+    labels = ProjectLabels.read(services.projects, (s.project_id for s in scopes))
     return [scope_view(s, labels.fields(s.project_id)) for s in scopes]
 
 

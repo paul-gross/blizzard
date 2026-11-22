@@ -18,6 +18,7 @@ from tests.support.container_guards import (
     duplicate_owners,
     graph_builds,
     lifetime_violations,
+    narrowing_violations,
     role_key_violations,
     wiring_boundary_violations,
 )
@@ -232,3 +233,22 @@ def test_default_factory_violations_flag_a_defaulted_constructor() -> None:
     defaulted = _registry()
     defaulted.service(Needs, lifetime=Lifetime.PROCESS)
     assert default_factory_violations(defaulted) == ["Needs parameter 'limit' has a default"]
+
+
+def test_a_narrowed_route_module_names_no_legacy_bag() -> None:
+    assert narrowing_violations(_SRC) == []
+
+
+def test_the_narrowing_gate_fails_a_planted_bag_import_parameter_and_attribute(tmp_path: Path) -> None:
+    planted = tmp_path / "hub" / "api" / "planted.py"
+    planted.parent.mkdir(parents=True)
+    planted.write_text(
+        "from blizzard.hub.api.deps import Services\n"
+        "from blizzard.hub import composition\n"
+        "def route(services: Services) -> composition.TenantServices: ...\n"
+    )
+    assert narrowing_violations(tmp_path, [Path("hub/api/planted.py")]) == [
+        "hub/api/planted.py:1: names Services",
+        "hub/api/planted.py:3: names Services",
+        "hub/api/planted.py:3: names TenantServices",
+    ]

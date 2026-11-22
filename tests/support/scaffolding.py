@@ -63,6 +63,7 @@ from blizzard.hub.auth.oauth.provider import IOAuthProvider
 from blizzard.hub.auth.oauth.registry import OAuthProviderRegistry
 from blizzard.hub.composition import (
     ForgeRegistryFactory,
+    HubCore,
     HubServices,
     LiveConfig,
     TenantServices,
@@ -1421,6 +1422,8 @@ class HubHarness:
     #: The wired app, so a test can build a second ``TestClient`` with a different peer
     #: address — the forwarded-header trust tests need a concrete IP peer.
     app: FastAPI | None = None
+    #: The hub core the services were built over — its per-tenant stores, and the process container beneath them.
+    core: HubCore | None = None
     _driver: FlowDriver | None = field(default=None, repr=False)
 
     @property
@@ -1481,6 +1484,15 @@ class HubHarness:
     def open_services(self, tenant: TenantId) -> TenantServices:
         """``tenant``'s services, opened as a request in that tenant would open them."""
         return self.hub_services.tenants.open_services(StoreScope(tenant))
+
+    def open_stores(self, tenant: TenantId) -> TenantStores:
+        """``tenant``'s stores, opened through the core the services were built over."""
+        assert self.core is not None
+        return self.core.open(StoreScope(tenant))
+
+    def resolve[T](self, tenant: TenantId, dependency_type: type[T]) -> T:
+        """``tenant``'s one ``dependency_type``, resolved through its container scope as a background pass would."""
+        return self.hub_services.process.tenants.resolve(StoreScope(tenant), dependency_type)
 
     def add_tenant(self, name: str) -> TenantHarness:
         """Add a tenant named ``name`` beside the default one and hand back what a test drives it with: its
@@ -1842,6 +1854,7 @@ def build_hub(
         engine=engine,
         events=services.events,
         app=app,
+        core=core,
     )
 
 

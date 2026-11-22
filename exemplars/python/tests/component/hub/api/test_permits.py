@@ -13,6 +13,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 
 from blizzard.hub.api import deps as hub_deps
+from blizzard.hub.tenancy import StoreScope
 from exemplar.hub.api import deps, permits
 from exemplar.hub.api.permit_params import path_permit
 from exemplar.hub.composition import build_tenant_services, build_tenant_stores
@@ -21,7 +22,6 @@ from tests.support.scaffolding import (
     build_hub,
     default_project,
     default_tenant,
-    scoped_connections,
     seed_runner,
 )
 
@@ -35,7 +35,8 @@ def _hub(tmp_path: Path) -> HubHarness:
     with hub.engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
         _PERMITS.upgrade()
         _PERMIT_REVISION.upgrade()
-    stores = build_tenant_stores(scoped_connections(hub.engine, default_tenant(hub.engine)), clock=hub.clock)
+    tenant = hub.hub_services.process.tenants.open(StoreScope(default_tenant(hub.engine)))
+    stores = build_tenant_stores(tenant.resolver, clock=hub.clock)
     hub.app.state.tenant_services = build_tenant_services(stores, hub.services)
     hub.app.dependency_overrides[hub_deps.tenant_services] = deps.tenant_services
     hub.app.include_router(permits.router)

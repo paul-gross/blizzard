@@ -134,7 +134,7 @@ def _labelled(routine: Routine, services: TenantServices) -> RoutineView:
     """``routine``'s view, labelled from one read of its project."""
     return _routine_view(
         routine,
-        ProjectLabels.read(services, [routine.project_id]).fields(routine.project_id),
+        ProjectLabels.read(services.projects, [routine.project_id]).fields(routine.project_id),
         services.urgency_reading.by_id(),
         _keeping(routine, services),
         services.urgency_reading.default_id(),
@@ -147,7 +147,7 @@ def _keeping(routine: Routine, services: TenantServices) -> tuple[KeptBy, ...]:
 
 def _listing(services: TenantServices, project_id: str | None, *, include_retired: bool) -> list[RoutineView]:
     routines = [r for r in services.routines.list_all(project_id) if include_retired or not r.retired]
-    labels = ProjectLabels.read(services, (r.project_id for r in routines))
+    labels = ProjectLabels.read(services.projects, (r.project_id for r in routines))
     urgencies = services.urgency_reading.by_id()
     keeping = services.cadence_reading.kept_by(routines, project_id=project_id)
     default_id = services.urgency_reading.default_id()
@@ -330,7 +330,7 @@ def routine_trend(
     `?project=` names, else in the call's project (the tenant's only one, else `422 project_required`). 404 on an
     unknown routine slug in that project; 422 on a malformed instant, a non-positive `period_days`, a
     non-positive span, or a span/`period_days` pair bucketing past the period cap."""
-    project_id = project if project is not None else project_of_call(services).project_id
+    project_id = project if project is not None else project_of_call(services.projects).project_id
     found = services.routines.get_by_slug(project_id, routine)
     if found is None:
         raise ProblemHTTPException(
@@ -393,7 +393,7 @@ def routine_proposal_counts(
     project_id: str | None = project
     if routine is not None:
         if project_id is None:
-            project_id = project_of_call(services).project_id
+            project_id = project_of_call(services.projects).project_id
         if services.routines.get_by_slug(project_id, routine) is None:
             raise ProblemHTTPException(
                 partial(problems_garden.routine_not_found_problem, f"unknown routine {routine!r}", 404)
@@ -401,7 +401,7 @@ def routine_proposal_counts(
     rows = services.garden_proposals.counts_by_class(
         since=parsed_since, until=parsed_until, routine_name=routine, project_id=project_id, origin=origin
     )
-    labels = ProjectLabels.read(services, (c.project_id for c in rows))
+    labels = ProjectLabels.read(services.projects, (c.project_id for c in rows))
     return GardenProposalCountsView(
         since=iso_utc(parsed_since),
         until=iso_utc(parsed_until),

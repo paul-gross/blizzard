@@ -197,14 +197,14 @@ def _labelled(cadence: Cadence, services: TenantServices) -> CadenceView:
     read = services.cadence_reading.view(cadence)
     return _cadence_view(
         read,
-        ProjectLabels.read(services, [cadence.project_id]).fields(cadence.project_id),
+        ProjectLabels.read(services.projects, [cadence.project_id]).fields(cadence.project_id),
         services.urgency_reading.by_id(),
     )
 
 
 def _listing(services: TenantServices, project_id: str | None, *, include_retired: bool) -> list[CadenceView]:
     reads = services.cadence_reading.list_cadences(project_id, include_retired=include_retired)
-    labels = ProjectLabels.read(services, (r.cadence.project_id for r in reads))
+    labels = ProjectLabels.read(services.projects, (r.cadence.project_id for r in reads))
     urgencies = services.urgency_reading.by_id()
     return [_cadence_view(r, labels.fields(r.cadence.project_id), urgencies) for r in reads]
 
@@ -303,7 +303,7 @@ def get_cadence(cadence_id: str, services: Services) -> CadenceView:
     read = services.cadence_reading.show(cadence_id)
     if read is None:
         raise ProblemHTTPException(partial(problems_garden.cadence_not_found_problem, f"unknown cadence {cadence_id}"))
-    labels = ProjectLabels.read(services, [read.cadence.project_id])
+    labels = ProjectLabels.read(services.projects, [read.cadence.project_id])
     return _cadence_view(read, labels.fields(read.cadence.project_id), services.urgency_reading.by_id())
 
 

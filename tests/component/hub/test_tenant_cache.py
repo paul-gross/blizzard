@@ -17,6 +17,8 @@ import sqlalchemy as sa
 from sqlalchemy import Engine, event
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.registry.interface import Lifetime, port
+from blizzard.foundation.registry.scopes import ScopeValues, open_child, supply
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.api.chunk_events import announce_minted
 from blizzard.hub.composition import (
@@ -141,7 +143,14 @@ def test_a_tenant_closed_while_its_stores_are_being_opened_is_dropped_by_its_evi
     evicting: list[threading.Thread] = []
 
     def build(scope: StoreScope) -> TenantStores:
-        built.append(build_tenant_stores(core.store_connections.scoped(scope), clock=FixedClock(_AT)))
+        # The tenant scope opens beneath the process scope directly: this cache, not the core's, confirms the tenant.
+        tenant = open_child(
+            core.process.owner,
+            lifetime=Lifetime.TENANT,
+            owner=scope.tenant,
+            values=ScopeValues((supply(port(StoreScope), scope),)),
+        )
+        built.append(build_tenant_stores(tenant.resolver, clock=FixedClock(_AT)))
         return built[-1]
 
     def confirm_then_close(tenant: TenantId) -> None:
@@ -248,7 +257,7 @@ def test_a_tenants_services_are_built_once_over_its_own_stores(tmp_path: Path) -
     stores = core.open(StoreScope(second))
     assert services.registry is stores.registry
     assert services.delete is stores.delete
-    assert services.finding_exit is stores.finding_exit
+    assert services.findings is stores.finding_store
     assert services is not first
     assert services.registry is not first.registry
 

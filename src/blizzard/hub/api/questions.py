@@ -160,7 +160,7 @@ def list_open_questions(services: Services, project: QueryProject) -> list[Quest
     question awaiting an answer, rather than only one page."""
     rows = services.chunks.questions.list_open_questions(project=project)
     runner_names = services.registry.names_for(row.runner_id for row in rows)
-    labels = ProjectLabels.read(services, (row.project_id for row in rows))
+    labels = ProjectLabels.read(services.projects, (row.project_id for row in rows))
     # A restart answers every open question in its one write, so an unanswered row is never superseded.
     return [
         question_view(row, runner_names, labels.fields(row.project_id), superseded_by_restart=False) for row in rows

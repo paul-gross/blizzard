@@ -11,6 +11,7 @@ from pathlib import Path
 from sqlalchemy import insert, select
 
 from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.hub.domain.garden.findings.model import FindingExitService
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from tests.support.finding_units import seed_fact
@@ -33,6 +34,7 @@ from tests.support.scaffolding import (
     build_hub,
     capture_statements,
     default_project,
+    default_tenant,
     hub_scoped,
     hub_store_connections,
     seed_lease,
@@ -552,7 +554,7 @@ def test_a_replayed_delivery_stays_recorded_even_after_one_of_its_findings_exits
     findings = FindingStore(hub_store_connections(hub.engine))
     finding = findings.get(finding_id)
     assert finding is not None
-    hub.services.finding_exit.resolve([finding], note="landed", actor="u_1")
+    hub.resolve(default_tenant(hub.engine), FindingExitService).resolve([finding], note="landed", actor="u_1")
     resolved = findings.get(finding_id)
     assert resolved is not None and resolved.state == "resolved"
 

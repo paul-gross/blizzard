@@ -446,7 +446,7 @@ def create_work_item(
     except WorkItemFieldBlank as exc:
         raise _blank(exc) from exc
     urgency = stated_urgency(request.urgency, services)
-    project_id = project if project is not None else project_of_call(services).project_id
+    project_id = project if project is not None else project_of_call(services.projects).project_id
     try:
         graph = services.default_graph.ensure_default(
             services.default_graph_doc, definition_yaml=services.default_graph_yaml

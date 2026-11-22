@@ -3839,6 +3839,7 @@ def test_runner_domain_core_selection_keys_on_every_node_module_outside_internal
 _COMPOSITION_ROOT_FILES = (
     _HUB_DIR / "app.py",
     _HUB_DIR / "composition.py",
+    _HUB_DIR / "process_root.py",
     _HUB_DIR / "store" / "internal" / "chunk_store_factory.py",
 )
 
@@ -3877,17 +3878,56 @@ def _blizzard_constructions(path: Path) -> list[tuple[str, int]]:
 )
 def test_each_blizzard_class_is_constructed_once_across_the_hub_composition_roots() -> None:
     """bzh:dependency-injection: a process-scoped collaborator is built once and shared, so
-    no class is constructed twice across the hub's composition-root files."""
-    sites: dict[str, list[str]] = {}
-    for path in _COMPOSITION_ROOT_FILES:
-        for name, lineno in _canonical_blizzard_constructions(path, _SRC_DIR):
-            sites.setdefault(name, []).append(f"{path.relative_to(_REPO_ROOT)}:{lineno}")
-    duplicated = {
+    no class is constructed twice across the hub's composition-root files — a class the hub's
+    registry owns counting as constructed there."""
+    duplicated = _constructed_more_than_once(_COMPOSITION_ROOT_FILES, _SRC_DIR, _hub_registry_owned())
+    assert not duplicated, f"constructed more than once across the composition roots: {duplicated}"
+
+
+def test_the_constructed_once_gate_counts_a_registered_class_constructed_in_a_root(tmp_path: Path) -> None:
+    src = tmp_path / "blizzard"
+    root = src / "hub" / "root.py"
+    root.parent.mkdir(parents=True)
+    root.write_text(
+        "from blizzard.hub.store.internal.finding_store import FindingStore\n"
+        "from blizzard.hub.store.internal.project_store import ProjectStore\n"
+        "def build(connections):\n"
+        "    return FindingStore(connections), ProjectStore(connections)\n"
+    )
+    owned = "blizzard.hub.store.internal.finding_store.FindingStore"
+    assert _constructed_more_than_once((root,), src, frozenset({owned})) == {
+        owned: ["the hub registry", f"{root.relative_to(tmp_path)}:4"]
+    }
+    assert _constructed_more_than_once((root,), src, frozenset()) == {}
+
+
+def _hub_registry_owned() -> frozenset[str]:
+    """Every class the store-backed hub registry constructs, by its canonical name."""
+    from blizzard.foundation.registry.internal.recording import Kind
+    from blizzard.foundation.registry.legacy import LegacyRegistry
+    from blizzard.hub.process_root import register_hub
+
+    registry = LegacyRegistry()
+    register_hub(registry, store_backed=True)
+    return frozenset(
+        f"{entry.source.__module__}.{entry.source.__qualname__}"
+        for entry in registry.entries
+        if entry.kind is Kind.SERVICE
+    )
+
+
+def _constructed_more_than_once(
+    files: Iterable[Path], src_root: Path, registered: frozenset[str]
+) -> dict[str, list[str]]:
+    sites: dict[str, list[str]] = {name: ["the hub registry"] for name in registered}
+    for path in files:
+        for name, lineno in _canonical_blizzard_constructions(path, src_root):
+            sites.setdefault(name, []).append(f"{path.relative_to(src_root.parent)}:{lineno}")
+    return {
         name: where
         for name, where in sites.items()
         if len(where) > 1 and name.rsplit(".", 1)[-1] not in _REPEATABLE_CONSTRUCTIONS
     }
-    assert not duplicated, f"constructed more than once across the composition roots: {duplicated}"
 
 
 # The hosted graph and the independent offline roots may each acquire a store, but only the hub composition

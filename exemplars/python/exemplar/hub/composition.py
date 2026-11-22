@@ -7,8 +7,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.registry.scopes import Resolver
 from blizzard.hub import composition as hub
-from blizzard.hub.store.scoped import ScopedConnections
 from exemplar.hub.domain.permits.model import IReadPermitRepository, IWritePermitRepository
 from exemplar.hub.domain.permits.service import PermitService
 from exemplar.hub.store.internal.permit_store import PermitStore
@@ -29,11 +29,11 @@ class TenantServices(hub.TenantServices):
     permit_service: PermitService
 
 
-def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> TenantStores:
-    """Build the :class:`TenantStores` of the tenant ``connections`` is scoped to."""
+def build_tenant_stores(tenant: Resolver, *, clock: IClock) -> TenantStores:
+    """Build the :class:`TenantStores` of the tenant whose container scope ``tenant`` resolves through."""
     # exemplar: production declares ``permit_store`` on the real class and builds it beside the other stores.
-    stores = hub.build_tenant_stores(connections, clock=clock)
-    return TenantStores(**vars(stores), permit_store=PermitStore(connections))
+    stores = hub.build_tenant_stores(tenant, clock=clock)
+    return TenantStores(**vars(stores), permit_store=PermitStore(stores.connections))
 
 
 def build_tenant_services(stores: TenantStores, served: hub.TenantServices) -> TenantServices:

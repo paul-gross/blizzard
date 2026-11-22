@@ -378,7 +378,7 @@ def get_question(question_id: str, services: Services) -> QuestionView:
     row = services.chunks.questions.get_question(question_id)
     if row is None:
         raise ProblemHTTPException(partial(problems.question_not_found_problem, question_id))
-    labels = ProjectLabels.read(services, [row.project_id])
+    labels = ProjectLabels.read(services.projects, [row.project_id])
     facts = ChunkFacts.or_default(services.chunks.facts.load_facts(row.chunk_id))
     return questions_api.question_view(
         row,
@@ -441,7 +441,7 @@ def get_garden_findings(chunk_id: str, services: Services) -> list[FindingView]:
     404 for an unknown chunk or one with no run context (not a routine run)."""
     run = _routine_run_or_404(chunk_id, services)
     citable = services.finding_bucket.for_run(run).citable
-    labels = ProjectLabels.read(services, (f.project_id for f in citable))
+    labels = ProjectLabels.read(services.projects, (f.project_id for f in citable))
     return [finding_view(f, labels.fields(f.project_id)) for f in citable]
 
 
@@ -461,7 +461,7 @@ def get_garden_proposals(
     Unpaged, kept for a previous-minor runner that reads the whole docket in one request;
     `/garden/proposals/page` is the bounded form current runners follow."""
     run = _routine_run_or_404(chunk_id, services)
-    labels = ProjectLabels.read(services, [run.project_id]).fields(run.project_id)
+    labels = ProjectLabels.read(services.projects, [run.project_id]).fields(run.project_id)
     return [
         garden_proposal_view(p, closure, labels)
         for p, closure in services.routine_garden_proposals.list_for_routine(run.project_id, run.routine_name, state)
@@ -480,7 +480,7 @@ def get_garden_proposals_page(
     404s, `limit` bounding what the request reads however long the routine's history; follow
     `next_cursor` until it is `None` for the whole docket. 422 on a cursor this route did not issue."""
     run = _routine_run_or_404(chunk_id, services)
-    labels = ProjectLabels.read(services, [run.project_id]).fields(run.project_id)
+    labels = ProjectLabels.read(services.projects, [run.project_id]).fields(run.project_id)
     try:
         pairs, next_cursor = services.routine_garden_proposals.list_page_for_routine(
             run.project_id, run.routine_name, state=state, cursor=cursor, limit=limit
@@ -611,7 +611,7 @@ def get_scopes(
             return problem_response(problems.chunk_not_found_problem(chunk_id, instance=http_request.url.path))
         project_id = chunk.require_project()
     scopes = services.scopes.list_all(project_id)
-    labels = ProjectLabels.read(services, (s.project_id for s in scopes))
+    labels = ProjectLabels.read(services.projects, (s.project_id for s in scopes))
     return [scope_view(s, labels.fields(s.project_id)) for s in scopes]
 
 
@@ -622,7 +622,7 @@ def _answered_findings_or_404(chunk_id: str, services: TenantServices) -> list[F
     findings = services.answered_findings.resolve_for_chunk(chunk)
     if findings is None:
         raise ProblemHTTPException(partial(problems.no_answered_proposal_problem, chunk_id))
-    labels = ProjectLabels.read(services, (f.project_id for f in findings))
+    labels = ProjectLabels.read(services.projects, (f.project_id for f in findings))
     return [finding_view(f, labels.fields(f.project_id)) for f in findings]
 
 
@@ -1118,7 +1118,7 @@ def list_runner_decisions(
     fleet.assert_owns(runner_id)
     rows = services.chunks.decisions.list_open_decisions(imposed_by_runner_id=runner_id)
     runner_names = services.registry.names_for([runner_id]) if rows else {}
-    labels = ProjectLabels.read(services, (d.project_id for d in rows))
+    labels = ProjectLabels.read(services.projects, (d.project_id for d in rows))
     return OpenDecisionsResponse(
         decisions=[to_decision_view(d, runner_names, labels.fields(d.project_id)) for d in rows]
     )

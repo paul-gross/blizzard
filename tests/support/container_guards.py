@@ -32,6 +32,13 @@ PROCESS_ROOTS: frozenset[Path] = frozenset(
 )
 
 
+#: The route modules whose area resolves through the container, relative to the source root: each names the services
+#: it uses and never the legacy bags.
+NARROWED_MODULES: tuple[Path, ...] = (Path("hub/api/findings.py"),)
+#: The legacy bags a narrowed module may not name.
+_LEGACY_BAGS = frozenset({"Services", "TenantServices"})
+
+
 def graph_builds(registry: RecordingRegistry, lifetimes: ProcessLifetimes, values: ScopeValues) -> list[str]:
     """The reason the registered graph does not build under strict validation, if it does not."""
     try:
@@ -155,6 +162,24 @@ def wiring_boundary_violations(source_root: Path, *, roots: frozenset[Path] = PR
             elif _is_wiring(name) and name.rpartition(".")[0] != own_area:
                 problems.append(f"{relative}: imports another area's wiring {name}")
     return problems
+
+
+def narrowing_violations(source_root: Path, modules: Iterable[Path] = NARROWED_MODULES) -> list[str]:
+    """Each place a narrowed module names a legacy bag — an import, a name, or an attribute."""
+    problems: list[str] = []
+    for relative in modules:
+        tree = ast.parse((source_root / relative).read_text(), filename=str(relative))
+        for node in ast.walk(tree):
+            named: str | None = None
+            if isinstance(node, ast.alias):
+                named = node.name.rpartition(".")[2]
+            elif isinstance(node, ast.Name):
+                named = node.id
+            elif isinstance(node, ast.Attribute):
+                named = node.attr
+            if named in _LEGACY_BAGS:
+                problems.append(f"{relative}:{getattr(node, 'lineno', 0)}: names {named}")
+    return sorted(problems)
 
 
 def _is_wiring(module: str) -> bool:

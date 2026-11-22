@@ -148,7 +148,7 @@ def _ingest_project(services: TenantServices, pointers: list[WorkRef], named: Pr
     try:
         return services.ingest.choose_project(pointers, named)
     except IngestProjectUnknown:
-        return project_of_call(services).project_id
+        return project_of_call(services.projects).project_id
 
 
 def ingest_project_refusal(

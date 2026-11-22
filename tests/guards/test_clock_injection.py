@@ -232,3 +232,53 @@ def test_system_clock_is_constructed_only_at_a_composition_root() -> None:
         for lineno in _system_clock_construction_lines(path):
             violations.append(f"{path.relative_to(_REPO_ROOT)}:{lineno}")
     assert not violations, f"L — SystemClock() may be constructed only at a composition root: {violations}"
+
+
+#: The one module that may register a production clock with the hub's registry; registering one constructs it, so
+#: no other module — a composition root included — may.
+_CLOCK_REGISTRATION_ROOT = _HUB_DIR / "scopes" / "wiring.py"
+_PRODUCTION_CLOCKS = frozenset({"SystemClock", "SystemMonotonicClock"})
+_REGISTERING_METHODS = frozenset({"service", "factory", "resource", "leaf", "bag"})
+
+
+def _clock_registration_lines(path: Path) -> list[int]:
+    tree = ast.parse(path.read_text(), filename=str(path))
+    return [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in _REGISTERING_METHODS
+        and node.args
+        and isinstance(node.args[0], ast.Name)
+        and node.args[0].id in _PRODUCTION_CLOCKS
+    ]
+
+
+def _clock_registrations_outside(src: Path, admitted: Path) -> list[str]:
+    return [
+        f"{path.relative_to(src)}:{lineno}"
+        for path in sorted(src.rglob("*.py"))
+        if path != admitted
+        for lineno in _clock_registration_lines(path)
+    ]
+
+
+def test_a_production_clock_is_registered_only_by_the_hub_scope_wiring() -> None:
+    """bzh:injected-clock: registering a production clock constructs it, so only the hub's scope wiring may."""
+    violations = _clock_registrations_outside(_SRC_DIR, _CLOCK_REGISTRATION_ROOT)
+    assert not violations, f"a production clock may be registered only in hub/scopes/wiring.py: {violations}"
+    assert _clock_registration_lines(_CLOCK_REGISTRATION_ROOT)
+
+
+def test_the_clock_registration_gate_fails_a_planted_registration_in_a_composition_root(tmp_path: Path) -> None:
+    root = tmp_path / "hub" / "composition.py"
+    root.parent.mkdir(parents=True)
+    root.write_text(
+        "def register(registry):\n"
+        "    registry.service(SystemMonotonicClock, lifetime=PROCESS)\n"
+        "    registry.factory(SystemClock, lifetime=PROCESS)\n"
+        "    registry.service(FindingStore, lifetime=TENANT)\n"
+    )
+    admitted = tmp_path / "hub" / "scopes" / "wiring.py"
+    assert _clock_registrations_outside(tmp_path, admitted) == ["hub/composition.py:2", "hub/composition.py:3"]
