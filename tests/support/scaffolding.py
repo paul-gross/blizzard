@@ -1458,6 +1458,8 @@ class HubHarness:
     app: FastAPI | None = None
     #: The hub core the services were built over — its per-tenant stores, and the process container beneath them.
     core: HubCore | None = None
+    #: The boot config the hub was built over — what a test root opening its own process supplies.
+    config: HubConfig | None = None
     _driver: FlowDriver | None = field(default=None, repr=False)
 
     @property
@@ -1918,6 +1920,7 @@ def build_hub(
         events=services.events,
         app=app,
         core=core,
+        config=config,
     )
 
 
