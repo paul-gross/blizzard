@@ -214,6 +214,36 @@ export type ValidationError = {
     type: string;
 };
 
+export type ListLivePermitsApiHoldersHolderPermitsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Holder
+         */
+        holder: string;
+    };
+    query?: never;
+    url: '/api/holders/{holder}/permits';
+};
+
+export type ListLivePermitsApiHoldersHolderPermitsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListLivePermitsApiHoldersHolderPermitsGetError = ListLivePermitsApiHoldersHolderPermitsGetErrors[keyof ListLivePermitsApiHoldersHolderPermitsGetErrors];
+
+export type ListLivePermitsApiHoldersHolderPermitsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PermitListResponse;
+};
+
+export type ListLivePermitsApiHoldersHolderPermitsGetResponse = ListLivePermitsApiHoldersHolderPermitsGetResponses[keyof ListLivePermitsApiHoldersHolderPermitsGetResponses];
+
 export type ListPermitsApiPermitsGetData = {
     body?: never;
     path?: never;
