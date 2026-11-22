@@ -24,13 +24,18 @@ from blizzard.hub.api.auth_session import tenant_bound
 from blizzard.hub.app import create_app_for_export
 from blizzard.hub.composition import build_hub_settings, memberships_leaf
 from blizzard.hub.config_keys import HUB_REGISTRY
+from blizzard.hub.delivery.action_registry import SHIPPED_ACTIONS, HubActions
 from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
+from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
+from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.process_root import register_hub
 from blizzard.hub.settings.footing import HubSettingsFooting
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
+from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
+from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from tests.support.container_guards import (
     alias_identity_violations,
     default_factory_violations,
@@ -133,6 +138,9 @@ def _process() -> Iterator[OwnedChild]:
                 supply(port(HubStoreConnections), connections),
                 supply(port(IClock), clock),
                 supply(port(HubSettingsGraph), build_hub_settings(connections, clock, footing)),
+                supply(port(HubActions), SHIPPED_ACTIONS),
+                supply(port(PackagedGraphs), GRAPHS_PACKAGED),
+                supply(port(PackagedSystemArtifacts), SYSTEM_ARTIFACTS_PACKAGED),
             )
         ),
     )

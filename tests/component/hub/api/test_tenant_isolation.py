@@ -46,6 +46,7 @@ from blizzard.hub.tenancy import StoreScope
 from tests.support.route_classes import FLEET, FLEET_CLAIM, HUB_LEVEL, HUMAN, live_routes
 from tests.support.scaffolding import (
     OP,
+    TEST_HUB_ACTIONS,
     HubHarness,
     InMemoryTraceExporter,
     build_hub,
@@ -771,7 +772,7 @@ def _project_answers(stores: TenantStores, project_id: ProjectId, owner: _Tenant
 def test_a_tenants_projects_and_links_answer_only_in_their_own_tenant(two: Two) -> None:
     """At the store: the other tenant's project, slugs and links answer as a project never minted does, while their own
     tenant reads them."""
-    core = build_hub_core(connections_for_engine(two.hub.engine), clock=two.hub.clock)
+    core = build_hub_core(connections_for_engine(two.hub.engine), clock=two.hub.clock, actions=TEST_HUB_ACTIONS)
     stores = {t.label: core.open(StoreScope(t.harness.tenant)) for t in two.both()}
     projects: dict[str, Project] = {}
     for t in two.both():

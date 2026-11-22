@@ -35,6 +35,7 @@ from blizzard.hub.tenancy import StoreScope
 from tests.support.forge_auth import sent_token
 from tests.support.scaffolding import (
     OP,
+    TEST_HUB_ACTIONS,
     config_authoring,
     default_tenant,
     hub_store_connections,
@@ -64,7 +65,7 @@ class _World:
         self.engine = create_engine_from_url(db_url)
         self.keys = hub_key_provider({}, data_dir=tmp_path / "data")
         clock = FixedClock(_NOW)
-        self.core = build_hub_core(connections_for_engine(self.engine), clock=clock)
+        self.core = build_hub_core(connections_for_engine(self.engine), clock=clock, actions=TEST_HUB_ACTIONS)
         self.stores = self.core.open(StoreScope(default_tenant(self.engine)))
         self.authoring = config_authoring(self.engine, keys=self.keys, clock=clock)
         self.authoring.create_secret(SecretName.parse("gh"), "tok-a", OP)

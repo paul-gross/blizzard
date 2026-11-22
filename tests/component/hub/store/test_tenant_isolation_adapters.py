@@ -20,7 +20,7 @@ from blizzard.hub.composition import TenantStores, build_hub_core, connections_f
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.cadence_store import CadenceStore
 from blizzard.hub.tenancy import StoreScope
-from tests.support.scaffolding import build_hub, hub_scoped, scoped_connections
+from tests.support.scaffolding import TEST_HUB_ACTIONS, build_hub, hub_scoped, scoped_connections
 from tests.support.tenant_isolation_world import Two, seeded
 
 
@@ -77,7 +77,7 @@ def _adapters(stores: TenantStores) -> Iterator[tuple[str, object]]:
 
 
 def test_each_tenants_adapters_read_back_none_of_the_others_records(two: Two) -> None:
-    core = build_hub_core(connections_for_engine(two.hub.engine), clock=two.hub.clock)
+    core = build_hub_core(connections_for_engine(two.hub.engine), clock=two.hub.clock, actions=TEST_HUB_ACTIONS)
     called: set[str] = set()
     for reader, other in ((two.first, two.second), (two.second, two.first)):
         stores = core.open(StoreScope(reader.harness.tenant))

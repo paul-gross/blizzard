@@ -194,6 +194,7 @@ from blizzard.hub.store.scoped import (
     statements_of,
 )
 from blizzard.hub.store.transactions import HubTransactions, connection_for, tenant_transactions
+from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
 from blizzard.hub.work_sources.editor import IWorkEditor
@@ -1799,7 +1800,13 @@ def build_hub(
         if with_settings
         else None
     )
-    core = build_hub_core(connections, clock=clock, settings=settings)
+    core = build_hub_core(
+        connections,
+        clock=clock,
+        actions=actions,
+        settings=settings,
+        system_artifacts=system_artifacts or SYSTEM_ARTIFACTS_PACKAGED,
+    )
     default = StoreScope(default_tenant(engine))
     default_stores = core.open(default)
     hub_source = HubWorkSource(
@@ -1837,7 +1844,6 @@ def build_hub(
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
         login_throttle=login_throttle,
         transcript_caps=transcript_caps,
-        system_artifacts=system_artifacts,
         trace_exporter=trace_exporter,
         tracing_settings=tracing_settings,
         tracing=config.tracing,
@@ -1846,7 +1852,6 @@ def build_hub(
         annotation_interval_seconds=config.annotation_interval_seconds,
         hub_version=hub_version or __version__,
         version_window=version_window,
-        actions=actions,
         extractors=extractors,
         action_pass_seconds=action_pass_seconds,
         action_pass_grace=action_pass_grace,

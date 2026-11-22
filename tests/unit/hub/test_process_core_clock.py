@@ -6,6 +6,7 @@ import pytest
 
 from blizzard.foundation.clock import SystemClock
 from blizzard.hub.composition import build_process_core
+from blizzard.hub.delivery.action_registry import SHIPPED_ACTIONS
 
 
 def test_process_core_ignores_controlled_environment(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -13,6 +14,7 @@ def test_process_core_ignores_controlled_environment(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("BLIZZARD_CLOCK_FENCE", "1")
     engine = Mock()
     with patch("blizzard.hub.composition.build_hub_core") as build:
-        assert build_process_core(engine) is build.return_value
+        assert build_process_core(engine, actions=SHIPPED_ACTIONS) is build.return_value
     assert build.call_args.args == (engine,)
     assert isinstance(build.call_args.kwargs["clock"], SystemClock)
+    assert build.call_args.kwargs["actions"] is SHIPPED_ACTIONS

@@ -19,8 +19,12 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.tenancy import StoreScope, TenantId
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
-from tests.support.scaffolding import add_tenant, build_hub, default_tenant, tenant_services_of
-from tests.support.transition_identity import process_identity_violations, transition_identity_violations
+from tests.support.scaffolding import TEST_HUB_ACTIONS, add_tenant, build_hub, default_tenant, tenant_services_of
+from tests.support.transition_identity import (
+    process_identity_violations,
+    process_sharing_violations,
+    transition_identity_violations,
+)
 
 
 def test_services_share_the_cores_stores(tmp_path: Path) -> None:
@@ -75,14 +79,14 @@ def test_the_stores_the_core_opens_for_a_tenant_are_scoped_to_it(tmp_path: Path)
     hub = build_hub(tmp_path)
     scope = StoreScope(default_tenant(hub.engine))
 
-    core = build_hub_core(connections_for_engine(hub.engine), clock=hub.clock)
+    core = build_hub_core(connections_for_engine(hub.engine), clock=hub.clock, actions=TEST_HUB_ACTIONS)
 
     assert core.open(scope).connections.scope == scope
 
 
 def test_transaction_binding_is_shared_only_within_one_tenant(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    core = build_hub_core(connections_for_engine(hub.engine), clock=hub.clock)
+    core = build_hub_core(connections_for_engine(hub.engine), clock=hub.clock, actions=TEST_HUB_ACTIONS)
     first = core.open(StoreScope(default_tenant(hub.engine)))
     second = core.open(StoreScope(add_tenant(hub.engine, "other")))
 
@@ -93,7 +97,7 @@ def test_transaction_binding_is_shared_only_within_one_tenant(tmp_path: Path) ->
 def test_the_core_reads_no_tenant_until_one_is_opened_so_a_stale_store_still_builds(tmp_path: Path) -> None:
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'empty.db'}")
 
-    core = build_hub_core(connections_for_engine(engine), clock=SystemClock())
+    core = build_hub_core(connections_for_engine(engine), clock=SystemClock(), actions=TEST_HUB_ACTIONS)
 
     with pytest.raises(HubStoreError):
         core.open(StoreScope(TenantId("ten_01J0000000000000000000000")))
@@ -154,3 +158,12 @@ def test_the_process_identity_gate_fails_a_planted_second_copy(tmp_path: Path) -
     assert process_identity_violations(planted, hub.hub_services) == [
         "HubCore.hub_events is not its container instance"
     ]
+
+
+def test_every_tenant_resolves_the_process_actions_codec_and_packaged_loaders(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.core is not None
+    second = add_tenant(hub.engine, "second")
+
+    for tenant in (default_tenant(hub.engine), second):
+        assert process_sharing_violations(hub.core, hub.open_stores(tenant)) == []

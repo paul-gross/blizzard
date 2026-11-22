@@ -30,7 +30,7 @@ from blizzard.hub.store.tenant_guard import (
     install_tenant_guard,
 )
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
-from tests.support.scaffolding import close_tenant, default_tenant, migrate_to
+from tests.support.scaffolding import TEST_HUB_ACTIONS, close_tenant, default_tenant, migrate_to
 
 _AT = datetime(2026, 10, 8, tzinfo=UTC)
 _SECOND = TenantId("ten_SECOND")
@@ -54,7 +54,7 @@ def _two_tenants(tmp_path: Path) -> tuple[HubCore, Engine, TenantId]:
     first = default_tenant(engine)
     with engine.begin() as conn:
         conn.execute(sa.insert(schema.tenants).values(tenant_id=_SECOND, name="second", created_at=_AT, created_by="t"))
-    core = build_hub_core(connections_for_engine(engine), clock=FixedClock(_AT))
+    core = build_hub_core(connections_for_engine(engine), clock=FixedClock(_AT), actions=TEST_HUB_ACTIONS)
     core.open(StoreScope(first)).registry.add(RunnerAddition("rn_a", "alpha", "hash-a", at=_AT, by="admin"))
     core.open(StoreScope(_SECOND)).registry.add(RunnerAddition("rn_b", "bravo", "hash-b", at=_AT, by="admin"))
     core.open(StoreScope(first)).hosts.add(HostAddition("hs_a", "alpha", "host-hash-a", at=_AT, by="admin"))

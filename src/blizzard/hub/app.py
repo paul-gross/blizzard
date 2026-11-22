@@ -440,7 +440,7 @@ def rotate_secret_keys(config: HubConfig, environ: Mapping[str, str]) -> Rotatio
     tenant's secrets re-sealed."""
     engine, connections = open_hub_store(config.db_url)
     try:
-        core = build_process_core(connections)
+        core = build_process_core(connections, actions=build_hub_actions(environ))
         try:
             tenants = core.every_open()
             keys = hub_key_provider(environ, data_dir=config.data_dir)
@@ -461,7 +461,7 @@ def import_legacy_config(
     legacy = read_legacy_keys(config.config_path, environ, strict=config.strict)
     engine, connections = open_hub_store(config.db_url)
     try:
-        core = build_process_core(connections)
+        core = build_process_core(connections, actions=build_hub_actions(environ))
         with contextlib.closing(core.process):
             target = _legacy_import_tenant(core.open_tenants(), named=tenant)
             stores = core.open(StoreScope(target))
@@ -783,7 +783,9 @@ def build_hosted_app(
         expected = migration_runner(config).script_head()
         readiness = ReadinessService(reader=reader, expected_revision=expected)
 
-        core = build_hub_core(connections, clock=resolved_clock, settings=settings)
+        core = build_hub_core(
+            connections, clock=resolved_clock, actions=build_hub_actions(os.environ), settings=settings
+        )
         # Closed after everything registered below: the tenant scopes, then the process scope; the engine, tracing
         # and settings stay borrowed from `hub host`.
         cleanup.callback(core.process.close)
@@ -873,7 +875,6 @@ def build_hosted_app(
             tracing=config.tracing,
             tracing_settings=tracing,
             platform_tracer=platform_tracing.tracer,
-            actions=build_hub_actions(os.environ),
             extractors=shipped_extractors(),
             egress=config.egress,
             egress_path_key=_egress_path_key(config.egress),

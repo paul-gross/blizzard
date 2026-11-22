@@ -47,7 +47,14 @@ from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSour
 from blizzard.hub.work_sources.source import WorkSourceAuthRefused
 from tests.support.forge_auth import sent_header
 from tests.support.github_app import API_BASE, APP_ID, FULL_GRANT, INSTALLATION_ID, AppGitHub, app_key_pem
-from tests.support.scaffolding import OP, config_authoring, default_tenant, migrated_hub_at, seed_forge
+from tests.support.scaffolding import (
+    OP,
+    TEST_HUB_ACTIONS,
+    config_authoring,
+    default_tenant,
+    migrated_hub_at,
+    seed_forge,
+)
 
 _NOW = datetime(2026, 11, 14, 12, 0, 0, tzinfo=UTC)
 _AUTHORITY = f"app/{APP_ID}/installation/{INSTALLATION_ID}"
@@ -67,7 +74,7 @@ class _World:
         self.engine = create_engine_from_url(db_url)
         keys = hub_key_provider({}, data_dir=tmp_path / "data")
         store_clock = FixedClock(_NOW)
-        core = build_hub_core(connections_for_engine(self.engine), clock=store_clock)
+        core = build_hub_core(connections_for_engine(self.engine), clock=store_clock, actions=TEST_HUB_ACTIONS)
         self.stores = core.open(StoreScope(default_tenant(self.engine)))
         self.authoring = config_authoring(self.engine, keys=keys, clock=store_clock)
         self.clock = ControlledClock(_NOW)
