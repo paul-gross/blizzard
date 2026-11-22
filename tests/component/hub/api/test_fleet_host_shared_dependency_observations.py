@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.api.auth import HostAuth
-from blizzard.hub.api.auth_session import TenantRequest, resolve_tenant
+from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.runners.host import HostTokenRotation
@@ -188,7 +188,7 @@ def test_shared_refusals_match_each_host_operation(
         )
     )
 
-    def close_before_resolution(request: Request, services: Hub) -> TenantRequest:
+    def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
         principal = HostAuth.of(request, services).demand()
         close_tenant(hub.engine, principal.tenant_id)
         services.tenants.open_tenants.refresh()

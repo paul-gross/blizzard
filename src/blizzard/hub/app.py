@@ -37,6 +37,7 @@ from blizzard.foundation.platform_tracing.handle import (
     DisabledPlatformTracing,
     IPlatformTracing,
 )
+from blizzard.foundation.registry.interface import ServiceAbsent
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.rotation import RotationResult
@@ -102,6 +103,7 @@ from blizzard.hub.api.queue import router as queue_router
 from blizzard.hub.api.readiness import router as readiness_router
 from blizzard.hub.api.repositories import router as repositories_router
 from blizzard.hub.api.request_config import request_config
+from blizzard.hub.api.resolution import process_request, refuse_absent_service
 from blizzard.hub.api.routines import project_router as project_routines_router
 from blizzard.hub.api.routines import router as routines_router
 from blizzard.hub.api.runners import router as runners_router
@@ -135,6 +137,7 @@ from blizzard.hub.composition import (
     build_hub_flags,
     build_process_core,
     build_services,
+    build_system_clock,
     open_hub_store,
 )
 from blizzard.hub.config import (
@@ -173,6 +176,7 @@ from blizzard.hub.forge.internal.factory import build_forge_registry
 from blizzard.hub.forge.refusals import refusal_reader
 from blizzard.hub.forge.registry import ForgeRegistry, WriteLocks
 from blizzard.hub.layout import SIGNING_KEYS_PARTS, remove_retired_workdirs
+from blizzard.hub.process_root import open_store_free
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import rotate_keys
@@ -436,9 +440,13 @@ def rotate_secret_keys(config: HubConfig, environ: Mapping[str, str]) -> Rotatio
     tenant's secrets re-sealed."""
     engine, connections = open_hub_store(config.db_url)
     try:
-        tenants = build_process_core(connections).every_open()
-        keys = hub_key_provider(environ, data_dir=config.data_dir)
-        return rotate_keys([stores.secrets for stores in tenants], keys, secret_cipher)
+        core = build_process_core(connections)
+        try:
+            tenants = core.every_open()
+            keys = hub_key_provider(environ, data_dir=config.data_dir)
+            return rotate_keys([stores.secrets for stores in tenants], keys, secret_cipher)
+        finally:
+            core.process.close()
     finally:
         engine.dispose()
 
@@ -454,26 +462,27 @@ def import_legacy_config(
     engine, connections = open_hub_store(config.db_url)
     try:
         core = build_process_core(connections)
-        target = _legacy_import_tenant(core.open_tenants(), named=tenant)
-        stores = core.open(StoreScope(target))
-        authoring = build_config_authoring(
-            stores,
-            cipher=secret_cipher(hub_key_provider(environ, data_dir=config.data_dir)),
-        )
-        existing = ExistingConfig(
-            secrets=frozenset(secret.name for secret in stores.secrets.list_all()),
-            work_sources=tuple(stores.work_source_records.list_all(include_retired=True)),
-            repositories=tuple(stores.repository_records.list_all(include_retired=True)),
-            forges=tuple(stores.forge_records.list_all(include_retired=True)),
-        )
-        return authoring.import_legacy(
-            legacy,
-            {name: environ[name] for name in legacy.variables},
-            stores.config_import.commit_coordinates(),
-            existing,
-            recorded=stores.config_import.recorded(),
-            links=ImportLinks(stores.projects),
-        )
+        with contextlib.closing(core.process):
+            target = _legacy_import_tenant(core.open_tenants(), named=tenant)
+            stores = core.open(StoreScope(target))
+            authoring = build_config_authoring(
+                stores,
+                cipher=secret_cipher(hub_key_provider(environ, data_dir=config.data_dir)),
+            )
+            existing = ExistingConfig(
+                secrets=frozenset(secret.name for secret in stores.secrets.list_all()),
+                work_sources=tuple(stores.work_source_records.list_all(include_retired=True)),
+                repositories=tuple(stores.repository_records.list_all(include_retired=True)),
+                forges=tuple(stores.forge_records.list_all(include_retired=True)),
+            )
+            return authoring.import_legacy(
+                legacy,
+                {name: environ[name] for name in legacy.variables},
+                stores.config_import.commit_coordinates(),
+                existing,
+                recorded=stores.config_import.recorded(),
+                links=ImportLinks(stores.projects),
+            )
     finally:
         engine.dispose()
 
@@ -574,6 +583,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             if services is not None:
                 cleanup.callback(services.action_loop.stop)
                 cleanup.callback(services.close_tenant_objects)
+            else:
+                cleanup.callback(app.state.hub_process.close)
         try:
             if services is not None:
                 services.action_loop.start()
@@ -636,13 +647,15 @@ def create_app(
         version=__version__,
         lifespan=lifespan,
         telemetry=platform_tracing.fastapi_telemetry(),
-        dependencies=[Depends(_annotate_chunk), Depends(_bind_request_config)],
+        dependencies=[Depends(process_request), Depends(_annotate_chunk), Depends(_bind_request_config)],
     )
     app.state.platform_tracing = platform_tracing
     app.state.config = config
     app.state.flags = flags
     app.state.readiness = readiness
     app.state.services = services
+    # The store-backed process the services were built over, else the store-free one, which lifespan closes.
+    app.state.hub_process = services.process if services is not None else open_store_free(clock=build_system_clock())
     # Set on shutdown by ``lifespan``; every SSE stream races it.
     app.state.shutdown = asyncio.Event()
     # The hosted hub's flow driver, set by ``build_hosted_app`` alone; ``lifespan`` runs it beside the sweeps.
@@ -654,6 +667,7 @@ def create_app(
     app.add_exception_handler(HTTPException, problem_http_exception)
     app.add_exception_handler(TenantClosed, refuse_closed_tenant)
     app.add_exception_handler(UnknownTenant, refuse_closed_tenant)
+    app.add_exception_handler(ServiceAbsent, refuse_absent_service)
     app.add_exception_handler(ProjectRequired, refuse_project_required)
     app.add_exception_handler(MembershipRoleRefused, refuse_membership_role)
     app.add_exception_handler(BuiltInWorkSource, refuse_built_in_work_source)
@@ -770,6 +784,9 @@ def build_hosted_app(
         readiness = ReadinessService(reader=reader, expected_revision=expected)
 
         core = build_hub_core(connections, clock=resolved_clock)
+        # Closed after everything registered below: the tenant scopes, then the process scope; the engine, tracing
+        # and settings stay borrowed from `hub host`.
+        cleanup.callback(core.process.close)
         # Minted here on first start when no key source exists yet.
         secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
         remove_retired_workdirs(config.data_dir)

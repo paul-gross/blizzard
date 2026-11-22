@@ -18,7 +18,7 @@ into any open tenant they name, acting there with that permission alone and no r
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from functools import partial
 from typing import Annotated
@@ -30,7 +30,7 @@ from fastapi.routing import APIRoute
 
 from blizzard.auth_core import Permission, Role
 from blizzard.foundation.platform_tracing.attributes import Caller, annotate_caller, annotate_tenant
-from blizzard.foundation.roles import collaborator
+from blizzard.foundation.roles import collaborator, dto
 from blizzard.hub.api import problems
 from blizzard.hub.api.auth import (
     UNRESOLVED_RUNNER_TOKEN,
@@ -48,11 +48,14 @@ from blizzard.hub.api.problems import (
     authentication_unresolved_problem,
     tenant_not_found_problem,
 )
+from blizzard.hub.api.resolution import hub_process, request_resolver, request_scope
 from blizzard.hub.auth.hashing import SessionId
+from blizzard.hub.auth.memberships import IReadMembershipRepository
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import HUB_PERMISSIONS, permissions_for
-from blizzard.hub.composition import HubServices, TenantServices
+from blizzard.hub.composition import HubServices
 from blizzard.hub.config import AUTH_MODE_NONE
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.wire.tenant import NO_SUCH_TENANT
 
@@ -161,53 +164,67 @@ def in_tenant(identity: ResolvedIdentity, tenant: TenantId, role: Role | None) -
     )
 
 
+@dto
 @dataclass(frozen=True)
-class TenantRequest:
-    """One request's resolved tenant: whom it was resolved for (``identity``, whose tenant is
-    ``scope.tenant``), the tenant's name, and the services opened for it."""
+class AdmittedTenant:
+    """One request's admitted tenant: whom it was resolved for (``identity``, whose tenant is
+    ``scope.tenant``) and the tenant's name. Its services resolve through the request's scope."""
 
     identity: Principal
     scope: StoreScope
     name: str
-    services: TenantServices
 
 
-def resolve_tenant(request: Request, hub: Hub) -> TenantRequest:
+def resolve_tenant(request: Request, hub: Hub) -> AdmittedTenant:
     """The tenant ``request`` acts in, by the first rule that applies — a machine credential, the
     ``X-Blizzard-Tenant`` header, the caller's one membership — else ``409 tenant_required``.
 
     A header disagreeing with a credential answers ``400``; a tenant that does not exist and one the
     caller cannot enter both answer the same ``404``; a person with no membership at all answers
-    ``404``. Under oauth a request with neither a credential nor a session answers ``401``."""
+    ``404``. Under oauth a request with neither a credential nor a session answers ``401``.
+
+    Synchronous, so a first open of the tenant's scope, which reads the store, runs off the event loop."""
+    resolver = request_resolver(request)
+    open_tenants = resolver.get(OpenTenants)
+    memberships = resolver.get(IReadMembershipRepository)
     named = _named_tenant(request)
     credential = _machine_credential(request, hub)
     if credential is not None:
         if named is not None and named != credential.tenant_id:
             raise ProblemHTTPException(problems.tenant_credential_mismatch_problem)
-        return _served(hub, credential.tenant_id, credential)
+        return _served(request, open_tenants, credential.tenant_id, credential)
     if request.app.state.config.auth.mode == AUTH_MODE_NONE:
-        tenant = named if named is not None else hub.tenants.open_tenants.only()
+        tenant = named if named is not None else open_tenants.only()
         if tenant is None:
             raise _tenant_required()
-        return _served(hub, tenant, implicit_operator(tenant))
+        return _served(request, open_tenants, tenant, implicit_operator(tenant))
     identity = resolve_identity(request, hub)
     if identity is None:
         raise ProblemHTTPException(partial(problems.authentication_required_problem, detail="authentication required"))
     if named is not None:
-        role = hub.memberships.role_in(named, identity.user_id)
+        role = memberships.role_in(named, identity.user_id)
         if role is None:
-            return _served(hub, named, _admitted(request, identity, named))
-        return _served(hub, named, in_tenant(identity, named, role))
-    memberships = hub.memberships.memberships_for(identity.user_id)
-    if not memberships:
+            return _served(request, open_tenants, named, _admitted(request, identity, named))
+        return _served(request, open_tenants, named, in_tenant(identity, named, role))
+    held = memberships.memberships_for(identity.user_id)
+    if not held:
         raise _no_such_tenant()
-    if len(memberships) > 1:
+    if len(held) > 1:
         raise _tenant_required()
-    only = memberships[0]
-    return _served(hub, only.tenant_id, in_tenant(identity, only.tenant_id, only.role))
+    only = held[0]
+    return _served(request, open_tenants, only.tenant_id, in_tenant(identity, only.tenant_id, only.role))
 
 
-async def tenant_bound(request: Request, tenant: Annotated[TenantRequest, Depends(resolve_tenant)]) -> None:
+def tenant_request(
+    request: Request, tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)]
+) -> Generator[AdmittedTenant]:
+    """The admitted tenant, with the request resolving through a request scope beneath the tenant's scope until the
+    request completes or is cancelled. Synchronous, so opening that scope runs off the event loop."""
+    with request_scope(request, tenant.scope):
+        yield tenant
+
+
+async def tenant_bound(request: Request, tenant: Annotated[AdmittedTenant, Depends(tenant_request)]) -> None:
     """A router dependency: resolve the request's tenant, and record it on every log line and span
     the request produces, and on ``request.state.tenant_id`` for a handler that runs outside the
     request's log context. Async, so the log binding lands in the request's own context rather than
@@ -236,7 +253,7 @@ class TenantBoundAdmitting:
         if self.permission not in HUB_PERMISSIONS:
             raise ValueError(f"{self.permission!r} is no hub-level permission; only one of those admits a non-member")
 
-    async def __call__(self, request: Request, tenant: Annotated[TenantRequest, Depends(resolve_tenant)]) -> None:
+    async def __call__(self, request: Request, tenant: Annotated[AdmittedTenant, Depends(tenant_request)]) -> None:
         await tenant_bound(request, tenant)
 
 
@@ -283,16 +300,16 @@ def _machine_credential(request: Request, hub: HubServices) -> RunnerPrincipal |
     return HostAuth.of(request, hub).principal
 
 
-def _served(hub: HubServices, tenant: TenantId, identity: Principal) -> TenantRequest:
-    name = hub.tenants.open_tenants.name(tenant)
+def _served(request: Request, open_tenants: OpenTenants, tenant: TenantId, identity: Principal) -> AdmittedTenant:
+    name = open_tenants.name(tenant)
     if name is None:
         raise _no_such_tenant()
     scope = StoreScope(tenant)
     try:
-        services = hub.tenants.open_services(scope)
+        hub_process(request).tenants.open(scope)
     except (UnknownTenant, TenantClosed):
         raise _no_such_tenant() from None
-    return TenantRequest(identity=identity, scope=scope, name=name, services=services)
+    return AdmittedTenant(identity=identity, scope=scope, name=name)
 
 
 def _no_such_tenant() -> HTTPException:
@@ -325,7 +342,7 @@ def _caller_of(request: Request) -> Caller:
     return PresentedSession(request).caller()
 
 
-def granted(request: Request, tenant: TenantRequest, permission: Permission) -> ResolvedIdentity:
+def granted(request: Request, tenant: AdmittedTenant, permission: Permission) -> ResolvedIdentity:
     """The person ``tenant`` was resolved for, holding ``permission`` there — else ``403``, for a
     person without it and for a machine credential, which no permission gate admits."""
     identity = tenant.identity
@@ -342,7 +359,7 @@ def require(permission: Permission) -> Callable[..., ResolvedIdentity]:
     (:func:`resolve_tenant`) and the person acting in it, then raises ``403`` when that person's
     membership there lacks ``permission``."""
 
-    def _dependency(request: Request, tenant: Annotated[TenantRequest, Depends(resolve_tenant)]) -> ResolvedIdentity:
+    def _dependency(request: Request, tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)]) -> ResolvedIdentity:
         return granted(request, tenant, permission)
 
     return _dependency
@@ -353,7 +370,7 @@ def require_either(permission: Permission, alternative: Permission) -> Callable[
     :class:`TenantBoundAdmitting` router, whose admitted person holds the hub-level ``alternative``
     and no tenant permission."""
 
-    def _dependency(request: Request, tenant: Annotated[TenantRequest, Depends(resolve_tenant)]) -> ResolvedIdentity:
+    def _dependency(request: Request, tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)]) -> ResolvedIdentity:
         if isinstance(tenant.identity, ResolvedIdentity) and alternative in tenant.identity.permissions:
             return granted(request, tenant, alternative)
         return granted(request, tenant, permission)

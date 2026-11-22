@@ -7,12 +7,14 @@ closure values; changes to those still require separate inspection.
 
 ANNOTATE = "blizzard.hub.app._annotate_chunk"
 REQUEST_CONFIG = "blizzard.hub.app._bind_request_config"
+PROCESS = "blizzard.hub.api.resolution.process_request"
 HUB = "blizzard.hub.api.hub_level.hub_services"
 TENANT = {
     ANNOTATE,
     HUB,
     "blizzard.hub.api.auth_session.resolve_tenant",
     "blizzard.hub.api.auth_session.tenant_bound",
+    "blizzard.hub.api.auth_session.tenant_request",
     "blizzard.hub.api.deps.tenant_services",
 }
 RUNNER = TENANT | {"blizzard.hub.api.auth.require_runner_principal"}
@@ -115,5 +117,5 @@ def inventory() -> dict[tuple[str, str], set[str]]:
             method, path = line.split()
             key = (method, path)
             assert key not in result, f"duplicate dependency inventory {key}"
-            result[key] = set(dependencies) | {REQUEST_CONFIG}
+            result[key] = set(dependencies) | {REQUEST_CONFIG, PROCESS}
     return result

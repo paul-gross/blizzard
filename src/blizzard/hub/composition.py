@@ -16,7 +16,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import httpx2
 from sqlalchemy import Engine
@@ -33,6 +33,8 @@ from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
+from blizzard.foundation.registry.interface import Lifetime, port
+from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.sealing import IKeyProvider, ISecretCipher
@@ -315,6 +317,9 @@ from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
+if TYPE_CHECKING:
+    from blizzard.hub.process_root import HubProcess
+
 
 @dataclass(frozen=True)
 class TenantServices:
@@ -541,6 +546,8 @@ class HubServices:
 
     #: Opens a tenant's services — the only way from the hub-level services to a tenant's.
     tenants: TenantServicesOpener
+    #: The hub's open process container and its tenant scopes — what a request resolves through.
+    process: HubProcess
     #: The hub-scoped reads a runner's credential resolves its tenant through — held only by the
     #: runner-auth edge (``bzh:hub-scoped-reads-confined``).
     hub_scoped_reads: HubScopedReads
@@ -932,6 +939,8 @@ class HubCore:
     hub_event_log: HubEventLogService
     tenants: TenantCache
     clock: IClock
+    #: The process container the core was opened through; whoever disposes the store closes it first.
+    process: HubProcess
 
     def open(self, scope: StoreScope) -> TenantStores:
         """``scope``'s tenant's stores, built once per tenant. Raises :class:`UnknownTenant` or
@@ -1055,14 +1064,54 @@ def build_system_clock() -> IClock:
     return SystemClock()
 
 
+def hub_scoped_reads_leaf(connections: HubStoreConnections) -> HubScopedReads:
+    """The hub-scoped reads, a legacy leaf the hub identity area owns until it adopts them."""
+    return build_hub_scoped_reads(connections)
+
+
+def open_tenants_leaf(reads: HubScopedReads) -> OpenTenants:
+    """The open tenants held in memory, a legacy leaf the hub identity area owns until it adopts them."""
+    return OpenTenants(reads.tenants.open_tenants)
+
+
+def memberships_leaf(connections: HubStoreConnections) -> MembershipRepository:
+    """The membership repository, a legacy leaf the hub identity area owns until it adopts it."""
+    return MembershipRepository(connections)
+
+
+#: The label every store-backed registration the store-free graph lacks answers with.
+HUB_STORE_UNAVAILABLE = "hub_store_unavailable"
+
+
+def register_legacy(registry: LegacyRegistry) -> None:
+    """Declare the legacy bridge's leaves: the process services a request's admission reads before its tenant is
+    known, each built as the hub-level builder built it."""
+    registry.leaf(hub_scoped_reads_leaf, lifetime=Lifetime.PROCESS)
+    registry.leaf(open_tenants_leaf, lifetime=Lifetime.PROCESS)
+    memberships = registry.leaf(memberships_leaf, lifetime=Lifetime.PROCESS)
+    registry.alias(port(IReadMembershipRepository), memberships)
+
+
+def register_legacy_absent(registry: LegacyRegistry) -> None:
+    """Declare each of the legacy bridge's leaves absent, for the store-free graph."""
+    for missing in (HubScopedReads, OpenTenants, MembershipRepository, IReadMembershipRepository):
+        registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=HUB_STORE_UNAVAILABLE)
+
+
 def build_hub_core(store_connections: HubStoreConnections, *, clock: IClock) -> HubCore:
-    """Build the :class:`HubCore`."""
+    """Build the :class:`HubCore` over the hub's process container, opened here; the core's ``process`` closes it."""
+    from blizzard.hub.process_root import open_store_backed  # the root registers this module's leaves
+
+    process = open_store_backed(store_connections, clock=clock)
     store_errors = store_connections.errors
-    hub_scoped_reads = build_hub_scoped_reads(store_connections)
+    hub_scoped_reads = process.resolver.get(HubScopedReads)
     auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
     hub_events = HubEventLogStore(store_connections)
 
     def build(scope: StoreScope) -> TenantStores:
+        # The tenant's container scope opens with its legacy entry, so a request admitting a tenant the legacy cache
+        # already serves finds its scope open too.
+        process.tenants.open(scope)
         return build_tenant_stores(store_connections.scoped(scope), clock=clock)
 
     return HubCore(
@@ -1075,6 +1124,7 @@ def build_hub_core(store_connections: HubStoreConnections, *, clock: IClock) -> 
         hub_event_log=HubEventLogService(events=hub_events),
         tenants=TenantCache(build=build, confirm_open=hub_scoped_reads.tenants.confirm_open),
         clock=clock,
+        process=process,
     )
 
 
@@ -1869,7 +1919,7 @@ def build_services(
     )
     hub_events = core.hub_events
     hub_event_log = core.hub_event_log
-    open_tenants = OpenTenants(core.hub_scoped_reads.tenants.open_tenants)
+    open_tenants = core.process.resolver.get(OpenTenants)
 
     def scope_of(tenant: TenantId) -> StoreScope:
         """The scope a hub-level pass or bridge opens a row's tenant in — built in this one place."""
@@ -2012,7 +2062,7 @@ def build_services(
     superuser_bootstrap_store = SuperuserBootstrapRepository(store_connections)
     # Built ahead of `auth` below, which takes it.
     auth_facts_service = AuthFactsService(facts=AuthFactsRepository(store_connections), clock=clock)
-    memberships = MembershipRepository(store_connections)
+    memberships = core.process.resolver.get(MembershipRepository)
     hub_admin_store = HubAdminRepository(store_connections)
     identity_transactions = IdentityTransactions(store_connections, auth_errors, core.store_errors)
     auth = AuthService(
@@ -2054,8 +2104,10 @@ def build_services(
     )
 
     def forget_closed(tenant: TenantId) -> None:
-        # A closed tenant's cached stores and services, and its broker, go first; the in-memory open set is read
-        # again after, so a request resolving the tenant meanwhile misses the cache and is refused by the store.
+        # A closed tenant's container scope, its cached stores and services, and its broker go first; the in-memory
+        # open set is read again after, so a request resolving the tenant meanwhile misses both caches and is refused
+        # by the store. The legacy entry alone closes the tenant's configured clients.
+        core.process.tenants.evict(tenant)
         core.tenants.evict(tenant)
         open_tenants.refresh()
 
@@ -2106,6 +2158,7 @@ def build_services(
             open_services=core.open_services,
             open_tenants=open_tenants,
         ),
+        process=core.process,
         hub_scoped_reads=core.hub_scoped_reads,
         tenant_registry=lambda tenant: core.open(scope_of(tenant)).registry,
         tenant_hosts=lambda tenant: core.open(scope_of(tenant)).hosts,

@@ -53,6 +53,7 @@ src/blizzard/hub/api/queue.py 16 aa249a12de6ae8052be1be15e003e01aacb2418bc513114
 src/blizzard/hub/api/readiness.py 2 179e80a61dc9fecb82fa0736efc3beb0e5f392744baf1f8907712a2525ffd47a
 src/blizzard/hub/api/repositories.py 4 04872ab1244affaf0dd2566075f23a1c44b43ebcb7a59aa5b6d84de038c2b427
 src/blizzard/hub/api/repository_params.py 1 9c70dbdf016ec3febc0342fd0620ea7c1d97d02d84114972f6880a1476e97160
+src/blizzard/hub/api/resolution.py 1 755aa50db4e0ccaaaf40bf99ce2fd5e740f8c44d5eb5570a8f132acd2f576fdf
 src/blizzard/hub/api/routines.py 23 056726b800ce2a7fb79ae3f96d655ab54831031901ab6f466a9a7c1edab8629d
 src/blizzard/hub/api/runners.py 21 fa6b629ddd1bfead84027947779b482cc0c53768bed2cc36e935cf568b62ccf0
 src/blizzard/hub/api/scopes.py 5 d63d356fa733e684afccbaaa8f476dbcbc72835bf705e68eb28a8ddc1c455cbf

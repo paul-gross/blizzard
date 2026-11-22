@@ -9,9 +9,11 @@ from httpx2 import Response
 from pydantic import BaseModel
 
 from blizzard.hub.api.auth import RunnerAuth, RunnerPrincipal, require_runner_principal
-from blizzard.hub.api.auth_session import TenantRequest, resolve_tenant
+from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
+from blizzard.hub.api.deps import tenant_services
 from blizzard.hub.api.fleet import FleetRequest
 from blizzard.hub.api.hub_level import Hub
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
@@ -121,9 +123,10 @@ def test_runner_registration_and_reads_problem_variants(
             def vanish_after_auth(
                 request: Request,
                 principal: RunnerPrincipal = Depends(require_runner_principal),
-                tenant: TenantRequest = Depends(resolve_tenant),
+                tenant: AdmittedTenant = Depends(resolve_tenant),
+                services: TenantServices = Depends(tenant_services),
             ) -> FleetRequest:
-                fleet = FleetRequest.of(request, principal, tenant)
+                fleet = FleetRequest.of(request, principal, tenant, services)
 
                 def missing_runner(_runner_id: str) -> None:
                     return None
@@ -140,7 +143,7 @@ def test_runner_registration_and_reads_problem_variants(
     observe(request(bearer(live)), 503, HubStoreUnavailableProblem)
     hub.app.state.services = services
 
-    def close_before_resolution(request: Request, services: Hub) -> TenantRequest:
+    def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
         principal = RunnerAuth.of(request, services).demand()
         close_tenant(hub.engine, principal.tenant_id)
         services.tenants.open_tenants.refresh()

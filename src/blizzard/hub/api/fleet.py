@@ -38,7 +38,7 @@ from blizzard.hub.api.analytics import (
     spend_response,
 )
 from blizzard.hub.api.auth import RunnerPrincipal, require_runner_principal, require_runner_principal_even_if_retired
-from blizzard.hub.api.auth_session import TenantRequest, resolve_tenant, tenant_bound
+from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant, tenant_bound
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.findings import finding_view
@@ -166,14 +166,15 @@ class FleetRequest:
         cls,
         request: Request,
         principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
-        tenant: Annotated[TenantRequest, Depends(resolve_tenant)],
+        tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)],
+        services: Services,
     ) -> FleetRequest:
         return cls(
             principal,
             request_config(request),
             tenant.scope,
             tenant.name,
-            tenant.services,
+            services,
             getattr(request.app.state, "hub_settings", None) is not None,
         )
 
@@ -182,14 +183,15 @@ class FleetRequest:
         cls,
         request: Request,
         principal: Annotated[RunnerPrincipal, Depends(require_runner_principal_even_if_retired)],
-        tenant: Annotated[TenantRequest, Depends(resolve_tenant)],
+        tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)],
+        services: Services,
     ) -> FleetRequest:
         return cls(
             principal,
             request_config(request),
             tenant.scope,
             tenant.name,
-            tenant.services,
+            services,
             getattr(request.app.state, "hub_settings", None) is not None,
         )
 
