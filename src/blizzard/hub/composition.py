@@ -1075,19 +1075,6 @@ def urgency_reading_leaf(
     return UrgencyReading(urgencies=urgencies, order=order, settings=settings, chunks=chunks)
 
 
-def graph_mint_leaf(graphs: GraphStore, clock: IClock, actions: HubActions) -> GraphMintService:
-    """The tenant's graph mint, validating against the catalogue of the actions the process serves — a legacy leaf the
-    graphs area owns until it adopts it."""
-    return GraphMintService(graphs=graphs, clock=clock, catalogue=actions.catalogue)
-
-
-def default_graph_leaf(
-    mint: GraphMintService, graphs: GraphStore, transactions: HubTransactions
-) -> DefaultGraphService:
-    """The tenant's mint-once default graph, a legacy leaf the graphs area owns until it adopts it."""
-    return DefaultGraphService(mint=mint, graphs=graphs, transactions=transactions)
-
-
 def register_legacy(registry: LegacyRegistry) -> None:
     """Declare the legacy bridge's leaves, each built as the legacy builder built it, over the store's adapters: the
     process services a request's admission reads before its tenant is known, and the transitional ports the adapters
@@ -1112,7 +1099,6 @@ def register_legacy(registry: LegacyRegistry) -> None:
     registry.alias(port(IReadWorkItemRepository), tenant.of(WorkItemStore))
     # The reads a declarative apply resolves its entries against.
     registry.alias(port(IReadProjectPositions), tenant.of(ProjectPositionStore))
-    registry.alias(port(IReadGraphRepository), tenant.of(GraphStore))
     registry.alias(port(IReadScopeRepository), tenant.of(ScopeStore))
     registry.alias(port(IReadRoutineRepository), tenant.of(RoutineStore))
     registry.alias(port(IReadRoutineScopeRepository), tenant.of(RoutineScopeStore))
@@ -1128,8 +1114,6 @@ def register_legacy(registry: LegacyRegistry) -> None:
         chunk_route_leaf,
         chunk_work_refs_leaf,
         urgency_reading_leaf,
-        graph_mint_leaf,
-        default_graph_leaf,
         delete_leaf,
         tenant_default_leaf,
         work_item_edits_leaf,
@@ -1146,7 +1130,6 @@ _LEGACY_TENANT_KEYS: tuple[type[Any], ...] = (
     IReadProjectLinks,
     IReadWorkItemRepository,
     IReadProjectPositions,
-    IReadGraphRepository,
     IReadScopeRepository,
     IReadRoutineRepository,
     IReadRoutineScopeRepository,
@@ -1160,8 +1143,6 @@ _LEGACY_TENANT_KEYS: tuple[type[Any], ...] = (
     IReadChunkRouteRepository,
     IReadChunkWorkRefsRepository,
     UrgencyReading,
-    GraphMintService,
-    DefaultGraphService,
     DeleteService,
     TenantDefault,
     WorkItemEditService,

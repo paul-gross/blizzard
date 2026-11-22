@@ -20,7 +20,6 @@ from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
-from blizzard.hub.domain.graph.authoring import DefaultGraphService, GraphMintService
 from blizzard.hub.domain.operations.delete import DeleteService
 from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.urgency.services import TenantDefault, UrgencyReading
@@ -46,8 +45,6 @@ LEGACY_INVENTORY: Mapping[object, str] = {
     IReadChunkWorkRefsRepository: "chunk operations",
     TenantDefault: "projects and urgency",
     UrgencyReading: "projects and urgency",
-    GraphMintService: "graphs",
-    DefaultGraphService: "graphs",
     GardenProposalDeliveryResolution: "garden authoring",
 }
 

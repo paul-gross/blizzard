@@ -120,7 +120,6 @@ _TENANT_ALIASED: tuple[type[Any], ...] = (
     ProjectLinkStore,
     ProjectPositionStore,
     WorkItemStore,
-    GraphStore,
     ScopeStore,
     RoutineStore,
     RoutineScopeStore,
