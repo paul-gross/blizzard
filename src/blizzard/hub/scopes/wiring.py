@@ -12,6 +12,7 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.clock import IClock, IMonotonicClock, SystemMonotonicClock
 from blizzard.foundation.registry.interface import Lifetime, Registry, port
+from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.scopes.environ import HubEnviron
 from blizzard.hub.settings.graph import HubSettingsGraph
@@ -21,7 +22,8 @@ from blizzard.hub.tenancy import StoreScope
 
 
 def register(registry: Registry) -> None:
-    """Declare the hub's borrowed process contexts, its process clocks, and the tenant's store scope."""
+    """Declare the hub's borrowed process contexts (the served hub actions among them), its process clocks, and the
+    tenant's store scope."""
     registry.context(port(Engine), lifetime=Lifetime.PROCESS)
     registry.context(port(HubStoreConnections), lifetime=Lifetime.PROCESS)
     registry.context(port(HubSettingsGraph), lifetime=Lifetime.PROCESS)
@@ -29,6 +31,7 @@ def register(registry: Registry) -> None:
     registry.context(port(PackagedGraphs), lifetime=Lifetime.PROCESS)
     registry.context(port(PackagedSystemArtifacts), lifetime=Lifetime.PROCESS)
     registry.context(port(HubEnviron), lifetime=Lifetime.PROCESS)
+    registry.context(port(HubActions), lifetime=Lifetime.PROCESS)
     monotonic = registry.service(SystemMonotonicClock, lifetime=Lifetime.PROCESS)
     registry.alias(port(IMonotonicClock), monotonic)
     registry.context(port(StoreScope), lifetime=Lifetime.TENANT)

@@ -44,8 +44,10 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
+from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
 from blizzard.foundation.project_colors import ProjectColor
+from blizzard.foundation.registry.internal.recording import RecordingRegistry, Rewrites
+from blizzard.foundation.registry.internal.translation import HUB_LIFETIMES, build_container
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.sealing import IKeyProvider
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -73,6 +75,7 @@ from blizzard.hub.composition import (
     build_hub_settings,
     build_services,
     connections_for_engine,
+    hub_core_over,
 )
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH, AuthConfig, HubConfig, LoginThrottleConfig
 from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
@@ -163,9 +166,11 @@ from blizzard.hub.forge.auth import IForgeAuthorizations
 from blizzard.hub.forge.readiness import ICredentialProbe
 from blizzard.hub.layout import DATA_DIRNAME
 from blizzard.hub.live_config import ConfigObjectCache
+from blizzard.hub.process_root import HUB_OWNER, registered, store_backed_process, store_backed_values
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.settings.footing import HubSettingsFooting
+from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
@@ -643,6 +648,47 @@ def configured_core(engine: Engine, root: Path, *, clock: IClock) -> HubCore:
         config=HubConfig(root=root, db_url=str(engine.url)),
         platform_tracing=DisabledPlatformTracing(),
         environ={},
+    )
+
+
+def overridden_core(
+    connections: HubStoreConnections,
+    *,
+    clock: IClock,
+    config: HubConfig,
+    platform_tracing: IPlatformTracing,
+    actions: HubActions,
+    overrides: Callable[[RecordingRegistry], Rewrites],
+    settings: HubSettingsGraph | None = None,
+    system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
+) -> HubCore:
+    """A store-backed hub core whose registered graph carries the test root's ``overrides``, over an empty
+    environment."""
+    registry = registered(store_backed=True, settings=settings is not None)
+    values = store_backed_values(
+        connections,
+        clock=clock,
+        config=config,
+        platform_tracing=platform_tracing,
+        environ={},
+        actions=actions,
+        settings=settings,
+        system_artifacts=system_artifacts,
+    )
+    owner = build_container(registry, HUB_LIFETIMES, owner=HUB_OWNER, values=values, overrides=overrides(registry))
+    return hub_core_over(store_backed_process(owner), connections, clock=clock)
+
+
+def second_core(hub: HubHarness) -> HubCore:
+    """A second hub core over ``hub``'s store and boot config, beside the one its services were built over."""
+    assert hub.config is not None
+    return build_hub_core(
+        connections_for_engine(hub.engine),
+        clock=hub.clock,
+        config=hub.config,
+        platform_tracing=DisabledPlatformTracing(),
+        environ={},
+        actions=TEST_HUB_ACTIONS,
     )
 
 
@@ -1785,14 +1831,10 @@ def build_hub(
     credential_probes: Mapping[str, ICredentialProbe] | None = None,
     with_settings: bool = False,
 ) -> HubHarness:
-    """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
-
-    ``hub.client`` is a :class:`RunnerFleetClient`.
-    ``work_sources=None`` defaults to one fake source, while ``{}`` is a deliberately **empty** registry;
-    each fake source is stored as a configured record linked to the tenant's only project, and each seeded
-    repository is linked to it too, while ``link=False`` leaves the sources unstored, serving no project, as a
-    file-configured source is, and the repositories stored but unlinked; ``hub_version`` and ``version_window`` default to the installed and packaged; ``forges`` builds each tenant's forge registry in place of the registered one, from the collaborators its parameters name; ``credential_probes`` replaces every forge kind's credential check; ``with_settings`` supplies the hub's settings
-    graph to the container as ``hub host`` does, and leaves the ports absent otherwise."""
+    """A migrated, fully-wired hub over ``tmp_path`` with fake external seams; ``hub.client`` is a
+    :class:`RunnerFleetClient`. ``work_sources=None`` seeds one fake source and ``{}`` none; ``link=False`` leaves
+    them unstored and the repositories unlinked. ``forges`` and ``credential_probes`` replace the registered forge
+    registry and credential checks; ``with_settings`` supplies the settings graph as ``hub host`` does."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(
         root=tmp_path,
@@ -1804,8 +1846,7 @@ def build_hub(
         trusted_proxies=tuple(trusted_proxies),
         tracing=tracing or TracingConfig(),
         egress=egress or EgressConfig(),
-        # A test may bound a pass below a second; the bound is only ever read as a number of seconds.
-        action_pass_seconds=cast("int", action_pass_seconds),
+        action_pass_seconds=action_pass_seconds,
     )
     # A second build over the same ``tmp_path`` reopens the store the first one wrote;
     # copying over it would discard that state, so only a fresh directory takes the copy.
@@ -1855,15 +1896,14 @@ def build_hub(
         named = {RESERVED_HUB_SOURCE_NAME: source}
         return WorkSourceRegistry(dict(named), closers=dict(named), editors=dict(named))
 
-    core = build_hub_core(
+    core = overridden_core(
         connections,
         clock=clock,
-        actions=actions,
-        settings=settings,
         system_artifacts=system_artifacts or SYSTEM_ARTIFACTS_PACKAGED,
         config=config,
         platform_tracing=DisabledPlatformTracing(),
-        environ={},
+        actions=actions,
+        settings=settings,
         overrides=lambda registry: replaced_adapters(
             registry, probes=credential_probes, forges=forges, work_sources=tenant_work_sources
         ),

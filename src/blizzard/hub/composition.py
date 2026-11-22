@@ -31,7 +31,7 @@ from blizzard.foundation.flags import (
 )
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.platform_tracing.handle import IPlatformTracing
+from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
 from blizzard.foundation.registry.interface import Lifetime, port
 from blizzard.foundation.registry.legacy import LegacyRegistry
@@ -72,7 +72,7 @@ from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import HubConfig, LoginThrottleConfig, OAuthProviderConfig
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE, ActionPassDriver, PassBound
-from blizzard.hub.delivery.action_registry import HubActions
+from blizzard.hub.delivery.action_registry import HubActions, build_hub_actions
 from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores, ITurnRunner, StepWake
 from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.delivery.hub_node import HubNodeRouter
@@ -313,7 +313,7 @@ from blizzard.hub.tenancy import STORE_UNAVAILABLE, StoreScope, TenantClosed, Te
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 if TYPE_CHECKING:
-    from blizzard.hub.process_root import HubProcess, Overrides
+    from blizzard.hub.process_root import HubProcess
 
 
 @dataclass(frozen=True)
@@ -927,9 +927,16 @@ def open_hub_store(db_url: str, platform_tracing: IPlatformTracing | None = None
         raise
 
 
-def build_process_core(connections: HubStoreConnections, *, actions: HubActions) -> HubCore:
-    """:func:`build_hub_core` on the system clock."""
-    return build_hub_core(connections, clock=build_system_clock(), actions=actions)
+def build_process_core(connections: HubStoreConnections, config: HubConfig, environ: Mapping[str, str]) -> HubCore:
+    """:func:`build_hub_core` for an offline verb: the system clock, tracing disabled and the environment's actions."""
+    return build_hub_core(
+        connections,
+        clock=build_system_clock(),
+        config=config,
+        platform_tracing=DisabledPlatformTracing(),
+        environ=environ,
+        actions=build_hub_actions(environ),
+    )
 
 
 def build_system_clock() -> IClock:
@@ -1091,8 +1098,6 @@ def register_legacy(registry: LegacyRegistry) -> None:
     registry.leaf(repo_errors_leaf, lifetime=Lifetime.PROCESS)
     identity = registry.leaf(identity_transactions_leaf, lifetime=Lifetime.PROCESS)
     registry.alias(port(IIdentityTransactions), identity)
-    # The hub actions a node may name, borrowed from the root that serves them until the hub lifecycle adopts them.
-    registry.context(port(HubActions), lifetime=Lifetime.PROCESS)
     users = registry.leaf(users_leaf, lifetime=Lifetime.PROCESS)
     registry.alias(port(IReadUserRepository), users)
     registry.leaf(action_loop_leaf, lifetime=Lifetime.PROCESS)
@@ -1193,36 +1198,34 @@ def build_hub_core(
     store_connections: HubStoreConnections,
     *,
     clock: IClock,
+    config: HubConfig,
+    platform_tracing: IPlatformTracing,
+    environ: Mapping[str, str],
     actions: HubActions,
     settings: HubSettingsGraph | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
-    config: HubConfig | None = None,
-    platform_tracing: IPlatformTracing | None = None,
-    environ: Mapping[str, str] | None = None,
-    overrides: Overrides | None = None,
 ) -> HubCore:
-    """Build the :class:`HubCore` over the hub's process container, opened here; the core's ``process`` closes it.
-    ``actions`` are the hub actions a node may name, and ``graphs`` and ``system_artifacts`` the packaged loaders, each
-    borrowed into the container. ``settings`` is the borrowed settings graph the container serves the settings ports
-    from; a core built without one declares them absent. ``config``, ``platform_tracing`` and ``environ`` are the
-    borrowed boot config, tracing handle (disabled when ``None``) and process environment; a core built without the
-    config or the environment serves no hub services. ``overrides`` is a test root's replacements over the registered
-    graph."""
+    """Build the :class:`HubCore` over the hub's process container, opened here over the borrowed inputs; the core's
+    ``process`` closes it. A core built without the ``settings`` graph declares the settings ports absent."""
     from blizzard.hub.process_root import open_store_backed  # the root registers this module's leaves
 
     process = open_store_backed(
         store_connections,
         clock=clock,
-        actions=actions,
-        settings=settings,
         graphs=graphs,
         system_artifacts=system_artifacts,
         config=config,
         platform_tracing=platform_tracing,
         environ=environ,
-        overrides=overrides,
+        actions=actions,
+        settings=settings,
     )
+    return hub_core_over(process, store_connections, clock=clock)
+
+
+def hub_core_over(process: HubProcess, store_connections: HubStoreConnections, *, clock: IClock) -> HubCore:
+    """The :class:`HubCore` over an opened store-backed ``process``, which the core's ``process`` then closes."""
     store_errors = store_connections.errors
     resolver = process.resolver
     hub_scoped_reads = resolver.get(HubScopedReads)
@@ -1280,8 +1283,7 @@ class TenantServiceParts:
     #: The config a turn binds: the settings graph's resolution, or the boot config without one.
     pass_config: Callable[[], HubConfig]
     step_wake: StepWake
-    #: Publishes a committed cadence mint's frames through the tenant's chunk-frame loader — handed in by the hub's
-    #: app, which owns the frames.
+    #: Publishes a committed cadence mint's frames through the tenant's chunk-frame loader; the app owns the frames.
     announce_minted: Callable[[ChunkFrameLoader, MintedErrand], None]
 
 
@@ -1879,15 +1881,10 @@ def build_services(
     cadences_on: Callable[[], bool],
     announce_minted: Callable[[ChunkFrameLoader, MintedErrand], None],
 ) -> HubServices:
-    """Construct and wire the hub-level services over the shared :class:`HubCore`, and have its
-    tenant cache serve each tenant's services (:func:`build_tenant_services`). The sweeps and exports
-    are one pass per hub, each acting on a row through the services of the row's tenant, opened from
-    the cache. Every live config read goes through the process container's :class:`HubConfigSource`, and the core's
-    container supplies the process collaborators and each tenant's scope its configured adapters; an explicit
-    ``oauth_registry`` wins over ``oauth_providers``; ``hub_version`` defaults to the installed one; ``extractors`` are
-    the turn-event extractors the derivation runs, and a pass is bounded by the live
-    ``action_pass_seconds``, its caller letting go ``action_pass_grace`` later. ``cadences_on`` answers, each
-    cadence pass, whether the ``cadences`` flag lets it mint, and
+    """Construct the hub-level services over the shared :class:`HubCore`, its tenant cache serving each tenant's
+    (:func:`build_tenant_services`). Each sweep or export is one pass per hub, acting on a row through its tenant's
+    services; live config is read through the container's :class:`HubConfigSource`. A pass is let go
+    ``action_pass_grace`` past its live bound; ``cadences_on`` answers whether a cadence pass may mint, and
     ``announce_minted`` publishes each mint it commits."""
     clock = core.clock
     process = core.process.resolver

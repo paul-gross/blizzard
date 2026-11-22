@@ -90,7 +90,7 @@ def hub_runtime_of(root: Path, *, allow_external_db: bool = False) -> hub_runtim
         root,
         clock,
         allow_external_db,
-        open_event_log=system_event_log_opener(clock),
+        open_event_log=system_event_log_opener(clock, {}),
         flag_registry=FLAG_REGISTRY,
         strict=STRICT,
     )

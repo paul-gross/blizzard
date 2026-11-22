@@ -27,8 +27,7 @@ from blizzard.hub.domain.urgency.services import TenantDefault, UrgencyReading
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.open_tenants import OpenTenants
 
-#: Each legacy key the hub registry declares, and the area that owns it until it adopts it. A key is a class, or a
-#: callable alias such as ``ColorPick``.
+#: Each legacy key the hub registry declares (a class or a callable alias), and the area that owns it until adopted.
 LEGACY_INVENTORY: Mapping[object, str] = {
     RepoErrorFactory: "hub identity",
     IdentityTransactions: "hub identity",

@@ -1,11 +1,7 @@
-"""The hub settings' registrations: the ports the admin-settings routes read, served from the borrowed graph.
+"""The hub settings' registrations: the admin-settings ports, each a member of the borrowed settings graph.
 
-The entrypoint builds the settings graph over the hub's store and borrows it into the process scope, so each port here
-is a member of that one graph and no settings store is constructed in the container. A graph without settings declares
-each port absent instead, so a route that reaches one answers the store's unavailability.
-
-Every graph also holds the borrowed boot ``HubConfig`` and the one :class:`HubConfigSource` over it, which reads the
-settings graph's resolution when the graph is borrowed and the boot config alone otherwise."""
+A graph without settings declares each port absent. Every graph holds the borrowed boot ``HubConfig`` and one
+:class:`HubConfigSource` over it, reading the settings graph's resolution when one is borrowed."""
 
 from __future__ import annotations
 
@@ -62,9 +58,12 @@ def register(registry: Registry) -> None:
     registry.factory(settings_config_source, lifetime=Lifetime.PROCESS)
 
 
-def register_absent(registry: Registry) -> None:
-    """Declare the settings ports absent, and the live config source over the boot config alone, for a graph with no
-    settings."""
+def register_boot_source(registry: Registry) -> None:
+    """Declare the live config source over the boot config alone, for a graph with no settings."""
     registry.factory(boot_config_source, lifetime=Lifetime.PROCESS)
+
+
+def register_absent(registry: Registry) -> None:
+    """Declare the settings ports absent, for a graph with no settings."""
     for missing in (IReadHubSettingsAdmin, HubSettingsReader, HubSettingsAuthoring, HubSettingsFooting):
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)

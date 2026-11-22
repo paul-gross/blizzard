@@ -41,6 +41,7 @@ from tests.support.scaffolding import (
     TEST_HUB_ACTIONS,
     add_tenant,
     close_tenant,
+    configured_core,
     count_queries,
     default_tenant,
     migrate_to,
@@ -211,7 +212,7 @@ def test_racing_opens_of_one_tenant_share_one_set_of_stores(tmp_path: Path) -> N
 def test_hub_scoped_reads_mark_every_statement_they_issue(tmp_path: Path) -> None:
     migrate_to(tmp_path, "head")
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
-    core = build_hub_core(connections_for_engine(engine), clock=FixedClock(_AT), actions=TEST_HUB_ACTIONS)
+    core = configured_core(engine, tmp_path, clock=FixedClock(_AT))
     tenant = default_tenant(engine)
     seen: list[Mapping[str, Any]] = []
 

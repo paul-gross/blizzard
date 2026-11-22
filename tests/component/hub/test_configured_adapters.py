@@ -23,7 +23,7 @@ from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.foundation.registry.internal.overrides import OverrideSet
 from blizzard.foundation.registry.internal.recording import RecordingRegistry
 from blizzard.hub.api.chunk_events import announce_minted
-from blizzard.hub.composition import HubCore, HubServices, build_hub_core, build_services, connections_for_engine
+from blizzard.hub.composition import HubCore, HubServices, build_services, connections_for_engine
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.model import WorkRef, WorkRefLabel
 from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
@@ -64,6 +64,7 @@ from tests.support.scaffolding import (
     default_tenant,
     hub_store_connections,
     migrate_to,
+    overridden_core,
     seed_repositories,
 )
 
@@ -250,12 +251,11 @@ def _hosted(
         replaced.replace_value(owned_ref(registry, IWorkSourceRegistry), borrowed)
         return replaced
 
-    core = build_hub_core(
+    core = overridden_core(
         connections_for_engine(engine),
         clock=FixedClock(_NOW),
         config=HubConfig(root=tmp_path, db_url=str(engine.url)),
         platform_tracing=tracing,
-        environ={},
         actions=TEST_HUB_ACTIONS,
         overrides=overrides,
     )

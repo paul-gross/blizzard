@@ -216,7 +216,7 @@ def _runtime_of(root: Path, allow_external_db: bool, flag_registry: FlagRegistry
         root,
         clock,
         allow_external_db,
-        open_event_log=system_event_log_opener(clock),
+        open_event_log=system_event_log_opener(clock, os.environ),
         flag_registry=flag_registry,
         strict=strict,
     )

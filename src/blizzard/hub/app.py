@@ -432,7 +432,7 @@ def rotate_secret_keys(config: HubConfig, environ: Mapping[str, str]) -> Rotatio
     tenant's secrets re-sealed."""
     engine, connections = open_hub_store(config.db_url)
     try:
-        core = build_process_core(connections, actions=build_hub_actions(environ))
+        core = build_process_core(connections, config, environ)
         try:
             tenants = core.every_open()
             keys = hub_key_provider(environ, data_dir=config.data_dir)
@@ -453,13 +453,7 @@ def import_legacy_config(
     legacy = read_legacy_keys(config.config_path, environ, strict=config.strict)
     engine, connections = open_hub_store(config.db_url)
     try:
-        core = build_hub_core(
-            connections,
-            clock=build_system_clock(),
-            actions=build_hub_actions(environ),
-            config=config,
-            environ=environ,
-        )
+        core = build_process_core(connections, config, environ)
         with contextlib.closing(core.process):
             target = _legacy_import_tenant(core.open_tenants(), named=tenant)
             stores = core.open(StoreScope(target))
@@ -653,7 +647,13 @@ def create_app(
     app.state.hub_process = (
         services.process
         if services is not None
-        else open_store_free(clock=build_system_clock(), config=config, platform_tracing=platform_tracing)
+        else open_store_free(
+            clock=build_system_clock(),
+            config=config,
+            platform_tracing=platform_tracing,
+            environ=os.environ,
+            actions=build_hub_actions(os.environ),
+        )
     )
     # Set on shutdown by ``lifespan``; every SSE stream races it.
     app.state.shutdown = asyncio.Event()

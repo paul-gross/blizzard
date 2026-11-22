@@ -46,8 +46,3 @@ def replaced_adapters(
     if work_sources is not None:
         overrides.replace_factory(owned_ref(registry, IWorkSourceRegistry), work_sources)
     return overrides
-
-
-def replaced_probes(registry: RecordingRegistry, probes: Mapping[str, ICredentialProbe]) -> OverrideSet:
-    """Replacements supplying ``probes`` as every forge kind's credential check, borrowed."""
-    return replaced_adapters(registry, probes=probes)

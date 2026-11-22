@@ -1,14 +1,8 @@
-"""The hub process's composition root: it registers the hub graph and opens the validated container over it.
+"""The hub process's composition root: it registers the hub graph, then opens the validated container over it.
 
-Registration and building are two steps, so a stand-in root can reuse the hub's registration and add to it before it
-builds. The store-backed graph declares the legacy bridge's leaves; the store-free graph declares each of them absent,
-so a route that reaches one answers the store's unavailability rather than serving on nothing. A graph opened
-without settings declares the settings ports absent the same way.
-
-The process scope borrows every value it is opened with — the store's connections, the clock, the boot config, the
-platform tracing handle, the process environment, the settings graph, the hub's actions and the packaged graph and
-system-artifact loaders — and the :class:`HubProcess` it returns owns only the container: closing it closes every
-tenant scope, then the process scope, and leaves the borrowed values to the entrypoint that built them."""
+The store-free graph declares each store-backed registration absent, and a graph without settings the settings ports.
+The process scope borrows every value it opens with; the :class:`HubProcess` owns only the container, closing its tenant
+scopes and then the process scope."""
 
 from __future__ import annotations
 
@@ -20,7 +14,6 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.platform_tracing import wiring as platform_tracing_wiring
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing
 from blizzard.foundation.registry.interface import port
-from blizzard.foundation.registry.internal.recording import Rewrites
 from blizzard.foundation.registry.internal.translation import HUB_LIFETIMES, build_container
 from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import OwnedChild, Resolver, ScopeValue, ScopeValues, supply
@@ -48,19 +41,7 @@ from blizzard.hub.settings import wiring as settings_wiring
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store import wiring as store
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
-from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
-from blizzard.hub.store.internal.config_import_store import ConfigImportStore
-from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
-from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
-from blizzard.hub.store.internal.credential_referrers import CredentialReferrersStore
-from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
-from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
-from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
-from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
-from blizzard.hub.store.internal.secret_store import SecretStore
-from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import TenantId, UnknownTenant
@@ -130,6 +111,7 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
     if store_backed and settings:
         settings_wiring.register(registry)
     else:
+        settings_wiring.register_boot_source(registry)
         settings_wiring.register_absent(registry)
 
 
@@ -138,43 +120,72 @@ def _register_config(registry: LegacyRegistry) -> None:
     refs = store.register_config(registry)
     config_wiring.register(
         registry,
-        work_sources=refs.of(WorkSourceRecordStore),
-        repositories=refs.of(RepositoryRecordStore),
-        forges=refs.of(ForgeRecordStore),
-        credentials=refs.of(CredentialRecordStore),
-        secrets=refs.of(SecretStore),
-        sealed=refs.of(SecretStore),
-        secret_references=refs.of(SecretReferrersStore),
-        forge_references=refs.of(ForgeReferrersStore),
-        credential_references=refs.of(CredentialReferrersStore),
-        changes=refs.of(ConfigChangeStore),
-        apply_writer=refs.of(ConfigApplyStore),
-        import_writer=refs.of(ConfigImportStore),
-        revisions=refs.of(ConfigRevisionsStore),
+        work_sources=refs.work_sources,
+        repositories=refs.repositories,
+        forges=refs.forges,
+        credentials=refs.credentials,
+        secrets=refs.secrets,
+        sealed=refs.secrets,
+        secret_references=refs.secret_references,
+        forge_references=refs.forge_references,
+        credential_references=refs.credential_references,
+        changes=refs.changes,
+        apply_writer=refs.apply_writer,
+        import_writer=refs.import_writer,
+        revisions=refs.revisions,
     )
 
 
-def _inputs(
-    config: HubConfig | None,
-    platform_tracing: IPlatformTracing | None,
-    environ: Mapping[str, str] | None,
-    actions: HubActions | None = None,
+def process_values(
+    *,
+    clock: IClock,
+    config: HubConfig,
+    platform_tracing: IPlatformTracing,
+    environ: Mapping[str, str],
+    actions: HubActions,
+    graphs: PackagedGraphs = GRAPHS_PACKAGED,
+    system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> list[ScopeValue[Any]]:
-    """The scope values of the process inputs supplied; a graph opened without one serves nothing that reads it."""
-    values: list[ScopeValue[Any]] = []
-    if actions is not None:
-        values.append(supply(port(HubActions), actions))
-    if config is not None:
-        values.append(supply(port(HubConfig), config))
-    if platform_tracing is not None:
-        values.append(supply(port(IPlatformTracing), platform_tracing))
-    if environ is not None:
-        values.append(supply(port(HubEnviron), HubEnviron(environ)))
-    return values
+    """The scope values every hub graph opens with."""
+    return [
+        supply(port(IClock), clock),
+        supply(port(HubConfig), config),
+        supply(port(IPlatformTracing), platform_tracing),
+        supply(port(HubEnviron), HubEnviron(environ)),
+        supply(port(HubActions), actions),
+        supply(port(PackagedGraphs), graphs),
+        supply(port(PackagedSystemArtifacts), system_artifacts),
+    ]
 
 
-#: A test root's replacements over the registered graph, built from the registry before the container is.
-type Overrides = Callable[[LegacyRegistry], Rewrites]
+def store_backed_values(
+    connections: HubStoreConnections,
+    *,
+    clock: IClock,
+    config: HubConfig,
+    platform_tracing: IPlatformTracing,
+    environ: Mapping[str, str],
+    actions: HubActions,
+    settings: HubSettingsGraph | None = None,
+    graphs: PackagedGraphs = GRAPHS_PACKAGED,
+    system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
+) -> ScopeValues:
+    """The store-backed graph's scope values; ``settings`` is supplied only to a graph declaring the settings ports."""
+    values: list[ScopeValue[Any]] = [
+        supply(port(HubStoreConnections), connections),
+        *process_values(
+            clock=clock,
+            config=config,
+            platform_tracing=platform_tracing,
+            environ=environ,
+            actions=actions,
+            graphs=graphs,
+            system_artifacts=system_artifacts,
+        ),
+    ]
+    if settings is not None:
+        values.append(supply(port(HubSettingsGraph), settings))
+    return _scoped(values)
 
 
 def build_store_backed(
@@ -182,27 +193,31 @@ def build_store_backed(
     connections: HubStoreConnections,
     *,
     clock: IClock,
+    config: HubConfig,
+    platform_tracing: IPlatformTracing,
+    environ: Mapping[str, str],
     actions: HubActions,
     settings: HubSettingsGraph | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
-    config: HubConfig | None = None,
-    platform_tracing: IPlatformTracing | None = None,
-    environ: Mapping[str, str] | None = None,
-    overrides: Overrides | None = None,
 ) -> HubProcess:
-    """Open the store-backed graph ``registry`` declares over the borrowed ``connections``, ``clock``, ``actions``, the
-    packaged ``graphs`` and ``system_artifacts``, boot config, tracing handle, environment and, when the graph declares
-    the settings ports, ``settings``. ``overrides`` is a test root's replacements."""
-    values: list[ScopeValue[Any]] = [
-        supply(port(HubStoreConnections), connections),
-        supply(port(IClock), clock),
-        *_packaged(graphs, system_artifacts),
-        *_inputs(config, platform_tracing, environ, actions),
-    ]
-    if settings is not None:
-        values.append(supply(port(HubSettingsGraph), settings))
-    owner = _opened(registry, *values, overrides=overrides(registry) if overrides is not None else None)
+    """Open the store-backed graph ``registry`` declares over the borrowed ``connections`` and process inputs."""
+    values = store_backed_values(
+        connections,
+        clock=clock,
+        config=config,
+        platform_tracing=platform_tracing,
+        environ=environ,
+        actions=actions,
+        settings=settings,
+        graphs=graphs,
+        system_artifacts=system_artifacts,
+    )
+    return store_backed_process(build_container(registry, HUB_LIFETIMES, owner=HUB_OWNER, values=values))
+
+
+def store_backed_process(owner: OwnedChild) -> HubProcess:
+    """The store-backed :class:`HubProcess` over its opened container, which is closed if the tenant reads fail."""
     try:
         reads = owner.resolver.get(HubScopedReads)
     except BaseException:
@@ -215,85 +230,86 @@ def build_store_free(
     registry: LegacyRegistry,
     *,
     clock: IClock,
+    config: HubConfig,
+    platform_tracing: IPlatformTracing,
+    environ: Mapping[str, str],
+    actions: HubActions,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
-    config: HubConfig | None = None,
-    platform_tracing: IPlatformTracing | None = None,
 ) -> HubProcess:
     """Open the store-free graph ``registry`` declares; it holds no tenant, so every tenant open is refused."""
-    return _process(
-        _opened(
-            registry,
-            supply(port(IClock), clock),
-            *_packaged(graphs, system_artifacts),
-            *_inputs(config, platform_tracing, None),
-        ),
-        confirm_open=_no_tenant,
-        open_tenants=tuple,
+    values = process_values(
+        clock=clock,
+        config=config,
+        platform_tracing=platform_tracing,
+        environ=environ,
+        actions=actions,
+        graphs=graphs,
+        system_artifacts=system_artifacts,
     )
+    owner = build_container(registry, HUB_LIFETIMES, owner=HUB_OWNER, values=_scoped(values))
+    return _process(owner, confirm_open=_no_tenant, open_tenants=tuple)
 
 
 def open_store_backed(
     connections: HubStoreConnections,
     *,
     clock: IClock,
+    config: HubConfig,
+    platform_tracing: IPlatformTracing,
+    environ: Mapping[str, str],
     actions: HubActions,
     settings: HubSettingsGraph | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
-    config: HubConfig | None = None,
-    platform_tracing: IPlatformTracing | None = None,
-    environ: Mapping[str, str] | None = None,
-    overrides: Overrides | None = None,
 ) -> HubProcess:
     """The hub's store-backed process, registered and opened; the settings ports are present only with ``settings``."""
-    registry = _registered(store_backed=True, settings=settings is not None)
     return build_store_backed(
-        registry,
+        registered(store_backed=True, settings=settings is not None),
         connections,
         clock=clock,
-        actions=actions,
-        settings=settings,
         graphs=graphs,
         system_artifacts=system_artifacts,
         config=config,
         platform_tracing=platform_tracing,
         environ=environ,
-        overrides=overrides,
+        actions=actions,
+        settings=settings,
     )
 
 
 def open_store_free(
     *,
     clock: IClock,
+    config: HubConfig,
+    platform_tracing: IPlatformTracing,
+    environ: Mapping[str, str],
+    actions: HubActions,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
-    config: HubConfig | None = None,
-    platform_tracing: IPlatformTracing | None = None,
 ) -> HubProcess:
     """The hub's store-free process, registered and opened."""
     return build_store_free(
-        _registered(store_backed=False),
+        registered(store_backed=False),
         clock=clock,
-        graphs=graphs,
-        system_artifacts=system_artifacts,
         config=config,
         platform_tracing=platform_tracing,
+        environ=environ,
+        actions=actions,
+        graphs=graphs,
+        system_artifacts=system_artifacts,
     )
 
 
-def _registered(*, store_backed: bool, settings: bool = False) -> LegacyRegistry:
+def registered(*, store_backed: bool, settings: bool = False) -> LegacyRegistry:
+    """A fresh registry holding the hub graph :func:`register_hub` declares."""
     registry = LegacyRegistry()
     register_hub(registry, store_backed=store_backed, settings=settings)
     return registry
 
 
-def _packaged(graphs: PackagedGraphs, system_artifacts: PackagedSystemArtifacts) -> tuple[ScopeValue[Any], ...]:
-    return (supply(port(PackagedGraphs), graphs), supply(port(PackagedSystemArtifacts), system_artifacts))
-
-
-def _opened(registry: LegacyRegistry, *values: ScopeValue[Any], overrides: Rewrites | None = None) -> OwnedChild:
-    return build_container(registry, HUB_LIFETIMES, owner=HUB_OWNER, values=ScopeValues(values), overrides=overrides)
+def _scoped(values: list[ScopeValue[Any]]) -> ScopeValues:
+    return ScopeValues(tuple(values))
 
 
 def _process(

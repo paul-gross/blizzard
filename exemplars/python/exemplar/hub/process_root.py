@@ -23,10 +23,10 @@ def open_store_backed(
     connections: HubStoreConnections,
     *,
     clock: IClock,
+    config: HubConfig,
+    platform_tracing: IPlatformTracing,
+    environ: Mapping[str, str],
     actions: HubActions,
-    config: HubConfig | None = None,
-    platform_tracing: IPlatformTracing | None = None,
-    environ: Mapping[str, str] | None = None,
 ) -> hub.HubProcess:
     """The hub's store-backed process with the permits area, registered and opened over the borrowed values."""
     registry = LegacyRegistry()
@@ -36,8 +36,8 @@ def open_store_backed(
         registry,
         connections,
         clock=clock,
-        actions=actions,
         config=config,
         platform_tracing=platform_tracing,
         environ=environ,
+        actions=actions,
     )

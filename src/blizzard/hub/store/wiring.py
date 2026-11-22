@@ -12,9 +12,11 @@ engine and the connections are borrowed process values the entrypoint supplies."
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
+from blizzard.foundation.roles import adapter_model
 from blizzard.hub.auth.invitations import IInvitationTokenReads
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.observability.egress.repository import IReadUsageCorpus
@@ -111,8 +113,7 @@ class StoreRefs:
         return self._refs[adapter]
 
 
-#: The tenant services a transitional alias of the legacy bridge targets, registered apart so their ``Ref`` is handed
-#: back.
+#: The tenant services a legacy-bridge alias targets, registered apart so their ``Ref`` is handed back.
 _TENANT_ALIASED: tuple[type[Any], ...] = (
     HubTransactions,
     ProjectStore,
@@ -219,10 +220,43 @@ def register_process_absent(registry: Registry) -> None:
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
 
 
-def register_config(registry: Registry) -> StoreRefs:
+@adapter_model
+@dataclass(frozen=True)
+class ConfigRefs:
+    """The ``Ref`` of each configured-record adapter, named for the config area's port it fills."""
+
+    work_sources: Ref[WorkSourceRecordStore]
+    repositories: Ref[RepositoryRecordStore]
+    forges: Ref[ForgeRecordStore]
+    credentials: Ref[CredentialRecordStore]
+    secrets: Ref[SecretStore]
+    secret_references: Ref[SecretReferrersStore]
+    forge_references: Ref[ForgeReferrersStore]
+    credential_references: Ref[CredentialReferrersStore]
+    changes: Ref[ConfigChangeStore]
+    apply_writer: Ref[ConfigApplyStore]
+    import_writer: Ref[ConfigImportStore]
+    revisions: Ref[ConfigRevisionsStore]
+
+
+def register_config(registry: Registry) -> ConfigRefs:
     """Declare the tenant's configured-record adapters, handing back the ``Ref`` of each, which the config area's ports
     alias."""
-    return StoreRefs({each: registry.service(each, lifetime=Lifetime.TENANT) for each in _CONFIG_SERVICES})
+    refs = StoreRefs({each: registry.service(each, lifetime=Lifetime.TENANT) for each in _CONFIG_SERVICES})
+    return ConfigRefs(
+        work_sources=refs.of(WorkSourceRecordStore),
+        repositories=refs.of(RepositoryRecordStore),
+        forges=refs.of(ForgeRecordStore),
+        credentials=refs.of(CredentialRecordStore),
+        secrets=refs.of(SecretStore),
+        secret_references=refs.of(SecretReferrersStore),
+        forge_references=refs.of(ForgeReferrersStore),
+        credential_references=refs.of(CredentialReferrersStore),
+        changes=refs.of(ConfigChangeStore),
+        apply_writer=refs.of(ConfigApplyStore),
+        import_writer=refs.of(ConfigImportStore),
+        revisions=refs.of(ConfigRevisionsStore),
+    )
 
 
 def register_config_absent(registry: Registry) -> None:

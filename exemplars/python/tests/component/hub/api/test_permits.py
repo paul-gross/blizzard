@@ -49,7 +49,7 @@ def oauth_hub(tmp_path: Path) -> Iterator[HubHarness]:
 
 
 def _mounted(hub: HubHarness) -> Iterator[HubHarness]:
-    assert hub.app is not None and hub.core is not None
+    assert hub.app is not None and hub.core is not None and hub.config is not None
     with hub.engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
         _PERMITS.upgrade()
         _PERMIT_REVISION.upgrade()
