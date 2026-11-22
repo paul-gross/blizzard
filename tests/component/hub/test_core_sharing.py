@@ -16,10 +16,11 @@ from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.finding_store import FindingStore
+from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.tenancy import StoreScope, TenantId
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from tests.support.scaffolding import add_tenant, build_hub, default_tenant, tenant_services_of
-from tests.support.transition_identity import transition_identity_violations
+from tests.support.transition_identity import process_identity_violations, transition_identity_violations
 
 
 def test_services_share_the_cores_stores(tmp_path: Path) -> None:
@@ -135,3 +136,21 @@ def test_a_background_resolution_and_the_retained_bag_share_one_finding_service(
     assert every[tenant] is services.findings
     assert exits.repo is services.findings
     assert hub.open_services(add_tenant(hub.engine, "other")).findings is not services.findings
+
+
+def test_every_retained_process_field_is_its_container_instance(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.core is not None
+
+    assert process_identity_violations(hub.core, hub.hub_services) == []
+
+
+def test_the_process_identity_gate_fails_a_planted_second_copy(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.core is not None
+
+    planted = replace(hub.core, hub_events=HubEventLogStore(hub.core.store_connections))
+
+    assert process_identity_violations(planted, hub.hub_services) == [
+        "HubCore.hub_events is not its container instance"
+    ]

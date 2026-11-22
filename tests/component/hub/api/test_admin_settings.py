@@ -3,21 +3,19 @@
 from __future__ import annotations
 
 import tomllib
-from datetime import UTC, datetime
 from pathlib import Path
 
 from blizzard.auth_core import Role
-from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.flags import FlagRegistry
-from blizzard.hub.composition import build_hub_settings
 from blizzard.hub.config import AUTH_MODE_OAUTH, json_literal
-from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from blizzard.hub.settings.footing import HubSettingsFooting
+from blizzard.hub.settings.model import IReadHubSettingsAdmin
+from blizzard.hub.settings.reader import HubSettingsReader
+from blizzard.hub.settings.service import HubSettingsAuthoring
+from blizzard.wire import problem as problem_types
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
-    hub_level_connections,
     seed_hub_admin,
     seed_session,
     seed_user,
@@ -25,12 +23,7 @@ from tests.support.scaffolding import (
 
 
 def _hub(tmp_path: Path, auth_mode: str = "none") -> HubHarness:
-    hub = build_hub(tmp_path, auth_mode=auth_mode)
-    footing = HubSettingsFooting(tmp_path, None, None, False, FlagRegistry(), False, HUB_REGISTRY, {})
-    hub.wired_app.state.hub_settings = build_hub_settings(
-        hub_level_connections(hub.engine), FixedClock(datetime(2026, 1, 1, tzinfo=UTC)), footing
-    )
-    return hub
+    return build_hub(tmp_path, auth_mode=auth_mode, with_settings=True)
 
 
 def test_change_notifications_only_follow_commits(tmp_path: Path) -> None:
@@ -286,3 +279,47 @@ def test_all_routes_require_hub_administrator(tmp_path: Path) -> None:
         assert forbidden.json()["type"] == "urn:blizzard:problem:permission-required"
         response = hub.client.request(method, path + suffix, headers={**admin_headers, "If-Match": "0"}, json=body)
         assert response.status_code == 200, response.text
+
+
+def test_the_settings_ports_are_the_members_of_the_one_borrowed_graph(tmp_path: Path) -> None:
+    hub = _hub(tmp_path)
+    graph = hub.wired_app.state.hub_settings
+    resolver = hub.hub_services.process.resolver
+    assert resolver.get(IReadHubSettingsAdmin) is graph.store
+    assert resolver.get(HubSettingsReader) is graph.reader
+    assert resolver.get(HubSettingsAuthoring) is graph.authoring
+    assert resolver.get(HubSettingsFooting) is graph.footing
+
+
+_SETTINGS_ROUTES: list[tuple[str, str, dict[str, object] | None]] = [
+    ("GET", "", None),
+    ("GET", "/changes", None),
+    ("GET", "/export", None),
+    ("PATCH", "", {}),
+    ("POST", "/apply", {}),
+]
+
+
+def test_a_settings_less_hub_answers_an_admin_the_store_unavailable_problem_and_refuses_others_first(
+    tmp_path: Path,
+) -> None:
+    hub = build_hub(tmp_path, auth_mode=AUTH_MODE_OAUTH)
+    member = seed_user(hub, username="tenant-admin", role=Role.ADMIN)
+    admin = seed_user(hub, username="hub-admin", role=Role.PENDING)
+    seed_hub_admin(hub.engine, admin.user_id)
+    member_headers = {"Authorization": f"Bearer {seed_session(hub, member)}"}
+    admin_headers = {"Authorization": f"Bearer {seed_session(hub, admin)}"}
+    for method, suffix, body in _SETTINGS_ROUTES:
+        path = "/api/admin/settings" + suffix
+        unavailable = hub.client.request(method, path, headers=admin_headers, json=body)
+        assert unavailable.status_code == 503, (method, path, unavailable.text)
+        assert unavailable.headers["content-type"].startswith("application/problem+json")
+        assert unavailable.json() == {
+            "type": problem_types.HUB_STORE_UNAVAILABLE,
+            "title": "Hub store unavailable",
+            "detail": "hub store not wired — start via `blizzard hub host`",
+            "instance": path,
+            "status": 503,
+        }
+        assert hub.client.request(method, path, headers=member_headers, json=body).status_code == 403
+        assert hub.client.request(method, path, json=body).status_code in (401, 403)

@@ -28,6 +28,7 @@ from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.runs.run import RoutineRetiredError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.errand_runs_store import ErrandRunsStore
 from tests.support.scaffolding import HubHarness, build_hub, default_project, hub_scoped, project_record
 
 _CTX = ChangeContext(actor="operator", door=Door.API)
@@ -87,7 +88,7 @@ def _try_mint(hub: HubHarness, cadence: Cadence, errand: Errand, *, judged: Erra
 
 
 def _last(hub: HubHarness, errand: Errand) -> ErrandRun | None:
-    return hub.services.errand_runs.last_runs([errand.key]).get(errand.key)
+    return hub.default_adapter(ErrandRunsStore).last_runs([errand.key]).get(errand.key)
 
 
 def _chunk(hub: HubHarness, chunk_id: str) -> Chunk:
@@ -179,12 +180,12 @@ def test_runs_grouped_into_one_chunk_each_read_the_survivor_until_it_settles(hub
     folded = _mint(hub, cadence, found[("every", "runner")])
     hub.services.group.group(survivor.chunk.chunk_id, [folded.chunk.chunk_id])
 
-    runs = hub.services.errand_runs.last_runs([errand.key for errand in found.values()])
+    runs = hub.default_adapter(ErrandRunsStore).last_runs([errand.key for errand in found.values()])
     assert {run.work_item_id for run in runs.values()} == {survivor.item.work_item_id, folded.item.work_item_id}
     assert all(run.run.unfinished() for run in runs.values())
 
     hub.services.stop.stop(_chunk(hub, survivor.chunk.chunk_id), by="operator")
-    runs = hub.services.errand_runs.last_runs([errand.key for errand in found.values()])
+    runs = hub.default_adapter(ErrandRunsStore).last_runs([errand.key for errand in found.values()])
     assert [run.run.outcome() for run in runs.values()] == [RunOutcome.CANCELLED, RunOutcome.CANCELLED]
 
 

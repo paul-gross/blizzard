@@ -2,11 +2,12 @@
 
 Registration and building are two steps, so a stand-in root can reuse the hub's registration and add to it before it
 builds. The store-backed graph declares the legacy bridge's leaves; the store-free graph declares each of them absent,
-so a route that reaches one answers the store's unavailability rather than serving on nothing.
+so a route that reaches one answers the store's unavailability rather than serving on nothing. A graph opened
+without settings declares the settings ports absent the same way.
 
-The process scope borrows every value it is opened with — the store's connections and the clock — and the
-:class:`HubProcess` it returns owns only the container: closing it closes every tenant scope, then the process scope,
-and leaves the borrowed values to the entrypoint that built them."""
+The process scope borrows every value it is opened with — the store's connections, the clock and the settings graph —
+and the :class:`HubProcess` it returns owns only the container: closing it closes every tenant scope, then the process
+scope, and leaves the borrowed values to the entrypoint that built them."""
 
 from __future__ import annotations
 
@@ -24,6 +25,8 @@ from blizzard.hub.composition import register_legacy, register_legacy_absent
 from blizzard.hub.domain.garden.findings import wiring as findings
 from blizzard.hub.scopes import wiring as scopes
 from blizzard.hub.scopes.tenants import TenantContainers
+from blizzard.hub.settings import wiring as settings_wiring
+from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store import wiring as store
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
@@ -54,9 +57,10 @@ class HubProcess:
             self.owner.close()
 
 
-def register_hub(registry: LegacyRegistry, *, store_backed: bool) -> None:
+def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool = False) -> None:
     """Declare the hub graph: the scope inputs, the legacy bridge's leaves, the store adapters and the adopted areas
-    over them — or, store-free, each store-backed registration absent."""
+    over them — or, store-free, each store-backed registration absent. The settings ports resolve from the borrowed
+    settings graph when ``settings`` is set, and are absent otherwise, whether or not the graph is store-backed."""
     scopes.register(registry)
     if store_backed:
         register_legacy(registry)
@@ -65,11 +69,25 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool) -> None:
         register_legacy_absent(registry)
         store.register_findings_absent(registry)
         findings.register_absent(registry)
+    if store_backed and settings:
+        settings_wiring.register(registry)
+    else:
+        settings_wiring.register_absent(registry)
 
 
-def build_store_backed(registry: LegacyRegistry, connections: HubStoreConnections, *, clock: IClock) -> HubProcess:
-    """Open the store-backed graph ``registry`` declares over the borrowed ``connections`` and ``clock``."""
-    owner = _opened(registry, supply(port(HubStoreConnections), connections), supply(port(IClock), clock))
+def build_store_backed(
+    registry: LegacyRegistry,
+    connections: HubStoreConnections,
+    *,
+    clock: IClock,
+    settings: HubSettingsGraph | None = None,
+) -> HubProcess:
+    """Open the store-backed graph ``registry`` declares over the borrowed ``connections``, ``clock`` and, when the
+    graph declares the settings ports, ``settings``."""
+    values: list[ScopeValue[Any]] = [supply(port(HubStoreConnections), connections), supply(port(IClock), clock)]
+    if settings is not None:
+        values.append(supply(port(HubSettingsGraph), settings))
+    owner = _opened(registry, *values)
     try:
         reads = owner.resolver.get(HubScopedReads)
     except BaseException:
@@ -83,9 +101,12 @@ def build_store_free(registry: LegacyRegistry, *, clock: IClock) -> HubProcess:
     return _process(_opened(registry, supply(port(IClock), clock)), confirm_open=_no_tenant, open_tenants=tuple)
 
 
-def open_store_backed(connections: HubStoreConnections, *, clock: IClock) -> HubProcess:
-    """The hub's store-backed process, registered and opened."""
-    return build_store_backed(_registered(store_backed=True), connections, clock=clock)
+def open_store_backed(
+    connections: HubStoreConnections, *, clock: IClock, settings: HubSettingsGraph | None = None
+) -> HubProcess:
+    """The hub's store-backed process, registered and opened; the settings ports are present only with ``settings``."""
+    registry = _registered(store_backed=True, settings=settings is not None)
+    return build_store_backed(registry, connections, clock=clock, settings=settings)
 
 
 def open_store_free(*, clock: IClock) -> HubProcess:
@@ -93,9 +114,9 @@ def open_store_free(*, clock: IClock) -> HubProcess:
     return build_store_free(_registered(store_backed=False), clock=clock)
 
 
-def _registered(*, store_backed: bool) -> LegacyRegistry:
+def _registered(*, store_backed: bool, settings: bool = False) -> LegacyRegistry:
     registry = LegacyRegistry()
-    register_hub(registry, store_backed=store_backed)
+    register_hub(registry, store_backed=store_backed, settings=settings)
     return registry
 
 

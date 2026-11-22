@@ -2,22 +2,16 @@
 
 from pathlib import Path
 
-from blizzard.foundation.flags import FlagRegistry
 from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.hub.api.auth_session import TENANT_HEADER
-from blizzard.hub.composition import build_hub_settings
-from blizzard.hub.config_keys import HUB_REGISTRY
-from blizzard.hub.settings.footing import HubSettingsFooting
-from tests.support.scaffolding import build_hub, default_tenant, hub_level_connections
+from tests.support.scaffolding import build_hub, default_tenant
 
 
 def test_cap_edit_reaches_every_open_tenant(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
+    hub = build_hub(tmp_path, with_settings=True)
     second = hub.add_tenant("bravo")
     tenants = (default_tenant(hub.engine), second.tenant)
-    footing = HubSettingsFooting(tmp_path, None, None, False, FlagRegistry(), False, HUB_REGISTRY, {})
-    settings = build_hub_settings(hub_level_connections(hub.engine), hub.clock, footing)
-    hub.wired_app.state.hub_settings = settings
+    settings = hub.wired_app.state.hub_settings
     chunks: list[str] = []
     for tenant in tenants:
         response = hub.client.post("/api/chunks", json={"tokens": ["hub:1"]}, headers={TENANT_HEADER: tenant})

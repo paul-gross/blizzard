@@ -783,7 +783,7 @@ def build_hosted_app(
         expected = migration_runner(config).script_head()
         readiness = ReadinessService(reader=reader, expected_revision=expected)
 
-        core = build_hub_core(connections, clock=resolved_clock)
+        core = build_hub_core(connections, clock=resolved_clock, settings=settings)
         # Closed after everything registered below: the tenant scopes, then the process scope; the engine, tracing
         # and settings stay borrowed from `hub host`.
         cleanup.callback(core.process.close)

@@ -1,7 +1,7 @@
 """Source-bound change detector; not a reviewed operation/refusal inventory."""
 
 FINGERPRINTS = """\
-src/blizzard/hub/api/admin_settings.py 4 a7e972fa3687d275722b784b600350a57a9d089cedbee59357d2d081ba2829d8
+src/blizzard/hub/api/admin_settings.py 3 94b706743c5b0ea3d59069d9a657dab0dc82a960cb78ce5049dac65285351f17
 src/blizzard/hub/api/admin_invariants.py 2 3b7a7969c36d6e20b5a5b84738c13f894c38329ecaa4c01d5a4b99a595e897b8
 src/blizzard/hub/api/admin_tenants.py 9 dfc8f084e6dfd45c2a25ef48955ce4f58b6eabd1909fc3869de25d7500718757
 src/blizzard/hub/api/analytics.py 12 78121178001f8dfc47d3ca9444023657cd4a0e4c21e6bbfa2bc8fc6d74560f56
