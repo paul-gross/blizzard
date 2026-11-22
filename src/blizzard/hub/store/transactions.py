@@ -145,3 +145,9 @@ def create_in_unit(
 
 
 _transactions_conform: type[IHubTransactions] = HubTransactions
+
+
+def tenant_transactions(connections: ScopedConnections) -> HubTransactions:
+    """A tenant's ordinary unit-of-work opener over ``connections`` — the opener a closing or closed tenant, which has
+    no container scope, is served by."""
+    return HubTransactions(connections)

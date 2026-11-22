@@ -755,3 +755,9 @@ def _terms_of(row: Row[Any]) -> LandingTerms:
 _flows_conforms: type[IWriteFlows] = FlowStore
 _flow_views_conforms: type[IReadFlowViews] = FlowStore
 _chunk_flow_submissions_conforms: type[IReadChunkFlowSubmissions] = FlowStore
+
+
+def tenant_flows(connections: ScopedConnections, clock: IClock) -> FlowStore:
+    """The one place a tenant's delivery-line store is constructed, shared by the registry and the borrowed-connection
+    roots."""
+    return FlowStore(connections, clock)

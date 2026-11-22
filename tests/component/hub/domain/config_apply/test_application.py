@@ -17,6 +17,7 @@ from blizzard.hub.domain.config_apply.entries import DeclaredRepository, Documen
 from blizzard.hub.domain.config_apply.service import ConfigApplication
 from blizzard.hub.domain.projects.declarations import ProjectDeclaration
 from blizzard.hub.domain.projects.model import ProjectEdit
+from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
 from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
 from blizzard.hub.store.internal.urgency_store import UrgencyOrderStore, UrgencyStore
 from tests.support.scaffolding import HubHarness, build_hub, default_tenant, hub_store_connections, seed_forge
@@ -56,7 +57,7 @@ def _application(hub: HubHarness, clock: FixedClock) -> ConfigApplication:
         credentials=services.credential_records,
         projects=services.projects,
         links=services.project_links,
-        positions=services.project_positions,
+        positions=hub.default_adapter(ProjectPositionStore),
         scopes=services.scopes,
         routines=services.routines,
         routine_scopes=services.routine_scopes,

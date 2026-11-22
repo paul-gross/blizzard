@@ -285,6 +285,8 @@ def test_eviction_drops_a_tenants_services_and_its_broker(tmp_path: Path) -> Non
     before = hub.tenants.open_services(StoreScope(second))
     broker = before.events
 
+    # A tenant's deletion evicts the cache and its container scope together; the scope holds the adapters.
+    core.process.tenants.evict(second)
     core.tenants.evict(second)
 
     after = hub.tenants.open_services(StoreScope(second))

@@ -73,7 +73,6 @@ from blizzard.hub.composition import (
     build_services,
     connections_for_engine,
     default_forge_registry,
-    tenant_transactions,
 )
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH, AuthConfig, HubConfig, LoginThrottleConfig
 from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
@@ -191,7 +190,7 @@ from blizzard.hub.store.scoped import (
     is_tenant_owned,
     statements_of,
 )
-from blizzard.hub.store.transactions import HubTransactions, connection_for
+from blizzard.hub.store.transactions import HubTransactions, connection_for, tenant_transactions
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
 from blizzard.hub.work_sources.editor import IWorkEditor
@@ -1493,6 +1492,10 @@ class HubHarness:
     def resolve[T](self, tenant: TenantId, dependency_type: type[T]) -> T:
         """``tenant``'s one ``dependency_type``, resolved through its container scope as a background pass would."""
         return self.hub_services.process.tenants.resolve(StoreScope(tenant), dependency_type)
+
+    def default_adapter[T](self, adapter_type: type[T]) -> T:
+        """The default tenant's one ``adapter_type``, resolved through its container scope."""
+        return self.resolve(default_tenant(self.engine), adapter_type)
 
     def add_tenant(self, name: str) -> TenantHarness:
         """Add a tenant named ``name`` beside the default one and hand back what a test drives it with: its

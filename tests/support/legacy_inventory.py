@@ -11,18 +11,12 @@ from blizzard.foundation.registry.internal.recording import Kind, RecordingRegis
 from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
-from blizzard.hub.store.internal.project_store import ProjectStore
-from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import HubTransactions
 
 #: Each legacy key the hub registry declares, and the area that owns it until it adopts it.
 LEGACY_INVENTORY: Mapping[type, str] = {
     HubScopedReads: "hub identity",
     OpenTenants: "hub identity",
     MembershipRepository: "hub identity",
-    ScopedConnections: "hub scoped store adapters",
-    HubTransactions: "hub scoped store adapters",
-    ProjectStore: "projects",
 }
 
 

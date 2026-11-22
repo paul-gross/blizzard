@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 
 from blizzard.hub.domain.projects.order import LandingOrderConflict
+from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
 from tests.support.scaffolding import HubHarness, build_hub
 
 _PROJECT = "/api/projects/widgets"
@@ -100,7 +101,7 @@ def test_two_concurrent_moves_land_in_a_serial_order(hub: HubHarness, monkeypatc
             )
         )
 
-    _once_after(monkeypatch, hub.services.project_positions, "landing_links", move_a_after_c)
+    _once_after(monkeypatch, hub.default_adapter(ProjectPositionStore), "landing_links", move_a_after_c)
 
     moved = _ok(
         hub.client.post(f"{_PROJECT}/landing-order/position", json={"repository": "c", "after_repository": "a"})
@@ -124,7 +125,7 @@ def test_a_move_racing_the_sequence_read_lands_in_a_serial_order(
     def move_a_after_c() -> None:
         _ok(hub.client.post(f"{_PROJECT}/landing-order/position", json={"repository": "a", "after_repository": "c"}))
 
-    _once(monkeypatch, hub.services.project_positions, "landing_seqs", move_a_after_c, before=before)
+    _once(monkeypatch, hub.default_adapter(ProjectPositionStore), "landing_seqs", move_a_after_c, before=before)
 
     moved = _ok(
         hub.client.post(f"{_PROJECT}/landing-order/position", json={"repository": "c", "after_repository": "a"})
@@ -142,7 +143,7 @@ def test_an_apply_whose_sequence_read_follows_a_put_applies_on_the_order_it_left
     def put_b_c_a() -> None:
         _ok(hub.client.put(f"{_PROJECT}/landing-order", json={"repositories": ["b", "c", "a"]}))
 
-    _once(monkeypatch, hub.services.project_positions, "landing_seqs", put_b_c_a, before=True)
+    _once(monkeypatch, hub.default_adapter(ProjectPositionStore), "landing_seqs", put_b_c_a, before=True)
     document = {"version": 2, "projects": [{"slug": "widgets", "landing_order": ["a", "c", "b"]}]}
 
     applied = _ok(hub.client.post("/api/config/apply", json=document))
@@ -159,7 +160,7 @@ def test_an_apply_whose_put_lands_between_the_sequence_and_link_reads_is_refused
     def put_b_c_a() -> None:
         _ok(hub.client.put(f"{_PROJECT}/landing-order", json={"repositories": ["b", "c", "a"]}))
 
-    _once_after(monkeypatch, hub.services.project_positions, "landing_seqs", put_b_c_a)
+    _once_after(monkeypatch, hub.default_adapter(ProjectPositionStore), "landing_seqs", put_b_c_a)
     document = {"version": 2, "projects": [{"slug": "widgets", "landing_order": ["a", "c", "b"]}]}
 
     refused = hub.client.post("/api/config/apply", params={"dry_run": str(dry_run).lower()}, json=document)
@@ -195,7 +196,7 @@ def test_a_move_that_keeps_losing_its_read_is_refused_as_a_landing_order_conflic
         attempts.append(from_seq)
         raise LandingOrderConflict("widgets", expected=from_seq)
 
-    monkeypatch.setattr(hub.services.project_positions, "record_positions", stale)
+    monkeypatch.setattr(hub.default_adapter(ProjectPositionStore), "record_positions", stale)
 
     refused = hub.client.post(f"{_PROJECT}/landing-order/position", json={"repository": "c"})
 

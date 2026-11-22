@@ -22,6 +22,7 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.domain.projects.order import LandingOrderConflict
+from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
 from tests.support.scaffolding import HubHarness, build_hub, default_project, ensure_fixture_forge, seed_project
 from tests.support.worker_http import Bound, bind_stubs
 
@@ -366,7 +367,7 @@ def test_a_landing_order_write_that_keeps_losing_its_read_shows_the_hubs_refusal
     def stale(project_id: str, *_args: Any, from_seq: int, **_kwargs: Any) -> None:
         raise LandingOrderConflict(project_id, expected=from_seq)
 
-    monkeypatch.setattr(hub.services.project_positions, "record_positions", stale)
+    monkeypatch.setattr(hub.default_adapter(ProjectPositionStore), "record_positions", stale)
 
     result = _cli(*argv)
 

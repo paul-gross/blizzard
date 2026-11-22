@@ -208,6 +208,7 @@ from blizzard.hub.store.internal.credential_record_store import CredentialRecord
 from blizzard.hub.store.internal.credential_referrers import CredentialReferrersStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.env_timeline_store import EnvTimelineStore
+from blizzard.hub.store.internal.errand_runs_store import ErrandRunsStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
@@ -223,6 +224,7 @@ from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads
 from blizzard.hub.store.internal.hub_scoped_invitations import InvitationReads
 from blizzard.hub.store.internal.hub_settings_store import HubSettingsStore
 from blizzard.hub.store.internal.invitation_store import InvitationStore
+from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
@@ -3012,14 +3014,16 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFindingRepository, "has_delivery_for_proposal"): lambda w: w.hub.services.findings.has_delivery_for_proposal(
         w.garden_proposal_2
     ),
-    (IReadFindingSetRepository, "get"): lambda w: w.hub.services.finding_sets.get("fins_hub_1"),
-    (IReadFindingSetRepository, "list_for_chunk"): lambda w: w.hub.services.finding_sets.list_for_chunk(w.run_chunk_1),
-    (IReadFindingSetRepository, "newest_for_routine_scope"): lambda w: (
-        w.hub.services.finding_sets.newest_for_routine_scope(w.project_id, "gardening", "blizzard")
+    (IReadFindingSetRepository, "get"): lambda w: w.hub.default_adapter(FindingSetStore).get("fins_hub_1"),
+    (IReadFindingSetRepository, "list_for_chunk"): lambda w: w.hub.default_adapter(FindingSetStore).list_for_chunk(
+        w.run_chunk_1
     ),
-    (IReadFindingSetRepository, "newest_by_scope_for_routine"): lambda w: (
-        w.hub.services.finding_sets.newest_by_scope_for_routine(w.project_id, "gardening")
-    ),
+    (IReadFindingSetRepository, "newest_for_routine_scope"): lambda w: w.hub.default_adapter(
+        FindingSetStore
+    ).newest_for_routine_scope(w.project_id, "gardening", "blizzard"),
+    (IReadFindingSetRepository, "newest_by_scope_for_routine"): lambda w: w.hub.default_adapter(
+        FindingSetStore
+    ).newest_by_scope_for_routine(w.project_id, "gardening"),
     (IReadGardenProposalClosureRepository, "get"): lambda w: w.hub.services.garden_proposal_closures.get(
         w.garden_proposal_1
     ),
@@ -3268,8 +3272,12 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadProjectLinks, "projects_linking_sources"): lambda w: w.hub.services.project_links.projects_linking_sources(
         [w.work_source_id]
     ),
-    (IReadProjectPositions, "landing_links"): lambda w: w.hub.services.project_positions.landing_links(w.project_id),
-    (IReadProjectPositions, "landing_seqs"): lambda w: w.hub.services.project_positions.landing_seqs([w.project_id]),
+    (IReadProjectPositions, "landing_links"): lambda w: w.hub.default_adapter(ProjectPositionStore).landing_links(
+        w.project_id
+    ),
+    (IReadProjectPositions, "landing_seqs"): lambda w: w.hub.default_adapter(ProjectPositionStore).landing_seqs(
+        [w.project_id]
+    ),
     (IReadProjectLinks, "linked_at"): lambda w: w.hub.services.project_links.linked_at(
         w.project_id, w.work_source_id, w.clock.now()
     ),
@@ -3285,7 +3293,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         w.project_id, [w.scope_a, w.scope_c, "runner-scope"]
     ),
     (IReadCadenceRepository, "get"): lambda w: w.hub.services.cadences.get(w.cadence_id),
-    (IReadErrandRunsRepository, "last_runs"): lambda w: w.hub.services.errand_runs.last_runs(w.errand_keys),
+    (IReadErrandRunsRepository, "last_runs"): lambda w: w.hub.default_adapter(ErrandRunsStore).last_runs(w.errand_keys),
     (IReadCadenceCorpus, "tenants_with_live_cadences"): lambda w: (
         w.hub.hub_services.hub_scoped_reads.corpus.tenants_with_live_cadences()
     ),
