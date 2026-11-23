@@ -204,3 +204,8 @@ class IUrgencyReferenceClearing(Protocol):
         """Clear every reference to ``urgency`` in the retire's locked ``transaction``, each record with its own
         ``revision`` and change row. A record a concurrent write has already moved off ``urgency`` is skipped."""
         ...
+
+
+#: The key the urgency lifecycle takes its clearings under: every record kind above this package that holds a reference
+#: to an urgency, supplied by the highest area's wiring.
+UrgencyReferenceClearings = Sequence[IUrgencyReferenceClearing]

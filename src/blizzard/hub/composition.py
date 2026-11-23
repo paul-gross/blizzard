@@ -76,13 +76,12 @@ from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.delivery.hub_node import HubNodeRouter
 from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.cadence.mint import CadenceMint, ErrandPlanning, MintedErrand
-from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
+from blizzard.hub.domain.cadence.ports import IReadCadenceRepository, IWriteCadenceRepository
 from blizzard.hub.domain.cadence.services import (
     CadenceAttention,
     CadenceAuthoring,
     CadenceLifecycle,
     CadenceReading,
-    CadenceUrgencyClearing,
 )
 from blizzard.hub.domain.cadence.sweep import CadenceSweep, TenantCadence
 from blizzard.hub.domain.chunk.dependencies import DependencyService
@@ -140,10 +139,10 @@ from blizzard.hub.domain.garden.review.service import ReviewFindingsRecorder
 from blizzard.hub.domain.garden.routines import (
     IReadRoutineRepository,
     IReadRoutineScopeRepository,
+    IWriteRoutineRepository,
     RoutineAuthoring,
     RoutineLifecycle,
     RoutineScopeMembership,
-    RoutineUrgencyClearing,
 )
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
 from blizzard.hub.domain.garden.runs.baselines import RoutineBaselineService
@@ -213,13 +212,8 @@ from blizzard.hub.domain.sweeps.names import SweepName
 from blizzard.hub.domain.sweeps.roster import SweepRoster
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.domain.tenancy.teardown import TenantTeardown, TenantTeardownSweep
-from blizzard.hub.domain.urgency.ports import IReadTenantSettings, IReadUrgencyOrder, IReadUrgencyRepository
 from blizzard.hub.domain.urgency.services import (
     TenantDefault,
-    TenantSettingsService,
-    UrgencyAuthoring,
-    UrgencyLifecycle,
-    UrgencyOrdering,
     UrgencyReading,
     UrgencyReferences,
 )
@@ -289,12 +283,10 @@ from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
-from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
 from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
 from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
-from blizzard.hub.store.internal.urgency_chunks_store import UrgencyChunksStore
 from blizzard.hub.store.internal.urgency_store import UrgencyOrderStore, UrgencyStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
@@ -434,14 +426,6 @@ class TenantServices:
     chunk_targets: ChunkTargets
     #: List and show urgencies in order, with the default marked and their open chunks counted.
     urgency_reading: UrgencyReading
-    #: Create and edit an urgency.
-    urgency_authoring: UrgencyAuthoring
-    #: Retire an urgency, moving its open work, and enable one.
-    urgency_lifecycle: UrgencyLifecycle
-    #: The urgency set's two reorders.
-    urgency_ordering: UrgencyOrdering
-    #: Show and edit the tenant's settings.
-    tenant_settings: TenantSettingsService
     #: The routine read Protocol — the same store instance as
     #: ``routine_authoring``'s writes.
     routines: IReadRoutineRepository
@@ -648,12 +632,6 @@ class TenantStores:
     urgencies: UrgencyStore
     #: The urgency set's order — composition-only write half.
     urgency_order: UrgencyOrderStore
-    #: The tenant's settings — composition-only write half.
-    tenant_settings: TenantSettingsStore
-    #: The open chunks carrying an urgency, counted and moved.
-    urgency_chunks: UrgencyChunksStore
-    #: The tenant's default urgency, read under every mint's locks.
-    tenant_default: TenantDefault
     clock: IClock
 
     @property
@@ -693,9 +671,6 @@ def build_tenant_stores(tenant: Resolver, *, clock: IClock) -> TenantStores:
         invitations=tenant.get(InvitationStore),
         urgencies=tenant.get(UrgencyStore),
         urgency_order=tenant.get(UrgencyOrderStore),
-        tenant_settings=tenant.get(TenantSettingsStore),
-        urgency_chunks=tenant.get(UrgencyChunksStore),
-        tenant_default=tenant.get(TenantDefault),
         work_item_edits=tenant.get(WorkItemEditService),
         garden_proposal_resolution=tenant.get(GardenProposalDeliveryResolution),
         clock=clock,
@@ -978,12 +953,6 @@ def delete_leaf(
     )
 
 
-def tenant_default_leaf(settings: TenantSettingsStore, urgencies: UrgencyStore) -> TenantDefault:
-    """The tenant's default urgency, read under every mint's locks, a legacy leaf the urgency area owns until it adopts
-    it."""
-    return TenantDefault(settings=settings, urgencies=urgencies)
-
-
 def work_item_edits_leaf(
     items: WorkItemStore,
     chunks: ChunkStores,
@@ -1046,13 +1015,6 @@ def chunk_work_refs_leaf(chunks: ChunkStores) -> IReadChunkWorkRefsRepository:
     return chunks.work_refs
 
 
-def urgency_reading_leaf(
-    urgencies: UrgencyStore, order: UrgencyOrderStore, settings: TenantSettingsStore, chunks: UrgencyChunksStore
-) -> UrgencyReading:
-    """The tenant's urgency listing and lookup, a legacy leaf the projects and urgency area owns until it adopts it."""
-    return UrgencyReading(urgencies=urgencies, order=order, settings=settings, chunks=chunks)
-
-
 def register_legacy(registry: LegacyRegistry) -> None:
     """Declare the legacy bridge's leaves, each built as the legacy builder built it, over the store's adapters: the
     process services a request's admission reads before its tenant is known, and the transitional ports the adapters
@@ -1077,9 +1039,9 @@ def register_legacy(registry: LegacyRegistry) -> None:
     registry.alias(port(IReadRoutineRepository), tenant.of(RoutineStore))
     registry.alias(port(IReadRoutineScopeRepository), tenant.of(RoutineScopeStore))
     registry.alias(port(IReadCadenceRepository), tenant.of(CadenceStore))
-    registry.alias(port(IReadUrgencyRepository), tenant.of(UrgencyStore))
-    registry.alias(port(IReadUrgencyOrder), tenant.of(UrgencyOrderStore))
-    registry.alias(port(IReadTenantSettings), tenant.of(TenantSettingsStore))
+    # The routine and cadence writes the urgency clearings are built over, until their areas adopt them.
+    registry.alias(port(IWriteRoutineRepository), tenant.of(RoutineStore))
+    registry.alias(port(IWriteCadenceRepository), tenant.of(CadenceStore))
     # The reads a chunk-changed frame is enriched from.
     registry.alias(port(IReadRunnerRegistry), tenant.of(RunnerRegistryStore))
     for leaf in (
@@ -1087,9 +1049,7 @@ def register_legacy(registry: LegacyRegistry) -> None:
         chunk_record_leaf,
         chunk_route_leaf,
         chunk_work_refs_leaf,
-        urgency_reading_leaf,
         delete_leaf,
-        tenant_default_leaf,
         work_item_edits_leaf,
         garden_proposal_resolution_leaf,
         event_log_leaf,
@@ -1105,17 +1065,14 @@ _LEGACY_TENANT_KEYS: tuple[type[Any], ...] = (
     IReadRoutineRepository,
     IReadRoutineScopeRepository,
     IReadCadenceRepository,
-    IReadUrgencyRepository,
-    IReadUrgencyOrder,
-    IReadTenantSettings,
+    IWriteRoutineRepository,
+    IWriteCadenceRepository,
     IReadRunnerRegistry,
     IReadChunkFactsRepository,
     IReadChunkRecordRepository,
     IReadChunkRouteRepository,
     IReadChunkWorkRefsRepository,
-    UrgencyReading,
     DeleteService,
-    TenantDefault,
     WorkItemEditService,
     GardenProposalDeliveryResolution,
     EventLogService,
@@ -1313,7 +1270,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     routine_store = tenant.get(RoutineStore)
     routine_scope_store = tenant.get(RoutineScopeStore)
     cadence_store = tenant.get(CadenceStore)
-    urgency_references = UrgencyReferences(urgencies=stores.urgencies, transactions=stores.transactions)
+    urgency_references = tenant.get(UrgencyReferences)
     errand_runs_store = tenant.get(ErrandRunsStore)
     config_authoring = tenant.get(ConfigAuthoring)
     finding_set_store = tenant.get(FindingSetStore)
@@ -1407,7 +1364,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     )
     work_ref_label: WorkRefLabel = tenant.get(WorkRefLabel)
     flow_line_factory = FlowLineFactory(facts=chunk_facts, record=chunk_record, graphs=graph_store)
-    tenant_default = stores.tenant_default
+    tenant_default = tenant.get(TenantDefault)
     cadence_attention = CadenceAttention(
         routines=routine_store, routine_scopes=routine_scope_store, scopes=scope_store, graphs=graph_store
     )
@@ -1642,36 +1599,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         project_links=stores.project_links,
         chunk_targets=chunk_targets,
         urgency_reading=tenant.get(UrgencyReading),
-        urgency_authoring=UrgencyAuthoring(
-            urgencies=stores.urgencies,
-            order=stores.urgency_order,
-            transactions=stores.transactions,
-            pick=tenant.get(ColorPick),
-            clock=clock,
-        ),
-        urgency_lifecycle=UrgencyLifecycle(
-            urgencies=stores.urgencies,
-            settings=stores.tenant_settings,
-            chunks=stores.urgency_chunks,
-            transactions=stores.transactions,
-            clock=clock,
-            references=(
-                RoutineUrgencyClearing(routines=routine_store),
-                CadenceUrgencyClearing(cadences=cadence_store),
-            ),
-        ),
-        urgency_ordering=UrgencyOrdering(
-            tenant_id=stores.scope.tenant,
-            order=stores.urgency_order,
-            transactions=stores.transactions,
-            clock=clock,
-        ),
-        tenant_settings=TenantSettingsService(
-            settings=stores.tenant_settings,
-            urgencies=stores.urgencies,
-            transactions=stores.transactions,
-            clock=clock,
-        ),
         routines=routine_store,
         routine_scopes=routine_scope_store,
         routine_scope_membership=RoutineScopeMembership(

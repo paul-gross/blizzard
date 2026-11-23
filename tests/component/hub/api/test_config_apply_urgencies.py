@@ -13,7 +13,8 @@ import pytest
 
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config_apply import service as config_apply_service
-from tests.support.scaffolding import HubHarness, build_hub
+from blizzard.hub.domain.urgency.services import UrgencyLifecycle
+from tests.support.scaffolding import HubHarness, build_hub, default_tenant
 
 _PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
 
@@ -183,7 +184,7 @@ def test_a_retire_committing_between_the_plan_and_the_write_refuses_the_apply_as
         plan = planned(*args, **kwargs)
         later = hub.services.urgency_reading.resolve("later")
         assert later is not None
-        hub.services.urgency_lifecycle.retire(
+        hub.resolve(default_tenant(hub.engine), UrgencyLifecycle).retire(
             later, ChangeContext(actor="rival", door=Door.API), move_to=None, may_control=True, if_match=None
         )
         return plan

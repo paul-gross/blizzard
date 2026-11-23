@@ -82,7 +82,6 @@ _TENANT_SERVICES: tuple[type[Any], ...] = (
     GardenProposalStore,
     GardenProposalClosureStore,
     InvitationStore,
-    UrgencyChunksStore,
     TranscriptSegmentStore,
     TranscriptEventStore,
     AnalyticsEventQueryStore,
@@ -120,9 +119,6 @@ _TENANT_ALIASED: tuple[type[Any], ...] = (
     RoutineStore,
     RoutineScopeStore,
     CadenceStore,
-    UrgencyStore,
-    UrgencyOrderStore,
-    TenantSettingsStore,
     RunnerRegistryStore,
 )
 
@@ -309,4 +305,36 @@ def register_projects(registry: Registry) -> ProjectRefs:
 def register_projects_absent(registry: Registry) -> None:
     """Declare the tenant's project adapters absent, for the store-free graph."""
     for missing in _PROJECT_SERVICES:
+        registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
+
+
+#: The urgency adapters the urgency area aliases its ports onto.
+_URGENCY_SERVICES: tuple[type[Any], ...] = (UrgencyStore, UrgencyOrderStore, TenantSettingsStore, UrgencyChunksStore)
+
+
+@adapter_model
+@dataclass(frozen=True)
+class UrgencyRefs:
+    """The ``Ref`` of each urgency adapter, named for the port family the urgency area aliases onto it."""
+
+    urgencies: Ref[UrgencyStore]
+    order: Ref[UrgencyOrderStore]
+    settings: Ref[TenantSettingsStore]
+    chunks: Ref[UrgencyChunksStore]
+
+
+def register_urgency(registry: Registry) -> UrgencyRefs:
+    """Declare the tenant's urgency adapters, handing back the ``Ref`` of each, which the urgency area's ports alias."""
+    refs = StoreRefs({each: registry.service(each, lifetime=Lifetime.TENANT) for each in _URGENCY_SERVICES})
+    return UrgencyRefs(
+        urgencies=refs.of(UrgencyStore),
+        order=refs.of(UrgencyOrderStore),
+        settings=refs.of(TenantSettingsStore),
+        chunks=refs.of(UrgencyChunksStore),
+    )
+
+
+def register_urgency_absent(registry: Registry) -> None:
+    """Declare the tenant's urgency adapters absent, for the store-free graph."""
+    for missing in _URGENCY_SERVICES:
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)

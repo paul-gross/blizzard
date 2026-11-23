@@ -12,6 +12,7 @@ from __future__ import annotations
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Header, Request, Response, status
 
 from blizzard.auth_core import Permission
@@ -21,12 +22,11 @@ from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_events import ChunkChanged, load_frame_states
-from blizzard.hub.api.deps import Services
+from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import may_edit_chunks
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.urgency.chain import URGENCY_FIELD
@@ -42,8 +42,9 @@ from blizzard.hub.domain.urgency.model import (
     UrgencyShape,
     UrgencyUnknown,
 )
-from blizzard.hub.domain.urgency.services import UrgencyReading
+from blizzard.hub.domain.urgency.services import UrgencyAuthoring, UrgencyLifecycle, UrgencyOrdering, UrgencyReading
 from blizzard.hub.domain.urgency.services import UrgencyView as UrgencyRead
+from blizzard.hub.events.broker import EventBroker
 from blizzard.wire.urgency import (
     UrgenciesListView,
     UrgencyCreateRequest,
@@ -63,6 +64,13 @@ router = APIRouter(
     dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)],
 )
 
+Reading = FromDishka[UrgencyReading]
+Authoring = FromDishka[UrgencyAuthoring]
+Lifecycle = FromDishka[UrgencyLifecycle]
+Ordering = FromDishka[UrgencyOrdering]
+Frames = FromDishka[ChunkFrameLoader]
+Events = FromDishka[EventBroker]
+
 _VIEW = [Depends(require(Permission.FLEET_VIEW))]
 Editor = Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))]
 
@@ -70,8 +78,9 @@ Editor = Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))]
 _ICON_POLICY = "default-src 'none'"
 
 
-def path_urgency(key: str, services: Services) -> Urgency:
-    found = services.urgency_reading.resolve(key)
+@inject_sync
+def path_urgency(key: str, reading: Reading) -> Urgency:
+    found = reading.resolve(key)
     if found is None:
         raise ProblemHTTPException(partial(problems_admin.urgency_not_found_problem, f"unknown urgency {key!r}"))
     return found
@@ -119,14 +128,12 @@ def _view(read: UrgencyRead) -> UrgencyView:
     )
 
 
-def _shown(urgency: Urgency, services: TenantServices) -> UrgencyView:
-    return _view(services.urgency_reading.view(urgency))
+def _shown(urgency: Urgency, reading: UrgencyReading) -> UrgencyView:
+    return _view(reading.view(urgency))
 
 
-def _listing(services: TenantServices, *, include_retired: bool = False) -> UrgenciesListView:
-    return UrgenciesListView(
-        urgencies=[_view(read) for read in services.urgency_reading.list(include_retired=include_retired)]
-    )
+def _listing(reading: UrgencyReading, *, include_retired: bool = False) -> UrgenciesListView:
+    return UrgenciesListView(urgencies=[_view(read) for read in reading.list(include_retired=include_retired)])
 
 
 def _icon(document: UrgencyIconDocument | None) -> IconShape | None:
@@ -144,15 +151,17 @@ def _revision_conflict(exc: ConfigRevisionConflict) -> ProblemHTTPException:
 
 
 @router.get("", response_model=UrgenciesListView, dependencies=_VIEW)
-def list_urgencies(services: Services, retired: bool = False) -> UrgenciesListView:
+@inject_sync
+def list_urgencies(reading: Reading, retired: bool = False) -> UrgenciesListView:
     """The live urgencies in order, most urgent first, the default marked; with `retired=true`, the retired ones
     too, each at its standing place."""
-    return _listing(services, include_retired=retired)
+    return _listing(reading, include_retired=retired)
 
 
 @router.post("", response_model=UrgencyView, status_code=status.HTTP_201_CREATED)
+@inject_sync
 def create_urgency(
-    request: UrgencyCreateRequest, identity: Editor, door: RequestDoor, services: Services
+    request: UrgencyCreateRequest, identity: Editor, door: RequestDoor, reading: Reading, authoring: Authoring
 ) -> UrgencyView:
     """Create an urgency at the least urgent end, or just after `after` — first under `after: null`. 422 naming the
     field for an invalid one, `urgency_slug_taken` for a slug a live or retired urgency holds, and
@@ -167,66 +176,77 @@ def create_urgency(
     )
     try:
         after = (
-            UNSET
-            if "after" not in sent
-            else None
-            if request.after is None
-            else services.urgency_reading.named("after", request.after)
+            UNSET if "after" not in sent else None if request.after is None else reading.named("after", request.after)
         )
-        created = services.urgency_authoring.create(shape, change_context(identity, door), after=after)
+        created = authoring.create(shape, change_context(identity, door), after=after)
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
-    return _shown(created, services)
+    return _shown(created, reading)
 
 
 @router.put("/order", response_model=UrgenciesListView)
+@inject_sync
 def put_urgency_order(
-    request: UrgencyOrderRequest, identity: Editor, door: RequestDoor, services: Services
+    request: UrgencyOrderRequest,
+    identity: Editor,
+    door: RequestDoor,
+    reading: Reading,
+    ordering: Ordering,
+    events: Events,
 ) -> UrgenciesListView:
     """Set the whole live order, most urgent first; one that already stands writes nothing. 422
     `urgency_order_incomplete` when it leaves a live urgency out, names a retired one, or names one twice, and
     `urgency_unknown` for one the tenant does not hold."""
     try:
-        named_by = services.urgency_reading.namer()
+        named_by = reading.namer()
         named = [named_by("urgencies", key) for key in request.urgencies]
-        moved = services.urgency_ordering.set_order(named, change_context(identity, door))
+        moved = ordering.set_order(named, change_context(identity, door))
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     if moved:
-        services.events.publish_queue_changed()
-    return _listing(services)
+        events.publish_queue_changed()
+    return _listing(reading)
 
 
 @router.post("/order/position", response_model=UrgenciesListView)
+@inject_sync
 def position_urgency(
-    request: UrgencyPositionRequest, identity: Editor, door: RequestDoor, services: Services
+    request: UrgencyPositionRequest,
+    identity: Editor,
+    door: RequestDoor,
+    reading: Reading,
+    ordering: Ordering,
+    events: Events,
 ) -> UrgenciesListView:
     """Move one urgency to just after `after`, or first under `after: null`; one already there writes nothing. 422
     for an urgency the tenant does not hold, a retired one, or a move after itself."""
     try:
-        moving = services.urgency_reading.named("urgency", request.urgency)
-        after = None if request.after is None else services.urgency_reading.named("after", request.after)
-        moved = services.urgency_ordering.move(moving, change_context(identity, door), after=after)
+        moving = reading.named("urgency", request.urgency)
+        after = None if request.after is None else reading.named("after", request.after)
+        moved = ordering.move(moving, change_context(identity, door), after=after)
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     if moved:
-        services.events.publish_queue_changed()
-    return _listing(services)
+        events.publish_queue_changed()
+    return _listing(reading)
 
 
 @router.get("/{key}", response_model=UrgencyView, dependencies=_VIEW)
-def get_urgency(urgency: PathUrgency, services: Services) -> UrgencyView:
+@inject_sync
+def get_urgency(urgency: PathUrgency, reading: Reading) -> UrgencyView:
     """Show an urgency by id or slug."""
-    return _shown(urgency, services)
+    return _shown(urgency, reading)
 
 
 @router.patch("/{key}", response_model=UrgencyView)
+@inject_sync
 def patch_urgency(
     identity: Editor,
     urgency: PathUrgency,
     request: UrgencyPatchRequest,
     door: RequestDoor,
-    services: Services,
+    reading: Reading,
+    authoring: Authoring,
     if_match: Annotated[int | None, Header()] = None,
 ) -> UrgencyView:
     """Edit the stated fields, keeping the revision on a no-op; `null` on `emoji` or `icon` clears it. 422 for a
@@ -241,20 +261,24 @@ def patch_urgency(
         icon=_icon(request.icon) if "icon" in sent else UNSET,
     )
     try:
-        edited = services.urgency_authoring.edit(urgency, edit, change_context(identity, door), if_match=if_match)
+        edited = authoring.edit(urgency, edit, change_context(identity, door), if_match=if_match)
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except ConfigRevisionConflict as exc:
         raise _revision_conflict(exc) from exc
-    return _shown(edited, services)
+    return _shown(edited, reading)
 
 
 @router.post("/{key}/retire", response_model=UrgencyRetireView)
+@inject_sync
 def retire_urgency(
     identity: Editor,
     urgency: PathUrgency,
     door: RequestDoor,
-    services: Services,
+    reading: Reading,
+    lifecycle: Lifecycle,
+    frames: Frames,
+    events: Events,
     request: UrgencyRetireRequest | None = None,
     if_match: Annotated[int | None, Header()] = None,
 ) -> UrgencyRetireView:
@@ -264,9 +288,9 @@ def retire_urgency(
     named; 422 `urgency_unknown`, `urgency_retired` or `urgency_move_to_self` for a `move_to` naming no urgency, a
     retired one, or this one. A retire moving open work needs `chunk:control` (403). 409 on a stale `If-Match`."""
     key = None if request is None else request.move_to
-    move_to = None if key is None else MoveTo(key, services.urgency_reading.resolve(key))
+    move_to = None if key is None else MoveTo(key, reading.resolve(key))
     try:
-        retired = services.urgency_lifecycle.retire(
+        retired = lifecycle.retire(
             urgency,
             change_context(identity, door),
             move_to=move_to,
@@ -286,30 +310,32 @@ def retire_urgency(
     except ConfigRevisionConflict as exc:
         raise _revision_conflict(exc) from exc
     if retired.moved:
-        for chunk_id, state in load_frame_states(services.chunk_frames, retired.moved).items():
-            ChunkChanged.of(services.chunk_frames, chunk_id, prev_status=state.facts.status().value).publish_from(
+        for chunk_id, state in load_frame_states(frames, retired.moved).items():
+            ChunkChanged.of(frames, chunk_id, prev_status=state.facts.status().value).publish_from(
                 state, cause="edited"
             )
-        services.events.publish_queue_changed()
-    view = _shown(retired.urgency, services)
+        events.publish_queue_changed()
+    view = _shown(retired.urgency, reading)
     return UrgencyRetireView(**view.model_dump(), moved_chunks=len(retired.moved))
 
 
 @router.post("/{key}/enable", response_model=UrgencyView)
+@inject_sync
 def enable_urgency(
     identity: Editor,
     urgency: PathUrgency,
     door: RequestDoor,
-    services: Services,
+    reading: Reading,
+    lifecycle: Lifecycle,
     if_match: Annotated[int | None, Header()] = None,
 ) -> UrgencyView:
     """Bring a retired urgency back at its standing place in the order; it moves no chunk back. Enabling a live one
     writes nothing. 409 on a stale `If-Match`."""
     try:
-        enabled = services.urgency_lifecycle.enable(urgency, change_context(identity, door), if_match=if_match)
+        enabled = lifecycle.enable(urgency, change_context(identity, door), if_match=if_match)
     except ConfigRevisionConflict as exc:
         raise _revision_conflict(exc) from exc
-    return _shown(enabled, services)
+    return _shown(enabled, reading)
 
 
 @router.get(
@@ -321,10 +347,11 @@ def enable_urgency(
         304: {"description": "The icon the client holds is current"},
     },
 )
-def get_urgency_icon(urgency: PathUrgency, request: Request, services: Services) -> Response:
+@inject_sync
+def get_urgency_icon(urgency: PathUrgency, request: Request, reading: Reading) -> object:
     """The urgency's icon, served with its media type, its digest as the entity tag, and a policy that lets no browser
     run it; 304 when `If-None-Match` names the digest. 404 when the urgency carries none."""
-    icon = services.urgency_reading.icon(urgency)
+    icon = reading.icon(urgency)
     if icon is None:
         raise ProblemHTTPException(
             partial(problems_admin.urgency_icon_not_found_problem, f"urgency {urgency.slug} carries no icon")

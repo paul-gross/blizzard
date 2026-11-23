@@ -196,6 +196,7 @@ from blizzard.hub.domain.urgency.ports import (
     IReadUrgencyOrder,
     IReadUrgencyRepository,
 )
+from blizzard.hub.domain.urgency.services import TenantSettingsService
 from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
 from blizzard.hub.secrets import hub_key_provider
@@ -2555,7 +2556,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     )
     urgency_chunks_store.move(
         [chunk_ready_1, chunk_ready_2],
-        from_id=hub.services.tenant_settings.show().default.urgency_id,
+        from_id=hub.resolve(default_tenant(hub.engine), TenantSettingsService).show().default.urgency_id,
         to=urgent.urgency_id,
     )
 

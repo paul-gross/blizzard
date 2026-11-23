@@ -13,9 +13,12 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
+from blizzard.hub.domain.urgency.ports import IReadUrgencyRepository, IWriteUrgencyRepository
+from blizzard.hub.domain.urgency.services import TenantDefault, UrgencyLifecycle, UrgencyReading
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
+from blizzard.hub.store.internal.urgency_store import UrgencyStore
 from blizzard.hub.tenancy import StoreScope, TenantId
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from tests.support.scaffolding import add_tenant, build_hub, configured_core, default_tenant, tenant_services_of
@@ -166,3 +169,16 @@ def test_every_tenant_resolves_the_process_actions_codec_and_packaged_loaders(tm
 
     for tenant in (default_tenant(hub.engine), second):
         assert process_sharing_violations(hub.core, hub.open_stores(tenant)) == []
+
+
+def test_the_urgency_ports_and_services_are_one_instance_within_a_tenant_and_apart_across_two(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    first = default_tenant(hub.engine)
+    second = add_tenant(hub.engine, "second")
+
+    adapter = hub.resolve(first, UrgencyStore)
+    assert hub.resolve(first, IReadUrgencyRepository) is adapter
+    assert hub.resolve(first, IWriteUrgencyRepository) is adapter
+    assert hub.services.urgency_reading is hub.resolve(first, UrgencyReading)
+    for key in (UrgencyStore, UrgencyReading, TenantDefault, UrgencyLifecycle):
+        assert hub.resolve(second, key) is not hub.resolve(first, key)

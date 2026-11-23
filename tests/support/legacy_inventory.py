@@ -21,7 +21,6 @@ from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.operations.delete import DeleteService
-from blizzard.hub.domain.urgency.services import TenantDefault, UrgencyReading
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.open_tenants import OpenTenants
 
@@ -41,8 +40,6 @@ LEGACY_INVENTORY: Mapping[object, str] = {
     IReadChunkRecordRepository: "chunk operations",
     IReadChunkRouteRepository: "chunk operations",
     IReadChunkWorkRefsRepository: "chunk operations",
-    TenantDefault: "projects and urgency",
-    UrgencyReading: "projects and urgency",
     GardenProposalDeliveryResolution: "garden authoring",
 }
 

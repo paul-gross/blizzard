@@ -24,11 +24,14 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery import wiring as delivery
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.documents import wiring as documents
+from blizzard.hub.domain.cadence import wiring as cadence_area
 from blizzard.hub.domain.config import wiring as config_wiring
 from blizzard.hub.domain.config_apply import wiring as config_apply
+from blizzard.hub.domain.garden import wiring as garden_area
 from blizzard.hub.domain.garden.findings import wiring as findings
 from blizzard.hub.domain.graph import wiring as graph_area
 from blizzard.hub.domain.projects import wiring as projects
+from blizzard.hub.domain.urgency import wiring as urgency_area
 from blizzard.hub.events import wiring as events
 from blizzard.hub.forge import wiring as forge
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
@@ -89,6 +92,9 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
         secrets.register(registry)
         findings.register(registry, store.register_findings(registry))
         graph_area.register(registry, store.register_graphs(registry))
+        _register_urgency(registry)
+        garden_area.register(registry)
+        cadence_area.register(registry)
         _register_config(registry)
         _register_projects(registry)
         config_apply.register(registry)
@@ -103,6 +109,10 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
         findings.register_absent(registry)
         store.register_graphs_absent(registry)
         graph_area.register_absent(registry)
+        store.register_urgency_absent(registry)
+        urgency_area.register_absent(registry)
+        garden_area.register_absent(registry)
+        cadence_area.register_absent(registry)
         store.register_config_absent(registry)
         config_wiring.register_absent(registry)
         store.register_projects_absent(registry)
@@ -128,6 +138,14 @@ def _register_projects(registry: LegacyRegistry) -> None:
         links=refs.links,
         positions=refs.positions,
         chunk_targets=refs.chunk_targets,
+    )
+
+
+def _register_urgency(registry: LegacyRegistry) -> None:
+    """The urgency adapters, and the urgency area's ports and services over them."""
+    refs = store.register_urgency(registry)
+    urgency_area.register(
+        registry, urgencies=refs.urgencies, order=refs.order, settings=refs.settings, chunks=refs.chunks
     )
 
 
