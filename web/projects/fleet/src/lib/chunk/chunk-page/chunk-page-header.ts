@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import type { ChunkDetail, RouteView, WorkRefView } from '../../api/hub';
+import type { ChunkDetail, ChunkRoute, ChunkWorkRef } from './chunk-detail.model';
 import { ChunkUrgency } from '../chunk-detail/chunk-urgency';
-import { ChunkActionsMenu } from '../chunk-detail/chunk-actions-menu';
+import { ChunkActionsMenu, type ChunkActionsDetail } from '../chunk-detail/chunk-actions-menu';
 import type { ChunkControl } from '../chunk-detail/chunk-control';
 import { injectRunnerHostNames, runnerDisplayName, runnerTitle } from '../../core/runner-display-name';
 import { KitSwatch } from '../../kit/kit-swatch';
@@ -39,7 +39,7 @@ export class ChunkPageHeader {
   readonly tone = input.required<Tone>();
 
   /** The work items this chunk serves, rendered first on the line. */
-  readonly pointers = input<readonly WorkRefView[]>([]);
+  readonly pointers = input<readonly ChunkWorkRef[]>([]);
 
   /** The chunk's project name, leading the line; `null` omits the project fact. */
   readonly projectName = input<string | null>(null);
@@ -48,7 +48,7 @@ export class ChunkPageHeader {
   readonly projectColor = input<string | null>(null);
 
   /** The chunk's live route, or `null` while no runner holds it. */
-  readonly route = input<RouteView | null>(null);
+  readonly route = input<ChunkRoute | null>(null);
 
   /** Each runner's host name by runner id — empty where the app provides no registry,
    * so the runner keeps the compact-id form. */
@@ -70,7 +70,7 @@ export class ChunkPageHeader {
   protected readonly statusColor = computed<string>(() => toneColor(this.tone()));
 
   /** The chunk aggregate the actions menu gates on; `null` hides the menu. */
-  readonly detail = input<ChunkDetail | null>(null);
+  readonly detail = input<(ChunkActionsDetail & Pick<ChunkDetail, 'terminal' | 'urgency'>) | null>(null);
 
   /** The daemon's chunk-control port behind the ⋮ menu; `null` hides the menu. */
   readonly control = input<ChunkControl | null>(null);

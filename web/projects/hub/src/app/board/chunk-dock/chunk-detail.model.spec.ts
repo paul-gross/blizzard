@@ -1,10 +1,11 @@
-import { type ChunkDetail, type ChunkStatus, type WorkItemsQuery } from 'fleet';
+import { type ChunkDetailAggregate, type WorkItemsQuery } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
 import { openDetail, openWorkItems, pendingStatusOverride } from './chunk-detail.model';
 
-const detail = (status: ChunkStatus, chunkId = 'ch_a', statusIfPaused?: ChunkStatus): ChunkDetail =>
-  ({ chunk_id: chunkId, status, status_if_paused: statusIfPaused }) as ChunkDetail;
+type ChunkStatus = Exclude<ChunkDetailAggregate['status']['kind'], 'unknown'>;
+const detail = (status: ChunkStatus, chunkId = 'ch_a', statusIfPaused?: ChunkStatus) =>
+  ({ chunk_id: chunkId, status: { kind: status }, status_if_paused: statusIfPaused ? { kind: statusIfPaused } : null });
 
 const STATUSES: readonly ChunkStatus[] = [
   'not_ready',
@@ -57,6 +58,7 @@ describe('pendingStatusOverride', () => {
       expect(pendingStatusOverride(detail(refused, 'ch_a', refused), [], [{ chunkId: 'ch_a', paused: true }])).toBeNull();
     }
     expect(pendingStatusOverride(detail('running'), [], [{ chunkId: 'ch_a', paused: true }])).toBeNull();
+    expect(pendingStatusOverride({ chunk_id: 'ch_a', status_if_paused: { kind: 'unknown', raw: 'future' } }, [], [{ chunkId: 'ch_a', paused: true }])).toBeNull();
   });
 
   it('predicts nothing for a pending Resume', () => {

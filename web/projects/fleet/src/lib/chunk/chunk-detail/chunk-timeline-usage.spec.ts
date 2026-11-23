@@ -2,9 +2,9 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import type { ChunkDetail } from '../../api/hub';
+import type { ChunkDetail } from '../chunk-page/chunk-detail.model';
 import { RUNNER_HOST_NAMES, RUNNER_NAMES } from '../../core/runner-display-name';
-import { chunkDetail, chunkUsageView, transitionView } from 'fleet/testing';
+import { domainChunkDetail as chunkDetail, domainUsage as chunkUsageView, domainTransition as transitionView } from 'fleet/testing';
 import { ChunkTimeline } from './chunk-timeline';
 
 const RUNNER_ID = 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3';
@@ -12,7 +12,7 @@ const RUNNER_ID = 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3';
 const STEP_USAGE = chunkUsageView({
   node_id: 'nd_build',
   epoch: 1,
-  kind: 'spawn',
+  kind: { kind: 'spawn' },
   input_tokens: 1200,
   output_tokens: 800,
   cache_read_tokens: 300,
@@ -66,8 +66,8 @@ describe('ChunkTimeline step usage', () => {
       ...COST_DETAIL,
       chunk_id: 'ch_01runner00000000000000000000',
       usage: [
-        { ...STEP_USAGE, kind: 'judge', runner_id: 'rn_01other0000000000000000000' },
-        { ...STEP_USAGE, kind: 'spawn', runner_id: RUNNER_ID, harness_id: 'claude_code' },
+        { ...STEP_USAGE, kind: { kind: 'judge' }, runner_id: 'rn_01other0000000000000000000' },
+        { ...STEP_USAGE, kind: { kind: 'spawn' }, runner_id: RUNNER_ID, harness_id: 'claude_code' },
       ],
     });
     const fixture = TestBed.createComponent(ChunkTimeline);

@@ -1,4 +1,4 @@
-import type { WorkItemEntry } from '../../api/hub';
+import type { WorkItem } from './work-item.model';
 
 /** The chunk's related work items and the state of the pass-through fetch, for the work-item column.
  *
@@ -8,7 +8,7 @@ import type { WorkItemEntry } from '../../api/hub';
  * a per-item `error` carries a single pointer's forge failure the pane notices in place). */
 export interface WorkItemsState {
   readonly status: 'loading' | 'error' | 'success';
-  readonly items: readonly WorkItemEntry[];
+  readonly items: readonly WorkItem[];
 }
 
 /** The shape {@link deriveWorkItemsState} needs from a work-items query — both
@@ -16,7 +16,7 @@ export interface WorkItemsState {
 export interface WorkItemsQuery {
   isPending(): boolean;
   isError(): boolean;
-  data(): { items?: readonly WorkItemEntry[] } | undefined;
+  data(): { items?: readonly WorkItem[] } | undefined;
 }
 
 /**

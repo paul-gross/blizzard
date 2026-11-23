@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { bounceView, chunkDetail, chunkUsageView, transitionView } from 'fleet/testing';
+import { domainBounce as bounceView, domainChunkDetail as chunkDetail, domainUsage as chunkUsageView, domainTransition as transitionView } from 'fleet/testing';
 import { ChunkTimeline } from './chunk-timeline';
 
 describe('ChunkTimeline graph runs', () => {

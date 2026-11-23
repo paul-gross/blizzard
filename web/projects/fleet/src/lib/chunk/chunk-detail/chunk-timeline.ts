@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
-import type { ChunkDetail } from '../../api/hub';
+import type { TimelineDetail } from './chunk-timeline-rows';
 import { harnessName } from '../../core/harness-name';
 import { injectRunnerHostNames, injectRunnerNames, runnerBoardLabel, runnerBoardParts } from '../../core/runner-display-name';
 import { SessionEfficiency } from '../../core/session-efficiency-view';
@@ -55,7 +55,7 @@ import { deriveActiveGraphHeader, deriveGraphHeaders } from './chunk-timeline-gr
 })
 export class ChunkTimeline {
   /** The chunk aggregate to render (its recorded history, current node, and usage). */
-  readonly detail = input.required<ChunkDetail>();
+  readonly detail = input.required<TimelineDetail>();
 
   /** Whether to render this component's own "Node history" heading, which
    * also serves as an `aria-labelledby` target. Set `false` when the host

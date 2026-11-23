@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { EscalationCause, type ChunkDetail, type ChunkEscalationView } from '../../api/hub';
 import { createCopyFlash } from '../../core/clipboard';
 import { openLookup } from '../../core/open-lookup';
 import { KitButton } from '../../kit/kit-button';
 import { KitSectionHead } from '../../kit/kit-section-head';
+import type { ChunkEscalationState, EscalationDetail } from './escalation.model';
 
 /**
  * The chunk's open escalation, needing a human takeover. Presentational only: it
@@ -20,7 +20,7 @@ import { KitSectionHead } from '../../kit/kit-section-head';
  * guidance prose that occupies the same field.
  * Wrapped-vs-raw rules and the wire field's own optionality:
  * `blizzard-context:/domain/humans/escalation.md` §The commands an escalation carries,
- * and the generated `ChunkEscalationView`.
+ * and the escalation read's command fields.
  */
 @Component({
   selector: 'fleet-chunk-detail-escalation',
@@ -31,14 +31,14 @@ import { KitSectionHead } from '../../kit/kit-section-head';
 })
 export class ChunkEscalation {
   /** The chunk aggregate to render the open escalation of, if any. */
-  readonly detail = input.required<ChunkDetail>();
+  readonly detail = input.required<EscalationDetail>();
 
   /** The takeover-command copy button's clipboard action and transient "Copied" state. */
   private readonly copyFlash = createCopyFlash();
   protected readonly copied = this.copyFlash.copied;
 
   /** The chunk's open escalation, if it currently needs a human takeover. */
-  protected readonly escalation = computed<ChunkEscalationView | null>(() => this.detail().escalation ?? null);
+  protected readonly escalation = computed<ChunkEscalationState | null>(() => this.detail().escalation);
 
   /** The opening sentence, chosen by cause: a recognized cause reads as prose, an
    * unrecognized one renders its raw value, and an absent one names no actor. */
@@ -78,27 +78,27 @@ export class ChunkEscalation {
  * The hub-authored causes (`bounce-cap`, `migration-target-unresolvable`) name no
  * worker — no worker was involved. The wire carries a cause as an open string — a stored
  * cause is free text on ingest — so an unrecognized value renders raw. */
-const CAUSE_SENTENCES = openLookup<EscalationCause, string>(
+const CAUSE_SENTENCES = openLookup<string, string>(
   {
-    [EscalationCause.RETRIES_EXHAUSTED]: 'The worker exhausted its retries',
-    [EscalationCause.OWNER_UNRESOLVABLE]: "The runner could not resolve the chunk's owner",
-    [EscalationCause.NO_ACCEPTABLE_HARNESS]: 'No acceptable harness was available for the chunk',
-    [EscalationCause.HARNESS_VERSION_CHANGED]: "The runner refused to launch the worker on its harness's changed version",
-    [EscalationCause.SPEND_CAP]: 'The worker hit its spend cap',
-    [EscalationCause.BOUNCE_CAP]: 'The chunk reached its bounce cap',
-    [EscalationCause.MIGRATION_TARGET_UNRESOLVABLE]: "The chunk's migration target could not be resolved",
-    [EscalationCause.HUB_ACTION_MISSING]: 'The hub node the chunk stands at names no action the hub can take',
-    [EscalationCause.HUB_ACTION_STUCK]: "The hub node's action was cut off at its deadline three turns in a row",
-    [EscalationCause.UNROUTABLE_OUTCOME]: "The hub node's answer has no edge to route the chunk on",
-    [EscalationCause.FORGE_AUTH]: "The repository's forge refused the hub's credential",
-    [EscalationCause.FORGE_CONFIG]: "The repository's forge could not find the repository with the hub's credential",
-    [EscalationCause.FORGE_CAPABILITY_MISSING]: "The repository's forge does not offer what the hub node's action needs",
-    [EscalationCause.CHANGE_CLOSED]: 'The change was closed without merging',
-    [EscalationCause.BRANCH_PROTECTED]: 'The forge refused to update a protected branch',
-    [EscalationCause.MERGE_METHOD_REFUSED]: 'The forge refused the configured merge method',
-    [EscalationCause.MISSING_CHECKS]: 'No CI checks were observed for the revision',
-    [EscalationCause.PARK_TIMEOUT]: 'The wait for the change to merge timed out',
-    [EscalationCause.ESCALATE_CHOICE]: 'The worker judged the work cannot be completed by a fleet worker',
+    'retries-exhausted': 'The worker exhausted its retries',
+    'owner-unresolvable': "The runner could not resolve the chunk's owner",
+    'no-acceptable-harness': 'No acceptable harness was available for the chunk',
+    'harness-version-changed': "The runner refused to launch the worker on its harness's changed version",
+    'spend-cap': 'The worker hit its spend cap',
+    'bounce-cap': 'The chunk reached its bounce cap',
+    'migration-target-unresolvable': "The chunk's migration target could not be resolved",
+    'hub-action-missing': 'The hub node the chunk stands at names no action the hub can take',
+    'hub-action-stuck': "The hub node's action was cut off at its deadline three turns in a row",
+    'unroutable-outcome': "The hub node's answer has no edge to route the chunk on",
+    'forge-auth': "The repository's forge refused the hub's credential",
+    'forge-config': "The repository's forge could not find the repository with the hub's credential",
+    'forge-capability-missing': "The repository's forge does not offer what the hub node's action needs",
+    'change-closed': 'The change was closed without merging',
+    'branch-protected': 'The forge refused to update a protected branch',
+    'merge-method-refused': 'The forge refused the configured merge method',
+    'missing-checks': 'No CI checks were observed for the revision',
+    'park-timeout': 'The wait for the change to merge timed out',
+    'escalate-choice': 'The worker judged the work cannot be completed by a fleet worker',
   },
   (raw) => `Escalated: ${raw}`,
 );

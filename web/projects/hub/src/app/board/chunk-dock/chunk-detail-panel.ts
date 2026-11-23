@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type ChunkArtifact, type ChunkControl, type ChunkDetail, type FactsDetail, type ChunkStatus, type AwaitingHumanFormActions, ChunkAwaitingHuman, ChunkDelivery, ChunkEscalation, ChunkFacts, ChunkIssuePane, ChunkTimeline, hasDelivery, toAwaitingHuman, type WorkItemsState, KitErrorLine, KitPanel } from 'fleet';
+import { type ChunkArtifact, type ChunkControl, type ChunkDetailAggregate, type AwaitingHumanFormActions, ChunkAwaitingHuman, ChunkDelivery, ChunkEscalation, ChunkFacts, ChunkIssuePane, ChunkTimeline, hasDelivery, type WorkItemsState, KitErrorLine, KitPanel } from 'fleet';
 import { ChunkArtifacts } from './chunk-artifacts';
 import { ChunkDetailHeader } from '../../core/chunk-detail-header/chunk-detail-header';
 
@@ -34,11 +34,11 @@ import { ChunkDetailHeader } from '../../core/chunk-detail-header/chunk-detail-h
 })
 export class ChunkDetailPanel {
   /** The chunk aggregate to render (status, current node, history, artifacts). */
-  readonly detail = input.required<ChunkDetail & FactsDetail>();
+  readonly detail = input.required<ChunkDetailAggregate>();
   readonly artifacts = input<readonly ChunkArtifact[]>([]);
 
   /** What the chunk waits on a human for, read once for every awaiting-human section. */
-  protected readonly awaitingHuman = computed(() => toAwaitingHuman(this.detail()));
+  protected readonly awaitingHuman = computed(() => this.detail().awaitingHuman);
 
   readonly boardChunkIds = input<ReadonlySet<string>>(new Set());
 
@@ -80,7 +80,7 @@ export class ChunkDetailPanel {
 
   /** The chunk's status as the status chip renders it, forwarded unchanged to
    * {@link ChunkDetailHeader.renderedStatus}. */
-  readonly renderedStatus = input.required<ChunkStatus>();
+  readonly renderedStatus = input.required<string>();
 
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();

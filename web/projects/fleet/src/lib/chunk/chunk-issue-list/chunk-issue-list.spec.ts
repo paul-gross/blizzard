@@ -2,8 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import type { WorkItemAuthorView, WorkItemEntry } from '../../api/hub';
-import { workItemEntry } from '../../testing/builders/chunk.translate';
+import type { WorkItemAuthor as WorkItemAuthorView, WorkItem as WorkItemEntry } from '../chunk-detail/work-item.model';
+import { workItem } from '../../testing/builders/chunk';
 import { ChunkIssueList } from './chunk-issue-list';
 
 describe('ChunkIssueList', () => {
@@ -15,7 +15,7 @@ describe('ChunkIssueList', () => {
   });
 
   function item(overrides: Partial<WorkItemEntry> & Pick<WorkItemEntry, 'source' | 'ref'>): WorkItemEntry {
-    return workItemEntry({
+    return workItem({
       label: `${overrides.source}#${overrides.ref}`,
       web_url: `https://forge.example/${overrides.source}/issues/${overrides.ref}`,
       fetched_at: '2026-08-20T00:00:00Z',
@@ -202,7 +202,7 @@ describe('ChunkIssueList', () => {
   // --- The hub idiom ------------------------------------------
 
   it('a hub entry renders its markdown body, a user authorship line, stated priority, and no forge anchor', async () => {
-    const { el } = await render([hubItem({ ref: '1', author: USER_AUTHOR, stated_priority: 'high' })]);
+    const { el } = await render([hubItem({ ref: '1', author: USER_AUTHOR, stated_priority: { kind: 'high' } })]);
 
     expect(el.querySelector('[data-testid="issue-body"] h1')?.textContent?.trim()).toBe('heading');
     expect(el.querySelector('[data-testid="issue-author"]')?.textContent).toContain('alice');
@@ -230,6 +230,11 @@ describe('ChunkIssueList', () => {
     expect(el.querySelector('[data-testid="issue-author"]')?.textContent?.replace(/\s+/g, ' ')).toContain(
       'Proposed by runner R-7Q2M, chunk',
     );
+  });
+
+  it('shows an unknown priority verbatim with the fallback tone', async () => {
+    const { el } = await render([hubItem({ ref: '1', author: USER_AUTHOR, stated_priority: { kind: 'unknown', raw: 'future' } })]);
+    expect(el.querySelector('[data-testid="issue-priority"]')?.textContent?.trim()).toBe('future');
   });
 
   it('a successfully fetched hub entry on a terminal chunk still renders the hub idiom — author alone is enough', async () => {

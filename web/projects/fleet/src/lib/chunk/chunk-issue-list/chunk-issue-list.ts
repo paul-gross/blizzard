@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import type { WorkItemAuthorView, WorkItemEntry, WorkItemPriority } from '../../api/hub';
+import type { WorkItemAuthor as WorkItemAuthorView, WorkItem as WorkItemEntry } from '../chunk-detail/work-item.model';
 import { KitAccordionGroup, KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown, KitSectionHead } from '../../kit';
 import type { Tone } from '../../kit';
 import { injectRunnerHostNames, runnerDisplayName } from '../../core/runner-display-name';
@@ -11,7 +11,7 @@ import { openLookup } from '../../core/open-lookup';
 /** A stated priority's badge tone — advice for the triaging human, never
  * a queue position, so it borrows the shared urgency ladder rather than inventing one. A
  * priority this build does not know reads `idle`. */
-const PRIORITY_TONE = openLookup<WorkItemPriority, Tone>({ high: 'needs', normal: 'waiting', low: 'idle' }, () => 'idle');
+const PRIORITY_TONE = openLookup<'low' | 'normal' | 'high', Tone>({ high: 'needs', normal: 'waiting', low: 'idle' }, () => 'idle');
 
 /**
  * A chunk's resolved work items as a one-line-per-issue accordion — the
@@ -26,7 +26,7 @@ const PRIORITY_TONE = openLookup<WorkItemPriority, Tone>({ high: 'needs', normal
  * carried on every entry regardless of fetch outcome.
  *
  * Daemon-agnostic ({@link ChunkTimeline}/{@link ChunkArtifactsPanel}'s own
- * shape): inputs off the shared `WorkItemEntry` wire type alone, no
+ * shape): inputs off the shared work-item domain type alone, no
  * injection, so both the hub and the runner mount it verbatim. Presentational
  * only — {@link items} is already the resolved, successful read; the
  * loading/error/empty triad around that read stays the caller's own
@@ -104,7 +104,12 @@ export class ChunkIssueList {
 
   /** A stated priority's badge tone, or `null` when the item states none. */
   protected priorityTone(item: WorkItemEntry): Tone | null {
-    return item.stated_priority ? PRIORITY_TONE(item.stated_priority) : null;
+    return item.stated_priority ? PRIORITY_TONE(item.stated_priority.kind) : null;
+  }
+
+  protected priorityLabel(item: WorkItemEntry): string {
+    const priority = item.stated_priority;
+    return priority?.kind === 'unknown' ? priority.raw : priority?.kind ?? '';
   }
 
   /** A `user`-authored item's legible name — the resolved login, falling back to the

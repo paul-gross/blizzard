@@ -1,10 +1,10 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { ChunkDetail } from '../../api/hub';
+import type { ChunkDetail } from './chunk-detail.model';
 import type { ChunkArtifact } from '../chunk-detail/artifact.model';
 import { assetChunkArtifact } from '../../testing/builders/artifact';
-import { chunkDetail, transitionView } from '../../testing/builders/chunk.translate';
+import { domainChunkDetail as chunkDetail, domainTransition as transitionView } from '../../testing/builders/chunk';
 
 import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
 

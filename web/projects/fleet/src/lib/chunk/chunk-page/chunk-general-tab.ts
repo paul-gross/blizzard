@@ -2,9 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
-import type { FactsDetail } from '../chunk-detail/chunk-facts';
-import type { ChunkDetail } from '../../api/hub';
-import { type AwaitingHumanFormActions, ChunkAwaitingHuman, toAwaitingHuman } from '../awaiting-human';
+import type { ChunkDetail } from './chunk-detail.model';
+import { type AwaitingHumanFormActions, ChunkAwaitingHuman } from '../awaiting-human';
 import {
   ChunkFacts,
   ChunkIssuePane,
@@ -44,7 +43,7 @@ import { AppLink } from '../../core/app-scope';
 })
 export class ChunkGeneralTab {
   /** The chunk aggregate to render. */
-  readonly detail = input.required<ChunkDetail & FactsDetail>();
+  readonly detail = input.required<ChunkDetail>();
 
   /** The chunk's related work-source items + fetch state. */
   readonly workItems = input<WorkItemsState>({ status: 'loading', items: [] });
@@ -69,7 +68,7 @@ export class ChunkGeneralTab {
   readonly chunkLinkBase = input<readonly string[]>(['/board', 'chunk']);
 
   /** What the chunk waits on a human for, read once for every awaiting-human section. */
-  protected readonly awaitingHuman = computed(() => toAwaitingHuman(this.detail()));
+  protected readonly awaitingHuman = computed(() => this.detail().awaitingHuman);
 
   /** The chunk's graph as `G-XXXX#name-YYYYMMDD`, beside the node history label. */
   protected readonly graphLabel = computed(() => chunkGraphLabel(this.detail()));

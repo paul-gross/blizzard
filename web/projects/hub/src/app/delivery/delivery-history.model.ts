@@ -1,8 +1,7 @@
 import {
   bounceReason,
   compactBounce,
-  type ChunkDetail,
-  type FlowFactView,
+  type ChunkDetailAggregate,
   type FlowView,
   formatAbsolute,
   formatSeenTag,
@@ -17,6 +16,10 @@ import {
 
 import { ordinal, placeInLine, placeStateLabel, placeStateTone } from '../core/flow-place.model';
 import { deliveryDiagnostic, deliveryFailureLabel } from './delivery-failure-label.model';
+
+type ChunkDetail = Pick<ChunkDetailAggregate,
+  'artifacts' | 'awaiting_external_merge' | 'bounces' | 'closed_prs' | 'flow_places' | 'flow_record' | 'history' | 'landed_repos' | 'open_prs'>;
+type FlowFactView = ChunkDetailAggregate['flow_record'][number];
 
 /** A link the drawer draws. */
 export interface DrawerLink {
@@ -85,7 +88,7 @@ export interface DeliveryDrawerView {
  * never by instant) is a withdrawal of the same submission. `facts` is one flow's facts in any order. */
 export function withdrawnAfter(facts: readonly FlowFactView[], turn: FlowFactView): boolean {
   const next = facts.filter((fact) => fact.id > turn.id).sort((a, b) => a.id - b.id)[0];
-  return next?.kind === 'withdrawn' && next.submission_id === turn.submission_id;
+  return next?.kind.kind === 'withdrawn' && next.submission_id === turn.submission_id;
 }
 
 /** The repositories a bounce left unlanded, by forge-side `owner/repo` — none for an envelope that does not parse. */
@@ -139,7 +142,7 @@ function historyTone(kind: hubApi.FlowFactKind | 'bounced' | 'polls' | 'transiti
 /** A settled turn's tone: a landing done, routine rework waiting on the step that takes it up, any other verdict
  * stale. */
 function verdictTone(turn: FlowFactView): Tone {
-  if (turn.verdict === 'landed') return 'done';
+  if (turn.verdict?.kind === 'landed') return 'done';
   return turn.rework ? 'waiting' : 'stale';
 }
 
@@ -171,18 +174,18 @@ function flowEntries(facts: readonly FlowFactView[], repo: string | null, now: n
     const first = polls[0];
     const last = polls[polls.length - 1];
     if (first && last) {
-      const count = polls.filter((fact) => fact.kind === 'turn-ended').length;
+      const count = polls.filter((fact) => fact.kind.kind === 'turn-ended').length;
       const span = clock(first.at) === clock(last.at) ? clock(first.at) : `${clock(first.at)}–${clock(last.at)}`;
       out.push({ ...draft(`poll-${first.id}`, last.at, now, repo, `waiting on checks · ${count} poll${count === 1 ? '' : 's'} · ${span}`, historyTone('polls')) });
     }
     polls = [];
   };
   facts.forEach((fact, index) => {
-    if (fact.kind === 'turn-started') {
+    if (fact.kind.kind === 'turn-started') {
       // The turn's own end, past a landed fact its pass wrote on the way.
-      const end = facts.slice(index + 1).find((each) => each.kind !== 'landed');
-      if (end?.kind === 'turn-ended' && !end.wait) return;
-      if (end?.kind === 'turn-ended' || polls.length > 0) {
+      const end = facts.slice(index + 1).find((each) => each.kind.kind !== 'landed');
+      if (end?.kind.kind === 'turn-ended' && !end.wait) return;
+      if (end?.kind.kind === 'turn-ended' || polls.length > 0) {
         polls.push(fact);
         return;
       }
@@ -190,26 +193,26 @@ function flowEntries(facts: readonly FlowFactView[], repo: string | null, now: n
       out.push(draft(`f-${fact.id}`, fact.at, now, repo, 'landing attempt started', historyTone('turn-started')));
       return;
     }
-    if (fact.kind === 'turn-ended' && fact.wait) {
+    if (fact.kind.kind === 'turn-ended' && fact.wait) {
       polls.push(fact);
       return;
     }
     flushPolls();
-    if (fact.kind === 'submitted') out.push(draft(`f-${fact.id}`, fact.at, now, repo, 'queued', historyTone('submitted')));
-    else if (fact.kind === 'landed') out.push(draft(`f-${fact.id}`, fact.at, now, repo, fact.revision ? `landed ${shortCommitHash(fact.revision)}` : 'landed', historyTone('landed')));
-    else if (fact.kind === 'turn-ended' && facts.some((each) => each.kind === 'landed' && each.submission_id === fact.submission_id)) return;
-    else if (fact.kind === 'turn-ended' && fact.verdict === 'landed') {
+    if (fact.kind.kind === 'submitted') out.push(draft(`f-${fact.id}`, fact.at, now, repo, 'queued', historyTone('submitted')));
+    else if (fact.kind.kind === 'landed') out.push(draft(`f-${fact.id}`, fact.at, now, repo, fact.revision ? `landed ${shortCommitHash(fact.revision)}` : 'landed', historyTone('landed')));
+    else if (fact.kind.kind === 'turn-ended' && facts.some((each) => each.kind.kind === 'landed' && each.submission_id === fact.submission_id)) return;
+    else if (fact.kind.kind === 'turn-ended' && fact.verdict?.kind === 'landed') {
       // A landing with nothing to merge writes no `landed` fact; its turn speaks for it.
       out.push(draft(`f-${fact.id}`, fact.at, now, repo, 'landed · no changes', historyTone('landed')));
-    } else if (fact.kind === 'turn-ended') {
+    } else if (fact.kind.kind === 'turn-ended') {
       const withdrawn = withdrawnAfter(facts, fact);
-      const outcome = fact.verdict === 'bounced' ? deliveryFailureLabel(fact.outcome) : fact.outcome;
+      const outcome = fact.verdict?.kind === 'bounced' ? deliveryFailureLabel(fact.outcome) : fact.outcome;
       out.push({ ...draft(`f-${fact.id}`, fact.at, now, repo, `landing attempt ${outcome}${withdrawn ? ' · withdrawn' : ''}`, historyTone('turn-ended', fact.rework)), rawOutcome: fact.outcome });
-    } else if (fact.kind === 'withdrawn') {
+    } else if (fact.kind.kind === 'withdrawn') {
       const prev = facts[index - 1];
-      if (prev?.submission_id === fact.submission_id && (prev.kind === 'landed' || (prev.kind === 'turn-ended' && !prev.wait))) return;
+      if (prev?.submission_id === fact.submission_id && (prev.kind.kind === 'landed' || (prev.kind.kind === 'turn-ended' && !prev.wait))) return;
       out.push(draft(`f-${fact.id}`, fact.at, now, repo, `withdrawn${fact.outcome ? ` (${fact.outcome})` : ''}`, historyTone('withdrawn')));
-    } else out.push(draft(`f-${fact.id}`, fact.at, now, repo, fact.kind, null));
+    } else out.push(draft(`f-${fact.id}`, fact.at, now, repo, fact.kind.kind === 'unknown' ? fact.kind.raw : fact.kind.kind, null));
   });
   flushPolls();
   return out;
@@ -234,7 +237,7 @@ function logKey(detail: ChunkDetail, name: string | null, at: string): string | 
   return candidates[0]?.key ?? null;
 }
 
-function bounceEntry(detail: ChunkDetail, bounce: hubApi.BounceView, index: number, now: number): Draft {
+function bounceEntry(detail: ChunkDetail, bounce: ChunkDetail['bounces'][number], index: number, now: number): Draft {
   const envelope = parseBounceEnvelope(bounce.envelope);
   const compact = compactBounce(bounce.envelope, bounce.cause);
   return {
@@ -313,15 +316,18 @@ function repoBlock(detail: ChunkDetail, forge: string, forges: ReadonlyMap<strin
   const closedPrs = detail.closed_prs.filter((pr) => pr.repo === forge);
   const unlanded = detail.bounces.flatMap((bounce) => unlandedOf(parseBounceEnvelope(bounce.envelope))).filter((each) => each.repo === forge);
   const committed = detail.artifacts
-    .filter((artifact) => artifact.kind === 'git_commit' && artifact.name === forge && artifact.branch_name)
+    .filter((artifact) => artifact.kind.kind === 'git_commit' && artifact.name === forge && artifact.branch_name)
     .sort((a, b) => (b.recorded_at ?? '').localeCompare(a.recorded_at ?? ''))[0];
 
   let state: string;
   let tone: Tone;
   if (landed) [state, tone] = ['landed', 'done'];
   // A turn that landed with nothing to merge leaves no landed repository behind.
-  else if (settled?.verdict === 'landed') [state, tone] = ['landed · no changes', 'done'];
-  else if (place) [state, tone] = [placeInLine(place) ? `in line · ${ordinal(place.position)}` : placeStateLabel(place.state), placeStateTone(place.state)];
+  else if (settled?.verdict?.kind === 'landed') [state, tone] = ['landed · no changes', 'done'];
+  else if (place) {
+    const raw = place.state.kind === 'unknown' ? place.state.raw : place.state.kind;
+    [state, tone] = [placeInLine(place) ? `in line · ${ordinal(place.position)}` : placeStateLabel(raw), placeStateTone(raw)];
+  }
   else if (settled) [state, tone] = [`bounced · ${deliveryFailureLabel(settled.outcome)}`, verdictTone(settled)];
   else if (openPrs.length) [state, tone] = [detail.awaiting_external_merge ? 'awaiting merge' : 'PR open', 'idle'];
   else [state, tone] = ['not submitted', 'idle'];
@@ -339,8 +345,8 @@ function repoBlock(detail: ChunkDetail, forge: string, forges: ReadonlyMap<strin
 }
 
 function summary(detail: ChunkDetail, repos: readonly DrawerRepo[], now: number): DrawerSummary {
-  const submitted = detail.flow_record.filter((fact) => fact.kind === 'submitted').sort((a, b) => a.at.localeCompare(b.at));
-  const landedAt = detail.flow_record.filter((fact) => fact.kind === 'landed').sort((a, b) => b.at.localeCompare(a.at))[0]?.at ?? null;
+  const submitted = detail.flow_record.filter((fact) => fact.kind.kind === 'submitted').sort((a, b) => a.at.localeCompare(b.at));
+  const landedAt = detail.flow_record.filter((fact) => fact.kind.kind === 'landed').sort((a, b) => b.at.localeCompare(a.at))[0]?.at ?? null;
   const first = submitted[0]?.at ?? null;
   const landedAll = repos.length > 0 && repos.every((repo) => repo.state === 'landed');
   const end = landedAll && landedAt ? Date.parse(landedAt) : now;

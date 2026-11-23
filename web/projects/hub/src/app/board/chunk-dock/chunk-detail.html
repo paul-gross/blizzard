@@ -12,7 +12,7 @@
     <app-chunk-detail-skeleton loading data-testid="chunk-detail-loading" />
     @if (detail(); as d) {
       <app-chunk-detail-panel
-        [artifacts]="detailQuery.data()?.domainArtifacts ?? []"
+        [artifacts]="d.artifacts"
         [detail]="d"
         [boardChunkIds]="boardChunkIds()"
         [projectColor]="projectColor()"

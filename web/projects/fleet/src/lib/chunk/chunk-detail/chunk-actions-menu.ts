@@ -1,13 +1,17 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
-import { ChunkDeleteRefusal, type ChunkDetail, type PauseView } from '../../api/hub';
+import type { ChunkDetail, ChunkPause } from '../chunk-page/chunk-detail.model';
 import { compactRef } from '../../core/compact-ref';
-import { unlisted } from '../../core/open-lookup';
 import { KitConfirmDialog, type KitConfirmDialogPrompt } from '../../kit/kit-confirm-dialog';
 import { KitMenu, KitMenuPanel } from '../../kit/kit-menu';
 import { KitMenuItem, KitMenuItemSubtitle } from '../../kit/kit-menu-item';
 import { completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from './chunk-action-copy';
 import type { ChunkControl } from './chunk-control';
+
+export type ChunkActionsDetail = Pick<ChunkDetail,
+  'chunk_id' | 'pause' | 'pausable' | 'completable' | 'current_node_name' | 'current_node_id' | 'delete_refusal' | 'route'> & {
+  neighborhood: { dependents: readonly { chunk_id: string; satisfied: boolean }[] } | null;
+};
 
 /**
  * A chunk header's ⋮ actions menu and the confirmation each action opens — Pause/Resume,
@@ -27,7 +31,7 @@ import type { ChunkControl } from './chunk-control';
 })
 export class ChunkActionsMenu {
   /** The chunk aggregate the menu gates on. */
-  readonly detail = input.required<ChunkDetail>();
+  readonly detail = input.required<ChunkActionsDetail>();
 
   /** The daemon's chunk-control port the confirmed actions fire through. */
   readonly control = input.required<ChunkControl>();
@@ -59,7 +63,7 @@ export class ChunkActionsMenu {
   /** The open operator pause — the Pause/Resume switch: non-null renders Resume, null
    * renders Pause (subject to {@link pausable}). `status` never gates Resume: a chunk both
    * paused and parked on a question derives `waiting_on_human`. */
-  protected readonly pause = computed<PauseView | null>(() => this.detail().pause ?? null);
+  protected readonly pause = computed<ChunkPause | null>(() => this.detail().pause ?? null);
   protected readonly pausable = computed<boolean>(() => this.detail().pausable ?? false);
   protected readonly completable = computed<boolean>(() => this.detail().completable ?? false);
 
@@ -68,7 +72,7 @@ export class ChunkActionsMenu {
     () => this.detail().current_node_name ?? this.detail().current_node_id ?? '—',
   );
 
-  private readonly deleteRefusal = computed<ChunkDeleteRefusal | null>(() => this.detail().delete_refusal ?? null);
+  private readonly deleteRefusal = computed<ChunkActionsDetail['delete_refusal']>(() => this.detail().delete_refusal ?? null);
 
   /** Whether Delete is withheld — exactly when the hub reports a refusal. */
   protected readonly deleteDisabled = computed<boolean>(() => this.deleteRefusal() !== null);
@@ -77,17 +81,17 @@ export class ChunkActionsMenu {
    * unsatisfied dependents it names hold it), else `deleteCopy()`'s own. */
   protected readonly deleteSubtitle = computed<string>(() => {
     const refusal = this.deleteRefusal();
-    switch (refusal) {
-      case ChunkDeleteRefusal.STATUS:
+    switch (refusal?.kind) {
+      case 'status':
         return 'Only before a runner claims it';
-      case ChunkDeleteRefusal.DEPENDENTS: {
+      case 'dependents': {
         const ids = (this.detail().neighborhood?.dependents ?? []).filter((n) => !n.satisfied).map((n) => compactRef(n.chunk_id));
         return `Blocked: ${ids.join(', ')} depend on this`;
       }
-      case null:
+      case undefined:
         return deleteCopy().subtitle ?? '';
       default:
-        return `Refused (${unlisted(refusal)})`;
+        return `Refused (${refusal!.raw})`;
     }
   });
 

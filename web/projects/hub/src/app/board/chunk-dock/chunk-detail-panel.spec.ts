@@ -2,8 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import type { ChunkDetail, WorkItemsState } from 'fleet';
-import { chunkControlStub, chunkDetail, decisionView, questionView, recordingAwaitingHumanActions, workItemEntry } from 'fleet/testing';
+import type { ChunkDetailAggregate as ChunkDetail, WorkItemsState } from 'fleet';
+import { chunkControlStub, domainChunkDetail as chunkDetail, domainDecision as decisionView, domainQuestion as questionView, recordingAwaitingHumanActions, workItem } from 'fleet/testing';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 
 const ISSUE_DETAIL: ChunkDetail = chunkDetail({
@@ -78,7 +78,7 @@ describe('ChunkDetailPanel', () => {
   it('renders all three columns and their sibling components, mounted at once (AC3)', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status.kind);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -105,7 +105,7 @@ describe('ChunkDetailPanel', () => {
   it('renders "Node history" exactly once (issue #205)', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status.kind);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -114,10 +114,11 @@ describe('ChunkDetailPanel', () => {
 
   it('orders asks, work item, issues, answered questions and decisions without duplicating actions', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
-    fixture.componentRef.setInput('detail', {
+    fixture.componentRef.setInput('detail', chunkDetail({
       ...WAITING_QUESTION_DETAIL,
+      awaitingHuman: undefined,
       questions: [
-        ...WAITING_QUESTION_DETAIL.questions!,
+        questionView({ question_id: 'qn_01', chunk_id: WAITING_QUESTION_DETAIL.chunk_id, question: 'Which API style should the endpoint use?', options: [] }),
         questionView({ question_id: 'qn_answered', chunk_id: WAITING_QUESTION_DETAIL.chunk_id, question: 'Earlier?', answered: true, answer: 'Yes' }),
       ],
       decision: decisionView({
@@ -125,8 +126,8 @@ describe('ChunkDetailPanel', () => {
         choices: [{ name: 'approve', description: 'Approve', requires_checks: false, would_override_red_checks: false }],
         check_results: [], transitioned: false,
       }),
-    });
-    fixture.componentRef.setInput('renderedStatus', WAITING_QUESTION_DETAIL.status);
+    }));
+    fixture.componentRef.setInput('renderedStatus', WAITING_QUESTION_DETAIL.status.kind);
     fixture.componentRef.setInput('canAnswer', true);
     fixture.componentRef.setInput('canResolve', true);
     const port = recordingAwaitingHumanActions();
@@ -157,7 +158,7 @@ describe('ChunkDetailPanel', () => {
   it('links the chunk longname to its dedicated page (issue #205)', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status.kind);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -169,12 +170,12 @@ describe('ChunkDetailPanel', () => {
     const workItems: WorkItemsState = {
       status: 'success',
       items: [
-        workItemEntry({ source: 'widget', ref: '42', label: 'widget#42', title: null, web_url: 'https://github.com/acme/widget/issues/42', fetched_at: 't', body: 'reproduces under load', comments: [] }),
+        workItem({ source: 'widget', ref: '42', label: 'widget#42', title: null, web_url: 'https://github.com/acme/widget/issues/42', fetched_at: 't', body: 'reproduces under load', comments: [] }),
       ],
     };
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status.kind);
     fixture.componentRef.setInput('workItems', workItems);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -185,7 +186,7 @@ describe('ChunkDetailPanel', () => {
   it('surfaces the awaiting-human gate for a parked chunk', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', WAITING_QUESTION_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', WAITING_QUESTION_DETAIL.status.kind);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -195,7 +196,7 @@ describe('ChunkDetailPanel', () => {
   it('emits dismiss when the close button is activated, through the header', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status.kind);
     let closed = false;
     fixture.componentInstance.dismiss.subscribe(() => (closed = true));
     await fixture.whenStable();
@@ -208,7 +209,7 @@ describe('ChunkDetailPanel', () => {
   it('fires detach through the control port once the operator confirms in the header', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status.kind);
     const control = chunkControlStub();
     fixture.componentRef.setInput('control', control);
     await fixture.whenStable();
@@ -226,7 +227,7 @@ describe('ChunkDetailPanel', () => {
   it('fires complete through the control port once the operator confirms in the header', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status.kind);
     const control = chunkControlStub();
     fixture.componentRef.setInput('control', control);
     await fixture.whenStable();
@@ -272,7 +273,7 @@ describe('ChunkDetailPanel', () => {
   it('saves an answer from the awaiting-human column through its port', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', WAITING_QUESTION_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', WAITING_QUESTION_DETAIL.status.kind);
     fixture.componentRef.setInput('canAnswer', true);
     const port = recordingAwaitingHumanActions();
     fixture.componentRef.setInput('awaitingHumanActions', port.actions);
@@ -298,7 +299,7 @@ describe('ChunkDetailPanel', () => {
   it('surfaces a detach error passed down from the container instead of swallowing it', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status.kind);
     fixture.componentRef.setInput('actionError', 'chunk ch_01routed000000000000000000 has no live route');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -309,7 +310,7 @@ describe('ChunkDetailPanel', () => {
   it('surfaces a pause error passed down from the container in the shared notice', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status.kind);
     fixture.componentRef.setInput('actionError', 'chunk ch_01routed000000000000000000 is not pausable (done)');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -320,7 +321,7 @@ describe('ChunkDetailPanel', () => {
   it('surfaces a complete error passed down from the container in the shared notice', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status.kind);
     fixture.componentRef.setInput('actionError', 'unknown chunk ch_01routed000000000000000000');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;

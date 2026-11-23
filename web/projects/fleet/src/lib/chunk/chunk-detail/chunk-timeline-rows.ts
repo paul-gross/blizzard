@@ -1,9 +1,14 @@
-import { type ChunkDetail, type ChunkStatus, MigrationSource } from '../../api/hub';
+import type { ChunkDetail } from '../chunk-page/chunk-detail.model';
+import type { KnownLaneStatus } from '../../core/chunk-lanes';
 import { openLookup } from '../../core/open-lookup';
 import type { SessionEfficiencyInput } from '../../core/session-efficiency';
 import { nodeStepKey } from '../../core/node-step';
 import { formatAbsolute, formatWhen, formatWhenParts } from '../../core/when';
 import { compactBounce } from './compact-bounce';
+
+export type TimelineDetail = Pick<ChunkDetail,
+  'chunk_id' | 'graph_id' | 'graph_name' | 'graph_created_at' | 'history' | 'migrations' | 'bounces' | 'restarts' |
+  'status' | 'current_node_id' | 'current_node_name' | 'latest_epoch' | 'usage'>;
 
 /** One judged node on the timeline: the node, the verdict that closed it, and where
  * that verdict routed the chunk — a transition re-read node-first for display. A
@@ -71,7 +76,7 @@ export interface ActiveRow {
  * (`verdictTone`: run reads cyan, the parked verbs amber-hi/red), `label` is the
  * text shown. A `null` status has no node mid-flight, so no row renders — as does a status
  * the client does not know. */
-const ACTIVE_VERBS = openLookup<ChunkStatus, { choice: string; label: string } | null>(
+const ACTIVE_VERBS = openLookup<KnownLaneStatus, { choice: string; label: string } | null>(
   {
     not_ready: null,
     ready: null,
@@ -110,7 +115,7 @@ export type StepUsageTotal = SessionEfficiencyInput & {
  * owner of this derivation (`canon:one-owner`, the same precedent
  * `sort-artifacts.ts`/`transcript-steps.ts` establish for their own lists).
  */
-export function deriveHistoryRows(detail: ChunkDetail, now: Date): readonly HistoryRow[] {
+export function deriveHistoryRows(detail: TimelineDetail, now: Date): readonly HistoryRow[] {
   const transitions: HistoryRow[] = (detail.history ?? [])
     // An entry transition (no origin node) judged nothing — the node it entered
     // shows up as the next row's origin, or as the in-flight row below.
@@ -137,9 +142,9 @@ export function deriveHistoryRows(detail: ChunkDetail, now: Date): readonly Hist
     }));
   // Cross-graph migration steps — the chunk left `from_graph/from_node`
   // and re-queued at `to_graph/landed_node`, woven into the same timeline by time.
-  const migrations: HistoryRow[] = (detail.migrations ?? []).filter((m) => m.source !== MigrationSource.RESTART).map((m) => ({
+  const migrations: HistoryRow[] = (detail.migrations ?? []).filter((m) => m.source?.kind !== 'restart').map((m) => ({
     kind: 'migration' as const,
-    key: m.source === MigrationSource.AUTHORED_EDGE && m.from_node_id !== null ? nodeStepKey(m.from_node_id, m.epoch) : null,
+    key: m.source?.kind === 'authored-edge' && m.from_node_id !== null ? nodeStepKey(m.from_node_id, m.epoch) : null,
     epoch: m.epoch,
     nodeId: m.from_node_id,
     nodeName: m.from_node_name ?? m.from_node_id ?? '·',
@@ -250,8 +255,8 @@ export function deriveMultiGraph(rows: readonly HistoryRow[]): boolean {
  * migration can hand a fresh graph an epoch a previous graph's history
  * already used, and that reuse is not this lag window.
  */
-export function deriveActiveRow(detail: ChunkDetail): ActiveRow | null {
-  const verb = ACTIVE_VERBS(detail.status);
+export function deriveActiveRow(detail: TimelineDetail): ActiveRow | null {
+  const verb = ACTIVE_VERBS(detail.status.kind);
   if (!verb || !detail.current_node_id) return null;
   const laggingBehind = (detail.history ?? []).some(
     (t) => t.epoch === detail.latest_epoch && t.to_node_id === detail.current_node_id,
@@ -271,7 +276,7 @@ export function deriveActiveRow(detail: ChunkDetail): ActiveRow | null {
  * `(nodeId, epoch)` yet — matches the row's origin node against every usage entry
  * recorded there. Multiple invocations at one step (spawn/resume/judge) fold into
  * one figure so the timeline reads one lap's cost per line. */
-export function usageForStep(detail: ChunkDetail, row: HistoryRow): StepUsageTotal | null {
+export function usageForStep(detail: TimelineDetail, row: HistoryRow): StepUsageTotal | null {
   // A restart's origin node is not a step of its own — its usage belongs to that
   // node's own transition row.
   if (!row.nodeId || row.kind === 'restart') return null;
@@ -290,6 +295,6 @@ export function usageForStep(detail: ChunkDetail, row: HistoryRow): StepUsageTot
     cost_partial: rows.some((u) => u.cost_partial === true),
     estimated_cost_usd: estimatedRows.length > 0 ? estimatedRows.reduce((sum, amount) => sum + amount, 0) : null,
     harnessId: stamped?.harness_id ?? null,
-    runnerId: (rows.find((u) => u.kind === 'spawn' && u.runner_id) ?? rows.find((u) => u.runner_id))?.runner_id ?? null,
+    runnerId: (rows.find((u) => u.kind.kind === 'spawn' && u.runner_id) ?? rows.find((u) => u.runner_id))?.runner_id ?? null,
   };
 }

@@ -1,9 +1,7 @@
 import type { ChunkArtifact } from '../chunk-detail/artifact.model';
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import type {
-  ChunkDetail,
-} from '../../api/hub';
+import type { TimelineDetail } from '../chunk-detail/chunk-timeline-rows';
 import { ChunkArtifactBody } from '../chunk-detail/chunk-artifact-body';
 import { ChunkTimeline } from '../chunk-detail/chunk-timeline';
 import { KitAccordionGroup } from '../../kit/kit-accordion-group';
@@ -45,7 +43,7 @@ import { TranscriptSegmentView } from '../../transcripts/transcript-segment-view
   styleUrl: './chunk-node-history-tab.css',
 })
 export class ChunkNodeHistoryTab {
-  readonly detail = input.required<ChunkDetail>();
+  readonly detail = input.required<TimelineDetail>();
 
   /** The raw `?step` URL param — forwarded straight to {@link ChunkTimeline} with
    * no lookup against the timeline's own rows here. */

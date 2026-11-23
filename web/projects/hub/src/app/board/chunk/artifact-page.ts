@@ -44,7 +44,7 @@ export class ArtifactPage {
    * landed — or when the key names nothing in the store. {@link state} is what
    * tells those two apart. */
   protected readonly artifact = computed<ArtifactModel | undefined>(() =>
-    artifactByKey(this.detailQuery.data()?.domainArtifacts ?? [], this.artifactKey()),
+    artifactByKey(this.detailQuery.data()?.artifacts ?? [], this.artifactKey()),
   );
 
   /** A resolved chunk whose store has no such key is a dead link (`empty`), not a

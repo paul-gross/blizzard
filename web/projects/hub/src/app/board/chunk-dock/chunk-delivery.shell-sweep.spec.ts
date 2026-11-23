@@ -3,8 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
-import { type ChunkDetail, ChunkGeneralTab } from 'fleet';
-import { chunkDetail } from 'fleet/testing';
+import { type ChunkDetailAggregate as ChunkDetail, ChunkGeneralTab } from 'fleet';
+import { domainChunkDetail as chunkDetail } from 'fleet/testing';
 import { boardChunk } from '../board.fixture';
 import { BoardShell } from '../board-shell/board-shell';
 import { ChunkDetailPanel } from './chunk-detail-panel';
@@ -18,7 +18,7 @@ const detail: ChunkDetail = chunkDetail({
   open_prs: [pr], landed_repos: [landed], awaiting_external_merge: true,
 });
 const summary = boardChunk({
-  chunk_id: detail.chunk_id, graph_id: detail.graph_id, status: detail.status,
+  chunk_id: detail.chunk_id, graph_id: detail.graph_id, status: 'delivering',
   laneStatus: { kind: 'delivering' }, open_prs: [pr], landed_repos: [landed], awaiting_external_merge: true,
 });
 
@@ -37,7 +37,7 @@ describe('delivery links real Chromium shell sweep', () => {
       board.componentRef.setInput('chunks', [summary]);
       board.componentRef.setInput('state', 'ready');
       dock.componentRef.setInput('detail', detail);
-      dock.componentRef.setInput('renderedStatus', detail.status);
+      dock.componentRef.setInput('renderedStatus', detail.status.kind);
       general.componentRef.setInput('detail', detail);
       const host = document.createElement('div');
       host.style.cssText = 'width:100%; max-width:100vw; min-width:0;';

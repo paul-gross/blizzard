@@ -1,10 +1,14 @@
-import { type ChunkDetail, type ChunkFlowPlaceView, type FlowFactView, type FlowView, type RepositorySummary } from 'fleet';
-import { assetArtifactView, bounceView, chunkDetail, FIXTURE_NOW, fixtureInstant, landedRepoView, prView, transitionView } from 'fleet/testing';
+import { type ChunkDetailAggregate as ChunkDetail, type FlowView, type RepositorySummary } from 'fleet';
+import { assetChunkArtifact as assetArtifactView, domainBounce as bounceView, domainChunkDetail as chunkDetail, FIXTURE_NOW, fixtureInstant, domainLandedRepo as landedRepoView, domainPr as prView, domainTransition as transitionView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
 import { deliveryDrawerView, deliveryHistory } from './delivery-history.model';
 
 const MIN = 60;
+type FlowFactView = ChunkDetail['flow_record'][number];
+type ChunkFlowPlaceView = ChunkDetail['flow_places'][number];
+type KnownFact = Exclude<FlowFactView['kind']['kind'], 'unknown'>;
+type KnownPlace = Exclude<ChunkFlowPlaceView['state']['kind'], 'unknown'>;
 
 const FLOWS = [
   { flow_id: 'fl_a', repository_id: 'rp_a' },
@@ -23,17 +27,17 @@ const FORGES: ReadonlyMap<string, string> = new Map([
  * judge it: `landed` lands, the reserved waits wait, an interruption, a cut-off, an escalation, or a supersession
  * judges nothing, any other answer bounces, and a conflict bounces as rework. */
 const JUDGED: Readonly<Record<string, Pick<FlowFactView, 'verdict' | 'wait' | 'rework'>>> = {
-  landed: { verdict: 'landed', wait: false, rework: false },
+  landed: { verdict: { kind: 'landed' }, wait: false, rework: false },
   pending: { verdict: null, wait: true, rework: false },
   'awaiting-merge': { verdict: null, wait: true, rework: false },
   interrupted: { verdict: null, wait: false, rework: false },
   'cut-off': { verdict: null, wait: false, rework: false },
   escalated: { verdict: null, wait: false, rework: false },
   superseded: { verdict: null, wait: false, rework: false },
-  failure: { verdict: 'bounced', wait: false, rework: false },
-  conflict: { verdict: 'bounced', wait: false, rework: true },
+  failure: { verdict: { kind: 'bounced' }, wait: false, rework: false },
+  conflict: { verdict: { kind: 'bounced' }, wait: false, rework: true },
 };
-const judged = (kind: FlowFactView['kind'], outcome: string | null | undefined): Pick<FlowFactView, 'verdict' | 'wait' | 'rework'> => {
+const judged = (kind: KnownFact, outcome: string | null | undefined): Pick<FlowFactView, 'verdict' | 'wait' | 'rework'> => {
   if (kind !== 'turn-ended') return { verdict: null, wait: false, rework: false };
   const judgement = outcome ? JUDGED[outcome] : undefined;
   if (judgement === undefined) throw new Error(`no hub judgement for the turn outcome ${String(outcome)}`);
@@ -42,11 +46,11 @@ const judged = (kind: FlowFactView['kind'], outcome: string | null | undefined):
 
 let factId = 0;
 /** A flow fact `minutesAgo` before the fixture's now, under submission `sub`. */
-const fact = (flowId: string, kind: FlowFactView['kind'], minutesAgo: number, fields: Partial<FlowFactView> = {}): FlowFactView => ({
+const fact = (flowId: string, kind: KnownFact, minutesAgo: number, fields: Partial<FlowFactView> = {}): FlowFactView => ({
   id: ++factId,
   flow_id: flowId,
   chunk_id: 'ch_1',
-  kind,
+  kind: { kind },
   at: fixtureInstant(-minutesAgo * MIN),
   outcome: null,
   revision: null,
@@ -55,13 +59,17 @@ const fact = (flowId: string, kind: FlowFactView['kind'], minutesAgo: number, fi
   ...fields,
 });
 
-const place = (flowId: string, position: number, state: ChunkFlowPlaceView['state'], fields: Partial<ChunkFlowPlaceView> = {}): ChunkFlowPlaceView =>
-  ({ flow_id: flowId, position, state, in_line: ['next', 'waiting', 'polling'].includes(state), ...fields, branch: 'master', next_poll_at: null, repository_name: null, repository_slug: null, resource: flowId }) as ChunkFlowPlaceView;
+const place = (flowId: string, position: number, state: KnownPlace | 'mystery', fields: Partial<ChunkFlowPlaceView> = {}): ChunkFlowPlaceView =>
+  ({ flow_id: flowId, position, state: state === 'mystery' ? { kind: 'unknown', raw: state } : { kind: state }, in_line: ['next', 'waiting', 'polling'].includes(state), ...fields, branch: 'master', next_poll_at: null, repository_name: null, repository_slug: null, resource: flowId });
 
 const detail = (fields: Partial<ChunkDetail>): ChunkDetail => chunkDetail({ chunk_id: 'ch_1', history: [], ...fields });
 const texts = (d: ChunkDetail) => deliveryHistory(d, FORGES, FIXTURE_NOW).map((entry) => entry.text);
 
 describe('deliveryHistory', () => {
+  it('renders a newer fact kind using its raw spelling', () => {
+    const unknown: FlowFactView = { ...fact('fl_a', 'submitted', 1), kind: { kind: 'unknown', raw: 'future-fact' } };
+    expect(texts(detail({ flow_record: [unknown] }))).toEqual(['future-fact']);
+  });
   it('folds a run of polls into one entry, and a settled turn into its outcome, newest first', () => {
     const record = [
       fact('fl_a', 'submitted', 30),
@@ -241,9 +249,9 @@ describe('deliveryDrawerView', () => {
       deliveryDrawerView(detail({ flow_places: [p] }), FLOWS, REPOSITORIES, FIXTURE_NOW)!.repos[0];
     expect(stateOf(place('fl_a', 1, 'landing'))).toMatchObject({ state: 'landing' });
     expect(stateOf(place('fl_a', 1, 'passed-over'))).toMatchObject({ state: 'passed over' });
-    expect(stateOf(place('fl_a', 3, 'mystery' as ChunkFlowPlaceView['state'], { in_line: false }))).toMatchObject({ state: 'mystery', tone: 'idle' });
+    expect(stateOf(place('fl_a', 3, 'mystery', { in_line: false }))).toMatchObject({ state: 'mystery', tone: 'idle' });
     expect(stateOf(place('fl_a', 3, 'waiting', { in_line: undefined }))).toMatchObject({ state: 'waiting' });
-    expect(stateOf(place('fl_a', 3, 'mystery' as ChunkFlowPlaceView['state'], { in_line: true }))).toMatchObject({ state: 'in line · 3rd' });
+    expect(stateOf(place('fl_a', 3, 'mystery', { in_line: true }))).toMatchObject({ state: 'in line · 3rd' });
   });
 
   it('reads a repository whose last attempt bounced as bounced, and one with nothing as not submitted', () => {

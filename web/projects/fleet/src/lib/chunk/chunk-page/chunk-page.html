@@ -15,7 +15,7 @@
       chunk-page-header
       data-testid="board-chunk-detail"
       [chunkId]="chunkId() ?? ''"
-      [status]="d.status"
+      [status]="statusText()"
       [tone]="tone()"
       [pointers]="d.work_refs"
       [projectName]="d.project_name ?? null"
@@ -51,7 +51,7 @@
       <ng-template fleetKitTabContent>
         <fleet-chunk-node-history-container
           [transcriptContext]="d.transcriptContext"
-          [artifacts]="d.domainArtifacts"
+          [artifacts]="d.artifacts"
           [chunkId]="chunkId()"
           [detail]="d"
           [selectedKey]="selection.stepKey()"
@@ -64,7 +64,7 @@
     <div [fleetKitTabPanel]="'artifacts'">
       <ng-template fleetKitTabContent>
         <fleet-chunk-artifacts-panel
-          [artifacts]="d.domainArtifacts"
+          [artifacts]="d.artifacts"
           [selectedKey]="selection.artifactKey()"
           [drilldown]="mobile()"
           testidPrefix="artifacts-tab"

@@ -176,7 +176,7 @@ export class DemoDirector {
   private artifacts(): readonly ChunkArtifact[] | null {
     const detail = this.detailQuery.data();
     if (detail === undefined || detail.chunk_id !== this.touring()) return null;
-    return sortArtifacts(detail.domainArtifacts);
+    return sortArtifacts(detail.artifacts);
   }
 
   /** A random chunk off the live fleet list, or `null` before the read lands. */

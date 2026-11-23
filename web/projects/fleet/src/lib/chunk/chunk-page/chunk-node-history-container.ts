@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 
 import type { ChunkArtifact } from '../chunk-detail/artifact.model';
-import type { ChunkDetail } from '../../api/hub';
+import type { TimelineDetail } from '../chunk-detail/chunk-timeline-rows';
 import type { TranscriptContext, TranscriptSegmentIndexEntry } from '../../transcripts/transcript-turn';
 import type { KitAsyncStateValue } from '../../kit/kit-async-state';
 import { asyncState, restingAsyncState } from '../../core/query-state';
@@ -44,7 +44,7 @@ import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
 export class ChunkNodeHistoryContainer {
   /** See {@link ChunkTranscriptsContainer.chunkId} — nullable for the same reason. */
   readonly chunkId = input.required<string | null>();
-  readonly detail = input.required<ChunkDetail>();
+  readonly detail = input.required<TimelineDetail>();
   readonly transcriptContext = input.required<TranscriptContext>();
   readonly artifacts = input<readonly ChunkArtifact[]>([]);
   readonly selectedKey = input<string | null>(null);

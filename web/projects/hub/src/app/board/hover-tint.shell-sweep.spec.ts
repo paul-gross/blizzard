@@ -3,8 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { commands, page, userEvent } from 'vitest/browser';
 
-import { type ChunkDetail, ChunkTimeline } from 'fleet';
-import { assetChunkArtifact, chunkArtifactStore, chunkDetail, commitChunkArtifact, transitionView } from 'fleet/testing';
+import { type ChunkDetailAggregate, ChunkTimeline } from 'fleet';
+import { assetChunkArtifact, chunkArtifactStore, domainChunkDetail, commitChunkArtifact, domainTransition } from 'fleet/testing';
 import { ChunkCard } from 'fleet';
 import { type BoardCard, boardCardView } from './board-card/board-card-view.model';
 import { ChunkArtifacts } from './chunk-dock/chunk-artifacts';
@@ -186,7 +186,7 @@ describe('board-card hover/selection tint shell sweep (web:shell-sweep)', () => 
   });
 });
 
-const TIMELINE_DETAIL: ChunkDetail = chunkDetail({
+const TIMELINE_DETAIL: ChunkDetailAggregate = domainChunkDetail({
   chunk_id: 'ch_01hover0000000000000000000',
   graph_id: 'gr_1',
   graph_name: 'default',
@@ -196,7 +196,7 @@ const TIMELINE_DETAIL: ChunkDetail = chunkDetail({
   status: 'running',
   work_refs: [],
   history: [
-    transitionView({
+    domainTransition({
       choice_name: 'pass',
       epoch: 1,
       from_node_id: 'nd_build',

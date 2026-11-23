@@ -2,15 +2,15 @@ import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
 import {
-  bouncedChunkDetail,
-  chunkDetail,
-  escalatedChunkDetail,
+  domainBouncedChunk as bouncedChunkDetail,
+  domainChunkDetail as chunkDetail,
+  domainEscalatedChunk as escalatedChunkDetail,
   fixtureInstant,
-  landedChunkDetail,
-  midFlightChunkDetail,
-  queuedChunkDetail,
-  stoppedChunkDetail,
-  transitionView,
+  domainLandedChunk as landedChunkDetail,
+  domainMidFlightChunk as midFlightChunkDetail,
+  domainQueuedChunk as queuedChunkDetail,
+  domainStoppedChunk as stoppedChunkDetail,
+  domainTransition as transitionView,
 } from 'fleet/testing';
 import { ChunkTimeline } from './chunk-timeline';
 

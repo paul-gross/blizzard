@@ -1,15 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { WaitKind, type ChunkDetail, type LandedRepoView, type PrView } from '../../api/hub';
+import type { ChunkDetail, ChunkLandedRepo, ChunkPr } from '../chunk-page/chunk-detail.model';
 import { shortCommitHash } from '../../core/commit-hash';
 import { FleetWhen } from '../../core/when-display/fleet-when';
 
 /** One repo's delivery: its PR (open or closed) and its landed commit, either of which may be absent. */
 interface DeliveryRow {
   readonly repo: string;
-  readonly openPr: PrView | null;
-  readonly closedPr: PrView | null;
-  readonly landed: LandedRepoView | null;
+  readonly openPr: ChunkPr | null;
+  readonly closedPr: ChunkPr | null;
+  readonly landed: ChunkLandedRepo | null;
   readonly sha: string | null;
 }
 
@@ -21,15 +21,15 @@ interface DeliveryRow {
   styleUrl: './chunk-delivery.css',
 })
 export class ChunkDelivery {
-  readonly detail = input.required<ChunkDetail>();
+  readonly detail = input.required<Pick<ChunkDetail, 'open_prs' | 'closed_prs' | 'landed_repos' | 'pending' | 'awaiting_external_merge'>>();
 
   /** Whether the chunk is parked on its change's merge; a pending kind this build does not know is not. */
-  protected readonly parkWait = computed(() => this.detail().pending?.kind === WaitKind.AWAITING_MERGE);
+  protected readonly parkWait = computed(() => this.detail().pending?.kind.kind === 'awaiting-merge');
 
   /** One row per repo, in order of first appearance across open PRs, closed PRs, then landed repos. */
   protected readonly rows = computed<readonly DeliveryRow[]>(() => {
     const d = this.detail();
-    const byRepo = new Map<string, { openPr: PrView | null; closedPr: PrView | null; landed: LandedRepoView | null }>();
+    const byRepo = new Map<string, { openPr: ChunkPr | null; closedPr: ChunkPr | null; landed: ChunkLandedRepo | null }>();
     const entry = (repo: string) => {
       let e = byRepo.get(repo);
       if (e === undefined) {

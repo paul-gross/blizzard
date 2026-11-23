@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type ChunkDetail, KitAsyncState, type KitAsyncStateValue, KitCloseButton, KitSkeleton, toneColor } from 'fleet';
+import { type ChunkDetailAggregate, KitAsyncState, type KitAsyncStateValue, KitCloseButton, KitSkeleton, toneColor } from 'fleet';
 import { ChunkDetailHeader } from '../core/chunk-detail-header/chunk-detail-header';
 import { DeliveryHistoryList } from './delivery-history-list';
 import type { DeliveryDrawerView as DrawerViewValue } from './delivery-history.model';
@@ -21,7 +21,7 @@ export class DeliveryDrawerView {
   readonly chunkId = input.required<string>();
   readonly state = input.required<KitAsyncStateValue>();
   /** The chunk's detail, `undefined` while unread. */
-  readonly detail = input<ChunkDetail | undefined>(undefined);
+  readonly detail = input<ChunkDetailAggregate | undefined>(undefined);
   /** The drawer's joined view of {@link detail}, `null` while unread. */
   readonly view = input<DrawerViewValue | null>(null);
   readonly projectColor = input<string | null>(null);

@@ -3,11 +3,11 @@ import { fn } from 'storybook/test';
 
 import { nodeStepKey } from '../../core/node-step';
 import {
-  chunkDetail,
-  transitionView,
-} from '../../testing/builders/chunk.translate';
+  domainChunkDetail as chunkDetail,
+  domainTransition as transitionView,
+} from '../../testing/builders/chunk';
 import { assetChunkArtifact } from '../../testing/builders/artifact';
-import { toolCallSegmentView, transcriptSegmentContentView, turnSegmentView } from '../../testing/builders/transcript.translate';
+import type { TranscriptTurn } from '../../transcripts/transcript-turn';
 import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
 
 const HISTORY = [
@@ -49,17 +49,21 @@ type Story = StoryObj<ChunkNodeHistoryTab>;
 
 const FULL_ARGS: Story['args'] = {
   stepArtifacts: [assetChunkArtifact()],
-  segmentData: transcriptSegmentContentView({
+  segmentData: {
+    segment_id: 'sg_01fixture0000000000000000000', final: true, truncated: false,
     turns: [
-      turnSegmentView({ index: 0 }),
-      turnSegmentView({
+      { index: 0, kind: 'asst', text: 'I will start by reading the work item.', timestamp: null,
+        thinking_redacted: false, truncated: false, tool: null, sidechain: null },
+      {
         index: 1,
         kind: 'tool',
         text: 'Checking the working tree.',
-        tool: toolCallSegmentView(),
-      }),
-    ],
-  }),
+        timestamp: null, thinking_redacted: false, truncated: false, sidechain: null,
+        tool: { name: 'Bash', tool_use_id: 'toolu_01fixture', input: { command: 'git status --short' }, input_shape: 'object',
+          input_unparsed: null, output: ' M web/projects/fleet/src/lib/testing/public-api.ts', output_truncated: false },
+      },
+    ] satisfies TranscriptTurn[],
+  },
 };
 
 export const Loading: Story = { args: { indexState: 'loading', segmentState: 'loading' } };

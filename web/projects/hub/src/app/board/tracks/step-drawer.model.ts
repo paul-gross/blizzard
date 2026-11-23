@@ -1,4 +1,4 @@
-import { type ChunkDetail, type ChunkArtifact, type ChunkArtifactStore, type ProjectView, formatWhenParts, hubApi, unlisted } from 'fleet';
+import { type ChunkArtifact, type ChunkArtifactStore, type ProjectView, formatWhenParts, hubApi, unlisted } from 'fleet';
 import { projectColorOf } from '../../core/project-lens-colors';
 
 import type { LeaseTranscriptRef } from './lease-transcript.query';
@@ -138,7 +138,7 @@ export function stepFacts<T>(
 }
 
 /** The chunk detail read, once it answers for `chunkId` — a read still on the chunk before reads as none. */
-export function chunkFor<T extends ChunkDetail>(detail: T | undefined, chunkId: string | null): T | null {
+export function chunkFor<T extends { readonly chunk_id: string }>(detail: T | undefined, chunkId: string | null): T | null {
   return detail !== undefined && detail.chunk_id === chunkId ? detail : null;
 }
 
@@ -153,10 +153,10 @@ export function ownArtifactKeys(
 
 /** The chunk with only the artifacts the step read names as its own; `null` until both the chunk and the step's own
  * detail are read. */
-export function stepArtifactsOf(chunk: { chunk_id: string; domainArtifacts: readonly ChunkArtifact[] } | null, keys: readonly string[] | undefined): ChunkArtifactStore | null {
+export function stepArtifactsOf(chunk: { chunk_id: string; artifacts: readonly ChunkArtifact[] } | null, keys: readonly string[] | undefined): ChunkArtifactStore | null {
   if (chunk === null || keys === undefined) return null;
   const mine = new Set(keys);
-  return { chunk_id: chunk.chunk_id, artifacts: chunk.domainArtifacts.filter((a) => mine.has(a.key)) };
+  return { chunk_id: chunk.chunk_id, artifacts: chunk.artifacts.filter((a) => mine.has(a.key)) };
 }
 
 /** The transcript to read for a step — its session's, fenced by its epoch — or `null` for a step the hub ran itself. */

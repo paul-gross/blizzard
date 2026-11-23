@@ -1038,6 +1038,10 @@ const DOMAIN_BOUNDARY_STRICT_SCOPES = [
   'runner/src/app/shell/app-scope-navigation',
   'runner/src/app/shell/app-session-recovery',
   'runner/src/app/shell/legacy-runner-redirect',
+  'fleet/src/lib/chunk/chunk-artifacts-panel',
+  'fleet/src/lib/chunk/chunk-detail',
+  'fleet/src/lib/chunk/chunk-page',
+  'hub/src/app/board/chunk-dock/chunk-detail.model',
 ];
 
 /** The `DOMAIN_BOUNDARY_EXEMPT` unit of `rel`, a `projects/`-relative posix path.

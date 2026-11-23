@@ -1,7 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import * as hubApi from '../../api/hub';
-import type { ChunkDetail, WorkItemsView } from '../../api/hub';
+import type { ChunkDetail as WireChunkDetail, WorkItemsView } from '../../api/hub';
 import { client as hubClient } from '../../api/hub/client.gen';
 import * as runnerApi from '../../api/runner';
 import { LIVE_COVERED_POLL_BACKSTOP_MS, RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from '../../core/polling';
@@ -9,6 +9,10 @@ import { type DaemonTarget, targetKeyRoot } from '../../core/daemon-target/daemo
 import { chunkDetailKey, chunkWorkItemsKey, type TranscriptPlane } from '../../core/query-keys';
 import { laneStatus } from '../../core/chunk-lanes.translate';
 import { fromArtifactView } from '../chunk-detail/artifact.translate';
+import { fromWorkItemsView } from './work-items.translate';
+import { toAwaitingHuman } from '../awaiting-human/awaiting-human.translate';
+import type { ChunkDetail } from './chunk-detail.model';
+import { fromChunkDeleteRefusal, fromChunkWaitKind, fromMigrationMode, fromMigrationSource, fromUsageKind, fromFlowState, fromFlowFactKind, fromFlowVerdict } from './chunk-wait.translate';
 
 /** Each plane's live-covered backstop — the interval its own live-update registry
  * leaves as insurance against a dropped frame. */
@@ -18,10 +22,87 @@ const POLL_BACKSTOP_MS: Record<TranscriptPlane, number> = {
 };
 
 /** Project presentation statuses without changing the cached aggregate. */
-export function projectChunkDetail(detail: ChunkDetail) {
-  const project = (neighbor: hubApi.ChunkNeighborView) => ({ ...neighbor, laneStatus: neighbor.status === null ? null : laneStatus(neighbor.status) });
+export function projectChunkDetail(detail: WireChunkDetail): ChunkDetail {
+  const project = (neighbor: hubApi.ChunkNeighborView) => ({
+    chunk_id: neighbor.chunk_id,
+    satisfied: neighbor.satisfied,
+    laneStatus: neighbor.status === null ? null : laneStatus(neighbor.status),
+  });
   return {
-    ...detail,
+    artifacts: detail.artifacts.map(fromArtifactView),
+    awaiting_external_merge: detail.awaiting_external_merge,
+    blocked: detail.blocked && { prerequisite_chunk_id: detail.blocked.prerequisite_chunk_id, unmet_count: detail.blocked.unmet_count },
+    bounces: detail.bounces.map((b) => ({ cause: b.cause, envelope: b.envelope, recorded_at: b.recorded_at, rework: b.rework, withdrawn: b.withdrawn })),
+    chunk_id: detail.chunk_id,
+    closed_prs: detail.closed_prs.map((p) => ({ number: p.number, repo: p.repo, url: p.url })),
+    completable: detail.completable,
+    cost: { billed_partial: detail.cost.billed_partial, cache_create_tokens: detail.cost.cache_create_tokens,
+      cache_read_tokens: detail.cost.cache_read_tokens, cost_partial: detail.cost.cost_partial, cost_usd: detail.cost.cost_usd,
+      estimated_cost_usd: detail.cost.estimated_cost_usd, input_tokens: detail.cost.input_tokens, output_tokens: detail.cost.output_tokens },
+    current_node_id: detail.current_node_id,
+    current_node_name: detail.current_node_name,
+    current_node_terminal: detail.current_node_terminal,
+    default_effort: detail.default_effort,
+    default_harnesses: [...detail.default_harnesses],
+    default_model: [...detail.default_model],
+    deletable: detail.deletable,
+    delete_refusal: detail.delete_refusal === null ? null : fromChunkDeleteRefusal(detail.delete_refusal),
+    escalation: detail.escalation === null ? null : {
+      cause: detail.escalation.cause,
+      detail: detail.escalation.detail,
+      epoch: detail.escalation.epoch,
+      takeover_command: detail.escalation.takeover_command,
+      wrapped_takeover_command: detail.escalation.wrapped_takeover_command,
+    },
+    flow_places: detail.flow_places.map((f) => ({ branch: f.branch, flow_id: f.flow_id, in_line: f.in_line, next_poll_at: f.next_poll_at,
+      position: f.position, repository_name: f.repository_name, repository_slug: f.repository_slug, resource: f.resource, state: fromFlowState(f.state) })),
+    flow_record: detail.flow_record.map((f) => ({ at: f.at, chunk_id: f.chunk_id, flow_id: f.flow_id, id: f.id, kind: fromFlowFactKind(f.kind),
+      outcome: f.outcome, revision: f.revision, rework: f.rework, submission_id: f.submission_id, verdict: f.verdict === null ? null : fromFlowVerdict(f.verdict), wait: f.wait })),
+    graph_created_at: detail.graph_created_at,
+    graph_editable: detail.graph_editable,
+    graph_id: detail.graph_id,
+    graph_name: detail.graph_name,
+    history: detail.history.map((h) => ({ choice_name: h.choice_name, epoch: h.epoch, from_node_id: h.from_node_id,
+      from_node_name: h.from_node_name, graph_id: h.graph_id, graph_name: h.graph_name, recorded_at: h.recorded_at,
+      to_node_id: h.to_node_id, to_node_name: h.to_node_name })),
+    intended_migration: detail.intended_migration && { graph_id: detail.intended_migration.graph_id, graph_name: detail.intended_migration.graph_name,
+      mode: fromMigrationMode(detail.intended_migration.mode), node_name: detail.intended_migration.node_name },
+    landed: detail.landed,
+    landed_repos: detail.landed_repos.map((r) => ({ commit_hash: r.commit_hash, repo: r.repo, url: r.url })),
+    latest_epoch: detail.latest_epoch,
+    migrations: detail.migrations.map((m) => ({ choice_name: m.choice_name, epoch: m.epoch, from_graph_id: m.from_graph_id,
+      from_graph_name: m.from_graph_name, from_node_id: m.from_node_id, from_node_name: m.from_node_name,
+      landed_node_id: m.landed_node_id, landed_node_name: m.landed_node_name, model: m.model, recorded_at: m.recorded_at,
+      source: m.source === null ? null : fromMigrationSource(m.source), to_graph_id: m.to_graph_id, to_graph_name: m.to_graph_name })),
+    open_prs: detail.open_prs.map((p) => ({ number: p.number, repo: p.repo, url: p.url })),
+    pausable: detail.pausable,
+    pause: detail.pause && { by: detail.pause.by, set_at: detail.pause.set_at },
+    pending: detail.pending && { kind: fromChunkWaitKind(detail.pending.kind), next_poll_at: detail.pending.next_poll_at, node_name: detail.pending.node_name, since: detail.pending.since },
+    project_id: detail.project_id,
+    project_name: detail.project_name,
+    project_slug: detail.project_slug,
+    promotable: detail.promotable,
+    repository_targets: detail.repository_targets.map((r) => ({ base_branch: r.base_branch, captured_at: r.captured_at,
+      inherited: r.inherited, repository_id: r.repository_id, repository_slug: r.repository_slug })),
+    requeues: detail.requeues.map((r) => ({ note: r.note, requeued_at: r.requeued_at, requeued_by: r.requeued_by })),
+    resolutions: detail.resolutions.map((r) => ({ choice: r.choice, decision_id: r.decision_id, epoch: r.epoch, node_id: r.node_id,
+      node_name: r.node_name, note: r.note, overrode_red_checks: r.overrode_red_checks, resolved_at: r.resolved_at, resolved_by: r.resolved_by })),
+    restarts: detail.restarts.map((r) => ({ decision_id: r.decision_id, epoch: r.epoch, from_graph_id: r.from_graph_id,
+      from_graph_name: r.from_graph_name, from_node_id: r.from_node_id, from_node_name: r.from_node_name, graph_id: r.graph_id,
+      graph_name: r.graph_name, note: r.note, recorded_at: r.recorded_at, restarted_by: r.restarted_by,
+      to_node_id: r.to_node_id, to_node_name: r.to_node_name })),
+    route: detail.route && { environment_ids: [...detail.route.environment_ids], runner_id: detail.route.runner_id,
+      runner_name: detail.route.runner_name, workspace_id: detail.route.workspace_id },
+    status: laneStatus(detail.status),
+    status_if_paused: detail.status_if_paused === null ? null : laneStatus(detail.status_if_paused),
+    terminal: detail.terminal,
+    urgency: detail.urgency && { slug: detail.urgency.slug, urgency_id: detail.urgency.urgency_id },
+    usage: detail.usage.map((u) => ({ cache_create_tokens: u.cache_create_tokens, cache_read_tokens: u.cache_read_tokens,
+      cost_partial: u.cost_partial, cost_usd: u.cost_usd, epoch: u.epoch, estimated_cost_usd: u.estimated_cost_usd,
+      harness_id: u.harness_id, harness_version: u.harness_version, input_tokens: u.input_tokens, kind: fromUsageKind(u.kind), model: u.model,
+      node_id: u.node_id, output_tokens: u.output_tokens, runner_id: u.runner_id })),
+    work_refs: detail.work_refs.map((r) => ({ label: r.label, ref: r.ref, source: r.source, web_url: r.web_url })),
+    awaitingHuman: toAwaitingHuman(detail),
     transcriptContext: {
       history: (detail.history ?? []).map((step) => ({
         from_node_id: step.from_node_id,
@@ -35,10 +116,7 @@ export function projectChunkDetail(detail: ChunkDetail) {
         terminal: detail.current_node_terminal ?? false,
       },
     },
-    domainArtifacts: detail.artifacts.map(fromArtifactView),
-    laneStatus: laneStatus(detail.status),
     neighborhood: detail.neighborhood && {
-      ...detail.neighborhood,
       prerequisites: detail.neighborhood.prerequisites.map(project),
       dependents: detail.neighborhood.dependents.map(project),
     },
@@ -49,7 +127,7 @@ export function projectChunkDetail(detail: ChunkDetail) {
  * its own module (`bzh:generated-client`): the two specs declare the chunk-detail DTO
  * field for field, but calling through the wrong plane's function would make a future
  * divergence silent rather than a compile error. */
-async function fetchChunkDetail(target: DaemonTarget, chunkId: string): Promise<ChunkDetail> {
+async function fetchChunkDetail(target: DaemonTarget, chunkId: string): Promise<WireChunkDetail> {
   const { data, error } =
     target.plane === 'hub'
       ? await hubApi.getChunkApiChunksChunkIdGet({ client: target.client, path: { chunk_id: chunkId }, throwOnError: false })
@@ -123,6 +201,7 @@ export function injectChunkWorkItemsQuery(target: () => DaemonTarget | null, chu
       queryKey: chunkWorkItemsKey(active === null ? '' : targetKeyRoot(active), id),
       enabled: id !== null && active !== null,
       queryFn: () => fetchChunkWorkItems(active!, id!),
+      select: fromWorkItemsView,
       staleTime: 30_000,
       refetchOnWindowFocus: false,
     };

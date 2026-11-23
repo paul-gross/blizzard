@@ -2,9 +2,9 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 
-import type { ChunkDetail } from '../../api/hub';
+import type { ChunkDetail } from '../chunk-page/chunk-detail.model';
 import { formatAbsolute } from '../../core/when';
-import { bounceView, chunkDetail, chunkUsageTotalView, chunkUsageView, transitionView } from 'fleet/testing';
+import { domainBounce as bounceView, domainChunkDetail as chunkDetail, domainUsageTotal as chunkUsageTotalView, domainUsage as chunkUsageView, domainTransition as transitionView } from 'fleet/testing';
 import { ChunkTimeline } from './chunk-timeline';
 
 /** A step usage cell's session efficiency cost, part by part. */
@@ -51,7 +51,7 @@ const COST_DETAIL: ChunkDetail = chunkDetail({
     chunkUsageView({
       node_id: 'nd_build',
       epoch: 1,
-      kind: 'spawn',
+      kind: { kind: 'spawn' },
       model: 'claude-opus-4-8',
       input_tokens: 1200,
       output_tokens: 800,
@@ -70,7 +70,7 @@ const PARTIAL_COST_DETAIL: ChunkDetail = {
     chunkUsageView({
       node_id: 'nd_build',
       epoch: 1,
-      kind: 'spawn',
+      kind: { kind: 'spawn' },
       model: 'claude-opus-4-8',
       input_tokens: 100,
       output_tokens: 50,
@@ -92,7 +92,7 @@ const ESTIMATE_COST_DETAIL: ChunkDetail = {
     chunkUsageView({
       node_id: 'nd_build',
       epoch: 1,
-      kind: 'spawn',
+      kind: { kind: 'spawn' },
       model: 'claude-opus-4-8',
       input_tokens: 900,
       output_tokens: 400,
@@ -349,7 +349,7 @@ describe('ChunkTimeline', () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', {
       ...REVIEW_FAIL_DETAIL,
-      status: 'not_ready',
+      status: { kind: 'not_ready' },
       current_node_id: null,
       history: [],
     });
@@ -474,7 +474,7 @@ describe('ChunkTimeline', () => {
 
   it('links a keyed row to the chunk detail page’s Node history tab when activatable is false (the default), the row itself the anchor, emitting nothing', async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
-    fixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: 'running' });
+    fixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: { kind: 'running' } });
     const emitted: (string | null)[] = [];
     fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
     await fixture.whenStable();
@@ -498,7 +498,7 @@ describe('ChunkTimeline', () => {
     const authoredFixture = TestBed.createComponent(ChunkTimeline);
     authoredFixture.componentRef.setInput('detail', {
       ...TWO_GRAPH_DETAIL,
-      migrations: [{ ...TWO_GRAPH_DETAIL.migrations![0], source: 'authored-edge' }],
+      migrations: [{ ...TWO_GRAPH_DETAIL.migrations![0], source: { kind: 'authored-edge' } }],
     });
     await authoredFixture.whenStable();
     const migrationLink = (authoredFixture.nativeElement as HTMLElement).querySelector(
@@ -580,7 +580,7 @@ describe('ChunkTimeline', () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', {
       ...TWO_GRAPH_DETAIL,
-      migrations: [{ ...TWO_GRAPH_DETAIL.migrations![0], source: 'authored-edge' }],
+      migrations: [{ ...TWO_GRAPH_DETAIL.migrations![0], source: { kind: 'authored-edge' } }],
     });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -598,7 +598,7 @@ describe('ChunkTimeline', () => {
 
   it('renders a null-keyed row inert — no anchor, no tabindex, no hover-keyed class (a non-worker migration or an active row with no epoch yet)', async () => {
     const migrationFixture = TestBed.createComponent(ChunkTimeline);
-    migrationFixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: 'ready' });
+    migrationFixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: { kind: 'ready' } });
     await migrationFixture.whenStable();
     const migrationEl = migrationFixture.nativeElement as HTMLElement;
 
@@ -643,7 +643,7 @@ describe('ChunkTimeline', () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     // TWO_GRAPH_DETAIL's own status is 'ready' (no node in flight) — 'running' gives it
     // an active row too, so both activatable shapes are exercised in one fixture.
-    fixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: 'running' });
+    fixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: { kind: 'running' } });
     fixture.componentRef.setInput('activatable', true);
     const emitted: (string | null)[] = [];
     fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
@@ -681,7 +681,7 @@ describe('ChunkTimeline', () => {
 
   it('applies the selected class only to the row matching selectedKey', async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
-    fixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: 'running' });
+    fixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: { kind: 'running' } });
     fixture.componentRef.setInput('activatable', true);
     fixture.componentRef.setInput('selectedKey', 'nd_s_build:1');
     await fixture.whenStable();
@@ -729,7 +729,7 @@ describe('ChunkTimeline', () => {
     // TWO_GRAPH_DETAIL's own active row lands post-migration at a node no history
     // transition ever routed into — epoch reuse across the migration is not the lag
     // window (`deriveActiveRow`'s own doc comment).
-    fixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: 'running' });
+    fixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: { kind: 'running' } });
     fixture.componentRef.setInput('activatable', true);
     const emitted: (string | null)[] = [];
     fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));

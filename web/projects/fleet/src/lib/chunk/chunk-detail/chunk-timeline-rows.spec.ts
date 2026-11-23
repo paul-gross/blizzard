@@ -1,5 +1,5 @@
-import type { ChunkDetail } from '../../api/hub';
-import { bounceView, chunkDetail, transitionView } from 'fleet/testing';
+import type { ChunkDetail } from '../chunk-page/chunk-detail.model';
+import { domainBounce as bounceView, domainChunkDetail as chunkDetail, domainTransition as transitionView } from 'fleet/testing';
 import { deriveActiveRow, deriveHistoryRows, deriveMultiGraph, rowChoice, rowMark, usageForStep } from './chunk-timeline-rows';
 
 const BASE: ChunkDetail = chunkDetail({
@@ -22,7 +22,7 @@ const BASE: ChunkDetail = chunkDetail({
       from_node_id: 'nd_review',
       to_graph_id: 'gr_2',
       landed_node_id: 'nd_build',
-      source: 'authored-edge',
+      source: { kind: 'authored-edge' },
       choice_name: 'escalate',
       recorded_at: '2026-07-13T00:00:03Z',
       from_graph_name: null,
@@ -95,7 +95,7 @@ describe('deriveHistoryRows', () => {
   it('reads a same-graph restart as from → to, by its operator, with no usage of its own', () => {
     const detail = {
       ...BASE,
-      usage: [{ node_id: 'nd_build', epoch: 3, kind: 'spawn', model: 'm', input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 0.01 }],
+      usage: [{ node_id: 'nd_build', epoch: 3, kind: { kind: 'spawn' }, model: 'm', input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 0.01 }],
     } as ChunkDetail;
     const restart = deriveHistoryRows(detail, NOW).find((r) => r.kind === 'restart')!;
     expect(restart).toMatchObject({ nodeName: 'build', toName: 'plan', actor: 'operator@example.test', crossesGraph: false });
@@ -114,7 +114,7 @@ describe('deriveHistoryRows', () => {
           from_node_id: 'nd_build',
           to_graph_id: 'gr_2',
           landed_node_id: 'nd_plan',
-          source: 'restart',
+          source: { kind: 'restart' },
           recorded_at: '2026-07-13T00:00:04Z',
         },
       ],
@@ -145,17 +145,17 @@ describe('deriveHistoryRows', () => {
 
 describe('deriveActiveRow', () => {
   it('renders the in-flight verb for a status with a node mid-flight', () => {
-    expect(deriveActiveRow({ ...BASE, status: 'running', history: [] })).toMatchObject({ nodeId: 'nd_build', choice: 'run', label: 'run' });
-    expect(deriveActiveRow({ ...BASE, status: 'needs_human', history: [] })).toMatchObject({ choice: 'needs-human', label: 'needs human' });
+    expect(deriveActiveRow({ ...BASE, status: { kind: 'running' }, history: [] })).toMatchObject({ nodeId: 'nd_build', choice: 'run', label: 'run' });
+    expect(deriveActiveRow({ ...BASE, status: { kind: 'needs_human' }, history: [] })).toMatchObject({ choice: 'needs-human', label: 'needs human' });
   });
 
   it('renders no row for a status with no node mid-flight', () => {
     for (const status of ['not_ready', 'ready', 'stopped', 'done'] as const) {
-      expect(deriveActiveRow({ ...BASE, status })).toBeNull();
+      expect(deriveActiveRow({ ...BASE, status: { kind: status } })).toBeNull();
     }
   });
 
   it('renders no row for a status the client does not know', () => {
-    expect(deriveActiveRow({ ...BASE, status: 'archived' as ChunkDetail['status'] })).toBeNull();
+    expect(deriveActiveRow({ ...BASE, status: { kind: 'unknown', raw: 'archived' } })).toBeNull();
   });
 });

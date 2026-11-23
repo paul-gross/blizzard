@@ -2,9 +2,9 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import type { ChunkDetail, RouteView, WorkRefView } from '../../api/hub';
+import type { ChunkDetail, ChunkRoute as RouteView, ChunkWorkRef as WorkRefView } from './chunk-detail.model';
 import type { ChunkControl } from '../chunk-detail/chunk-control';
-import { chunkControlStub, chunkDetail, routeView } from 'fleet/testing';
+import { chunkControlStub, domainChunkDetail as chunkDetail, domainRoute as routeView } from 'fleet/testing';
 import { ChunkPageHeader } from './chunk-page-header';
 
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';

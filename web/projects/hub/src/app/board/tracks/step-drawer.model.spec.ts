@@ -1,6 +1,6 @@
 import { assetChunkArtifact } from 'fleet/testing';
 import type { ChunkArtifact, ChunkArtifactStore } from 'fleet';
-import type { ChunkDetail, ProjectView } from 'fleet';
+import type { ProjectView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
 import type { EnvTimelineSegment, PlacedStep } from './step.model';
@@ -266,7 +266,7 @@ describe('stepFacts', () => {
 });
 
 describe('chunkFor', () => {
-  const detail = { chunk_id: 'ch_1', artifacts: [] } as unknown as ChunkDetail;
+  const detail = { chunk_id: 'ch_1', artifacts: [] };
 
   it('is the detail once it answers for the chunk', () => {
     expect(chunkFor(detail, 'ch_1')).toBe(detail);
@@ -281,7 +281,7 @@ describe('chunkFor', () => {
 
 describe('stepArtifactsOf', () => {
   const art = (key: string, o: Partial<ChunkArtifact> = {}): ChunkArtifact => assetChunkArtifact({ key, name: key, ...o });
-  const chunkWith = (...domainArtifacts: ChunkArtifact[]) => ({ chunk_id: 'ch_AAAA0001', domainArtifacts });
+  const chunkWith = (...artifacts: ChunkArtifact[]) => ({ chunk_id: 'ch_AAAA0001', artifacts });
   const keys = (c: ChunkArtifactStore | null): string[] => c!.artifacts.map((a) => a.key);
 
   it('is null without a chunk or the step read', () => {

@@ -1,5 +1,10 @@
 import type { KitAsyncStateValue } from '../../kit/kit-async-state';
 import type { KitTabOption } from '../../kit/kit-tabs';
+import type { LaneStatus } from '../../core/chunk-lanes';
+
+export function chunkStatusText(status: LaneStatus | undefined): string {
+  return status?.kind === 'unknown' ? status.raw : status?.kind ?? '';
+}
 
 const BASE_TAB_OPTIONS: readonly KitTabOption[] = [
   { value: 'general', label: 'General', testid: 'tab-general' },
