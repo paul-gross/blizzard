@@ -47,7 +47,7 @@ export class GraphDiagramDetail {
   });
 
   protected nodeName(nodeId: string): string {
-    return (this.graph().nodes ?? []).find((n) => n.nodeId === nodeId)?.name ?? nodeId;
+    return this.graph().nodes.find((n) => n.nodeId === nodeId)?.name ?? nodeId;
   }
 
   /** The selected edge's target, rendered for the "Target" row: a node's name, the

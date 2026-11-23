@@ -24,7 +24,7 @@ import type {
   RunResponse,
   RunRow,
 } from './run.domain';
-import type { Vocabulary } from './vocabulary.domain';
+import { unlisted, type Vocabulary } from './vocabulary.domain';
 
 /** What a run is sent as: the scope, the mode, the trimmed note, and an urgency only when one is chosen. */
 export interface RunRequest {
@@ -60,7 +60,7 @@ export const RUN_REFUSALS: RefusalMap<RunDraft> = {
 
 const runModeOf = openLookup<WireRunMode, Vocabulary<RunMode>>(
   { [WireRunMode.FULL]: 'full', [WireRunMode.DELTA]: 'delta' },
-  (raw) => ({ unlisted: raw }),
+  unlisted,
 );
 
 function escalationOf(wire: hubApi.RunEscalationView | null): RunEscalation | null {
@@ -74,10 +74,10 @@ function cadenceOf(wire: RunCadenceView | null): RunCadence | null {
 }
 
 /** A run-list row as the domain holds it; its outcome read as a lane status. */
-export function fromRunRowView(wire: RunRowView): RunRow {
+export function toRunRow(wire: RunRowView): RunRow {
   return {
     chunkId: wire.chunk_id,
-    routineName: wire.routine_name,
+    routineSlug: wire.routine_name,
     scopeSlug: wire.scope_slug,
     mode: runModeOf(wire.mode),
     mintedAt: wire.minted_at,
@@ -112,7 +112,7 @@ function deltaSetOf(wire: hubApi.DeliveredSetDeltaView): RunDeltaSet {
 export function fromRunDeltaView(wire: RunDeltaView): RunDelta {
   return {
     chunkId: wire.chunk_id,
-    routineName: wire.routine_name,
+    routineSlug: wire.routine_name,
     scopeSlug: wire.scope_slug,
     escalation: escalationOf(wire.escalation),
     cadence: cadenceOf(wire.cadence),

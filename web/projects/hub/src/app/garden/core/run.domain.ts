@@ -49,7 +49,7 @@ export interface DeliveredSetCounts {
 export interface RunRow {
   readonly chunkId: string;
   /** The routine's slug. */
-  readonly routineName: string;
+  readonly routineSlug: string;
   readonly scopeSlug: string;
   readonly mode: Vocabulary<RunMode>;
   readonly mintedAt: string;
@@ -98,7 +98,7 @@ export interface RunDeltaSet {
 export interface RunDelta {
   readonly chunkId: string;
   /** The routine's slug. */
-  readonly routineName: string;
+  readonly routineSlug: string;
   readonly scopeSlug: string;
   readonly escalation: RunEscalation | null;
   /** `null` for a run started by hand. */

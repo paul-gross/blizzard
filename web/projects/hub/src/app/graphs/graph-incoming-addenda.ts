@@ -23,12 +23,12 @@ export interface IncomingAddendum {
  * `name`, so this match is unaffected by it. Ordered as `graph.edges` lists them.
  */
 export function incomingAddenda(graph: Graph, node: GraphNode): readonly IncomingAddendum[] {
-  const nodes = graph.nodes ?? [];
+  const nodes = graph.nodes;
   const result: IncomingAddendum[] = [];
-  for (const edge of graph.edges ?? []) {
+  for (const edge of graph.edges) {
     if (edge.toNodeName !== node.name || !edge.promptAddendum) continue;
     const fromNode = nodes.find((n) => n.nodeId === edge.fromNodeId);
-    const choice = fromNode?.choices?.find((c) => c.choiceId === edge.choiceId);
+    const choice = fromNode?.choices.find((c) => c.choiceId === edge.choiceId);
     result.push({
       fromNodeName: fromNode?.name ?? edge.fromNodeId,
       choiceName: choice?.name ?? edge.choiceId,

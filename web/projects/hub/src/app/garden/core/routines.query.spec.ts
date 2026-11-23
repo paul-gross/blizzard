@@ -16,8 +16,8 @@ import {
   injectHubRoutineProposalCountsQuery,
   injectHubRoutineSweepsQuery,
   injectHubRoutineTrendQuery,
-  injectHubRoutinesDomainQuery,
-  injectHubScopeRoutinesDomainQuery,
+  injectHubRoutinesQuery,
+  injectHubRoutinesAsScopeRoutinesQuery,
 } from './routines.query';
 
 @Component({
@@ -26,8 +26,8 @@ import {
   template: '',
 })
 class TestRoutinesQueryHost {
-  readonly query = injectHubRoutinesDomainQuery();
-  readonly scopeRoutines = injectHubScopeRoutinesDomainQuery();
+  readonly query = injectHubRoutinesQuery();
+  readonly scopeRoutines = injectHubRoutinesAsScopeRoutinesQuery();
 }
 
 @Component({
@@ -36,7 +36,7 @@ class TestRoutinesQueryHost {
   template: '',
 })
 class TestRoutinesDomainQueryHost {
-  readonly query = injectHubRoutinesDomainQuery();
+  readonly query = injectHubRoutinesQuery();
 }
 
 @Component({
@@ -129,7 +129,7 @@ describe('the routine list read', () => {
   });
 });
 
-describe('injectHubRoutinesDomainQuery', () => {
+describe('injectHubRoutinesQuery', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 

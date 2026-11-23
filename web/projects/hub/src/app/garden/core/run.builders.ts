@@ -27,7 +27,7 @@ export function gardenDeliveredSet(overrides: Partial<DeliveredSetCounts> = {}):
  * nothing. */
 export function gardenRunRow(overrides: Pick<RunRow, 'chunkId'> & Partial<RunRow>): RunRow {
   return {
-    routineName: 'nightly',
+    routineSlug: 'nightly',
     scopeSlug: 'blizzard',
     mode: 'full',
     mintedAt: fixtureInstant(-24 * 3600),
@@ -45,7 +45,7 @@ export function gardenRunDeltaSet(overrides: Pick<RunDeltaSet, 'findingSetId'> &
 
 /** One run's delta: a `nightly` sweep of `blizzard`, started by hand, delivering no sets. */
 export function gardenRunDelta(overrides: Pick<RunDelta, 'chunkId'> & Partial<RunDelta>): RunDelta {
-  return { routineName: 'nightly', scopeSlug: 'blizzard', escalation: null, cadence: null, sets: [], ...overrides };
+  return { routineSlug: 'nightly', scopeSlug: 'blizzard', escalation: null, cadence: null, sets: [], ...overrides };
 }
 
 /** A routine's baseline over one scope, recorded a day before the fixture clock, pinning no repo. */

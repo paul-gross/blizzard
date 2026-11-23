@@ -5,7 +5,7 @@ import { asyncState, injectPendingMutationVariables, KitMasterDetail, KitChips, 
 import { FleetProposalList, type ProposalListRowVm } from './proposal-list';
 import { type GardenProposalAcceptVars, type GardenProposalPassVars } from './garden-proposal.mutations';
 import { injectHubGardenProposalsQuery } from './garden-proposals.query';
-import { injectHubRoutinesDomainQuery } from '../core/routines.query';
+import { injectHubRoutinesQuery } from '../core/routines.query';
 import type { Proposal } from '../core/proposal.domain';
 import {
   ALL_CLASSES,
@@ -62,7 +62,7 @@ export class GardeningProposalsPage {
   private readonly viewport = inject(ViewportService);
   private readonly url = injectQueryFilters();
   private readonly proposalsQuery = injectHubGardenProposalsQuery();
-  private readonly routinesQuery = injectHubRoutinesDomainQuery();
+  private readonly routinesQuery = injectHubRoutinesQuery();
 
   protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
 

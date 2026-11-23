@@ -15,7 +15,7 @@ import {
   fromRoutineBaselineView,
   fromRoutineRunResponse,
   fromRunDeltaView,
-  fromRunRowView,
+  toRunRow,
   RUN_REFUSALS,
   toRunRequest,
 } from './run.translate';
@@ -49,9 +49,9 @@ describe('RUN_REFUSALS', () => {
   });
 });
 
-describe('fromRunRowView', () => {
+describe('toRunRow', () => {
   it('carries the identity, mode, outcome as a lane status, escalation, and each delivered set’s counts', () => {
-    const row = fromRunRowView(
+    const row = toRunRow(
       runRowView({
         chunk_id: 'ch_1',
         mode: 'delta',
@@ -62,7 +62,7 @@ describe('fromRunRowView', () => {
     );
     expect(row).toEqual({
       chunkId: 'ch_1',
-      routineName: 'nightly',
+      routineSlug: 'nightly',
       scopeSlug: 'blizzard',
       mode: 'delta',
       mintedAt: expect.any(String),
@@ -73,7 +73,7 @@ describe('fromRunRowView', () => {
   });
 
   it('holds a mode and an outcome this build does not know as unknown, and no escalation or set as empty', () => {
-    const row = fromRunRowView(runRowView({ chunk_id: 'ch_1', mode: 'sampled' as never, outcome: 'orbiting' as never }));
+    const row = toRunRow(runRowView({ chunk_id: 'ch_1', mode: 'sampled' as never, outcome: 'orbiting' as never }));
     expect(row.mode).toEqual({ unlisted: 'sampled' });
     expect(row.laneStatus).toEqual({ kind: 'unknown', raw: 'orbiting' });
     expect(row.escalation).toBeNull();
@@ -116,7 +116,7 @@ describe('fromRunDeltaView', () => {
 
   it('reads a run started by hand, unescalated, with no sets', () => {
     const delta = fromRunDeltaView(runDeltaView({ chunk_id: 'ch_1' }));
-    expect(delta).toEqual({ chunkId: 'ch_1', routineName: 'nightly', scopeSlug: 'blizzard', escalation: null, cadence: null, sets: [] });
+    expect(delta).toEqual({ chunkId: 'ch_1', routineSlug: 'nightly', scopeSlug: 'blizzard', escalation: null, cadence: null, sets: [] });
   });
 });
 

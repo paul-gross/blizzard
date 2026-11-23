@@ -59,13 +59,13 @@ function routinesQueryOptions() {
  * renders a routine's full history regardless of its lifecycle state. Routines change rarely and carry no SSE event of
  * their own, `injectHubGraphsQuery`'s own standing.
  */
-export function injectHubRoutinesDomainQuery() {
+export function injectHubRoutinesQuery() {
   const read = routinesQueryOptions();
   return injectQuery(() => ({ ...read(), select: (wire: RoutineView[]): readonly Routine[] => wire.map(toRoutine) }));
 }
 
-/** The routine list as {@link ScopeRoutine}s — the same read and cache entry as {@link injectHubRoutinesDomainQuery}. */
-export function injectHubScopeRoutinesDomainQuery() {
+/** The routine list as {@link ScopeRoutine}s — the same read and cache entry as {@link injectHubRoutinesQuery}. */
+export function injectHubRoutinesAsScopeRoutinesQuery() {
   const read = routinesQueryOptions();
   return injectQuery(() => ({ ...read(), select: (wire: RoutineView[]): readonly ScopeRoutine[] => wire.map(toScopeRoutine) }));
 }

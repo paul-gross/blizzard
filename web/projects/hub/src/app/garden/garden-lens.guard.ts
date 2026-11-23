@@ -4,7 +4,7 @@ import { QueryClient } from '@tanstack/angular-query-experimental';
 
 import { ProjectLens, lensSegmentOf, lensedUrl, unlensedUrl } from '../core/project-lens';
 import type { Project } from '../core/project.domain';
-import { projectDomainsQueryOptions } from '../core/projects.query';
+import { ensureProjectDomains } from '../core/projects.query';
 import { GARDENING_DOORWAY_URL, GARDENING_LANDING_TAB } from './core/garden-project';
 import { isRecordTab, readRecordProject } from './core/garden-record.query';
 
@@ -23,9 +23,7 @@ async function tenantProjects(): Promise<readonly Project[]> {
   const lens = inject(ProjectLens);
   const queryClient = inject(QueryClient);
   await lens.whenReady();
-  // `ensureQueryData` hands back the cached read as stored, so the domain projection's `select` is applied here.
-  const { select, ...read } = projectDomainsQueryOptions();
-  return queryClient.ensureQueryData(read).then(select, (): readonly Project[] => []);
+  return ensureProjectDomains(queryClient).catch((): readonly Project[] => []);
 }
 
 function redirectTo(router: Router, url: string): RedirectCommand {

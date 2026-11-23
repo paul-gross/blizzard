@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 
 import { compactRef, KitBadge, KitChip, KitSelectList, KitSelectRow, type Tone, FleetWhen } from 'fleet';
 
-import { graphLifecycleTone } from '../core/lifecycle-tone';
+import { graphLifecycleTone } from './graph-lifecycle-tone';
 import { type GraphSummary, graphVocabularyText } from './graph.domain';
 
 /** One graph name's lineage, grouped client-side from the flat `GraphSummary[]`
@@ -188,6 +188,6 @@ export class GraphExplorerList {
   /** {@link graphLifecycleTone}'s lookup, bound to a version rather than a bare lifecycle so
    * the template calls one method per row. */
   protected badgeTone(version: GraphSummary): Tone {
-    return graphLifecycleTone(this.lifecycle(version));
+    return graphLifecycleTone(version.lifecycle);
   }
 }

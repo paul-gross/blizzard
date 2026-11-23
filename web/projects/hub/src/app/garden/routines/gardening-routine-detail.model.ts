@@ -122,7 +122,7 @@ export function modelEffortLabel(models: readonly string[], effort: string | nul
 export function routineRecentRuns(runs: readonly RunRow[] | undefined, slug: string | null): readonly RecentRunVm[] | null {
   if (runs === undefined || slug === null) return null;
   return runs
-    .filter((run) => run.routineName === slug)
+    .filter((run) => run.routineSlug === slug)
     .sort((a, b) => Date.parse(b.mintedAt) - Date.parse(a.mintedAt))
     .map((run) => ({
       chunkId: run.chunkId,

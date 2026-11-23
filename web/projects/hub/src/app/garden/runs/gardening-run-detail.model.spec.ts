@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { runDeltaVm } from './gardening-run-detail.model';
 
 const delta = (fields: Partial<RunDelta> = {}): RunDelta =>
-  gardenRunDelta({ chunkId: 'ch_1', routineName: 'docs', scopeSlug: 'web', ...fields });
+  gardenRunDelta({ chunkId: 'ch_1', routineSlug: 'docs', scopeSlug: 'web', ...fields });
 
 const set = gardenRunDeltaSet({
   findingSetId: 'fs_1',

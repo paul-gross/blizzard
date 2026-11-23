@@ -27,7 +27,7 @@ export function runListRows(
 ): readonly RunListRowVm[] {
   return runs.map((row) => ({
     chunkId: row.chunkId,
-    routineName: routineDisplayName(row.routineName, routines),
+    routineName: routineDisplayName(row.routineSlug, routines),
     scopeSlug: row.scopeSlug,
     mode: vocabularyText(row.mode),
     mintedAt: row.mintedAt,

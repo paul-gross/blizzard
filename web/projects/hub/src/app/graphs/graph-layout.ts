@@ -182,7 +182,7 @@ function dagreTargetId(target: EdgeTarget): string {
  * ≤1-per-node limitation) or if dagre itself throws.
  */
 export function layoutGraph(graph: Graph, measure: TextMeasurer): LayoutOutcome {
-  const nodes = graph.nodes ?? [];
+  const nodes = graph.nodes;
   if (nodes.length === 0) return { ok: false };
 
   const nameToId = new Map(nodes.map((n) => [n.name, n.nodeId]));

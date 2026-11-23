@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import { gardenScopeView, type RequestClientStub, stubHubClient, settle } from 'fleet/testing';
-import { injectHubDomainScopesQuery } from './scopes.query';
+import { injectHubScopesQuery } from './scopes.query';
 
 @Component({
   selector: 'app-test-scopes-query-host',
@@ -11,10 +11,10 @@ import { injectHubDomainScopesQuery } from './scopes.query';
   template: '',
 })
 class TestScopesQueryHost {
-  readonly query = injectHubDomainScopesQuery();
+  readonly query = injectHubScopesQuery();
 }
 
-describe('injectHubDomainScopesQuery', () => {
+describe('injectHubScopesQuery', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 

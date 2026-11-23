@@ -6,8 +6,9 @@ export interface UnknownGraphValue {
   readonly raw: string;
 }
 
-/** What one choice's `to:` names: a node in this graph, the reserved `done` terminal, or another graph. */
-export type ChoiceTargetKind = 'node' | 'done' | 'graph' | UnknownGraphValue;
+/** What one choice's `to:` names: a node in this graph, the reserved `done` terminal, another graph, or the
+ * reserved `escalate` terminal — which parks the chunk at its node and reaches no node. */
+export type ChoiceTargetKind = 'node' | 'done' | 'graph' | 'escalate' | UnknownGraphValue;
 
 /** Where a node's step runs. */
 export type Executor = 'runner' | 'hub' | UnknownGraphValue;

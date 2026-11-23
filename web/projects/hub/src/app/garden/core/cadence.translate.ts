@@ -29,9 +29,7 @@ import {
   type ChoreMode,
   type ErrandState,
 } from './cadence.domain';
-import { type Vocabulary, vocabularyText } from './vocabulary.domain';
-
-const unlisted = (raw: string) => ({ unlisted: raw });
+import { unlisted, type Vocabulary, vocabularyText } from './vocabulary.domain';
 
 const anchorOf = openLookup<WireCadenceAnchor, Vocabulary<CadenceAnchor>>(
   {

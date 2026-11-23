@@ -6,7 +6,7 @@ import { injectQueryFilters, injectRouteParam } from '../core/route-state';
 import { injectHostFactsQuery } from '../core/hosts.query';
 import { EventDetailView } from './event-detail-view';
 import { detailState, findEvent } from './event-detail.model';
-import { narrowEventSeverity } from './event-log.translate';
+import { narrowEventSeverity } from './event-log.domain';
 import { injectHubEventsQuery } from './events.query';
 
 @Component({

@@ -173,7 +173,7 @@ describe('GraphDiagramDetail', () => {
     const graph: Graph = {
       ...GRAPH,
       edges: [
-        ...GRAPH.edges!,
+        ...GRAPH.edges,
         { ...EDGE_DEFAULTS, fromNodeId: 'n_plan', choiceId: 'c_advance', toNodeName: 'build', promptAddendum: 'A second route in.' },
       ],
     };

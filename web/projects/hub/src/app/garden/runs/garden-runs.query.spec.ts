@@ -84,7 +84,7 @@ describe('injectHubRunDeltaQuery', () => {
     const fixture = TestBed.createComponent(TestRunDeltaQueryHost);
     await settle(fixture);
 
-    expect(fixture.componentInstance.query.data()?.routineName).toBe('nightly');
+    expect(fixture.componentInstance.query.data()?.routineSlug).toBe('nightly');
     expect(stub.forRoute('/api/runs/ch_1', 'GET')).toHaveLength(1);
   });
 

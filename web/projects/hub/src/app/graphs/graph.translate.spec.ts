@@ -17,8 +17,8 @@ describe('graph vocabularies', () => {
     expect(['node', 'done', 'graph'].map(choiceTargetKind)).toEqual(['node', 'done', 'graph']);
   });
 
-  it('folds the reserved escalate target into done', () => {
-    expect(choiceTargetKind('escalate')).toBe('done');
+  it('keeps the reserved escalate target distinct from done', () => {
+    expect(choiceTargetKind('escalate')).toBe('escalate');
   });
 
   it('keeps an unforeseen value of every vocabulary raw', () => {
@@ -122,10 +122,10 @@ describe('fromGraphView', () => {
     expect(graph.edges[0].targetKind).toEqual({ kind: 'unknown', raw: 'portal' });
   });
 
-  it('reads an escalate edge as one into done', () => {
+  it('reads an escalate edge as escalate, not done', () => {
     const graph = fromGraphView(graphView({ edges: [graphEdgeView({ target_kind: 'escalate' })] }));
 
-    expect(graph.edges[0].targetKind).toBe('done');
+    expect(graph.edges[0].targetKind).toBe('escalate');
   });
 
   it('reads a graph with no nodes, edges, or sessions as empty lists', () => {

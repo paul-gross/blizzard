@@ -1,7 +1,7 @@
 import { eventView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
-import { eventSeverity, fromEventView, narrowEventSeverity } from './event-log.translate';
+import { eventSeverity, fromEventView, toEventLogSeverity } from './event-log.translate';
 
 describe('eventSeverity', () => {
   it('reads each known severity as itself', () => {
@@ -13,11 +13,9 @@ describe('eventSeverity', () => {
   });
 });
 
-describe('narrowEventSeverity', () => {
-  it('passes a listed severity and refuses anything else', () => {
-    expect(narrowEventSeverity('warning')).toBe('warning');
-    expect(narrowEventSeverity('')).toBeNull();
-    expect(narrowEventSeverity('emergency')).toBeNull();
+describe('toEventLogSeverity', () => {
+  it('writes each listed severity as the query param spells it', () => {
+    expect((['info', 'warning', 'critical'] as const).map(toEventLogSeverity)).toEqual(['info', 'warning', 'critical']);
   });
 });
 

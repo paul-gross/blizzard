@@ -238,11 +238,28 @@ describe('layoutGraph', () => {
     expect(layoutGraph(broken, measure)).toEqual({ ok: false });
   });
 
+  it('draws no edge for an escalate choice and shows no done sink for it', () => {
+    const escalating: Graph = {
+      ...GRAPH_DEFAULTS,
+      graphId: 'gr_escalating',
+      name: 'escalating',
+      entryNodeId: 'n_a',
+      nodes: [{ ...NODE_DEFAULTS, nodeId: 'n_a', name: 'a', executor: 'runner', session: 'fresh', judgedBy: 'worker', choices: [] }],
+      edges: [{ ...EDGE_DEFAULTS, fromNodeId: 'n_a', choiceId: 'c_stuck', toNodeName: 'escalate', targetKind: 'escalate' }],
+    };
+    const outcome = layoutGraph(escalating, measure);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.graph.edges).toHaveLength(0);
+    expect(outcome.graph.selfLoops).toHaveLength(0);
+    expect(outcome.graph.done).toBeNull();
+  });
+
   it('skips an edge whose targetKind this build does not list, laying out the rest', () => {
     const gained: Graph = {
       ...DEFAULT_LIKE,
       edges: [
-        ...(DEFAULT_LIKE.edges ?? []),
+        ...DEFAULT_LIKE.edges,
         { ...EDGE_DEFAULTS, fromNodeId: 'n_review', choiceId: 'c_pass2', toNodeName: 'elsewhere', targetKind: 'portal' as never },
       ],
     };
@@ -323,14 +340,14 @@ describe('layoutGraph', () => {
         ...TRIAGE_LIKE,
         nodes: [
           {
-            ...TRIAGE_LIKE.nodes![0],
+            ...TRIAGE_LIKE.nodes[0],
             choices: [
-              ...TRIAGE_LIKE.nodes![0].choices!,
+              ...TRIAGE_LIKE.nodes[0].choices,
               { choiceId: 'c_basic_2', name: 'basic-again', description: '' },
             ],
           },
         ],
-        edges: [...TRIAGE_LIKE.edges!, { ...EDGE_DEFAULTS, fromNodeId: 'n_triage', choiceId: 'c_basic_2', toNodeName: 'graph:bas-dwf', targetKind: 'graph', targetGraph: 'bas-dwf' }],
+        edges: [...TRIAGE_LIKE.edges, { ...EDGE_DEFAULTS, fromNodeId: 'n_triage', choiceId: 'c_basic_2', toNodeName: 'graph:bas-dwf', targetKind: 'graph', targetGraph: 'bas-dwf' }],
       };
       const outcome = layoutGraph(shared, measure);
       expect(outcome.ok).toBe(true);

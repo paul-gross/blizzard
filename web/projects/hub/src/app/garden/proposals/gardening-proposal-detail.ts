@@ -9,7 +9,7 @@ import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectHubFindingsQuery } from '../core/finding.query';
 import { injectHubGardenProposalsQuery } from './garden-proposals.query';
 import { injectHubWorkItemQuery } from '../core/work-item.query';
-import { injectHubRoutinesDomainQuery } from '../core/routines.query';
+import { injectHubRoutinesQuery } from '../core/routines.query';
 import { injectConfirmGoneFindingsMutation, injectNotAFindingFindingsMutation, injectResolveFindingsMutation, injectWontFixFindingsMutation, type FindingExitVars } from '../core/finding.mutations';
 import { confirmGoneFindingsMutationKey, notAFindingFindingsMutationKey, resolveFindingsMutationKey, wontFixFindingsMutationKey } from '../../core/mutation-keys';
 import { map } from 'rxjs';
@@ -60,7 +60,7 @@ export class GardeningProposalDetail {
   private readonly route = inject(ActivatedRoute);
   private readonly proposalsQuery = injectHubGardenProposalsQuery();
   private readonly meQuery = injectMeQuery();
-  private readonly routinesQuery = injectHubRoutinesDomainQuery();
+  private readonly routinesQuery = injectHubRoutinesQuery();
 
   private readonly proposals = computed<readonly Proposal[]>(() => this.proposalsQuery.data() ?? []);
 

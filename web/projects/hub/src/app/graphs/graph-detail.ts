@@ -113,7 +113,7 @@ export class GraphDetail {
    * override`'s container-applies-overrides rule: {@link GraphDetailHeader} receives
    * only this already-merged result, never the raw override to reconcile itself). */
   protected renderedRetired(graph: Graph): boolean {
-    return this.overrideRetired() ?? !!graph.retired;
+    return this.overrideRetired() ?? graph.retired;
   }
 
   protected readonly nodes = computed<readonly GraphNode[]>(() => this.graph()?.nodes ?? []);

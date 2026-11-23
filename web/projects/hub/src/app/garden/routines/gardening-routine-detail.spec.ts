@@ -116,7 +116,7 @@ describe('GardeningRoutineDetail', () => {
       // The gardening run dialog's own baselines read, fired only once its Run trigger opens it.
       'GET /api/routines/{routine_id}/baselines': () => [],
       // The run dialog's own scope picker (`gardening-run-dialog.ts`) injects
-      // `injectHubDomainScopesQuery` independently of this pane.
+      // `injectHubScopesQuery` independently of this pane.
       'GET /api/scopes': () => [],
       'GET /api/runs': () => [],
       'GET /api/me': () => me,

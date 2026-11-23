@@ -1,15 +1,15 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type EventView, hubApi, listEventsApiEventsGet, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
-import type { EventLogEntry } from './event-log.domain';
-import { fromEventView } from './event-log.translate';
+import { type EventView, listEventsApiEventsGet, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
+import type { EventLogEntry, KnownEventSeverity } from './event-log.domain';
+import { fromEventView, toEventLogSeverity } from './event-log.translate';
 import { hubEventsKey, lensedKey } from '../core/query-keys';
 import { injectProjectFilter } from '../core/project-filter';
 
 /** The event feed's filter axes — `null`/`undefined` on any of them means
  * "unfiltered" for that axis, matching the hub's own query-param contract. */
 export interface HubEventsFilters {
-  readonly severity?: hubApi.EventLogSeverity | null;
+  readonly severity?: KnownEventSeverity | null;
   readonly runnerId?: string | null;
   readonly chunkId?: string | null;
 }
@@ -35,7 +35,7 @@ export function injectHubEventsQuery(filters: () => HubEventsFilters = () => ({}
       queryFn: async (): Promise<EventView[]> => {
         const { data, error } = await listEventsApiEventsGet({
           query: {
-            severity: f.severity ?? undefined,
+            severity: f.severity ? toEventLogSeverity(f.severity) : undefined,
             runner_id: f.runnerId ?? undefined,
             chunk_id: f.chunkId ?? undefined,
             project: project ?? undefined,

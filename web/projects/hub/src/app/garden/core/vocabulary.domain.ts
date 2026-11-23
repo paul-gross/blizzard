@@ -6,6 +6,11 @@ export interface Unlisted {
   readonly unlisted: string;
 }
 
+/** `raw`, a value this build does not know, held as an {@link Unlisted}. */
+export function unlisted(raw: string): Unlisted {
+  return { unlisted: raw };
+}
+
 /** A vocabulary value as the domain holds it: one this build knows, or an {@link Unlisted} raw value. */
 export type Vocabulary<K extends string> = K | Unlisted;
 

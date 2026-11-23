@@ -24,7 +24,7 @@ import { FleetRoutineProposalCounts, type ProposalCountsRowVm } from './routine-
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import type { GraphSummary } from '../../graphs/graph.domain';
 import { injectHubGraphQuery, injectHubGraphsQuery } from '../../graphs/graphs.query';
-import { injectHubRoutineProposalCountsQuery, injectHubRoutineScopesQuery, injectHubRoutineSweepsQuery, injectHubRoutineTrendQuery, injectHubRoutinesDomainQuery } from '../core/routines.query';
+import { injectHubRoutineProposalCountsQuery, injectHubRoutineScopesQuery, injectHubRoutineSweepsQuery, injectHubRoutineTrendQuery, injectHubRoutinesQuery } from '../core/routines.query';
 import { EMPTY_ROUTINE_EDIT_DRAFT, type Routine, type RoutineEditDraft } from '../core/routine.domain';
 import { toEditBaseline } from '../core/routine.translate';
 import { routineEditRules } from './routine.form';
@@ -72,7 +72,7 @@ export class GardeningRoutineDetail {
   protected readonly urgenciesQuery = injectDomainUrgenciesQuery();
   private readonly route = inject(ActivatedRoute);
 
-  private readonly routinesQuery = injectHubRoutinesDomainQuery();
+  private readonly routinesQuery = injectHubRoutinesQuery();
   private readonly graphsQuery = injectHubGraphsQuery();
   private readonly meQuery = injectMeQuery();
   private readonly routineLifecycleMutation = injectRoutineLifecycleMutation();

@@ -20,7 +20,7 @@ export function sessionLabel(node: GraphNode): string {
  * table's Retries column (`graph-node-table.ts`) and the diagram's detail pane
  * (`graph-diagram-detail.ts`) can't drift on how the two fields combine. */
 export function retriesLabel(node: GraphNode): string {
-  if (node.retriesMax === undefined || node.retriesMax === null) return '—';
+  if (node.retriesMax === null) return '—';
   const exhausted = node.retriesExhausted ? ` → ${node.retriesExhausted}` : '';
   return `${node.retriesMax}${exhausted}`;
 }
@@ -28,7 +28,7 @@ export function retriesLabel(node: GraphNode): string {
 /** A hub node's `with:` arguments in `name: value, value` form, one argument per `;`, or `—`
  * when it passes none. */
 export function actionArgsLabel(node: GraphNode): string {
-  const args = Object.entries(node.actionArgs ?? {});
+  const args = Object.entries(node.actionArgs);
   return args.length > 0 ? args.map(([name, values]) => `${name}: ${values.join(', ')}`).join('; ') : '—';
 }
 

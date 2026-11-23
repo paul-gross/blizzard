@@ -7,9 +7,9 @@ import { AppLink } from 'fleet/shell';
 
 import { gardenPathOf } from './garden-lens.guard';
 import { injectHubCadencesQuery } from './core/cadences.query';
-import { injectHubRoutinesDomainQuery } from './core/routines.query';
+import { injectHubRoutinesQuery } from './core/routines.query';
 import { defaultRoutineWindow } from './core/routine-window';
-import { injectHubDomainScopesQuery } from './core/scopes.query';
+import { injectHubScopesQuery } from './core/scopes.query';
 import {
   gardenSurfaceCounts,
   gardenSurfaceTabs,
@@ -44,8 +44,8 @@ import { injectHubRunRowsQuery } from './runs/garden-runs.query';
 export class GardeningPage {
   private readonly router = inject(Router);
   private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());
-  private readonly scopesQuery = injectHubDomainScopesQuery();
-  private readonly routinesQuery = injectHubRoutinesDomainQuery();
+  private readonly scopesQuery = injectHubScopesQuery();
+  private readonly routinesQuery = injectHubRoutinesQuery();
   private readonly cadencesQuery = injectHubCadencesQuery();
   private readonly runsQuery = injectHubRunRowsQuery(() => this.window.since);
   private readonly proposalsQuery = injectHubGardenProposalsQuery();

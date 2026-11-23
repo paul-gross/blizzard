@@ -13,9 +13,7 @@ import type {
   FindingSource,
   FindingState,
 } from './finding.domain';
-import type { Vocabulary } from './vocabulary.domain';
-
-const unlisted = (raw: string) => ({ unlisted: raw });
+import { unlisted, type Vocabulary } from './vocabulary.domain';
 
 const stateOf = openLookup<hubApi.FindingState, Vocabulary<FindingState>>(
   {

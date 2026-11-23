@@ -10,7 +10,16 @@ export interface UnknownEventValue {
 export const EVENT_SEVERITIES = ['info', 'warning', 'critical'] as const;
 
 /** How loudly an event asks for attention. */
-export type EventSeverity = (typeof EVENT_SEVERITIES)[number] | UnknownEventValue;
+export type EventSeverity = KnownEventSeverity | UnknownEventValue;
+
+/** A severity this build lists — the only values a severity filter can hold. */
+export type KnownEventSeverity = (typeof EVENT_SEVERITIES)[number];
+
+/** `value` narrowed to a listed severity, or `null` outside the closed set — so a filter value crossing from a
+ * generic UI string narrows against the vocabulary this build knows. */
+export function narrowEventSeverity(value: string): KnownEventSeverity | null {
+  return EVENT_SEVERITIES.find((severity) => severity === value) ?? null;
+}
 
 /** A severity as text — a known value as itself, an unknown one raw. */
 export function eventSeverityText(severity: EventSeverity): string {

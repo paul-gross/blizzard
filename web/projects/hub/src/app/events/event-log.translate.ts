@@ -1,7 +1,7 @@
 // bzh:frontend-domain-boundary — the one place the event-log wire is read.
 import { hubApi, openLookup, type EventView } from 'fleet';
 
-import type { EventLogEntry, EventSeverity } from './event-log.domain';
+import type { EventLogEntry, EventSeverity, KnownEventSeverity } from './event-log.domain';
 
 /** An event's severity; a value this build does not list reads as unknown, raw. */
 export const eventSeverity = openLookup<hubApi.EventLogSeverity, EventSeverity>(
@@ -9,11 +9,15 @@ export const eventSeverity = openLookup<hubApi.EventLogSeverity, EventSeverity>(
   (raw) => ({ kind: 'unknown', raw }),
 );
 
-/** `value` narrowed to the generated severity vocabulary (`GET /api/events`'s own query
- * param), or `null` outside the closed set — so a filter value crossing from a generic UI
- * string into the typed query narrows against the wire's own values. */
-export function narrowEventSeverity(value: string): hubApi.EventLogSeverity | null {
-  return Object.values(hubApi.EventLogSeverity).find((severity) => severity === value) ?? null;
+const WIRE_SEVERITY: Readonly<Record<KnownEventSeverity, hubApi.EventLogSeverity>> = {
+  info: hubApi.EventLogSeverity.INFO,
+  warning: hubApi.EventLogSeverity.WARNING,
+  critical: hubApi.EventLogSeverity.CRITICAL,
+};
+
+/** A severity filter as `GET /api/events`'s own `severity` query param. */
+export function toEventLogSeverity(severity: KnownEventSeverity): hubApi.EventLogSeverity {
+  return WIRE_SEVERITY[severity];
 }
 
 /** An event-log row as the domain holds it, every field the projected-event fingerprint hashes kept as served. */

@@ -1,8 +1,8 @@
 import { computed, type Signal } from '@angular/core';
 import { confirmGoneFindingsMutationKey, notAFindingFindingsMutationKey, reopenFindingsMutationKey, resolveFindingsMutationKey, supersedeFindingsMutationKey, wontFixFindingsMutationKey } from '../../core/mutation-keys';
 import { injectHubFindingClassesQuery, injectHubFindingsBucketQuery } from '../core/finding.query';
-import { injectHubRoutinesDomainQuery } from '../core/routines.query';
-import { injectHubDomainScopesQuery } from '../core/scopes.query';
+import { injectHubRoutinesQuery } from '../core/routines.query';
+import { injectHubScopesQuery } from '../core/scopes.query';
 import { injectPendingMutationVariables, type KitChipOption } from 'fleet';
 import { FINDING_STATES, type Finding, type FindingState } from '../core/finding.domain';
 import type { Routine } from '../core/routine.domain';
@@ -70,8 +70,8 @@ export interface FindingsBucketFilters {
  */
 export function injectFindingsBucketFilters(): FindingsBucketFilters {
   const url = injectQueryFilters();
-  const routinesQuery = injectHubRoutinesDomainQuery();
-  const scopesQuery = injectHubDomainScopesQuery();
+  const routinesQuery = injectHubRoutinesQuery();
+  const scopesQuery = injectHubScopesQuery();
   const routines = computed<readonly Routine[]>(() => routinesQuery.data() ?? []);
   const scopes = computed<readonly Scope[]>(() => scopesQuery.data() ?? []);
 

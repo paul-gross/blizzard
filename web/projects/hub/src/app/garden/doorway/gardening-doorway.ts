@@ -6,7 +6,7 @@ import { ProjectLens } from '../../core/project-lens';
 import { injectProjectDomainsQuery } from '../../core/projects.query';
 import { injectHubCadencesQuery } from '../core/cadences.query';
 import { GARDENING_DOORWAY_URL, GARDENING_LANDING_TAB } from '../core/garden-project';
-import { injectHubRoutinesDomainQuery } from '../core/routines.query';
+import { injectHubRoutinesQuery } from '../core/routines.query';
 import { injectHubGardenProposalsQuery } from '../proposals/garden-proposals.query';
 import { GardeningDoorwayCards } from './gardening-doorway-cards';
 import { doorwayCards } from './gardening-doorway.model';
@@ -23,7 +23,7 @@ export class GardeningDoorway {
   private readonly lens = inject(ProjectLens);
   private readonly projectsQuery = injectProjectDomainsQuery();
   private readonly cadencesQuery = injectHubCadencesQuery();
-  private readonly routinesQuery = injectHubRoutinesDomainQuery();
+  private readonly routinesQuery = injectHubRoutinesQuery();
   private readonly proposalsQuery = injectHubGardenProposalsQuery();
 
   protected readonly cards = computed(() => doorwayCards(

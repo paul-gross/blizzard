@@ -3,9 +3,7 @@
 import { type GardenProposalClosureView, type GardenProposalView, hubApi, openLookup } from 'fleet';
 
 import type { Proposal, ProposalClosure, ProposalClosureKind, ProposalItemOutcome, ProposalOrigin } from './proposal.domain';
-import type { Vocabulary } from './vocabulary.domain';
-
-const unlisted = (raw: string) => ({ unlisted: raw });
+import { unlisted, type Vocabulary } from './vocabulary.domain';
 
 /** Who raised a proposal, as the domain holds it. */
 export const proposalOriginOf = openLookup<hubApi.GardenProposalOrigin, Vocabulary<ProposalOrigin>>(

@@ -5,7 +5,7 @@ import { asyncStateOf, createRefusalState, type UrgencyReference, submitForm } f
 import { injectHubRoutineBaselinesQuery } from './routine-baselines.query';
 import { injectHubRoutineScopesQuery } from '../core/routines.query';
 import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
-import { injectHubDomainScopesQuery } from '../core/scopes.query';
+import { injectHubScopesQuery } from '../core/scopes.query';
 import { EMPTY_RUN_DRAFT, type RoutineBaseline, type RunDraft, type RunResponse } from '../core/run.domain';
 import type { Scope } from '../core/scope.domain';
 import { runRules } from './run.form';
@@ -20,7 +20,7 @@ import { baselineForScope, liveRelatedScopes, orderScopesBySwept, sweptScopeSlug
  * (`GET /api/routines/{routine_id}/baselines`) resolving before submission rather
  * than after.
  *
- * Injects `injectHubDomainScopesQuery` (every scope, for descriptions),
+ * Injects `injectHubScopesQuery` (every scope, for descriptions),
  * `injectHubRoutineScopesQuery` (the routine's own related set),
  * `injectHubRoutineBaselinesQuery`, and the run service; composes their data
  * into the previously-swept-first scope ordering, restricted to the routine's related, non-retired
@@ -45,7 +45,7 @@ export class GardeningRunDialog {
 
   readonly closed = output<void>();
 
-  protected readonly scopesQuery = injectHubDomainScopesQuery();
+  protected readonly scopesQuery = injectHubScopesQuery();
   protected readonly routineScopesQuery = injectHubRoutineScopesQuery(() => this.routineId());
   protected readonly baselinesQuery = injectHubRoutineBaselinesQuery(() => this.routineId());
 

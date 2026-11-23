@@ -6,7 +6,7 @@ import { mintedAtFor, runListRows, summedCounts } from './gardening-runs-state.m
 
 const DELIVERED_RUN = gardenRunRow({
   chunkId: 'ch_1',
-  routineName: 'nightly',
+  routineSlug: 'nightly',
   scopeSlug: 'blizzard',
   mode: 'full',
   mintedAt: '2026-01-10T00:00:00Z',
@@ -19,7 +19,7 @@ const DELIVERED_RUN = gardenRunRow({
 
 const ESCALATED_RUN = gardenRunRow({
   chunkId: 'ch_2',
-  routineName: 'nightly',
+  routineSlug: 'nightly',
   scopeSlug: 'web',
   mode: 'delta',
   mintedAt: '2026-01-11T00:00:00Z',

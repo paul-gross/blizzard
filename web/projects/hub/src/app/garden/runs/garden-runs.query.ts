@@ -9,9 +9,9 @@ import {
   type RunRowView,
 } from 'fleet';
 import type { RunDelta, RunRow } from '../core/run.domain';
-import { fromRunDeltaView, fromRunRowView as toRunRow } from '../core/run.translate';
+import { fromRunDeltaView, toRunRow } from '../core/run.translate';
 import type { ScopeSweep } from '../core/scope.domain';
-import { fromRunRowView as toScopeSweep } from '../core/scope.translate';
+import { toScopeSweep } from '../core/scope.translate';
 import { injectProjectFilter } from '../../core/project-filter';
 import { lensedKey, hubRunDeltaKey, hubRunsKey } from '../../core/query-keys';
 

@@ -10,8 +10,8 @@ import { type ScopeEditVars } from './scope-edit.mutations';
 import { EMPTY_SCOPE_DESCRIPTION_DRAFT, type Scope, type ScopeDescriptionDraft, scopeDescriptionDraft } from '../core/scope.domain';
 import { SCOPE_DESCRIPTION_RULES } from './scope.form';
 import { injectScopeService } from './scope.service';
-import { injectHubScopeRoutinesDomainQuery } from '../core/routines.query';
-import { injectHubDomainScopesQuery, injectHubScopeRoutinesQuery } from '../core/scopes.query';
+import { injectHubRoutinesAsScopeRoutinesQuery } from '../core/routines.query';
+import { injectHubScopesQuery, injectHubScopeRoutinesQuery } from '../core/scopes.query';
 import { injectLensedProject } from '../../core/lensed-project';
 import { injectScopeLifecycleMutation, type ScopeLifecycleVars } from './scope-lifecycle.mutations';
 import { editScopeMutationKey, scopeLifecycleMutationKey } from '../../core/mutation-keys';
@@ -53,9 +53,9 @@ import { injectProjectFilter } from '../../core/project-filter';
 export class GardeningScopeDetail {
   private readonly route = inject(ActivatedRoute);
 
-  private readonly routinesQuery = injectHubScopeRoutinesDomainQuery();
-  private readonly scopesQuery = injectHubDomainScopesQuery();
-  private readonly tenantScopesQuery = injectHubDomainScopesQuery({ tenantWide: true });
+  private readonly routinesQuery = injectHubRoutinesAsScopeRoutinesQuery();
+  private readonly scopesQuery = injectHubScopesQuery();
+  private readonly tenantScopesQuery = injectHubScopesQuery({ tenantWide: true });
   private readonly project = injectLensedProject();
   protected readonly projectFilter = injectProjectFilter();
   private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());

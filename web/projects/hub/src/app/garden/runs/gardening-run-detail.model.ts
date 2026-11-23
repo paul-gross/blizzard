@@ -25,7 +25,7 @@ export function runDeltaVm(
   if (delta === undefined) return null;
   return {
     chunkId: delta.chunkId,
-    routineName: routineDisplayName(delta.routineName, routines),
+    routineName: routineDisplayName(delta.routineSlug, routines),
     scopeSlug: delta.scopeSlug,
     mintedAt: mintedAtFor(delta.chunkId),
     escalation: delta.escalation,

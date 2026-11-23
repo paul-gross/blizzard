@@ -35,19 +35,19 @@ export interface ResolvedEdge {
 /** Resolves every edge's target — from the edge's `targetKind`, a node in
  * this graph, the reserved `done` terminal, or a migration to `targetGraph` — and
  * its structural kind. Returns `null` if an edge names a target it cannot place (an
- * unknown node name, or a graph migration carrying no target graph). An edge whose
- * `targetKind` this build does not list is skipped, so the rest of the diagram
+ * unknown node name, or a graph migration carrying no target graph). An `escalate`
+ * edge, or one whose `targetKind` this build does not list, is skipped, so the rest of the diagram
  * still renders.
  *
  * Only edges present in `graph.edges` are resolved. */
 export function resolveEdges(graph: Graph, nameToId: ReadonlyMap<string, string>): ResolvedEdge[] | null {
-  const indexById = new Map(graph.nodes?.map((n, i) => [n.nodeId, i]) ?? []);
-  const nodeById = new Map(graph.nodes?.map((n) => [n.nodeId, n]) ?? []);
+  const indexById = new Map(graph.nodes.map((n, i) => [n.nodeId, i]));
+  const nodeById = new Map(graph.nodes.map((n) => [n.nodeId, n]));
   const resolved: ResolvedEdge[] = [];
-  for (const [i, edge] of (graph.edges ?? []).entries()) {
+  for (const [i, edge] of graph.edges.entries()) {
     // The choice's name lives on the *source* node's `choices`, not the edge — the
     // edge only carries `choiceId` (mirrors `graph-detail.ts`'s `resolvedEdges`).
-    const choice = nodeById.get(edge.fromNodeId)?.choices?.find((c) => c.choiceId === edge.choiceId);
+    const choice = nodeById.get(edge.fromNodeId)?.choices.find((c) => c.choiceId === edge.choiceId);
     const label = choice?.name ?? edge.choiceId;
     const targetKind = edge.targetKind;
     if (targetKind === 'done') {
@@ -67,7 +67,7 @@ export function resolveEdges(graph: Graph, nameToId: ReadonlyMap<string, string>
       });
       continue;
     }
-    // A target kind a newer hub added: this build cannot place it, so it draws no edge.
+    // An `escalate` edge reaches no node, and a target kind a newer hub added cannot be placed: neither draws an edge.
     if (targetKind !== 'node') continue;
     const toId = nameToId.get(edge.toNodeName);
     if (toId === undefined) return null;

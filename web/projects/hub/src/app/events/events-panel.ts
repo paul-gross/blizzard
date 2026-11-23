@@ -5,7 +5,7 @@ import { injectQueryFilters } from '../core/route-state';
 import { injectHostFactsQuery } from '../core/hosts.query';
 import { EventsView } from './events-view';
 import { eventChunkIds, eventRunnerIds, eventRunnerNames } from './events-panel.model';
-import { narrowEventSeverity } from './event-log.translate';
+import { narrowEventSeverity } from './event-log.domain';
 import { injectHubEventsQuery } from './events.query';
 
 /**

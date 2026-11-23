@@ -15,12 +15,12 @@ import { injectProjectFilter } from '../../core/project-filter';
  * The scope list as {@link Scope}s — every scope, newest first, each marked retired or not. Under a project lens it is
  * that project's scopes (`GET /api/projects/{project}/scopes`); on All it is the tenant's (`GET /api/scopes`), which
  * only the gardening doorway reads, grouping them by project. Feeds the gardening run dialog's scope picker and the
- * routines panel's scope list. Scopes change rarely and carry no SSE event of their own, `injectHubRoutinesDomainQuery`'s
+ * routines panel's scope list. Scopes change rarely and carry no SSE event of their own, `injectHubRoutinesQuery`'s
  * own standing.
  *
  * `tenantWide` reads the whole tenant even under a lens, for a figure that sets one project beside the others.
  */
-export function injectHubDomainScopesQuery(options: { readonly tenantWide?: boolean } = {}) {
+export function injectHubScopesQuery(options: { readonly tenantWide?: boolean } = {}) {
   const read = scopesQueryOptions(options);
   return injectQuery(() => ({ ...read(), select: (wire: ScopeView[]): readonly Scope[] => wire.map(fromScopeView) }));
 }

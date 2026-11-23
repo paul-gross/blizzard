@@ -57,7 +57,7 @@ export function endpointNodeIds(selection: DiagramSelection | null): readonly st
  * the `graph` input changes out from under it). */
 export function resolveSelectedNode(graph: Graph, selection: DiagramSelection | null): GraphNode | null {
   if (selection === null || selection.kind !== 'node') return null;
-  return (graph.nodes ?? []).find((n) => n.nodeId === selection.nodeId) ?? null;
+  return graph.nodes.find((n) => n.nodeId === selection.nodeId) ?? null;
 }
 
 /** A selected edge's choice, resolved against its source node — the pane's view of
@@ -82,9 +82,9 @@ export interface ResolvedChoiceSelection {
 /** The selected edge's choice, or `null` when nothing (or a node) is selected. */
 export function resolveSelectedChoice(graph: Graph, selection: DiagramSelection | null): ResolvedChoiceSelection | null {
   if (selection === null || selection.kind !== 'edge') return null;
-  const fromNode = (graph.nodes ?? []).find((n) => n.nodeId === selection.fromNodeId);
-  const choice = fromNode?.choices?.find((c: GraphChoice) => c.choiceId === selection.choiceId);
-  const edge = (graph.edges ?? []).find(
+  const fromNode = graph.nodes.find((n) => n.nodeId === selection.fromNodeId);
+  const choice = fromNode?.choices.find((c: GraphChoice) => c.choiceId === selection.choiceId);
+  const edge = graph.edges.find(
     (e) => e.fromNodeId === selection.fromNodeId && e.choiceId === selection.choiceId,
   );
   return {

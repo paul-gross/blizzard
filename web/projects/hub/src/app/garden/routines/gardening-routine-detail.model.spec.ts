@@ -397,10 +397,10 @@ describe('modelEffortLabel', () => {
   });
 });
 
-function runRow(chunkId: string, routineName: string, mintedAt: string, added: number[]): RunRow {
+function runRow(chunkId: string, routineSlug: string, mintedAt: string, added: number[]): RunRow {
   return gardenRunRow({
     chunkId,
-    routineName,
+    routineSlug,
     mintedAt,
     scopeSlug: 'hub-api',
     mode: 'delta',

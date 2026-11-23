@@ -1,7 +1,6 @@
 import {
   branchMarkerTone,
   builtInTone,
-  graphLifecycleTone,
   lifecycleTone,
 } from './lifecycle-tone';
 
@@ -23,17 +22,5 @@ describe('branchMarkerTone', () => {
   it('reads an override amber (waiting) and an inherited branch the built-in grey', () => {
     expect(branchMarkerTone('override')).toBe('waiting');
     expect(branchMarkerTone('inherited')).toBe(builtInTone);
-  });
-});
-
-describe('graphLifecycleTone', () => {
-  it('reads effective cyan, retired red, and superseded dim', () => {
-    expect(graphLifecycleTone('effective')).toBe('spawning');
-    expect(graphLifecycleTone('retired')).toBe('stale');
-    expect(graphLifecycleTone('superseded')).toBe('idle');
-  });
-
-  it('reads a lifecycle this build does not know as idle', () => {
-    expect(graphLifecycleTone('archived' as never)).toBe('idle');
   });
 });

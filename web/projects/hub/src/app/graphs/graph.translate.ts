@@ -26,9 +26,9 @@ import type {
 
 const unknown = (raw: string): UnknownGraphValue => ({ kind: 'unknown', raw });
 
-/** An edge's target kind. `escalate` is the reserved terminal a run leaves the graph through, so it reads as `done`. */
+/** An edge's target kind, `escalate` kept distinct: it parks the chunk at its node rather than finishing it. */
 export const choiceTargetKind = openLookup<hubApi.ChoiceTargetKind, ChoiceTargetKind>(
-  { node: 'node', done: 'done', graph: 'graph', escalate: 'done' },
+  { node: 'node', done: 'done', graph: 'graph', escalate: 'escalate' },
   unknown,
 );
 

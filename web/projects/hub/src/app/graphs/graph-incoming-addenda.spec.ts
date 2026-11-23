@@ -75,7 +75,7 @@ const GRAPH: Graph = {
 
 describe('incomingAddenda', () => {
   it('collects every inbound edge with a non-empty promptAddendum, labelled by source node and choice', () => {
-    const build = GRAPH.nodes!.find((n) => n.nodeId === 'n_build')!;
+    const build = GRAPH.nodes.find((n) => n.nodeId === 'n_build')!;
     expect(incomingAddenda(GRAPH, build)).toEqual([
       { fromNodeName: 'plan', choiceName: 'advance', promptAddendum: 'Arriving fresh from plan.' },
       { fromNodeName: 'review', choiceName: 'review-failed', promptAddendum: 'Fix the review findings.' },
@@ -83,12 +83,12 @@ describe('incomingAddenda', () => {
   });
 
   it('returns an empty list for a node with no inbound edges at all', () => {
-    const plan = GRAPH.nodes!.find((n) => n.nodeId === 'n_plan')!;
+    const plan = GRAPH.nodes.find((n) => n.nodeId === 'n_plan')!;
     expect(incomingAddenda(GRAPH, plan)).toEqual([]);
   });
 
   it('excludes an inbound edge whose promptAddendum is null, undefined, or empty', () => {
-    const review = GRAPH.nodes!.find((n) => n.nodeId === 'n_review')!;
+    const review = GRAPH.nodes.find((n) => n.nodeId === 'n_review')!;
     expect(incomingAddenda(GRAPH, review)).toEqual([]);
   });
 
@@ -97,7 +97,7 @@ describe('incomingAddenda', () => {
       ...GRAPH,
       edges: [{ ...EDGE_DEFAULTS, fromNodeId: 'n_missing', choiceId: 'c_missing', toNodeName: 'build', promptAddendum: 'Orphaned.' }],
     };
-    const build = graph.nodes!.find((n) => n.nodeId === 'n_build')!;
+    const build = graph.nodes.find((n) => n.nodeId === 'n_build')!;
     expect(incomingAddenda(graph, build)).toEqual([
       { fromNodeName: 'n_missing', choiceName: 'c_missing', promptAddendum: 'Orphaned.' },
     ]);
@@ -105,7 +105,7 @@ describe('incomingAddenda', () => {
 
   it('handles a graph with no edges at all', () => {
     const graph: Graph = { ...GRAPH, edges: [] };
-    const build = graph.nodes!.find((n) => n.nodeId === 'n_build')!;
+    const build = graph.nodes.find((n) => n.nodeId === 'n_build')!;
     expect(incomingAddenda(graph, build)).toEqual([]);
   });
 });
