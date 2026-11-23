@@ -7,8 +7,6 @@ every domain service's own narrow parameter alike — is the same instance built
 
 from __future__ import annotations
 
-import random
-
 # The tenant cache's lock guards this process's memory, not a store decision.
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
@@ -16,7 +14,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol
 
 import httpx2
 from sqlalchemy import Engine
@@ -198,12 +196,10 @@ from blizzard.hub.domain.operations.promote import PromoteService
 from blizzard.hub.domain.operations.queue import GroupService, QueueService
 from blizzard.hub.domain.operations.restart import RestartService
 from blizzard.hub.domain.operations.stop import StopService
-from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
 from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
-from blizzard.hub.domain.projects.order import IReadProjectPositions
 from blizzard.hub.domain.projects.targets import ChunkTargetCapture, ChunkTargets
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.host import IReadHostRegistry
@@ -255,7 +251,6 @@ from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEve
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.cadence_store import CadenceStore
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
-from blizzard.hub.store.internal.chunk_targets_store import ChunkTargetsStore
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
@@ -283,7 +278,6 @@ from blizzard.hub.store.internal.hub_settings_store import HubSettingsStore
 from blizzard.hub.store.internal.invariants import HubInvariants, TenantReads
 from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
-from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
@@ -438,10 +432,6 @@ class TenantServices:
     project_links: IReadProjectLinks
     #: Each chunk's effective repository targets.
     chunk_targets: ChunkTargets
-    #: The one writer of projects and their links, each write with its change row.
-    project_authoring: ProjectAuthoring
-    #: Picks among equally least-used colors for a project created with none — the apply edge's seam.
-    color_pick: ColorPick
     #: List and show urgencies in order, with the default marked and their open chunks counted.
     urgency_reading: UrgencyReading
     #: Create and edit an urgency.
@@ -651,10 +641,6 @@ class TenantStores:
     projects: ProjectStore
     #: Project links — composition-only write half; ``HubServices`` carries the read half.
     project_links: ProjectLinkStore
-    #: The repository targets chunks captured — composition-only; ``TenantServices`` carries the service over them.
-    chunk_targets: ChunkTargetsStore
-    #: Landing positions — composition-only write half; ``HubServices`` carries the read half.
-    project_positions: ProjectPositionStore
     config_apply: ConfigApplyStore
     config_import: ConfigImportStore
     invitations: InvitationStore
@@ -702,8 +688,6 @@ def build_tenant_stores(tenant: Resolver, *, clock: IClock) -> TenantStores:
         config_changes=tenant.get(ConfigChangeStore),
         projects=tenant.get(ProjectStore),
         project_links=tenant.get(ProjectLinkStore),
-        chunk_targets=tenant.get(ChunkTargetsStore),
-        project_positions=tenant.get(ProjectPositionStore),
         config_apply=tenant.get(ConfigApplyStore),
         config_import=tenant.get(ConfigImportStore),
         invitations=tenant.get(InvitationStore),
@@ -980,12 +964,6 @@ def step_wake_leaf() -> StepWake:
     return StepWake()
 
 
-def color_pick_leaf() -> ColorPick:
-    """One process-scoped draw for every project color a create leaves to the hub, a legacy leaf the projects area
-    owns until it adopts it."""
-    return random.Random().choice
-
-
 def delete_leaf(
     items: WorkItemStore, clock: IClock, chunks: ChunkStores, transactions: HubTransactions
 ) -> DeleteService:
@@ -1089,16 +1067,12 @@ def register_legacy(registry: LegacyRegistry) -> None:
     registry.alias(port(IReadUserRepository), users)
     registry.leaf(action_loop_leaf, lifetime=Lifetime.PROCESS)
     registry.leaf(step_wake_leaf, lifetime=Lifetime.PROCESS)
-    registry.leaf(color_pick_leaf, lifetime=Lifetime.PROCESS)
     hub_events = store_wiring.register_process(registry)
     registry.alias(port(IReadHubEventLog), hub_events)
     tenant = store_wiring.register_tenant(registry)
     registry.alias(port(IHubTransactions), tenant.of(HubTransactions))
-    registry.alias(port(IReadProjectRepository), tenant.of(ProjectStore))
-    registry.alias(port(IReadProjectLinks), tenant.of(ProjectLinkStore))
     registry.alias(port(IReadWorkItemRepository), tenant.of(WorkItemStore))
     # The reads a declarative apply resolves its entries against.
-    registry.alias(port(IReadProjectPositions), tenant.of(ProjectPositionStore))
     registry.alias(port(IReadScopeRepository), tenant.of(ScopeStore))
     registry.alias(port(IReadRoutineRepository), tenant.of(RoutineStore))
     registry.alias(port(IReadRoutineScopeRepository), tenant.of(RoutineScopeStore))
@@ -1126,10 +1100,7 @@ def register_legacy(registry: LegacyRegistry) -> None:
 #: The transitional tenant ports and leaves :func:`register_legacy` declares, for the store-free graph.
 _LEGACY_TENANT_KEYS: tuple[type[Any], ...] = (
     IHubTransactions,
-    IReadProjectRepository,
-    IReadProjectLinks,
     IReadWorkItemRepository,
-    IReadProjectPositions,
     IReadScopeRepository,
     IReadRoutineRepository,
     IReadRoutineScopeRepository,
@@ -1167,8 +1138,6 @@ def register_legacy_absent(registry: LegacyRegistry) -> None:
         IReadHubEventLog,
     ):
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
-    # A callable alias keys the color draw, so it is named as its key rather than as a class.
-    registry.absent(port(cast("type[Any]", ColorPick)), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
     store_wiring.register_process_absent(registry)
     store_wiring.register_tenant_absent(registry)
     for missing in _LEGACY_TENANT_KEYS:
@@ -1257,7 +1226,6 @@ class TenantServiceParts:
     follow_latest_default: bool
     transcript_caps: TranscriptCaps | None
     platform_tracer: IPlatformTracer | None
-    color_pick: ColorPick
     versions: IVersionWindow
     extractors: Sequence[ITurnEventExtractor]
     action_passes: ActionPassDriver
@@ -1316,7 +1284,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     # One id-keyed retired-runner refusal, shared by every runner-contact operation.
     retired = RetiredRunnerGuard(registry=registry_store)
     # A served declaration resolves against the tenant's projects in one read per add or registration.
-    served_projects = BulkProjectResolver(stores.projects)
+    served_projects = tenant.get(BulkProjectResolver)
     fleet = FleetService(
         registry=registry_store,
         hosts=stores.hosts,
@@ -1388,10 +1356,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         ),
         formats=garden_formats,
     )
-    chunk_targets = ChunkTargets(
-        targets=stores.chunk_targets, links=stores.project_links, records=stores.repository_records
-    )
-    chunk_target_capture = ChunkTargetCapture(reads=chunk_targets, targets=stores.chunk_targets)
+    chunk_targets = tenant.get(ChunkTargets)
+    chunk_target_capture = tenant.get(ChunkTargetCapture)
     hub_router = HubNodeRouter(
         artifacts=chunk_artifacts,
         hub_exec=chunk_hub_exec,
@@ -1675,20 +1641,12 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         projects=stores.projects,
         project_links=stores.project_links,
         chunk_targets=chunk_targets,
-        project_authoring=ProjectAuthoring(
-            projects=stores.projects,
-            links=stores.project_links,
-            positions=stores.project_positions,
-            pick=parts.color_pick,
-            clock=clock,
-        ),
-        color_pick=parts.color_pick,
         urgency_reading=tenant.get(UrgencyReading),
         urgency_authoring=UrgencyAuthoring(
             urgencies=stores.urgencies,
             order=stores.urgency_order,
             transactions=stores.transactions,
-            pick=parts.color_pick,
+            pick=tenant.get(ColorPick),
             clock=clock,
         ),
         urgency_lifecycle=UrgencyLifecycle(
@@ -1886,7 +1844,6 @@ def build_services(
         follow_latest_default=follow_latest_default,
         transcript_caps=transcript_caps,
         platform_tracer=process.get(IPlatformTracer),
-        color_pick=color_pick,
         versions=HubVersionWindow(hub_version, version_window),
         extractors=extractors,
         action_passes=ActionPassDriver(action_loop, lambda: action_bound(config_source.current().action_pass_seconds)),

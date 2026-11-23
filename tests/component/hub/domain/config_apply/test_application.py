@@ -20,7 +20,14 @@ from blizzard.hub.domain.projects.model import ProjectEdit
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
 from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
 from blizzard.hub.store.internal.urgency_store import UrgencyOrderStore, UrgencyStore
-from tests.support.scaffolding import HubHarness, build_hub, default_tenant, hub_store_connections, seed_forge
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    default_tenant,
+    first_color,
+    hub_store_connections,
+    seed_forge,
+)
 
 _AT = datetime(2031, 5, 6, 7, 8, 9, tzinfo=UTC)
 
@@ -68,7 +75,7 @@ def _application(hub: HubHarness, clock: FixedClock) -> ConfigApplication:
         urgencies=UrgencyStore(connections),
         urgency_order=UrgencyOrderStore(connections),
         tenant_settings=TenantSettingsStore(connections),
-        pick=services.color_pick,
+        pick=first_color,
         clock=clock,
     )
 

@@ -28,6 +28,7 @@ from blizzard.hub.domain.config import wiring as config_wiring
 from blizzard.hub.domain.config_apply import wiring as config_apply
 from blizzard.hub.domain.garden.findings import wiring as findings
 from blizzard.hub.domain.graph import wiring as graph_area
+from blizzard.hub.domain.projects import wiring as projects
 from blizzard.hub.events import wiring as events
 from blizzard.hub.forge import wiring as forge
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
@@ -89,6 +90,7 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
         findings.register(registry, store.register_findings(registry))
         graph_area.register(registry, store.register_graphs(registry))
         _register_config(registry)
+        _register_projects(registry)
         config_apply.register(registry)
         live_config.register(registry)
         forge.register_tenant(registry)
@@ -103,6 +105,8 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
         graph_area.register_absent(registry)
         store.register_config_absent(registry)
         config_wiring.register_absent(registry)
+        store.register_projects_absent(registry)
+        projects.register_absent(registry)
         config_apply.register_absent(registry)
         live_config.register_absent(registry)
         forge.register_tenant_absent(registry)
@@ -113,6 +117,18 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
     else:
         settings_wiring.register_boot_source(registry)
         settings_wiring.register_absent(registry)
+
+
+def _register_projects(registry: LegacyRegistry) -> None:
+    """The project adapters, and the projects area's ports and services over them."""
+    refs = store.register_projects(registry)
+    projects.register(
+        registry,
+        projects=refs.projects,
+        links=refs.links,
+        positions=refs.positions,
+        chunk_targets=refs.chunk_targets,
+    )
 
 
 def _register_config(registry: LegacyRegistry) -> None:

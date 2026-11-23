@@ -25,6 +25,7 @@ from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.graph.model import IWriteGraphRepository
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectSlug
 from blizzard.hub.domain.tenancy.administration import (
     TenantAdministration,
@@ -221,7 +222,7 @@ def test_the_default_project_is_renamed_and_its_slug_moved_like_any_other(hub: H
     services = hub.open_services(created.tenant_id)
     project = _default_project(hub, created.tenant_id)
 
-    edited = services.project_authoring.edit(
+    edited = hub.resolve(created.tenant_id, ProjectAuthoring).edit(
         project, ProjectEdit(slug="main", name="Main"), ChangeContext(actor="usr_ada", door=Door.API), if_match=1
     )
 

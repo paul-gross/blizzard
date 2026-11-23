@@ -10,6 +10,7 @@ import httpx2
 import pytest
 
 from blizzard.hub.domain.config.changes import ChangeContext, Door
+from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId, ProjectSlug
 from tests.support.scaffolding import HubHarness, build_hub, ensure_fixture_forge
 
@@ -208,7 +209,7 @@ def test_a_former_slug_is_refused_naming_the_project_that_left_it(hub: HubHarnes
     _rows(_apply(hub, {"projects": [{"slug": "web", "name": "Web"}]}))
     web = hub.services.projects.get_by_slug(ProjectSlug("web"))
     assert web is not None
-    hub.services.project_authoring.edit(web, ProjectEdit(slug="site"), ChangeContext(actor="op", door=Door.API))
+    hub.default_adapter(ProjectAuthoring).edit(web, ProjectEdit(slug="site"), ChangeContext(actor="op", door=Door.API))
     before = _changes(hub)
 
     refused = _apply(hub, {"projects": [{"slug": "web", "name": "Web again"}]})

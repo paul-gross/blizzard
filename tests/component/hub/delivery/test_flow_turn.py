@@ -30,6 +30,7 @@ from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.delivery.flows import Submission
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
+from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgets, ForgePriority
 from blizzard.hub.forge.landing import CommitPresence, Comparison, ForgeAuthRefused, ForgeUnavailable, VisitForges
@@ -619,7 +620,7 @@ def test_a_visit_built_after_an_edit_lands_by_the_terms_its_first_turn_took(worl
     record = world.hub.services.repository_records.list_all(include_retired=False)[0]
     project = world.hub.services.projects.get(ProjectId(default_project(world.hub.engine)))
     assert project is not None
-    world.hub.services.project_authoring.order_repositories(project, [record], OP)
+    world.hub.default_adapter(ProjectAuthoring).order_repositories(project, [record], OP)
     world.hub.clock.advance(timedelta(seconds=31))
 
     world.tick()

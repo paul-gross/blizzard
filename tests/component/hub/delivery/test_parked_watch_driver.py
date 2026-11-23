@@ -18,6 +18,7 @@ from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.forges import ConfiguredForge
 from blizzard.hub.domain.config.repositories import RepositoryEdit, RepositoryId
+from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.landing import ChangeState
 from blizzard.hub.store import schema as s
@@ -81,7 +82,7 @@ class _World:
         authoring.edit_repository(records[_B], RepositoryEdit(landing_policy=LandingPolicy.PARK), OP)
         project = self.hub.services.projects.get(ProjectId(default_project(self.hub.engine)))
         assert project is not None
-        self.hub.services.project_authoring.order_repositories(project, [records[n] for n in (_A, _B, _C)], OP)
+        self.hub.default_adapter(ProjectAuthoring).order_repositories(project, [records[n] for n in (_A, _B, _C)], OP)
         self.chunk_id = self._chunk()
         self.deliver_node = self._deliver_node()
 
