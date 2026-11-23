@@ -32,7 +32,7 @@ import { injectMeQuery } from '../core/auth/me.query';
 import { hasPermission } from '../core/auth/session.domain';
 import { injectAuthProvidersQuery } from '../core/auth/providers.query';
 import { injectHubChunkCountsQuery } from '../board/chunks/chunk-counts.query';
-import { injectHubFleetSpendQuery } from '../board/fleet-spend/fleet-spend.query';
+import { injectHubFleetSpendDomainQuery } from '../board/fleet-spend/fleet-spend.query';
 import { injectHubHealthQuery } from '../board/health/health.query';
 import { injectLogoutMutation } from '../core/auth/logout.mutations';
 import { isPublicUrl, redirectToLogin } from '../core/auth/auth-redirect';
@@ -186,7 +186,7 @@ export class App {
 
   /** The fleet's spend-today read — `since` is local start-of-day off {@link dayStart},
    * so the window rolls forward at local midnight without a reload. */
-  protected readonly spendToday = injectHubFleetSpendQuery(
+  protected readonly spendToday = injectHubFleetSpendDomainQuery(
     () => this.dayStart(),
     undefined,
     () => this.ready(),
@@ -195,10 +195,10 @@ export class App {
   /** The fleet's spend-yesterday read — `[startOfPreviousLocalDayIso(now),
    * startOfLocalDayIso(now))`, both derived from the one local-day boundary helper so
    * the window rolls over with today by construction and never includes today's
-   * own spend. A second, independent `injectHubFleetSpendQuery` entry — distinct
+   * own spend. A second, independent `injectHubFleetSpendDomainQuery` entry — distinct
    * from {@link spendToday}'s in both `since` and `until`, so it is its own cache
    * entry rather than colliding on one. */
-  protected readonly spendYesterday = injectHubFleetSpendQuery(
+  protected readonly spendYesterday = injectHubFleetSpendDomainQuery(
     () => this.previousDayStart(),
     () => this.dayStart(),
     () => this.ready(),
