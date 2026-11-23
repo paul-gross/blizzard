@@ -361,7 +361,7 @@ describe('gardening panels shell sweep (web:shell-sweep)', () => {
     fixture.componentRef.setInput('canEdit', true);
     fixture.componentRef.setInput(
       'descriptionForm',
-      TestBed.runInInjectionContext(() => form(signal({ description: PANEL_SCOPE.description }), SCOPE_DESCRIPTION_RULES)),
+      TestBed.runInInjectionContext(() => form(signal({ description: PANEL_SCOPE.description ?? '' }), SCOPE_DESCRIPTION_RULES)),
     );
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);

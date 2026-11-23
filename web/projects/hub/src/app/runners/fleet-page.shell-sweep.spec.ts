@@ -1,4 +1,5 @@
 import { RunnerConnection, type RunnerRegistryView } from 'fleet';
+import { chunkDetail } from 'fleet/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -145,7 +146,7 @@ function nextClaimClient(): QueryClient {
     });
   }
   client.setQueryData(hubUrgenciesKey, []);
-  client.setQueryData(hubChunkKey(blocked.prerequisite), { chunk_id: blocked.prerequisite, status: { kind: 'running' as const } });
+  client.setQueryData(hubChunkKey(blocked.prerequisite), chunkDetail({ chunk_id: blocked.prerequisite, status: 'running' }));
   return client;
 }
 
