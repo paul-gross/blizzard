@@ -22,6 +22,19 @@ export function projectChunkDetail(detail: ChunkDetail) {
   const project = (neighbor: hubApi.ChunkNeighborView) => ({ ...neighbor, laneStatus: neighbor.status === null ? null : laneStatus(neighbor.status) });
   return {
     ...detail,
+    transcriptContext: {
+      history: (detail.history ?? []).map((step) => ({
+        from_node_id: step.from_node_id,
+        from_node_name: step.from_node_name ?? null,
+        epoch: step.epoch,
+      })),
+      current: {
+        nodeId: detail.current_node_id,
+        nodeName: detail.current_node_name ?? null,
+        epoch: detail.latest_epoch,
+        terminal: detail.current_node_terminal ?? false,
+      },
+    },
     domainArtifacts: detail.artifacts.map(fromArtifactView),
     laneStatus: laneStatus(detail.status),
     neighborhood: detail.neighborhood && {

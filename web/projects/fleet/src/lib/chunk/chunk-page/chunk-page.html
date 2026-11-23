@@ -50,6 +50,7 @@
     <div [fleetKitTabPanel]="'node-history'">
       <ng-template fleetKitTabContent>
         <fleet-chunk-node-history-container
+          [transcriptContext]="d.transcriptContext"
           [artifacts]="d.domainArtifacts"
           [chunkId]="chunkId()"
           [detail]="d"
@@ -77,11 +78,11 @@
         <fleet-chunk-transcripts-container
           [target]="daemon.target()"
           [chunkId]="chunkId()"
-          [history]="d.history"
-          [currentNodeId]="d.current_node_id"
-          [currentNodeName]="d.current_node_name ?? null"
-          [latestEpoch]="d.latest_epoch"
-          [currentNodeTerminal]="d.current_node_terminal"
+          [history]="d.transcriptContext.history"
+          [currentNodeId]="d.transcriptContext.current.nodeId"
+          [currentNodeName]="d.transcriptContext.current.nodeName"
+          [latestEpoch]="d.transcriptContext.current.epoch"
+          [currentNodeTerminal]="d.transcriptContext.current.terminal"
           [segmentId]="selection.transcriptSegment()"
           [sidechainPath]="selection.transcriptSidechain()"
           [drilldown]="mobile()"

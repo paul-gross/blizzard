@@ -1,4 +1,4 @@
-import type { TranscriptSegmentIndexEntry } from '../api/hub';
+import type { TranscriptSegmentIndexEntry } from './transcript-turn';
 import type { TranscriptStep } from './transcript-steps';
 
 /**

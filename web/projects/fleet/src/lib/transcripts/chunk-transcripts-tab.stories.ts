@@ -1,20 +1,16 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
-import { transitionView } from '../testing/builders/chunk.translate';
-import { toolCallSegmentView, transcriptSegmentContentView, transcriptSegmentIndexEntry, turnSegmentView } from '../testing/builders/transcript.translate';
+import { toolCallSegmentView, transcriptSegmentContentView, transcriptSegmentIndexEntry, turnSegmentView } from './transcript-fixtures';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 
 const HISTORY = [
-  transitionView({ from_node_id: null, to_node_id: 'nd_plan', to_node_name: 'plan', epoch: 1 }),
-  transitionView({
+  { from_node_id: null, epoch: 1 },
+  {
     from_node_id: 'nd_plan',
     from_node_name: 'plan',
-    to_node_id: 'nd_build',
-    to_node_name: 'build',
-    choice_name: 'approve',
     epoch: 2,
-  }),
+  },
 ];
 
 const SEGMENTS = [

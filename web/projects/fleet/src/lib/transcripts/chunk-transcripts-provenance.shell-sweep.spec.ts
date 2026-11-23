@@ -2,9 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { commands, page } from 'vitest/browser';
 
-import type { TranscriptSegmentIndexEntry, TransitionView } from '../api/hub';
-import { transitionView } from '../testing/builders/chunk.translate';
-import { transcriptSegmentIndexEntry } from '../testing/builders/transcript.translate';
+import type { TranscriptSegmentIndexEntry, TranscriptHistoryStep } from './transcript-turn';
+import { transcriptSegmentIndexEntry } from './transcript-fixtures';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 
 /** The design tokens are a global stylesheet the app build loads, never a standalone mount —
@@ -37,18 +36,12 @@ function tokenColor(token: string): string {
  * needs `--browsers=ChromiumHeadless`, not jsdom — run it via `npm run shell-sweep`
  * (`web/scripts/shell-sweep.js`).
  */
-const HISTORY: readonly TransitionView[] = [
-  transitionView({
+const HISTORY: readonly TranscriptHistoryStep[] = [
+  {
     from_node_id: 'nd_build',
     from_node_name: 'Build',
-    to_node_id: 'nd_review',
-    to_node_name: 'Review',
-    choice_name: 'pass',
     epoch: 1,
-    recorded_at: '2026-08-09T00:00:00+00:00',
-    graph_id: null,
-    graph_name: null,
-  }),
+  },
 ];
 
 function segment(overrides: Partial<TranscriptSegmentIndexEntry> = {}): TranscriptSegmentIndexEntry {

@@ -1,9 +1,9 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import type { TranscriptSegmentContentView, TranscriptSegmentIndexEntry, TurnSegmentViewOutput } from '../api/hub';
+import type { TranscriptSegmentContent, TranscriptSegmentIndexEntry, TranscriptTurn } from './transcript-turn';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
-import { transcriptSegmentIndexEntry } from '../testing/builders/transcript.translate';
+import { transcriptSegmentIndexEntry } from './transcript-fixtures';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 
 interface Props {
@@ -17,7 +17,7 @@ interface Props {
   segmentId?: string | null;
   sidechainPath?: string | null;
   segmentState?: KitAsyncStateValue;
-  segmentData?: TranscriptSegmentContentView;
+  segmentData?: TranscriptSegmentContent;
   drilldown?: boolean;
 }
 
@@ -61,7 +61,7 @@ const HISTORY = [
   },
 ];
 
-function turn(overrides: Partial<TurnSegmentViewOutput> = {}): TurnSegmentViewOutput {
+function turn(overrides: Partial<TranscriptTurn> = {}): TranscriptTurn {
   return {
     index: 0,
     kind: 'asst',
@@ -230,7 +230,7 @@ describe('ChunkTranscriptsTab', () => {
   });
 
   it('caps a large segment’s rendered turns and says so (review:F7)', async () => {
-    const turns: TurnSegmentViewOutput[] = Array.from({ length: 1200 }, (_, i) => turn({ index: i, text: `turn ${i}` }));
+    const turns: TranscriptTurn[] = Array.from({ length: 1200 }, (_, i) => turn({ index: i, text: `turn ${i}` }));
     const { el } = await render({
       history: HISTORY,
       segments: [segment()],

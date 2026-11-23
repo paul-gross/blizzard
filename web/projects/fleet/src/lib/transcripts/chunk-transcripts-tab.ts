@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import type { TransitionView } from '../api/hub';
+import type { TranscriptHistoryStep } from './transcript-turn';
 import { compactRef } from '../core/compact-ref';
 import { harnessName } from '../core/harness-name';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
@@ -11,7 +11,8 @@ import { KitSelectList } from '../kit/kit-select-list';
 import { KitSelectRow } from '../kit/kit-select-row';
 import { encodeSidechainPath, parseSidechainPath, resolveSidechainByPath } from './transcript-sidechain-path';
 import { deriveTranscriptSteps, resolveSegmentSeams, type TranscriptStep } from './transcript-steps';
-import type { TranscriptSegmentContentView, TranscriptSegmentIndexEntry } from '../api/hub';
+import type { TranscriptSegmentIndexEntry } from './transcript-turn';
+import type { TranscriptSegmentContent } from './transcript-turn';
 import { mergeLateLinks } from './merge-late-links';
 import { TranscriptSegmentView } from './transcript-segment-view';
 import { type SidechainOpenEvent, TranscriptViewer } from './transcript-viewer';
@@ -42,7 +43,7 @@ import { type SidechainOpenEvent, TranscriptViewer } from './transcript-viewer';
 })
 export class ChunkTranscriptsTab {
   /** `ChunkDetail.history` — the node-history steps to group segments under. */
-  readonly history = input.required<readonly TransitionView[]>();
+  readonly history = input.required<readonly TranscriptHistoryStep[]>();
 
   /** `ChunkDetail.current_node_id`/`.current_node_name`/`.latest_epoch` — the in-flight step. */
   readonly currentNodeId = input<string | null>(null);
@@ -76,7 +77,7 @@ export class ChunkTranscriptsTab {
   readonly segmentState = input.required<KitAsyncStateValue>();
 
   /** The open segment's turns and completion state, once {@link segmentState} is `'ready'`. */
-  readonly segmentData = input<TranscriptSegmentContentView | undefined>(undefined);
+  readonly segmentData = input<TranscriptSegmentContent | undefined>(undefined);
 
   /** Emitted with a segment id when the operator picks it, or `null` to close one. */
   readonly pickSegment = output<string | null>();

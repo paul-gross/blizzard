@@ -3,8 +3,6 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 
 import type {
   ChunkDetail,
-  TranscriptSegmentContentView,
-  TranscriptSegmentIndexEntry,
 } from '../../api/hub';
 import { ChunkArtifactBody } from '../chunk-detail/chunk-artifact-body';
 import { ChunkTimeline } from '../chunk-detail/chunk-timeline';
@@ -12,6 +10,7 @@ import { KitAccordionGroup } from '../../kit/kit-accordion-group';
 import { KitAccordionSection } from '../../kit/kit-accordion-section';
 import { KitAsyncState, type KitAsyncStateValue } from '../../kit/kit-async-state';
 import { KitMasterDetail } from '../../kit/kit-master-detail';
+import type { TranscriptSegmentContent, TranscriptSegmentIndexEntry } from '../../transcripts/transcript-turn';
 import { mergeLateLinks } from '../../transcripts/merge-late-links';
 import { TranscriptSegmentView } from '../../transcripts/transcript-segment-view';
 
@@ -64,7 +63,7 @@ export class ChunkNodeHistoryTab {
   readonly indexState = input.required<KitAsyncStateValue>();
   readonly isForbidden = input(false);
   readonly segmentState = input.required<KitAsyncStateValue>();
-  readonly segmentData = input<TranscriptSegmentContentView | undefined>(undefined);
+  readonly segmentData = input<TranscriptSegmentContent | undefined>(undefined);
 
   /** The effective (operator-paged or step-default) segment's own resume-seam links —
    * {@link ChunkNodeHistoryContainer.continuedFrom}/`.continuesIn` forwarded straight

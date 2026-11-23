@@ -1,16 +1,76 @@
-import type * as hubApi from '../api/hub';
-import type * as runnerApi from '../api/runner';
+/** A normalized tool invocation embedded in a transcript turn. */
+export interface TranscriptTool {
+  name: string;
+  tool_use_id: string | null;
+  input: Record<string, unknown>;
+  input_shape: string;
+  input_unparsed: string | null;
+  input_truncated?: boolean;
+  output: string | null;
+  output_patch?: boolean;
+  output_truncated: boolean;
+}
 
-/**
- * The turn shape {@link TranscriptViewer} (`./transcript-viewer`) renders: a union of the hub's
- * and the runner's generated turn types, because both planes feed the one viewer
- * (`TRANSCRIPT_SEGMENTS_API`). Nothing hand-declares the shape, so a drift between the two
- * regenerated clients surfaces as a compile error at the consumer.
- */
-export type TranscriptTurn = hubApi.TurnSegmentViewOutput | runnerApi.TurnSegmentView;
+/** A nested conversation, possibly linked to its spawning tool. */
+export interface TranscriptSidechain {
+  agent_id: string | null;
+  agent_type: string | null;
+  link: string;
+  parent_tool_use_id?: string | null;
+  turns: TranscriptTurn[];
+}
 
-/** A turn's tool call, derived from the same two generated clients as {@link TranscriptTurn}. */
-export type TranscriptTool = hubApi.ToolCallSegmentView | runnerApi.ToolCallSegmentView;
+/** A normalized turn. Unknown kinds remain visible to the viewer. */
+export interface TranscriptTurn {
+  index: number;
+  kind: string;
+  text: string;
+  timestamp: string | null;
+  thinking_redacted: boolean;
+  truncated: boolean;
+  tool: TranscriptTool | null;
+  sidechain: TranscriptSidechain | null;
+}
 
-/** A turn's sidechain conversation, derived from the same two generated clients as {@link TranscriptTurn}. */
-export type TranscriptSidechain = hubApi.SidechainSegmentViewOutput | runnerApi.SidechainSegmentView;
+/** The contents of one transcript segment. */
+export interface TranscriptSegmentContent {
+  segment_id: string;
+  final: boolean;
+  truncated: boolean;
+  turns: TranscriptTurn[];
+}
+
+/** Metadata for a segment, independent of the daemon serving it. */
+export interface TranscriptSegmentIndexEntry {
+  segment_id: string;
+  node_id: string;
+  epoch: number;
+  spawn_generation: number;
+  turn_range_start: number;
+  turn_range_end: number;
+  byte_count: number;
+  final: boolean;
+  truncated: boolean;
+  harness_id: string | null;
+  harness_version: string | null;
+  normalizer_version: string;
+  received_at: string;
+}
+
+export interface TranscriptSegmentIndex {
+  chunk_id: string;
+  segments: TranscriptSegmentIndexEntry[];
+}
+
+/** The history facts needed to associate a segment with its producing step. */
+export interface TranscriptHistoryStep {
+  from_node_id: string | null;
+  from_node_name?: string | null;
+  epoch: number;
+}
+
+/** History and current step as used by transcript grouping. */
+export interface TranscriptContext {
+  history: readonly TranscriptHistoryStep[];
+  current: { nodeId: string | null; nodeName: string | null; epoch: number | null; terminal: boolean };
+}

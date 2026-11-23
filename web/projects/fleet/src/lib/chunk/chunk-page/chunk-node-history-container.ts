@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 
 import type { ChunkArtifact } from '../chunk-detail/artifact.model';
-import type { ChunkDetail, TranscriptSegmentIndexEntry } from '../../api/hub';
+import type { ChunkDetail } from '../../api/hub';
+import type { TranscriptContext, TranscriptSegmentIndexEntry } from '../../transcripts/transcript-turn';
 import type { KitAsyncStateValue } from '../../kit/kit-async-state';
 import { asyncState, restingAsyncState } from '../../core/query-state';
 import {
@@ -44,6 +45,7 @@ export class ChunkNodeHistoryContainer {
   /** See {@link ChunkTranscriptsContainer.chunkId} — nullable for the same reason. */
   readonly chunkId = input.required<string | null>();
   readonly detail = input.required<ChunkDetail>();
+  readonly transcriptContext = input.required<TranscriptContext>();
   readonly artifacts = input<readonly ChunkArtifact[]>([]);
   readonly selectedKey = input<string | null>(null);
   /** {@link ChunkTimeline.graphLinkBase}, forwarded — `null` leaves graph
@@ -69,13 +71,8 @@ export class ChunkNodeHistoryContainer {
   /** Every transcript step derived from the index — {@link selectedStepSegments} and the seam resolution
    * below both read this rather than re-deriving it. */
   private readonly steps = computed<readonly TranscriptStep[]>(() => {
-    const d = this.detail();
-    return deriveTranscriptSteps(this.indexQuery.data()?.segments ?? [], d.history ?? [], {
-      nodeId: d.current_node_id,
-      nodeName: d.current_node_name ?? null,
-      epoch: d.latest_epoch,
-      terminal: d.current_node_terminal ?? false,
-    });
+    const context = this.transcriptContext();
+    return deriveTranscriptSteps(this.indexQuery.data()?.segments ?? [], context.history, context.current);
   });
 
   /** The selected step's own segments, in `spawn_generation` order. */

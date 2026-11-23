@@ -1,6 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { envTimelineStepTranscriptApiEnvTimelineStepTranscriptGet, type hubApi } from 'fleet';
+import { envTimelineStepTranscriptApiEnvTimelineStepTranscriptGet, translateTranscriptTurn, type TranscriptTurn } from 'fleet';
 import { hubEnvTimelineKey } from '../../core/query-keys';
 
 /** Which session's transcript: its chunk, the node it ran, and the epoch it was fenced by. */
@@ -16,7 +16,7 @@ export interface LeaseTranscriptRef {
  * One session's transcript as the hub assembles it: every turn it shipped, in order — or `null` when the caller may not
  * read transcripts (the hub's `403`), which the drawer says quietly rather than as a failure.
  */
-export type LeaseTranscript = Pick<hubApi.LeaseTranscriptView, 'turns' | 'truncated'> | null;
+export type LeaseTranscript = { turns: TranscriptTurn[]; truncated: boolean } | null;
 
 /** How long a running step's transcript reads fresh; a finished one's never changes. */
 const LIVE_FRESH_MS = 15_000;
@@ -28,7 +28,7 @@ async function readLeaseTranscript(ref: LeaseTranscriptRef): Promise<LeaseTransc
   });
   if (response?.status === 403) return null;
   if (error) throw error;
-  return data;
+  return { turns: data.turns.map(translateTranscriptTurn), truncated: data.truncated };
 }
 
 /** The transcript of the session that ran a node step; idle while there is none to read. */
