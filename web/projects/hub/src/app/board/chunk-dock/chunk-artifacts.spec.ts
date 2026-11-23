@@ -2,24 +2,16 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import type { ChunkDetail } from 'fleet';
-import { assetArtifactView, chunkDetail, commitArtifactView } from 'fleet/testing';
+import type { ChunkArtifactStore } from 'fleet';
+import { assetChunkArtifact, chunkArtifactStore, commitChunkArtifact } from 'fleet/testing';
 import { ChunkArtifacts } from './chunk-artifacts';
 
-const REVIEW_FAIL_DETAIL: ChunkDetail = chunkDetail({
+const REVIEW_FAIL_DETAIL: ChunkArtifactStore = chunkArtifactStore({
   chunk_id: 'ch_01review0000000000000000000',
-  graph_id: 'gr_1',
-  graph_name: null,
-  status: 'running',
-  current_node_id: 'nd_build',
-  current_node_name: null,
-  latest_epoch: 2,
-  work_refs: [],
-  history: [],
   artifacts: [
-    commitArtifactView({
+    commitChunkArtifact({
       key: 'build.widget.1',
-      kind: 'git_commit',
+      kind: { kind: 'git_commit' },
       name: 'widget',
       node_id: 'nd_build',
       node_name: 'build',
@@ -29,9 +21,9 @@ const REVIEW_FAIL_DETAIL: ChunkDetail = chunkDetail({
       commit_hash: 'c1',
       branch_url: null,
     }),
-    assetArtifactView({
+    assetChunkArtifact({
       key: 'review.review-findings.2',
-      kind: 'asset',
+      kind: { kind: 'asset' },
       name: 'review-findings',
       node_id: 'nd_review',
       node_name: 'review',
@@ -41,20 +33,12 @@ const REVIEW_FAIL_DETAIL: ChunkDetail = chunkDetail({
   ],
 });
 
-const NAMED_DETAIL: ChunkDetail = chunkDetail({
+const NAMED_DETAIL: ChunkArtifactStore = chunkArtifactStore({
   chunk_id: 'ch_01named000000000000000000000',
-  graph_id: 'gr_1',
-  graph_name: null,
-  status: 'running',
-  current_node_id: 'nd_review',
-  current_node_name: 'review',
-  latest_epoch: 1,
-  work_refs: [],
-  history: [],
   artifacts: [
-    commitArtifactView({
+    commitChunkArtifact({
       key: 'build.widget.1',
-      kind: 'git_commit',
+      kind: { kind: 'git_commit' },
       name: 'widget',
       node_id: 'nd_build',
       node_name: 'build',
@@ -64,9 +48,9 @@ const NAMED_DETAIL: ChunkDetail = chunkDetail({
       commit_hash: 'c1',
       branch_url: 'https://forge.example/acme/widget/tree/feature/widget',
     }),
-    commitArtifactView({
+    commitChunkArtifact({
       key: 'build.orphan.1',
-      kind: 'git_commit',
+      kind: { kind: 'git_commit' },
       name: 'orphan',
       node_id: 'nd_build',
       node_name: 'build',

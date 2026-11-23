@@ -1,16 +1,16 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 
-import { addFindingOp, findingDelta, goneFindingOp, observedFindingOp } from 'fleet/testing';
+import { domainAddFindingOp, domainFindingDelta, domainGoneFindingOp, domainObservedFindingOp } from 'fleet/testing';
 import { ChunkArtifactDelta } from './chunk-artifact-delta';
 
-const one = findingDelta();
-const many = findingDelta({
+const one = domainFindingDelta();
+const many = domainFindingDelta({
   findings: [
-    addFindingOp(),
-    addFindingOp({ class: 'dead-code', locus: 'web/projects/hub/src', summary: 'An exported helper has no importer.' }),
-    observedFindingOp(),
-    observedFindingOp({ id: 'fn_01fixture0000000000000000002' }),
-    goneFindingOp(),
+    domainAddFindingOp(),
+    domainAddFindingOp({ class: 'dead-code', locus: 'web/projects/hub/src', summary: 'An exported helper has no importer.' }),
+    domainObservedFindingOp(),
+    domainObservedFindingOp({ id: 'fn_01fixture0000000000000000002' }),
+    domainGoneFindingOp(),
   ],
 });
 

@@ -21,3 +21,5 @@ export type { WorkItemsState, WorkItemsQuery } from './work-items-state';
 export { ChunkTimeline } from './chunk-timeline';
 export type { TransitionView, ArtifactView, DecisionView, ChunkUsageTotalView } from '../../api/hub';
 export { ChunkUrgency } from './chunk-urgency';
+
+export type { ChunkArtifact, ChunkArtifactStore } from './artifact.model';

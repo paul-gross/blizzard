@@ -1,15 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 
-import { findingCandidate, findingSurvey } from 'fleet/testing';
+import { domainFindingCandidate, domainFindingSurvey } from 'fleet/testing';
 import { ChunkArtifactSurvey } from './chunk-artifact-survey';
 
-const one = findingSurvey();
-const many = findingSurvey({
+const one = domainFindingSurvey();
+const many = domainFindingSurvey({
   candidates: [
-    findingCandidate(),
-    findingCandidate({ class: 'dead-code', locus: 'web/projects/hub/src', summary: 'An exported helper has no importer.' }),
-    findingCandidate({ class: 'drift', locus: 'blizzard/hub', summary: 'A doc table disagrees with the registry.', ref: 'blizzard#1201' }),
-    findingCandidate({ class: 'coverage', locus: 'web/projects/runner', summary: 'A container has no spec.', introduced: '9f2c4e1a7b3d' }),
+    domainFindingCandidate(),
+    domainFindingCandidate({ class: 'dead-code', locus: 'web/projects/hub/src', summary: 'An exported helper has no importer.' }),
+    domainFindingCandidate({ class: 'drift', locus: 'blizzard/hub', summary: 'A doc table disagrees with the registry.', ref: 'blizzard#1201' }),
+    domainFindingCandidate({ class: 'coverage', locus: 'web/projects/runner', summary: 'A container has no spec.', introduced: '9f2c4e1a7b3d' }),
   ],
 });
 

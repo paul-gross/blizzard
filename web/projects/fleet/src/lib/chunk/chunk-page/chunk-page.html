@@ -50,6 +50,7 @@
     <div [fleetKitTabPanel]="'node-history'">
       <ng-template fleetKitTabContent>
         <fleet-chunk-node-history-container
+          [artifacts]="d.domainArtifacts"
           [chunkId]="chunkId()"
           [detail]="d"
           [selectedKey]="selection.stepKey()"
@@ -62,7 +63,7 @@
     <div [fleetKitTabPanel]="'artifacts'">
       <ng-template fleetKitTabContent>
         <fleet-chunk-artifacts-panel
-          [artifacts]="d.artifacts"
+          [artifacts]="d.domainArtifacts"
           [selectedKey]="selection.artifactKey()"
           [drilldown]="mobile()"
           testidPrefix="artifacts-tab"

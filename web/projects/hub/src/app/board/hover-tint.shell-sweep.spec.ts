@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { commands, page, userEvent } from 'vitest/browser';
 
 import { type ChunkDetail, ChunkTimeline } from 'fleet';
-import { assetArtifactView, chunkDetail, commitArtifactView, transitionView } from 'fleet/testing';
+import { assetChunkArtifact, chunkArtifactStore, chunkDetail, commitChunkArtifact, transitionView } from 'fleet/testing';
 import { ChunkCard } from 'fleet';
 import { type BoardCard, boardCardView } from './board-card/board-card-view.model';
 import { ChunkArtifacts } from './chunk-dock/chunk-artifacts';
@@ -322,34 +322,26 @@ describe('chunk-timeline (Quick Reference) full-bleed row shell sweep (web:shell
   });
 });
 
-const ARTIFACTS_DETAIL: ChunkDetail = chunkDetail({
+const ARTIFACTS_DETAIL = chunkArtifactStore({
   chunk_id: 'ch_01hover0000000000000000000',
-  graph_id: 'gr_1',
-  graph_name: 'default',
-  current_node_id: 'nd_review',
-  current_node_name: 'review',
-  latest_epoch: 1,
-  status: 'running',
-  work_refs: [],
-  history: [],
   artifacts: [
-    assetArtifactView({
+    assetChunkArtifact({
       key: 'build.plan.1',
       node_id: 'nd_build',
       node_name: 'build',
       epoch: 1,
       name: 'plan',
-      kind: 'asset',
+      kind: { kind: 'asset' },
       content: 'plan content',
       recorded_at: '2026-08-09T00:00:00.000Z',
     }),
-    commitArtifactView({
+    commitChunkArtifact({
       key: 'build.commit.1',
       node_id: 'nd_build',
       node_name: 'build',
       epoch: 1,
       name: 'commit',
-      kind: 'git_commit',
+      kind: { kind: 'git_commit' },
       content: null,
       recorded_at: '2026-08-09T00:00:01.000Z',
       repo: null,

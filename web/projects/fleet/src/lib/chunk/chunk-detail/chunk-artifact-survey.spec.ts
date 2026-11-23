@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { FindingSurvey } from '../../api/hub';
+import type { FindingSurvey } from './artifact-structured.model';
 import { ChunkArtifactSurvey } from './chunk-artifact-survey';
 
 const FULL_SURVEY: FindingSurvey = {

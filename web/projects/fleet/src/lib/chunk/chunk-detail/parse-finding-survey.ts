@@ -1,4 +1,4 @@
-import type { FindingCandidate, FindingSurvey } from '../../api/hub';
+import type { FindingCandidate, FindingSurvey } from './artifact-structured.model';
 
 /**
  * Runtime validation of the **survey** asset a garden routine's survey node

@@ -3,7 +3,7 @@ import { RouterLink } from '@angular/router';
 
 import {
   ChunkDelivery,
-  type ChunkDetail,
+  type ChunkDetail, type ChunkArtifactStore,
   type FactsDetail,
   ChunkFacts,
   ChunkIssuePane,
@@ -99,7 +99,7 @@ export class StepDrawerView {
   readonly chunk = input<(ChunkDetail & FactsDetail) | null>(null);
   readonly workItems = input<WorkItemsState>({ status: 'loading', items: [] });
   /** The chunk with only this step's artifacts. */
-  readonly stepArtifacts = input<ChunkDetail | null>(null);
+  readonly stepArtifacts = input<ChunkArtifactStore | null>(null);
   /** The session's transcript; `null` when the caller may not read it. */
   readonly transcript = input<LeaseTranscript | undefined>(undefined);
   readonly transcriptState = input<KitAsyncStateValue>('loading');

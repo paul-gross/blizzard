@@ -1,7 +1,7 @@
+import type { ChunkArtifact } from '../chunk-detail/artifact.model';
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
 import type {
-  ArtifactView,
   ChunkDetail,
   TranscriptSegmentContentView,
   TranscriptSegmentIndexEntry,
@@ -59,7 +59,7 @@ export class ChunkNodeHistoryTab {
 
   /** The selected step's own artifacts, already filtered by the container (exact
    * `(node_id, epoch)`, never latest-by-node). */
-  readonly stepArtifacts = input<readonly ArtifactView[]>([]);
+  readonly stepArtifacts = input<readonly ChunkArtifact[]>([]);
 
   readonly indexState = input.required<KitAsyncStateValue>();
   readonly isForbidden = input(false);

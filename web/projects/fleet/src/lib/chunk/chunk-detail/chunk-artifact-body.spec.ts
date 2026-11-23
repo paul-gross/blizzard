@@ -1,19 +1,19 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { ArtifactView } from '../../api/hub';
+import type { ChunkArtifact } from './artifact.model';
 import { formatAbsolute } from '../../core/when';
 import {
-  assetArtifactView,
-  bounceArtifactView,
-  commitArtifactView,
-  deltaArtifactView,
-  surveyArtifactView,
+  assetChunkArtifact,
+  bounceChunkArtifact,
+  commitChunkArtifact,
+  deltaChunkArtifact,
+  surveyChunkArtifact,
 } from 'fleet/testing';
 import { ChunkArtifactBody } from './chunk-artifact-body';
 import { parseBounceEnvelope } from './parse-bounce-envelope';
 
-const ASSET: ArtifactView = assetArtifactView({
+const ASSET: ChunkArtifact = assetChunkArtifact({
   epoch: 1,
   key: 'plan',
   name: 'plan',
@@ -72,7 +72,7 @@ describe('ChunkArtifactBody', () => {
   });
 
   it('keeps a git_commit’s ref line in summary mode', async () => {
-    const commit: ArtifactView = commitArtifactView({
+    const commit: ChunkArtifact = commitChunkArtifact({
       epoch: 1,
       key: 'deliver.commit',
       name: 'commit',
@@ -100,11 +100,20 @@ describe('ChunkArtifactBody', () => {
     const head = (fixture.nativeElement as HTMLElement).querySelector('.a-head')!;
 
     expect(head.querySelector('.a-key')?.nextElementSibling?.classList.contains('a-kind')).toBe(true);
-    expect(head.querySelector('.a-kind')?.textContent?.trim()).toBe(`· ${ASSET.kind}`);
+    expect(head.querySelector('.a-kind')?.textContent?.trim()).toBe(`· ${ASSET.kind.kind}`);
+  });
+
+  it('renders an unknown kind by its raw name without treating it as a commit', async () => {
+    const fixture = TestBed.createComponent(ChunkArtifactBody);
+    fixture.componentRef.setInput('artifact', assetChunkArtifact({ kind: { kind: 'unknown', raw: 'future-kind' } }));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.a-kind')?.textContent).toContain('future-kind');
+    expect(el.querySelector('[data-testid="artifact-ref"]')).toBeNull();
   });
 
   describe('a git_commit ref line', () => {
-    const LINKED: ArtifactView = commitArtifactView({
+    const LINKED: ChunkArtifact = commitChunkArtifact({
       key: 'deliver.commit',
       repo: 'acme/widget',
       branch_name: 'feat/widget',
@@ -143,7 +152,7 @@ describe('ChunkArtifactBody', () => {
   });
 
   it('renders a FindingDelta-shaped asset structurally through ChunkArtifactDelta instead of the verbatim pre', async () => {
-    const delta: ArtifactView = {
+    const delta: ChunkArtifact = {
       ...ASSET,
       key: 'reconcile.delta.2',
       content: JSON.stringify({
@@ -162,7 +171,7 @@ describe('ChunkArtifactBody', () => {
   });
 
   it('renders a survey-shaped asset through ChunkArtifactSurvey, not as a delta and not verbatim', async () => {
-    const survey: ArtifactView = {
+    const survey: ChunkArtifact = {
       ...ASSET,
       key: 'survey.survey.1',
       content: JSON.stringify({
@@ -185,7 +194,7 @@ describe('ChunkArtifactBody', () => {
   });
 
   it('falls back to the verbatim pre for JSON matching neither garden shape', async () => {
-    const config: ArtifactView = {
+    const config: ChunkArtifact = {
       ...ASSET,
       key: 'settings',
       content: JSON.stringify({ scope: 'runner-daemon', revisions: { blizzard: 'abc123' } }),
@@ -201,7 +210,7 @@ describe('ChunkArtifactBody', () => {
   });
 
   it('falls back to the verbatim pre for a delta-shaped asset rendered in summary mode — no parse attempted', async () => {
-    const delta: ArtifactView = {
+    const delta: ChunkArtifact = {
       ...ASSET,
       content: JSON.stringify({ scope: 's', findings: [] }),
     };
@@ -216,7 +225,7 @@ describe('ChunkArtifactBody', () => {
   });
 
   it('attempts no survey parse either in summary mode', async () => {
-    const survey: ArtifactView = {
+    const survey: ChunkArtifact = {
       ...ASSET,
       content: JSON.stringify({ scope: 's', candidates: [] }),
     };
@@ -310,9 +319,9 @@ describe('ChunkArtifactBody', () => {
   });
 
   it.each([
-    ['surveyArtifactView', surveyArtifactView(), 'artifact-survey'],
-    ['deltaArtifactView', deltaArtifactView(), 'artifact-delta'],
-    ['bounceArtifactView', bounceArtifactView(), 'artifact-bounce-facts'],
+    ['surveyChunkArtifact', surveyChunkArtifact(), 'artifact-survey'],
+    ['deltaChunkArtifact', deltaChunkArtifact(), 'artifact-delta'],
+    ['bounceChunkArtifact', bounceChunkArtifact(), 'artifact-bounce-facts'],
   ])('reaches its structured view from %s defaults', async (_name, artifact, handle) => {
     const fixture = TestBed.createComponent(ChunkArtifactBody);
     fixture.componentRef.setInput('artifact', artifact);

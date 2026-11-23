@@ -1,9 +1,9 @@
-import type { ArtifactView } from '../../api/hub';
-import { assetArtifactView } from 'fleet/testing';
+import type { ChunkArtifact } from './artifact.model';
+import { assetChunkArtifact } from 'fleet/testing';
 import { filterArtifactsByStep } from './filter-artifacts-by-step';
 
-function artifact(overrides: Partial<ArtifactView>): ArtifactView {
-  return assetArtifactView({
+function artifact(overrides: Partial<ChunkArtifact>): ChunkArtifact {
+  return assetChunkArtifact({
     key: 'k',
     name: 'n',
     node_id: 'nd_build',

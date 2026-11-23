@@ -1,12 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import type { ArtifactView } from '../../api/hub';
+import type { ChunkArtifact } from '../chunk-detail/artifact.model';
 import { ChunkArtifactBody, sortArtifacts } from '../chunk-detail';
 import { KitAsyncState, KitMasterDetail, KitSelectList, KitSelectRow, type KitAsyncStateValue } from '../../kit';
 
 /**
  * A chunk's artifact store as a nav list beside a viewer — daemon-agnostic,
- * off the shared {@link ArtifactView} shape alone rather than a whole `ChunkDetail`, so any
+ * off the shared {@link ChunkArtifact} shape alone rather than a whole `ChunkDetail`, so any
  * host with an artifact list and a URL-held selection can mount it verbatim. Lifted out of
  * the hub board's own Artifacts tab (which shipped this exact list-plus-viewer shape first)
  * so the runner's chunk detail page gets the same look and feel without duplicating it —
@@ -33,7 +33,7 @@ import { KitAsyncState, KitMasterDetail, KitSelectList, KitSelectRow, type KitAs
 })
 export class ChunkArtifactsPanel {
   /** The chunk's artifact store, server-ordered. */
-  readonly artifacts = input.required<readonly ArtifactView[]>();
+  readonly artifacts = input.required<readonly ChunkArtifact[]>();
 
   /** The raw selection param — the requested entry, before this component falls it
    * back to the most recent one. */
@@ -82,7 +82,7 @@ export class ChunkArtifactsPanel {
     return sorted.length > 0 ? sorted[sorted.length - 1].key : null;
   });
 
-  protected readonly selectedArtifact = computed<ArtifactView | undefined>(() => {
+  protected readonly selectedArtifact = computed<ChunkArtifact | undefined>(() => {
     const key = this.effectiveKey();
     if (key === null) return undefined;
     return this.artifacts().find((art) => art.key === key);

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 
+import type { ChunkArtifact } from '../chunk-detail/artifact.model';
 import type { ChunkDetail, TranscriptSegmentIndexEntry } from '../../api/hub';
 import type { KitAsyncStateValue } from '../../kit/kit-async-state';
 import { asyncState, restingAsyncState } from '../../core/query-state';
@@ -43,6 +44,7 @@ export class ChunkNodeHistoryContainer {
   /** See {@link ChunkTranscriptsContainer.chunkId} — nullable for the same reason. */
   readonly chunkId = input.required<string | null>();
   readonly detail = input.required<ChunkDetail>();
+  readonly artifacts = input<readonly ChunkArtifact[]>([]);
   readonly selectedKey = input<string | null>(null);
   /** {@link ChunkTimeline.graphLinkBase}, forwarded — `null` leaves graph
    * badges unlinked. */
@@ -61,7 +63,7 @@ export class ChunkNodeHistoryContainer {
   private readonly parsedSelection = computed(() => parseSelectedKey(this.selectedKey()));
 
   protected readonly stepArtifacts = computed(() =>
-    stepArtifacts(this.detail().artifacts ?? [], this.parsedSelection()),
+    stepArtifacts(this.artifacts(), this.parsedSelection()),
   );
 
   /** Every transcript step derived from the index — {@link selectedStepSegments} and the seam resolution

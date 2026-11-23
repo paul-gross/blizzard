@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { FindingDelta } from '../../api/hub';
+import type { FindingDelta } from './artifact-structured.model';
 import { ChunkArtifactDelta } from './chunk-artifact-delta';
 
 const RAW = JSON.stringify({ scope: 'runner-daemon', findings: [] });

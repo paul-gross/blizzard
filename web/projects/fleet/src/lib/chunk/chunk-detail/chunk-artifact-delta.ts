@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, computed, input } from '@angular/core';
 
-import type { AddFindingOp, FindingDelta, GoneFindingOp, ObservedFindingOp } from '../../api/hub';
+import type { AddFindingOp, FindingDelta, GoneFindingOp, ObservedFindingOp } from './artifact-structured.model';
 import { compactRef } from '../../core/compact-ref';
 import { KitFactList, type KitFact } from '../../kit/kit-fact-list';
 import { KitProseBlock } from '../../kit/kit-prose-block';

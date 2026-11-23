@@ -6,7 +6,7 @@ import {
   chunkDetail,
   transitionView,
 } from '../../testing/builders/chunk.translate';
-import { assetArtifactView } from '../../testing/builders/artifact.translate';
+import { assetChunkArtifact } from '../../testing/builders/artifact';
 import { toolCallSegmentView, transcriptSegmentContentView, turnSegmentView } from '../../testing/builders/transcript.translate';
 import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
 
@@ -48,7 +48,7 @@ export default meta;
 type Story = StoryObj<ChunkNodeHistoryTab>;
 
 const FULL_ARGS: Story['args'] = {
-  stepArtifacts: [assetArtifactView()],
+  stepArtifacts: [assetChunkArtifact()],
   segmentData: transcriptSegmentContentView({
     turns: [
       turnSegmentView({ index: 0 }),

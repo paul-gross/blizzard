@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { type ArtifactView, type ChunkDetail, KitAsyncState, KitSectionHead, ChunkArtifactBody, sortArtifacts } from 'fleet';
+import { type ChunkArtifact, type ChunkArtifactStore, KitAsyncState, KitSectionHead, ChunkArtifactBody, sortArtifacts } from 'fleet';
 import { AppLink } from 'fleet/shell';
 
 /**
@@ -32,7 +32,7 @@ import { AppLink } from 'fleet/shell';
 })
 export class ChunkArtifacts {
   /** The chunk aggregate to render (its attached artifacts). */
-  readonly detail = input.required<ChunkDetail>();
+  readonly detail = input.required<ChunkArtifactStore>();
 
   /** The chunk detail route's own path segments, before the chunk id — lets a
    * consumer outside the desktop board point this link elsewhere without
@@ -64,5 +64,5 @@ export class ChunkArtifacts {
   });
 
   /** The artifact store, oldest attachment first — see {@link sortArtifacts}. */
-  protected readonly artifacts = computed<readonly ArtifactView[]>(() => sortArtifacts(this.detail().artifacts ?? []));
+  protected readonly artifacts = computed<readonly ChunkArtifact[]>(() => sortArtifacts(this.detail().artifacts ?? []));
 }

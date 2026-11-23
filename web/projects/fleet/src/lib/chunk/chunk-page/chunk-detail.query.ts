@@ -8,6 +8,7 @@ import { LIVE_COVERED_POLL_BACKSTOP_MS, RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } f
 import { type DaemonTarget, targetKeyRoot } from '../../core/daemon-target/daemon-target';
 import { chunkDetailKey, chunkWorkItemsKey, type TranscriptPlane } from '../../core/query-keys';
 import { laneStatus } from '../../core/chunk-lanes.translate';
+import { fromArtifactView } from '../chunk-detail/artifact.translate';
 
 /** Each plane's live-covered backstop — the interval its own live-update registry
  * leaves as insurance against a dropped frame. */
@@ -21,6 +22,7 @@ export function projectChunkDetail(detail: ChunkDetail) {
   const project = (neighbor: hubApi.ChunkNeighborView) => ({ ...neighbor, laneStatus: neighbor.status === null ? null : laneStatus(neighbor.status) });
   return {
     ...detail,
+    domainArtifacts: detail.artifacts.map(fromArtifactView),
     laneStatus: laneStatus(detail.status),
     neighborhood: detail.neighborhood && {
       ...detail.neighborhood,

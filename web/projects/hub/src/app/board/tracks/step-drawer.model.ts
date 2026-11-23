@@ -1,4 +1,4 @@
-import { type ChunkDetail, type ProjectView, formatWhenParts, hubApi, unlisted } from 'fleet';
+import { type ChunkDetail, type ChunkArtifact, type ChunkArtifactStore, type ProjectView, formatWhenParts, hubApi, unlisted } from 'fleet';
 import { projectColorOf } from '../../core/project-lens-colors';
 
 import type { LeaseTranscriptRef } from './lease-transcript.query';
@@ -153,10 +153,10 @@ export function ownArtifactKeys(
 
 /** The chunk with only the artifacts the step read names as its own; `null` until both the chunk and the step's own
  * detail are read. */
-export function stepArtifactsOf(chunk: ChunkDetail | null, keys: readonly string[] | undefined): ChunkDetail | null {
+export function stepArtifactsOf(chunk: { chunk_id: string; domainArtifacts: readonly ChunkArtifact[] } | null, keys: readonly string[] | undefined): ChunkArtifactStore | null {
   if (chunk === null || keys === undefined) return null;
   const mine = new Set(keys);
-  return { ...chunk, artifacts: chunk.artifacts.filter((a) => mine.has(a.key)) };
+  return { chunk_id: chunk.chunk_id, artifacts: chunk.domainArtifacts.filter((a) => mine.has(a.key)) };
 }
 
 /** The transcript to read for a step — its session's, fenced by its epoch — or `null` for a step the hub ran itself. */

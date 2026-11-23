@@ -2,17 +2,17 @@ import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
 import {
-  assetArtifactView,
-  commitArtifactView,
-  deltaArtifactView,
+  assetChunkArtifact,
+  commitChunkArtifact,
+  deltaChunkArtifact,
   fixtureInstant,
-  surveyArtifactView,
+  surveyChunkArtifact,
 } from 'fleet/testing';
 import { ChunkArtifactsPanel } from './chunk-artifacts-panel';
 
-const few = [commitArtifactView(), assetArtifactView(), surveyArtifactView(), deltaArtifactView()];
+const few = [commitChunkArtifact(), assetChunkArtifact(), surveyChunkArtifact(), deltaChunkArtifact()];
 const forty = Array.from({ length: 40 }, (_, i) =>
-  assetArtifactView({
+  assetChunkArtifact({
     key: `artifact-${String(i + 1).padStart(2, '0')}`,
     name: `artifact-${i + 1}`,
     epoch: Math.floor(i / 8) + 1,
