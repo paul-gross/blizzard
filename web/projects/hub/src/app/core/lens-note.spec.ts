@@ -4,13 +4,13 @@ import {
   QueryClient,
   provideTanStackQuery,
 } from '@tanstack/angular-query-experimental';
-import { type ProjectView } from 'fleet';
+import { projectView } from 'fleet/testing';
 
 import { LensNote } from './lens-note';
 import { ProjectLens } from './project-lens';
 import { hubProjectsKey } from './query-keys';
 
-const WINTER: ProjectView = {
+const WINTER = projectView({
   project_id: 'proj_w',
   slug: 'winter',
   name: 'Winter',
@@ -18,10 +18,10 @@ const WINTER: ProjectView = {
   color: 'teal',
   revision: 1,
   created_at: '2026-10-01T00:00:00Z',
-};
+});
 
 describe('LensNote', () => {
-  async function mount(project: ProjectView | null, surface: string) {
+  async function mount(project: { readonly slug: string } | null, surface: string) {
     const slug = project?.slug ?? null;
     // The tenant's projects as the lens control read them, so the note names the lensed one without a request.
     const queryClient = new QueryClient();

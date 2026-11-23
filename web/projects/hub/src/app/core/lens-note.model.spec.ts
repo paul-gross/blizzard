@@ -1,16 +1,7 @@
-import type { ProjectView } from 'fleet';
-
 import { lensNoteText } from './lens-note.model';
+import { project } from './project.builders';
 
-const WINTER: ProjectView = {
-  project_id: 'proj_w',
-  slug: 'winter',
-  name: 'Winter',
-  description: '',
-  color: 'teal',
-  revision: 1,
-  created_at: '2026-10-01T00:00:00Z',
-};
+const WINTER = project({ project_id: 'proj_w', slug: 'winter', name: 'Winter', color: 'teal' });
 
 describe('lensNoteText', () => {
   it('names the lensed project and says the view is the whole tenant', () => {

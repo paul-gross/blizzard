@@ -1,4 +1,4 @@
-import { injectQuery } from '@tanstack/angular-query-experimental';
+import { type QueryClient, injectQuery } from '@tanstack/angular-query-experimental';
 
 import {
   type ProjectNotFoundProblem,
@@ -8,6 +8,7 @@ import {
   problemType,
 } from 'fleet/shell';
 import { hubProjectsKey } from './query-keys';
+import type { Project } from './project.domain';
 import { fromProjectView } from './project.translate';
 
 /** The `type` of the hub's refusal when the tenant holds no such project. */
@@ -64,4 +65,17 @@ export async function readProject(
   if (problemType(error) === PROJECT_NOT_FOUND) return null;
   if (error) throw error;
   return data ?? null;
+}
+
+/** {@link readProject} as a {@link Project}. */
+export async function readProjectDomain(segment: string): Promise<Project | null> {
+  const project = await readProject(segment);
+  return project === null ? null : fromProjectView(project);
+}
+
+/** The tenant's projects through `queryClient`'s cache, read once when it holds none — a guard's path to the list
+ * {@link injectProjectDomainsQuery} hands a view. */
+export async function ensureProjectDomains(queryClient: QueryClient): Promise<readonly Project[]> {
+  const projects = await queryClient.ensureQueryData(projectsQueryOptions());
+  return projects.map(fromProjectView);
 }

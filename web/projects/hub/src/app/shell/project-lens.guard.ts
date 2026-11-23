@@ -2,10 +2,11 @@ import { inject } from '@angular/core';
 import { type CanActivateFn, RedirectCommand, Router } from '@angular/router';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
-import { type ProjectView, errorMessage } from 'fleet/shell';
+import { errorMessage } from 'fleet/shell';
 
 import { ProjectLens, lensSegmentOf, lensedUrl, unlensedUrl } from '../core/project-lens';
-import { projectsQueryOptions, readProject } from '../core/projects.query';
+import type { Project } from '../core/project.domain';
+import { ensureProjectDomains, readProjectDomain } from '../core/projects.query';
 import { hubProjectsKey } from '../core/query-keys';
 
 /**
@@ -27,7 +28,7 @@ export const projectLensGuard: CanActivateFn = async (_route, state) => {
 
   await lens.whenReady();
 
-  const listed = await queryClient.ensureQueryData(projectsQueryOptions()).catch((): readonly ProjectView[] => []);
+  const listed = await ensureProjectDomains(queryClient).catch((): readonly Project[] => []);
   if (listed.some((project) => project.slug === segment)) return true;
 
   const redirectTo = (url: string) => new RedirectCommand(router.parseUrl(url), { replaceUrl: true });
@@ -36,9 +37,9 @@ export const projectLensGuard: CanActivateFn = async (_route, state) => {
   const byId = listed.find((project) => project.project_id === segment);
   if (byId !== undefined) return underSlug(byId.slug);
 
-  let named: ProjectView | null;
+  let named: Project | null;
   try {
-    named = await readProject(segment);
+    named = await readProjectDomain(segment);
   } catch (error) {
     lens.notify(`Could not open project “${segment}” (${errorMessage(error, 'the hub did not answer')}). Showing all projects.`);
     return redirectTo(unlensedUrl(state.url));

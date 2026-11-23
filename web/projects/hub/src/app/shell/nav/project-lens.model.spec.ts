@@ -1,16 +1,7 @@
-import type { ProjectView } from 'fleet/shell';
-
+import { project as projectOf } from '../../core/project.builders';
 import { lensChoices } from './project-lens.model';
 
-const project = (slug: string, name: string): ProjectView => ({
-  project_id: `proj_${slug}`,
-  slug,
-  name,
-  description: '',
-  color: 'teal',
-  revision: 1,
-  created_at: '2026-10-01T00:00:00Z',
-});
+const project = (slug: string, name: string) => projectOf({ project_id: `proj_${slug}`, slug, name, color: 'teal' });
 
 describe('lensChoices', () => {
   it('offers All, then every project by name', () => {

@@ -39,7 +39,7 @@ import { isPublicUrl, redirectToLogin } from '../core/auth/auth-redirect';
 
 import { readDemoConfig } from '../demo/demo-config';
 import { startOfLocalDayIso, startOfPreviousLocalDayIso } from '../core/local-day';
-import { injectProjectsQuery } from '../core/projects.query';
+import { injectProjectDomainsQuery } from '../core/projects.query';
 import { AppNav } from './nav/app-nav';
 import { AppNavMenu } from './nav/app-nav-menu';
 import { MobileTabBar } from './nav/mobile-tab-bar';
@@ -330,7 +330,7 @@ export class App {
   }
 
   /** The tenant's projects, read once for both lens selectors once the board has entered the tenant. */
-  private readonly projectsQuery = injectProjectsQuery(() => this.ready());
+  private readonly projectsQuery = injectProjectDomainsQuery(() => this.ready());
 
   /** The lens selectors' choices — All, then the tenant's projects by name. */
   protected readonly lensChoices = computed(() => lensChoices(this.projectsQuery.data() ?? []));
