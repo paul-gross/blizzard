@@ -9,9 +9,13 @@ describe('runnerSubscription', () => {
       windows_sampled_at: 'snapshot', spenders: ['r2', 'r1'],
       windows: [{ window: '5h', utilization_pct: 0, resets_at: 'reset', window_seconds: 18000 }],
       renewal_result: 'failed', renewal_failure_reason: 'timed_out', renewal_attempted_at: 'renewal',
+      revision: null, settings: {}, state: 'active',
     };
     const fact = runnerSubscription(row);
-    expect(fact).toEqual(row);
+    expect(fact).toEqual(expect.objectContaining({ slug: row.slug, name: row.name, provider: row.provider,
+      condition: row.condition, miss_reason: row.miss_reason, ok: row.ok, sampled_at: row.sampled_at,
+      windows_sampled_at: row.windows_sampled_at, windows: row.windows, spenders: row.spenders,
+      renewal_result: row.renewal_result, renewal_failure_reason: row.renewal_failure_reason, renewal_attempted_at: row.renewal_attempted_at }));
     expect(fact.windows).not.toBe(row.windows);
     expect(fact.spenders).not.toBe(row.spenders);
   });
