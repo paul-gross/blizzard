@@ -90,6 +90,7 @@ def test_a_chunk_found_open_outside_the_locked_set_widens_the_lock_and_retries_w
         chunks=cast(IWriteUrgencyChunks, chunks),
         transactions=cast(IHubTransactions, transactions),
         clock=FixedClock(_AT),
+        references=(),
     )
 
     retired = lifecycle.retire(
@@ -116,6 +117,7 @@ def test_re_retiring_a_retired_urgency_with_open_chunks_and_a_move_writes_nothin
         chunks=cast(IWriteUrgencyChunks, chunks),
         transactions=cast(IHubTransactions, _Transactions()),
         clock=FixedClock(_AT),
+        references=(),
     )
 
     retired = lifecycle.retire(

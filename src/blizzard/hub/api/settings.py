@@ -8,6 +8,7 @@ from __future__ import annotations
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Header
 
 from blizzard.auth_core import Permission
@@ -15,15 +16,18 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.urgency.services import SettingsView as SettingsRead
+from blizzard.hub.domain.urgency.services import TenantSettingsService, UrgencyReading
 from blizzard.hub.domain.urgency.settings import DEFAULT_URGENCY_FIELD, TenantSettings
 from blizzard.wire.urgency import SettingsPatchRequest, SettingsView, UrgencyRef
+
+Settings = FromDishka[TenantSettingsService]
+Reading = FromDishka[UrgencyReading]
 
 router = APIRouter(
     prefix="/api/settings",
@@ -42,17 +46,20 @@ def _view(read: SettingsRead) -> SettingsView:
 
 
 @router.get("", response_model=SettingsView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def get_settings(services: Services) -> SettingsView:
+@inject_sync
+def get_settings(settings: Settings) -> SettingsView:
     """The tenant's settings."""
-    return _view(services.tenant_settings.show())
+    return _view(settings.show())
 
 
 @router.patch("", response_model=SettingsView)
+@inject_sync
 def patch_settings(
     request: SettingsPatchRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    services: Services,
+    settings: Settings,
+    reading: Reading,
     if_match: Annotated[int | None, Header()] = None,
 ) -> SettingsView:
     """Edit the stated settings, keeping the revision on a no-op. 422 `urgency_unknown` for a `default_urgency`
@@ -61,13 +68,11 @@ def patch_settings(
     sent = request.model_fields_set
     try:
         default = (
-            services.urgency_reading.named(DEFAULT_URGENCY_FIELD, TenantSettings.named_default(request.default_urgency))
+            reading.named(DEFAULT_URGENCY_FIELD, TenantSettings.named_default(request.default_urgency))
             if "default_urgency" in sent
             else UNSET
         )
-        edited = services.tenant_settings.edit(
-            change_context(identity, door), default_urgency=default, if_match=if_match
-        )
+        edited = settings.edit(change_context(identity, door), default_urgency=default, if_match=if_match)
     except ConfigFieldError as exc:
         raise ProblemHTTPException(
             partial(problems_admin.config_field_invalid_problem, "body", exc.field, exc.message, exc.code)

@@ -56,6 +56,8 @@ NARROWED_MODULES: tuple[Path, ...] = tuple(
         "record_reads.py",
         "user_names.py",
         "request_config.py",
+        "urgencies.py",
+        "settings.py",
     )
 )
 #: The legacy bags a narrowed module may not name.

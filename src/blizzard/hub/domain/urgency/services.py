@@ -44,11 +44,11 @@ from blizzard.hub.domain.urgency.ports import (
     IReadUrgencyChunks,
     IReadUrgencyOrder,
     IReadUrgencyRepository,
-    IUrgencyReferenceClearing,
     IWriteTenantSettings,
     IWriteUrgencyChunks,
     IWriteUrgencyOrder,
     IWriteUrgencyRepository,
+    UrgencyReferenceClearings,
     tenant_settings_lock,
     urgency_lock,
     urgency_order_lock,
@@ -307,7 +307,7 @@ class UrgencyLifecycle:
         chunks: IWriteUrgencyChunks,
         transactions: IHubTransactions,
         clock: IClock,
-        references: Sequence[IUrgencyReferenceClearing] = (),
+        references: UrgencyReferenceClearings,
     ) -> None:
         self._urgencies = urgencies
         self._settings = settings

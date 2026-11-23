@@ -29,6 +29,17 @@ from blizzard.hub.domain.graph.model import (
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.domain.urgency.ports import (
+    IReadTenantSettings,
+    IReadUrgencyChunks,
+    IReadUrgencyOrder,
+    IReadUrgencyRepository,
+    IWriteTenantSettings,
+    IWriteUrgencyChunks,
+    IWriteUrgencyOrder,
+    IWriteUrgencyRepository,
+)
+from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.graphs import PackagedGraphs
@@ -99,10 +110,10 @@ ADAPTER_PORTS: Mapping[type[Any], tuple[type[Any], ...]] = {
     ConfigApplyStore: (),
     ConfigImportStore: (),
     InvitationStore: (),
-    UrgencyStore: (),
-    UrgencyOrderStore: (),
-    TenantSettingsStore: (),
-    UrgencyChunksStore: (),
+    UrgencyStore: (IReadUrgencyRepository, IWriteUrgencyRepository),
+    UrgencyOrderStore: (IReadUrgencyOrder, IWriteUrgencyOrder),
+    TenantSettingsStore: (IReadTenantSettings, IWriteTenantSettings),
+    UrgencyChunksStore: (IReadUrgencyChunks, IWriteUrgencyChunks),
     ConfigRevisionsStore: (),
     FindingStore: (IReadFindingRepository, IWriteFindingRepository),
     GraphStore: (IReadGraphRepository, IWriteGraphRepository, IReadGraphBodies, IReadNodeExecutors),
@@ -145,8 +156,6 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantStores.invitations", stores.invitations, InvitationStore),
         ("TenantStores.urgencies", stores.urgencies, UrgencyStore),
         ("TenantStores.urgency_order", stores.urgency_order, UrgencyOrderStore),
-        ("TenantStores.tenant_settings", stores.tenant_settings, TenantSettingsStore),
-        ("TenantStores.urgency_chunks", stores.urgency_chunks, UrgencyChunksStore),
         ("TenantServices.graphs", services.graphs, GraphStore),
         ("TenantServices.graph_bodies", services.graph_bodies, GraphStore),
         ("TenantServices.node_executors", services.node_executors, GraphStore),
@@ -167,6 +176,7 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantServices.graph_yaml", services.graph_yaml, IConfigCodec),
         ("TenantServices.graph_mint", services.graph_mint, GraphMintService),
         ("TenantServices.default_graph", services.default_graph, DefaultGraphService),
+        ("TenantServices.urgency_reading", services.urgency_reading, UrgencyReading),
         ("TenantServices.events", services.events, EventBroker),
     )
     problems = [
