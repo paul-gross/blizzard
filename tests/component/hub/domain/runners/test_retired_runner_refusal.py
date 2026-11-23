@@ -13,9 +13,11 @@ import sqlalchemy as sa
 from blizzard.hub.api import transcripts as transcripts_api
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.execution.facts import PushedFact
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.execution.submissions import Completion, GateSubmission
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
+from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.registration import (
     IWriteRunnerRegistry,
     RunnerCapability,
@@ -32,7 +34,9 @@ _RUNNER = "runner-a"
 def _retired_hub(tmp_path: Path) -> HubHarness:
     hub = build_hub(tmp_path)
     seed_runner(hub, _RUNNER, register=False)
-    hub.services.fleet.register(_registration(hub), "ws-a", capabilities=(RunnerCapability("claude", default=True),))
+    hub.default_adapter(FleetService).register(
+        _registration(hub), "ws-a", capabilities=(RunnerCapability("claude", default=True),)
+    )
     writer = cast(IWriteRunnerRegistry, hub.services.registry)
     writer.record_lifecycle(_RUNNER, retired=True, at=hub.clock.now(), by="op", expected_lifecycle=0)
     return hub
@@ -50,7 +54,7 @@ def test_register_refuses_a_retired_runner_before_any_write(tmp_path: Path) -> N
 
     with pytest.raises(RunnerRetired):
         seed_runner(hub, _RUNNER, register=False)
-        hub.services.fleet.register(_registration(hub), "ws-b", env_capacity=9)
+        hub.default_adapter(FleetService).register(_registration(hub), "ws-b", env_capacity=9)
 
     after = _registration(hub)
     assert after.workspace_id == before.workspace_id
@@ -63,14 +67,14 @@ def test_heartbeat_refuses_a_retired_runner_without_refreshing_liveness(tmp_path
     hub.clock.advance(timedelta(seconds=60))
 
     with pytest.raises(RunnerRetired):
-        hub.services.fleet.heartbeat(_RUNNER)
+        hub.default_adapter(FleetService).heartbeat(_RUNNER)
 
     assert _registration(hub).last_seen_at == before
 
 
 def test_heartbeat_on_an_unregistered_runner_is_false_not_a_refusal(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    assert hub.services.fleet.heartbeat("ghost") is False
+    assert hub.default_adapter(FleetService).heartbeat("ghost") is False
 
 
 def test_enroll_refuses_a_retired_runner_without_setting_a_token(tmp_path: Path) -> None:
@@ -78,7 +82,7 @@ def test_enroll_refuses_a_retired_runner_without_setting_a_token(tmp_path: Path)
     held = _registration(hub).token_hash
 
     with pytest.raises(RunnerRetired, match="reinstate"):
-        hub.services.enrollment.enroll(_registration(hub))
+        hub.default_adapter(RunnerEnrollmentService).enroll(_registration(hub))
 
     assert _registration(hub).token_hash == held
 
@@ -115,7 +119,7 @@ class _Routed:
     def __init__(self, tmp_path: Path) -> None:
         self.hub = build_hub(tmp_path)
         seed_runner(self.hub, _RUNNER, register=False)
-        self.hub.services.fleet.register(
+        self.hub.default_adapter(FleetService).register(
             _registration(self.hub), "ws-a", capabilities=(RunnerCapability("claude", default=True),)
         )
         self.chunk_id = self.hub.client.post("/api/chunks", json={"tokens": ["default:1"]}).json()["chunk_id"]
@@ -185,7 +189,7 @@ _GUARDED: dict[str, Callable[[_Routed], object]] = {
         r.chunk, r.graph, GateSubmission(from_node_id=r.node_id, epoch=1, runner_id=_RUNNER)
     ),
     "route-token rekey": lambda r: r.hub.services.claim.rekey(r.route),
-    "runner read": lambda r: r.hub.services.fleet.own_liveness(_registration(r.hub)),
+    "runner read": lambda r: r.hub.default_adapter(FleetService).own_liveness(_registration(r.hub)),
 }
 
 
@@ -204,4 +208,4 @@ def test_each_runner_contact_operation_refuses_a_retired_runner_and_lands_nothin
 def test_the_operator_read_still_shows_a_retired_runner(tmp_path: Path) -> None:
     hub = _retired_hub(tmp_path)
 
-    assert hub.services.fleet.get_liveness(_registration(hub)).registration.retired is True
+    assert hub.default_adapter(FleetService).get_liveness(_registration(hub)).registration.retired is True

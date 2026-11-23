@@ -122,6 +122,7 @@ from blizzard.hub.api.traces import router as traces_router
 from blizzard.hub.api.transcripts import router as transcripts_router
 from blizzard.hub.api.urgencies import router as urgencies_router
 from blizzard.hub.api.users import router as users_router
+from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.api.work_item_reads import router as work_item_reads_router
 from blizzard.hub.api.work_source_params import refuse_built_in_work_source
 from blizzard.hub.api.work_sources import router as work_sources_router
@@ -803,6 +804,7 @@ def build_hosted_app(
             clock=resolved_clock,
             actions=build_hub_actions(os.environ),
             settings=settings,
+            versions=HubVersionWindow(__version__, version_window),
             config=config,
             platform_tracing=platform_tracing,
             environ=os.environ,
@@ -852,7 +854,6 @@ def build_hosted_app(
             tracing_settings=tracing,
             extractors=shipped_extractors(),
             egress_path_key=_egress_path_key(config.egress),
-            version_window=version_window,
             cadences_on=lambda: flags.on("cadences"),
             announce_minted=announce_minted,
         )

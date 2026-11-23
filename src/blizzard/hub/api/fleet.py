@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 
 from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.api import chunk_events, node_steps, problems
 from blizzard.hub.api import chunk_statuses as chunk_statuses_api
@@ -150,17 +150,16 @@ claim_router = APIRouter(
 )
 
 
+@collaborator
 @dataclass(frozen=True)
 class FleetRequest:
     """One fleet-router call: the runner its bearer token names, the hub policy it is judged under,
-    and the tenant that runner was added in — its name, and its services, the only ones the call
-    reaches."""
+    and the tenant that runner was added in — its scope and its name."""
 
     principal: RunnerPrincipal
     config: HubConfig
     scope: StoreScope
     tenant_name: str
-    services: TenantServices
     live_settings: bool = False
 
     @classmethod
@@ -169,14 +168,12 @@ class FleetRequest:
         request: Request,
         principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
         tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)],
-        services: Services,
     ) -> FleetRequest:
         return cls(
             principal,
             request_config(request),
             tenant.scope,
             tenant.name,
-            services,
             getattr(request.app.state, "hub_settings", None) is not None,
         )
 
@@ -186,14 +183,12 @@ class FleetRequest:
         request: Request,
         principal: Annotated[RunnerPrincipal, Depends(require_runner_principal_even_if_retired)],
         tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)],
-        services: Services,
     ) -> FleetRequest:
         return cls(
             principal,
             request_config(request),
             tenant.scope,
             tenant.name,
-            services,
             getattr(request.app.state, "hub_settings", None) is not None,
         )
 
@@ -1002,11 +997,17 @@ def get_lease_transcript_segments(
     response_model=RunnerRegistrationResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@inject_sync
 def register_runner(
     request: RunnerRegistrationRequest,
     http_request: Request,
-    services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
+    registry: runners_api.Runners,
+    service: runners_api.Fleet,
+    hosts: runners_api.Hosts,
+    projects: runners_api.Projects,
+    executors: runners_api.Executors,
+    events: runners_api.Events,
 ) -> object:
     """Register the calling runner — the one its bearer token names — with its workspace binding
     and the name it declares; idempotent.
@@ -1016,7 +1017,7 @@ def register_runner(
     body ``runner_id`` from an older runner is ignored. A retired runner is refused 403, a refused version 409, and a
     capability list repeating a harness id 422."""
     runner_id = fleet.caller_id()
-    registration = services.registry.get_runner(runner_id)
+    registration = registry.get_runner(runner_id)
     if registration is None:
         return problem_response(problems.runner_not_found_problem(runner_id, instance=http_request.url.path))
     capabilities = tuple(
@@ -1036,7 +1037,7 @@ def register_runner(
         else None
     )
     try:
-        registered = services.fleet.register(
+        registered = service.register(
             registration,
             request.workspace_id,
             name=request.name,
@@ -1068,12 +1069,12 @@ def register_runner(
         return problem_response(problems.duplicate_capability_harness_problem(exc, instance=http_request.url.path))
     except RunnerVersionRefused as exc:
         if exc.changed:
-            services.events.publish_runner_changed(runner_id, kind="registered", runner_name=registration.name)
+            events.publish_runner_changed(runner_id, kind="registered", runner_name=registration.name)
         return problem_response(problems.runner_version_problem(exc, instance=http_request.url.path))
     if registered.changed:
-        services.events.publish_runner_changed(runner_id, kind="registered", runner_name=registered.name)
-    hosts = runners_api.hosts_of(services, [registration])
-    host = None if registration.host_id is None else hosts.get(registration.host_id)
+        events.publish_runner_changed(runner_id, kind="registered", runner_name=registered.name)
+    standing = runners_api.hosts_of(hosts, [registration])
+    host = None if registration.host_id is None else standing.get(registration.host_id)
     flags = flag_bindings(registered.bindings, registered.subscription, host)
     return RunnerRegistrationResponse(
         runner_id=runner_id,
@@ -1082,7 +1083,7 @@ def register_runner(
         tenant_id=fleet.scope.tenant,
         tenant_name=fleet.tenant_name,
         projects=runners_api.served_views(
-            registered.projects, runners_api.served_projects(services, registered.projects)
+            registered.projects, runners_api.served_projects(projects, registered.projects)
         ),
         bindings=runners_api.binding_views(registered.bindings, flags, request.agents),
         subscription=registered.subscription,
@@ -1090,24 +1091,26 @@ def register_runner(
         hub_version=registered.version.hub_version,
         window=VersionWindowView(floor=registered.version.floor, ceiling=registered.version.ceiling),
         unenforceable_gates=runners_api.unenforceable_views(
-            request.gates, services.node_executors.executors_by_node_name() if request.gates else {}
+            request.gates, executors.executors_by_node_name() if request.gates else {}
         ),
     )
 
 
-@router.post("/runners/{runner_id}/heartbeats", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/runners/{runner_id}/heartbeats", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@inject_sync
 def heartbeat_runner(
     runner_id: str,
-    services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
+    service: runners_api.Fleet,
+    events: runners_api.Events,
 ) -> Response:
     """Refresh the calling runner's liveness — the slow runner-level heartbeat. Returns 204; 403 when
     retired or when the path names another runner; 404 before its first registration."""
     fleet.assert_owns(runner_id)
-    alive = services.fleet.heartbeat(runner_id)
+    alive = service.heartbeat(runner_id)
     if not alive:
         raise ProblemHTTPException(partial(problems.runner_not_found_problem, runner_id))
-    services.events.publish_runner_changed(runner_id, kind="heartbeat", runner_name=fleet.principal.runner_name)
+    events.publish_runner_changed(runner_id, kind="heartbeat", runner_name=fleet.principal.runner_name)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -1129,15 +1132,20 @@ def list_runner_decisions(
 
 
 @router.get("/runners/{runner_id}", response_model=RunnerView)
+@inject_sync
 def get_runner(
     runner_id: str,
-    services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
+    registry: runners_api.Runners,
+    service: runners_api.Fleet,
+    clock: runners_api.Clock,
+    projects: runners_api.Projects,
+    hosts: runners_api.Hosts,
 ) -> RunnerView:
     """The calling runner's own declarative state — its pull read; 403 when retired or when the path
     names another runner, 409 before its first registration."""
     fleet.assert_owns(runner_id)
-    registration = services.registry.get_runner(runner_id)
+    registration = registry.get_runner(runner_id)
     if registration is None:
         raise ProblemHTTPException(partial(problems.runner_not_found_problem, runner_id))
     try:
@@ -1145,8 +1153,8 @@ def get_runner(
     except RunnerNeverConnected as exc:
         raise ProblemHTTPException(partial(problems.runner_not_registered_problem, exc)) from exc
     return runners_api.runner_view(
-        services.fleet.own_liveness(registration),
-        now=services.clock.now(),
-        projects=runners_api.served_projects(services, registration.served),
-        hosts=runners_api.hosts_of(services, [registration]),
+        service.own_liveness(registration),
+        now=clock.now(),
+        projects=runners_api.served_projects(projects, registration.served),
+        hosts=runners_api.hosts_of(hosts, [registration]),
     )

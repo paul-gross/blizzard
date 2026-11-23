@@ -17,6 +17,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.models import User
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.runners.host import HostAddition, HostLifecycleFact, HostReport, IWriteHostRegistry
 from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
@@ -40,7 +41,7 @@ def _register_runner(
     hub: HubHarness, *, runner_id: str = "runner-a", redirect_uris: tuple[str, ...] = _DEFAULT_REDIRECT_URIS
 ) -> None:
     seed_runner(hub, runner_id, register=False)
-    hub.services.fleet.register(
+    hub.default_adapter(FleetService).register(
         added_runner(hub, runner_id), "workspace-1", public_url="https://runner-a.example", redirect_uris=redirect_uris
     )
 
@@ -265,7 +266,7 @@ def _bravo(hub: HubHarness) -> TenantHarness:
     """A second tenant, ``bravo``, holding the registered runner ``_BRAVO_RUNNER``."""
     bravo = hub.add_tenant("bravo")
     seed_runner(bravo.services, _BRAVO_RUNNER, register=False)
-    bravo.services.fleet.register(
+    bravo.fleet.register(
         added_runner(bravo.services, _BRAVO_RUNNER),
         "workspace-1",
         public_url="https://bravo-runner.example",

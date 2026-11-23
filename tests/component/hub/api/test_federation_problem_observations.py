@@ -7,6 +7,7 @@ from httpx2 import Response
 from pydantic import BaseModel
 
 from blizzard.auth_core import Role
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.runners.host import HostAddition, HostLifecycleFact, HostReport, IWriteHostRegistry
 from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
@@ -43,7 +44,7 @@ def test_authorize_problem_variants_match_runtime_responses(tmp_path: Path) -> N
 
     observe(disabled.client.get(_PATH, params=_PARAMS), 404, IdpDisabledProblem)
     seed_runner(hub, "runner-a", register=False)
-    hub.services.fleet.register(
+    hub.default_adapter(FleetService).register(
         added_runner(hub, "runner-a"), "workspace-1", public_url="https://runner.example", redirect_uris=(_REDIRECT,)
     )
     observe(hub.client.get(_PATH, params=_PARAMS, follow_redirects=False), 501, FederationNoProviderProblem)

@@ -14,6 +14,7 @@ from sqlalchemy import Connection
 
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph
 from blizzard.hub.domain.observability.egress.rows import step_row
 from blizzard.hub.domain.observability.hub_events import HubEventKind
@@ -149,7 +150,9 @@ def test_a_step_names_its_runner_by_id_and_latest_registered_name_and_a_rename_b
         return root.attributes[RUNNER_ID], root.attributes[RUNNER_NAME]
 
     told = first_step_root()
-    hub.services.fleet.register(added_runner(hub, _RN), "w1", name="r-claude-2", capabilities=SEEDED_CAPABILITIES)
+    hub.default_adapter(FleetService).register(
+        added_runner(hub, _RN), "w1", name="r-claude-2", capabilities=SEEDED_CAPABILITIES
+    )
     retold = first_step_root()
 
     assert told == (_RN, "r-claude")

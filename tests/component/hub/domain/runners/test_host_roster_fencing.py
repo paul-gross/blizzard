@@ -14,6 +14,7 @@ from typing import Any, cast
 import pytest
 from sqlalchemy import func
 
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.runners.host import IWriteHostRegistry
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.store import schema as s
@@ -220,7 +221,10 @@ def test_a_reinstate_decided_before_the_host_retires_is_refused(
     hub: HubHarness, hosted: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _ok(hub.client.post("/api/runners/rn_a/retire", json={"by": "op"}))
-    _once_before(monkeypatch, hub.services.fleet._transactions, "begin", lambda: _ok(_retire_host(hub, hosted)))  # pyright: ignore[reportPrivateUsage]  # the fleet service's transaction seam is the only point between the read and the unit
+    fleet = hub.default_adapter(FleetService)
+    # The fleet service's transaction seam is the only point between the read and the unit.
+    transactions = fleet._transactions  # pyright: ignore[reportPrivateUsage]
+    _once_before(monkeypatch, transactions, "begin", lambda: _ok(_retire_host(hub, hosted)))
 
     refused = hub.client.post("/api/runners/rn_a/reinstate", json={"by": "op"})
 
@@ -260,7 +264,7 @@ def test_a_roster_runner_retired_before_the_loop_reaches_it_interrupts_the_retir
     retire_runner = lambda: _ok(hub.client.post("/api/runners/rn_a/retire", json={"by": "other"}))  # noqa: E731
     # The host's own holdings read is the first; the second is the loop's retire of rn_a deciding, just before it
     # writes.
-    _once_before(monkeypatch, hub.services.fleet, "holdings", retire_runner, nth=2)
+    _once_before(monkeypatch, hub.default_adapter(FleetService), "holdings", retire_runner, nth=2)
     since = _last_event_id(hub)
 
     interrupted = _retire_host(hub, hosted)
@@ -283,7 +287,7 @@ def test_a_runner_retire_that_loses_its_fact_write_is_refused(
     runner_id = _ok(hub.client.post("/api/fleet/host/runners", json={"name": "r"}, headers=headers), 201)["runner_id"]
     competitor = lambda: _ok(hub.client.post(f"/api/runners/{runner_id}/retire", json={"by": "other"}))  # noqa: E731
     # The retire's holdings read is the last read it decides on before its fact write.
-    _once_before(monkeypatch, hub.services.fleet, "holdings", competitor)
+    _once_before(monkeypatch, hub.default_adapter(FleetService), "holdings", competitor)
 
     if door == "operator":
         refused = hub.client.post(f"/api/runners/{runner_id}/retire", json={"by": "op"})

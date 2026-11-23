@@ -14,6 +14,7 @@ import sqlalchemy as sa
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.flags import FlagRegistry, resolve_flags
+from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.secrets import ENV_SECRET_KEY
 from blizzard.hub.store import schema as s
 from blizzard.hub.tenancy import TenantId
@@ -88,7 +89,7 @@ old-hub = "hub"
 def test_the_answer_carries_the_hubs_fleet_flags_and_nothing_of_another_scope(tmp_path: Path) -> None:
     registry = FlagRegistry.parse(_FLEET_REGISTRY, "fixture")
     hub = build_hub(tmp_path, flags=resolve_flags(registry, "hub", {"fleet-thing": True}).flags)
-    added = hub.services.enrollment.add("r-claude", by="op")
+    added = hub.default_adapter(RunnerEnrollmentService).add("r-claude", by="op")
 
     status, body = _identity(hub, added.token)
 
@@ -98,14 +99,14 @@ def test_the_answer_carries_the_hubs_fleet_flags_and_nothing_of_another_scope(tm
 
 def test_a_hub_over_the_empty_packaged_registry_answers_no_fleet_flags(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    added = hub.services.enrollment.add("r-claude", by="op")
+    added = hub.default_adapter(RunnerEnrollmentService).add("r-claude", by="op")
 
     assert _identity(hub, added.token)[1]["fleet_flags"] == {}
 
 
 def test_a_token_names_its_added_runner_before_it_ever_registers(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    added = hub.services.enrollment.add("r-claude", by="op")
+    added = hub.default_adapter(RunnerEnrollmentService).add("r-claude", by="op")
 
     assert _identity(hub, added.token) == (
         200,

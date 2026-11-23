@@ -19,7 +19,7 @@ TENANT = {
 }
 RUNNER = TENANT | {"blizzard.hub.api.auth.require_runner_principal"}
 FLEET_REQUEST = RUNNER | {"blizzard.hub.api.fleet.FleetRequest.of"}
-HOST = TENANT | {"blizzard.hub.api.auth.require_host_principal"}
+HOST = TENANT - {"blizzard.hub.api.deps.tenant_services"} | {"blizzard.hub.api.auth.require_host_principal"}
 
 # Keys are the hub's effective route paths, not client-side parameter names.
 GROUPS = [
@@ -66,15 +66,20 @@ GET /api/fleet/chunks/{chunk_id}/analytics/spend/nodes
     (
         FLEET_REQUEST,
         """
-GET /api/fleet/runners/{runner_id}
 GET /api/fleet/runners/{runner_id}/decisions
 POST /api/fleet/chunks/{chunk_id}/completions
 POST /api/fleet/chunks/{chunk_id}/decisions
 POST /api/fleet/chunks/{chunk_id}/release
 POST /api/fleet/chunks/{chunk_id}/route-token
 POST /api/fleet/events
-POST /api/fleet/runners
 POST /api/fleet/transcripts
+""",
+    ),
+    (
+        FLEET_REQUEST - {"blizzard.hub.api.deps.tenant_services"},
+        """
+GET /api/fleet/runners/{runner_id}
+POST /api/fleet/runners
 """,
     ),
     (
@@ -105,7 +110,7 @@ POST /api/fleet/host/runners/{runner_id}/retire
         "POST /api/fleet/routes",
     ),
     (
-        TENANT
+        TENANT - {"blizzard.hub.api.deps.tenant_services"}
         | {
             "blizzard.hub.api.auth.reject_runner_principal",
             "blizzard.hub.api.auth_session.require.<locals>._dependency",

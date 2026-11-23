@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import STALE_AFTER
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
@@ -540,7 +541,7 @@ def test_a_runner_gaining_a_route_after_the_check_is_a_409_and_the_committed_hos
     seed_runner(hub, "rn_a")
     hub.client.post(f"/api/hosts/{host_id}/adoptions", json={"runner_ids": ["rn_a"]})
     chunk_id = _held_chunk(hub, "rn_a")
-    fleet = hub.services.fleet
+    fleet = hub.default_adapter(FleetService)
     real = fleet.holdings
     reads: list[str] = []
 

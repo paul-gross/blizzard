@@ -24,9 +24,6 @@ def _fleet(principal: RunnerPrincipal) -> FleetRequest:
         config=HubConfig(root=Path("."), db_url="sqlite://"),
         scope=StoreScope(_TENANT),
         tenant_name="acme",
-        # A unit-tier stand-in: `assert_owns` reads only the principal, and a real
-        # TenantServices bag needs a provisioned tenant store.
-        services=None,  # pyright: ignore[reportArgumentType]  # unit tier wires no tenant services
     )
 
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
@@ -130,7 +131,11 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
     provider = FakeProvider({"e9": "/ws/e9"})
     assert hub.app is not None
     # r2 presents its own token, so the hub resolves the reclaim to r2, not to r1.
-    _hub_client = HttpHubClient(RunnerFleetClient(hub.app, services=hub.services, default_runner_id="r2"))
+    _hub_client = HttpHubClient(
+        RunnerFleetClient(
+            hub.app, services=hub.services, fleet=hub.default_adapter(FleetService), default_runner_id="r2"
+        )
+    )
     harness = FakeHarness(handle=_HANDLE, verdict=None)
     _harnesses = HarnessRegistry(
         {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}

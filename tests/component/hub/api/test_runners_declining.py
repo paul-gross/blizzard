@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.hub.api import runners as runners_api
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.runners.registration import RunnerDeclining
 from blizzard.wire.runner import RunnerRegistrationRequest
 from tests.support.scaffolding import HubHarness, build_hub, seed_runner
@@ -45,7 +46,7 @@ class _PreFieldRegistration(BaseModel):
 def _register(hub: HubHarness, declining: tuple[RunnerDeclining, ...] | None) -> None:
     held = hub.services.registry.get_runner(_RUNNER)
     assert held is not None
-    hub.services.fleet.register(held, "w1", declining=declining)
+    hub.default_adapter(FleetService).register(held, "w1", declining=declining)
 
 
 def _held(hub: HubHarness) -> tuple[RunnerDeclining, ...]:

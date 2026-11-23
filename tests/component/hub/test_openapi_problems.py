@@ -15,6 +15,7 @@ from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.app import create_app_for_export
 from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.runners.host import HostTokenRotation
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
@@ -809,7 +810,7 @@ def test_host_runner_retirement_lifecycle_races_match_openapi(
     )
     assert claim.status_code == 201, claim.text
     registry = cast(IWriteRunnerRegistry, hub.services.registry)
-    fleet = hub.services.fleet
+    fleet = hub.default_adapter(FleetService)
     if interrupted:
         release = hub.services.detach.release_held
 

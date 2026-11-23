@@ -74,7 +74,7 @@ REVIEWED[("POST", "/api/fleet/host/runners")].add(
 REVIEWED[("POST", "/api/fleet/host/runners/{runner_id}/retire")].add(
     (
         "blizzard.hub.api.fleet_host.retire_host_runner",
-        "RunnerRetireResponse(runner=registry_view(services.fleet.get_liveness(refreshed), now=services.clock.now(), projects=served_projects(services, refreshed.served), hosts=hosts_of(services, [refreshed]), executors=executors_for(services, [refreshed])), released_chunk_ids=[r.chunk_id for r in outcome.released])",
+        "RunnerRetireResponse(runner=RunnerReads(registry, fleet, clock, projects, hosts, executors).detail(refreshed), released_chunk_ids=[r.chunk_id for r in outcome.released])",
     )
 )
 
@@ -186,7 +186,7 @@ _MODELS = {
     ("POST", "/api/fleet/runners"): {
         (
             "blizzard.hub.api.fleet.register_runner",
-            "RunnerRegistrationResponse(runner_id=runner_id, runner_name=registered.name, first_registration=registered.first, tenant_id=fleet.scope.tenant, tenant_name=fleet.tenant_name, projects=runners_api.served_views(registered.projects, runners_api.served_projects(services, registered.projects)), bindings=runners_api.binding_views(registered.bindings, flags, request.agents), subscription=registered.subscription, subscription_unrostered=flags.subscription_unrostered, hub_version=registered.version.hub_version, window=VersionWindowView(floor=registered.version.floor, ceiling=registered.version.ceiling), unenforceable_gates=runners_api.unenforceable_views(request.gates, services.node_executors.executors_by_node_name() if request.gates else {}))",
+            "RunnerRegistrationResponse(runner_id=runner_id, runner_name=registered.name, first_registration=registered.first, tenant_id=fleet.scope.tenant, tenant_name=fleet.tenant_name, projects=runners_api.served_views(registered.projects, runners_api.served_projects(projects, registered.projects)), bindings=runners_api.binding_views(registered.bindings, flags, request.agents), subscription=registered.subscription, subscription_unrostered=flags.subscription_unrostered, hub_version=registered.version.hub_version, window=VersionWindowView(floor=registered.version.floor, ceiling=registered.version.ceiling), unenforceable_gates=runners_api.unenforceable_views(request.gates, executors.executors_by_node_name() if request.gates else {}))",
         )
     },
 }

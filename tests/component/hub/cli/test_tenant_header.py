@@ -69,7 +69,7 @@ def test_a_verb_naming_no_tenant_sends_no_tenant_header(tmp_path: Path) -> None:
 def test_tenant_names_the_tenant_the_verb_acts_in(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     bravo = hub.add_tenant("bravo")
-    seed_runner(bravo.services, "bravo-r1")
+    seed_runner(bravo, "bravo-r1")
     sent = _cli_against(hub)
 
     in_bravo = _runner_list("--tenant", bravo.tenant)

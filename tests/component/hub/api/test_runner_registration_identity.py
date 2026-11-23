@@ -15,6 +15,8 @@ import sqlalchemy as sa
 from fastapi.testclient import TestClient
 
 from blizzard import __version__
+from blizzard.hub.domain.execution.fleet import FleetService
+from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.version_window import line_of
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
@@ -90,7 +92,7 @@ def _register(hub: HubHarness, token: str, *, name: str | None = None, workspace
 
 def test_an_added_runner_first_registers_under_its_minted_id(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    added = hub.services.enrollment.add("r-claude", by="op")
+    added = hub.default_adapter(RunnerEnrollmentService).add("r-claude", by="op")
     held = hub.services.registry.get_runner(added.runner_id)
     assert added.runner_id.startswith("rn_")
     assert held is not None and held.never_connected()
@@ -117,7 +119,7 @@ def test_an_added_runner_first_registers_under_its_minted_id(tmp_path: Path) -> 
 @pytest.mark.parametrize("declared", [None, "", "   "])
 def test_a_registration_declaring_no_name_keeps_the_one_held(tmp_path: Path, declared: str | None) -> None:
     hub = build_hub(tmp_path)
-    added = hub.services.enrollment.add("r-claude", by="op")
+    added = hub.default_adapter(RunnerEnrollmentService).add("r-claude", by="op")
 
     resp = _register(hub, added.token, name=declared)
 
@@ -130,7 +132,7 @@ def test_a_registration_declaring_no_name_keeps_the_one_held(tmp_path: Path, dec
 @pytest.mark.parametrize("paused", [False, True], ids=["live", "hub-paused"])
 def test_a_restart_under_a_new_name_renames_the_runner_and_changes_nothing_else(tmp_path: Path, paused: bool) -> None:
     hub = build_hub(tmp_path)
-    added = hub.services.enrollment.add("r-old", by="op")
+    added = hub.default_adapter(RunnerEnrollmentService).add("r-old", by="op")
     assert _register(hub, added.token, name="r-old").status_code == 201
     if paused:
         assert hub.client.post(f"/api/runners/{added.runner_id}/pause", json={"by": "op"}).status_code == 200
@@ -161,8 +163,8 @@ def test_a_restart_under_a_new_name_renames_the_runner_and_changes_nothing_else(
 
 def test_two_runners_sharing_a_name_register_independently(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    first = hub.services.enrollment.add("r-claude", by="op")
-    second = hub.services.enrollment.add("r-claude", by="op")
+    first = hub.default_adapter(RunnerEnrollmentService).add("r-claude", by="op")
+    second = hub.default_adapter(RunnerEnrollmentService).add("r-claude", by="op")
     assert first.runner_id != second.runner_id
 
     one = _register(hub, first.token, name="r-claude", workspace_id="w1")
@@ -180,7 +182,7 @@ def test_two_runners_sharing_a_name_register_independently(tmp_path: Path) -> No
 
 def test_the_fleet_read_of_a_runner_that_never_registered_is_409(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    added = hub.services.enrollment.add("r-claude", by="op")
+    added = hub.default_adapter(RunnerEnrollmentService).add("r-claude", by="op")
 
     resp = hub.client.get(f"/api/fleet/runners/{added.runner_id}", headers=_bearer(added.token))
 
@@ -218,7 +220,7 @@ def test_a_runner_added_in_another_tenant_registers_naming_that_tenant(tmp_path:
 def test_a_renamed_tenant_reaches_its_runner_on_the_next_registration(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     bravo = add_tenant(hub.engine, "bravo")
-    token = seed_runner(hub.open_services(bravo), "rn-bravo-1")
+    token = seed_runner(hub.open_services(bravo), "rn-bravo-1", fleet=hub.resolve(bravo, FleetService))
     before = _register(hub, token)
 
     _rename(hub, bravo, "bravo-renamed")

@@ -59,6 +59,7 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.api.chunk_events import AnnouncedTurns, announce_minted
+from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.auth.invitations import InvitationToken
 from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
 from blizzard.hub.auth.models import User
@@ -123,6 +124,7 @@ from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSo
 from blizzard.hub.domain.delivery.flows import Submission, flow_lock
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
 from blizzard.hub.domain.graph.actions import SHIPPED_CATALOGUE, TEST_ACTION_SPECS
@@ -660,11 +662,12 @@ def overridden_core(
     actions: HubActions,
     overrides: Callable[[RecordingRegistry], Rewrites],
     settings: HubSettingsGraph | None = None,
+    versions: HubVersionWindow | None = None,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> HubCore:
     """A store-backed hub core whose registered graph carries the test root's ``overrides``, over an empty
     environment."""
-    registry = registered(store_backed=True, settings=settings is not None)
+    registry = registered(store_backed=True, settings=settings is not None, versions=versions is not None)
     values = store_backed_values(
         connections,
         clock=clock,
@@ -673,6 +676,7 @@ def overridden_core(
         environ={},
         actions=actions,
         settings=settings,
+        versions=versions,
         system_artifacts=system_artifacts,
     )
     owner = build_container(registry, HUB_LIFETIMES, owner=HUB_OWNER, values=values, overrides=overrides(registry))
@@ -1375,7 +1379,7 @@ SEEDED_CAPABILITIES = (RunnerCapability("claude", default=True),)
 
 
 def seed_runner(
-    target: HubHarness | TenantServices,
+    target: HubHarness | TenantHarness | TenantServices,
     runner_id: str,
     *,
     name: str | None = None,
@@ -1384,14 +1388,20 @@ def seed_runner(
     capabilities: tuple[RunnerCapability, ...] = SEEDED_CAPABILITIES,
     register: bool = True,
     projects: tuple[str, ...] | None = None,
+    fleet: FleetService | None = None,
 ) -> str:
     """Add ``runner_id`` at the hub as ``hub runner add`` does, but under a chosen id and holding
     ``token`` (default :func:`runner_token`), and — with ``register`` — record its first registration
     so it is connected; returns the plaintext token. ``register=False`` leaves it added but never
     connected. A runner the hub already holds is left as is, except that ``register`` connects one
     that never has. It serves ``projects``, each an id or slug, and the tenant's ``default`` project
-    when ``None``, whatever other projects the tenant holds."""
-    services = target.services if isinstance(target, HubHarness) else target
+    when ``None``, whatever other projects the tenant holds. A bare ``TenantServices`` target registers through the
+    tenant's ``fleet``, which a harness target resolves itself."""
+    services = target if isinstance(target, TenantServices) else target.services
+    if isinstance(target, HubHarness):
+        fleet = target.default_adapter(FleetService)
+    elif isinstance(target, TenantHarness):
+        fleet = target.fleet
     registry = services.registry
     assert isinstance(registry, RunnerRegistryStore), "seeding writes through the hub's own registry store"
     plaintext = token or runner_token(runner_id)
@@ -1404,7 +1414,8 @@ def seed_runner(
             RunnerAddition(runner_id, name or runner_id, token_hash, at=services.clock.now(), by="test", served=served)
         )
     if register and (present is None or present.never_connected()):
-        services.fleet.register(added_runner(services, runner_id), workspace_id, capabilities=capabilities)
+        assert fleet is not None, "registering a runner of a bare TenantServices needs the tenant's fleet"
+        fleet.register(added_runner(services, runner_id), workspace_id, capabilities=capabilities)
     return plaintext
 
 
@@ -1436,6 +1447,7 @@ class RunnerFleetClient(TestClient):
         app: FastAPI,
         *,
         services: TenantServices,
+        fleet: FleetService,
         default_runner_id: str = "r1",
         register_claimants: bool = True,
         runner_prefix: str = "",
@@ -1444,6 +1456,7 @@ class RunnerFleetClient(TestClient):
         self.default_runner_id = f"{runner_prefix}{default_runner_id}"
         self._runner_prefix = runner_prefix
         self._services = services
+        self._fleet = fleet
         self._register_claimants = register_claimants
         self._seeding = threading.Lock()
         # Ids this client has seen present (or connected): neither condition is ever undone, so a
@@ -1480,7 +1493,9 @@ class RunnerFleetClient(TestClient):
         )
         with self._seeding:
             workspace_id = body.get("workspace_id") if _string_keyed(body) else None
-            seed_runner(self._services, runner_id, workspace_id=str(workspace_id or "w1"), register=connect)
+            seed_runner(
+                self._services, runner_id, workspace_id=str(workspace_id or "w1"), register=connect, fleet=self._fleet
+            )
             self._present.add(runner_id)
             if connect:
                 self._connected.add(runner_id)
@@ -1590,10 +1605,13 @@ class HubHarness:
         tenant = add_tenant(self.engine, name)
         self.hub_services.tenants.open_tenants.refresh()
         services = self.open_services(tenant)
+        fleet = self.resolve(tenant, FleetService)
         prefix = f"{name}-"
-        client = RunnerFleetClient(self.app, services=services, runner_prefix=prefix)
+        client = RunnerFleetClient(self.app, services=services, fleet=fleet, runner_prefix=prefix)
         client.headers[TENANT_HEADER] = tenant
-        return TenantHarness(tenant=tenant, name=name, services=services, client=client, runner_prefix=prefix)
+        return TenantHarness(
+            tenant=tenant, name=name, services=services, fleet=fleet, client=client, runner_prefix=prefix
+        )
 
     def promote(self, chunk_id: str) -> None:
         """Promote ``chunk_id`` through the real ``POST /api/chunks/{id}/promote`` path."""
@@ -1607,6 +1625,8 @@ class TenantHarness:
     tenant: TenantId
     name: str
     services: TenantServices
+    #: The tenant's one fleet service, which registers its runners.
+    fleet: FleetService
     #: Names the tenant on every call; a fleet call's runner is seeded in this tenant under :attr:`runner_prefix`.
     client: RunnerFleetClient
     runner_prefix: str
@@ -1623,6 +1643,14 @@ def tenant_services_of(app: FastAPI) -> TenantServices:
     tenant = tenants.open_tenants.only()
     assert tenant is not None, "tenant_services_of needs an app serving exactly one open tenant"
     return tenants.open_services(StoreScope(tenant))
+
+
+def tenant_fleet_of(app: FastAPI) -> FleetService:
+    """The fleet service of a wired ``app``'s only open tenant, resolved through its container scope."""
+    tenants = app.state.services.tenants
+    tenant = tenants.open_tenants.only()
+    assert tenant is not None, "tenant_fleet_of needs an app serving exactly one open tenant"
+    return app.state.services.process.tenants.resolve(StoreScope(tenant), FleetService)
 
 
 def serve_default_tenant(hub: HubHarness, services: TenantServices) -> None:
@@ -1904,6 +1932,7 @@ def build_hub(
         platform_tracing=DisabledPlatformTracing(),
         actions=actions,
         settings=settings,
+        versions=HubVersionWindow(hub_version or __version__, version_window),
         overrides=lambda registry: replaced_adapters(
             registry, probes=credential_probes, forges=forges, work_sources=tenant_work_sources
         ),
@@ -1934,8 +1963,6 @@ def build_hub(
         trace_exporter=trace_exporter,
         tracing_settings=tracing_settings,
         egress_path_key=egress_path_key,
-        hub_version=hub_version or __version__,
-        version_window=version_window,
         extractors=extractors,
         action_pass_grace=action_pass_grace,
         cadences_on=lambda: (flags or HUB_FLAGS).on("cadences"),
@@ -1945,7 +1972,8 @@ def build_hub(
     services = hub_services.tenants.open_services(default)
     app = create_hub_app(config, services=hub_services, flags=flags)
     app.state.hub_settings = settings
-    client = RunnerFleetClient(app, services=services, register_claimants=auto_register_claimants)
+    fleet = hub_services.process.tenants.resolve(default, FleetService)
+    client = RunnerFleetClient(app, services=services, fleet=fleet, register_claimants=auto_register_claimants)
     # Warm FastAPI's per-router route-resolution cache: it lazily caches routes on first
     # use, which is thread-unsafe under the component tier's OS-thread races.
     # POST avoids reading the SPA fallback when built static assets are present.

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
@@ -17,15 +18,34 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events, problems
 from blizzard.hub.api.auth import HostPrincipal, require_host_principal
 from blizzard.hub.api.auth_session import tenant_bound
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.ingest_broadcast import pushed_facts
 from blizzard.hub.api.problem_rendering import problem_response
-from blizzard.hub.api.runners import executors_for, hosts_of, publish_retirement, registry_view, served_projects
-from blizzard.hub.composition import TenantServices
+from blizzard.hub.api.runners import (
+    Clock,
+    Events,
+    Executors,
+    Fleet,
+    Frames,
+    HostEnrollment,
+    Hosts,
+    Projects,
+    Routes,
+    RunnerReads,
+    Runners,
+    publish_retirement,
+)
 from blizzard.hub.domain.execution.fleet import RetireInterrupted, RetireOutcome
-from blizzard.hub.domain.runners.host import Host, HostReport, HostRetired, HostWorkspace, origins_of
-from blizzard.hub.domain.runners.registration import DeclaredSubscription, RunnerHoldsRoutes, RunnerLifecycleConflict
+from blizzard.hub.domain.execution.host_facts import HostFactIngestService
+from blizzard.hub.domain.runners.host import Host, HostReport, HostRetired, HostWorkspace, IReadHostRegistry, origins_of
+from blizzard.hub.domain.runners.host_report import HostReportService
+from blizzard.hub.domain.runners.registration import (
+    DeclaredSubscription,
+    IReadRunnerRegistry,
+    RunnerHoldsRoutes,
+    RunnerLifecycleConflict,
+)
 from blizzard.hub.domain.runners.served import UnknownServedProject
+from blizzard.hub.events.broker import EventBroker
 from blizzard.wire.facts import HostFactAck, HostFactBatch
 from blizzard.wire.host import HostRecordResponse, HostReportRequest, HostRunnerAddRequest, HostRunnerView
 from blizzard.wire.runner import RunnerAddResponse, RunnerRetireRequest, RunnerRetireResponse
@@ -36,11 +56,14 @@ router = APIRouter(
     prefix="/api/fleet/host", tags=["fleet-host"], dependencies=[Depends(require_host_principal), Depends(tenant_bound)]
 )
 
+Report = FromDishka[HostReportService]
+HostFacts = FromDishka[HostFactIngestService]
 
-def _held_host(services: TenantServices, principal: HostPrincipal) -> Host | None:
+
+def _held_host(hosts: IReadHostRegistry, principal: HostPrincipal) -> Host | None:
     """The calling host's loaded record — the one its bearer token names; its row vanishing since the gate resolved it
     reads as an unresolved token."""
-    return services.hosts.get_host(principal.host_id)
+    return hosts.get_host(principal.host_id)
 
 
 def _unresolved(request: Request) -> JSONResponse:
@@ -49,8 +72,8 @@ def _unresolved(request: Request) -> JSONResponse:
     )
 
 
-def _record(services: TenantServices, principal: HostPrincipal, host: Host) -> HostRecordResponse:
-    runners = services.registry.list_runners(host_id=host.host_id)
+def _record(registry: IReadRunnerRegistry, principal: HostPrincipal, host: Host) -> HostRecordResponse:
+    runners = registry.list_runners(host_id=host.host_id)
     return HostRecordResponse(
         host_id=host.host_id,
         tenant_id=principal.tenant_id,
@@ -62,9 +85,13 @@ def _record(services: TenantServices, principal: HostPrincipal, host: Host) -> H
 
 
 @router.post("", response_model=HostRecordResponse)
+@inject_sync
 def report_host(
     request: HostReportRequest,
-    services: Services,
+    hosts: Hosts,
+    registry: Runners,
+    report: Report,
+    events: Events,
     principal: Annotated[HostPrincipal, Depends(require_host_principal)],
     http_request: Request,
 ) -> HostRecordResponse | JSONResponse:
@@ -73,11 +100,11 @@ def report_host(
     The hub never rejects a report over its content — it doubles as the heartbeat every tick. A ``name`` another live
     host holds is not recorded, and the answer carries the name the hub holds. The ``host-changed`` frame is published
     only when the report changed what the hub held, or found the host offline. A retired host is refused 403."""
-    held = _held_host(services, principal)
+    held = _held_host(hosts, principal)
     if held is None:
         return _unresolved(http_request)
     try:
-        reported = services.host_report.report(
+        reported = report.report(
             held,
             HostReport(
                 name=request.name,
@@ -93,54 +120,68 @@ def report_host(
     except HostRetired as exc:
         return problem_response(problems.host_retired_problem(exc, instance=http_request.url.path))
     if reported.changed:
-        services.events.publish_host_changed(held.host_id, kind="reported", host_name=reported.name)
-    refreshed = _held_host(services, principal)
+        events.publish_host_changed(held.host_id, kind="reported", host_name=reported.name)
+    refreshed = _held_host(hosts, principal)
     if refreshed is None:
         return _unresolved(http_request)
-    return _record(services, principal, refreshed)
+    return _record(registry, principal, refreshed)
 
 
 @router.get("", response_model=HostRecordResponse)
+@inject_sync
 def get_host_record(
-    services: Services,
+    hosts: Hosts,
+    registry: Runners,
     principal: Annotated[HostPrincipal, Depends(require_host_principal)],
     http_request: Request,
 ) -> HostRecordResponse | JSONResponse:
     """The calling host's own record, and the runners the hub holds under it that are not retired."""
-    host = _held_host(services, principal)
+    host = _held_host(hosts, principal)
     if host is None:
         return _unresolved(http_request)
-    return _record(services, principal, host)
+    return _record(registry, principal, host)
 
 
 @router.post("/runners", response_model=RunnerAddResponse, status_code=status.HTTP_201_CREATED)
+@inject_sync
 def add_host_runner(
     request: HostRunnerAddRequest,
-    services: Services,
+    hosts: Hosts,
+    host_enrollment: HostEnrollment,
+    events: Events,
     principal: Annotated[HostPrincipal, Depends(require_host_principal)],
     http_request: Request,
 ) -> RunnerAddResponse | JSONResponse:
     """Add a runner under the calling host, in the host's tenant, as an operator's add would — its id and bearer token
     are minted together and the plaintext token is returned once. An entry of ``projects`` naming no project of the
     tenant is refused 422, and a host retired before the add lands 403; nothing is added."""
-    host = _held_host(services, principal)
+    host = _held_host(hosts, principal)
     if host is None:
         return _unresolved(http_request)
     try:
-        added = services.host_enrollment.add_runner(host, request.name, by=host.name, projects=request.projects)
+        added = host_enrollment.add_runner(host, request.name, by=host.name, projects=request.projects)
     except UnknownServedProject as exc:
         return problem_response(problems.unknown_served_project_problem(exc, instance=http_request.url.path))
     except HostRetired as exc:
         return problem_response(problems.host_retired_problem(exc, instance=http_request.url.path))
-    services.events.publish_runner_changed(added.runner_id, kind="added", runner_name=added.name, by=host.name)
+    events.publish_runner_changed(added.runner_id, kind="added", runner_name=added.name, by=host.name)
     return RunnerAddResponse(runner_id=added.runner_id, runner_name=added.name, token=added.token)
 
 
 @router.post("/runners/{runner_id}/retire", response_model=RunnerRetireResponse)
+@inject_sync
 def retire_host_runner(
     runner_id: str,
     request: RunnerRetireRequest,
-    services: Services,
+    registry: Runners,
+    fleet: Fleet,
+    clock: Clock,
+    projects: Projects,
+    hosts: Hosts,
+    executors: Executors,
+    routes: Routes,
+    events: Events,
+    frames: Frames,
     principal: Annotated[HostPrincipal, Depends(require_host_principal)],
     http_request: Request,
 ) -> RunnerRetireResponse | JSONResponse:
@@ -148,63 +189,61 @@ def retire_host_runner(
     chunk unless ``force``. A runner that does not stand under the calling host is refused as unknown (404), and a
     retire — a re-run included — whose runner was retired or reinstated after it was read is refused 409, revoking no
     token and releasing no route the runner holds since; what it committed first is still published."""
-    registration = services.registry.get_runner(runner_id)
+    registration = registry.get_runner(runner_id)
     if registration is None or registration.host_id != principal.host_id:
         return problem_response(problems.runner_not_found_problem(runner_id, instance=http_request.url.path))
-    held = services.chunks.route.live_routes_of_runner(runner_id)
-    changes = chunk_events.ChunkChanged.before_many(services.chunk_frames, [r.chunk_id for r in held])
+    held = routes.live_routes_of_runner(runner_id)
+    changes = chunk_events.ChunkChanged.before_many(frames, [r.chunk_id for r in held])
     try:
-        outcome: RetireOutcome = services.fleet.retire(registration, by=request.by, force=request.force)
+        outcome: RetireOutcome = fleet.retire(registration, by=request.by, force=request.force)
     except RetireInterrupted as exc:
-        publish_retirement(services, registration, exc.committed, by=request.by, changes=changes)
+        publish_retirement(events, frames, registration, exc.committed, by=request.by, changes=changes)
         return problem_response(problems.runner_retire_interrupted_problem(exc, instance=http_request.url.path))
     except RunnerHoldsRoutes as exc:
         return problem_response(problems.runner_holds_routes_problem(exc, instance=http_request.url.path))
     except RunnerLifecycleConflict as exc:
         return problem_response(problems.runner_lifecycle_conflict_problem(exc, instance=http_request.url.path))
-    publish_retirement(services, registration, outcome, by=request.by, changes=changes)
-    refreshed = services.registry.get_runner(runner_id)
+    publish_retirement(events, frames, registration, outcome, by=request.by, changes=changes)
+    refreshed = registry.get_runner(runner_id)
     assert refreshed is not None  # just retired, so the runner exists
 
     return RunnerRetireResponse(
-        runner=registry_view(
-            services.fleet.get_liveness(refreshed),
-            now=services.clock.now(),
-            projects=served_projects(services, refreshed.served),
-            hosts=hosts_of(services, [refreshed]),
-            executors=executors_for(services, [refreshed]),
-        ),
+        runner=RunnerReads(registry, fleet, clock, projects, hosts, executors).detail(refreshed),
         released_chunk_ids=[r.chunk_id for r in outcome.released],
     )
 
 
-def _publish_spenders(services: TenantServices, host: Host, slugs: frozenset[str]) -> None:
+def _publish_spenders(registry: IReadRunnerRegistry, events: EventBroker, host: Host, slugs: frozenset[str]) -> None:
     """Publish the ``runner_changed(external-usage)`` frame for each live runner under ``host`` spending a slug the
     push wrote."""
-    for runner in services.registry.list_runners(host_id=host.host_id):
+    for runner in registry.list_runners(host_id=host.host_id):
         if runner.subscription in slugs:
-            services.events.publish_runner_changed(runner.runner_id, kind="external-usage", runner_name=runner.name)
+            events.publish_runner_changed(runner.runner_id, kind="external-usage", runner_name=runner.name)
 
 
 @router.post("/events", response_model=HostFactAck)
+@inject_sync
 def ingest_host_facts(
     batch: HostFactBatch,
-    services: Services,
+    hosts: Hosts,
+    registry: Runners,
+    host_facts: HostFacts,
+    events: Events,
     principal: Annotated[HostPrincipal, Depends(require_host_principal)],
     http_request: Request,
 ) -> HostFactAck | JSONResponse:
     """Land the calling host's own facts — its subscription usage samples and misses — idempotent on the batch's
     per-host ``seq`` high-water mark; 403 when the host is retired. A fact of any other kind is rejected in the ack
     and holds the mark behind it."""
-    host = _held_host(services, principal)
+    host = _held_host(hosts, principal)
     if host is None:
         return _unresolved(http_request)
     try:
-        result = services.host_facts.ingest(host, pushed_facts(batch))
+        result = host_facts.ingest(host, pushed_facts(batch))
     except HostRetired as exc:
         return problem_response(problems.host_retired_problem(exc, instance=http_request.url.path))
     if result.slugs:
-        _publish_spenders(services, host, result.slugs)
+        _publish_spenders(registry, events, host, result.slugs)
     return HostFactAck(
         host_id=host.host_id,
         high_water=result.high_water,

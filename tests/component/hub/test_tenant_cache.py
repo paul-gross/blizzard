@@ -16,12 +16,14 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy import Engine, event
 
+from blizzard import __version__
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.foundation.registry.interface import Lifetime, port
 from blizzard.foundation.registry.scopes import ScopeValues, open_child, supply
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.api.chunk_events import announce_minted
+from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.composition import (
     HubCore,
     HubServices,
@@ -61,6 +63,7 @@ def _core(tmp_path: Path) -> tuple[HubCore, Engine]:
         config=config,
         platform_tracing=DisabledPlatformTracing(),
         environ={},
+        versions=HubVersionWindow(__version__, VERSION_WINDOW),
     )
     return core, engine
 
@@ -236,7 +239,6 @@ def _served(core: HubCore) -> HubServices:
     return build_services(
         core,
         follow_latest_default=False,
-        version_window=VERSION_WINDOW,
         extractors=shipped_extractors(),
         cadences_on=lambda: False,
         announce_minted=announce_minted,
