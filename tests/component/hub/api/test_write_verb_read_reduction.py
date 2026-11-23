@@ -14,8 +14,6 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
-from blizzard.hub.auth.models import Session
-from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
@@ -78,22 +76,18 @@ def _record_calls(monkeypatch: pytest.MonkeyPatch, store_type: type, method: str
 
 @dataclass
 class _CountingSessions:
-    """Forwards ``get_by_hash`` to the hub's real session repository, counting calls —
-    the identity-resolution seam a session-gated route reaches through."""
+    """Counts ``get_by_hash`` on the hub's session repository — the identity-resolution seam a
+    session-gated route reaches through the process container."""
 
-    inner: IReadSessionRepository
-    get_by_hash_calls: int = 0
+    calls: list[tuple[str, Any]]
 
-    def get_by_hash(self, id_hash: str) -> Session | None:
-        self.get_by_hash_calls += 1
-        return self.inner.get_by_hash(id_hash)
+    @property
+    def get_by_hash_calls(self) -> int:
+        return len(self.calls)
 
 
-def _wire_counting_sessions(hub: HubHarness) -> _CountingSessions:
-    counting = _CountingSessions(hub.hub_services.sessions)
-    assert hub.app is not None
-    hub.app.state.services = replace(hub.hub_services, sessions=counting)
-    return counting
+def _wire_counting_sessions(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> _CountingSessions:
+    return _CountingSessions(_record_calls(monkeypatch, type(hub.hub_services.sessions), "get_by_hash"))
 
 
 # --- facts-load counting: pause, stop, question-answer -----------------------------
@@ -166,7 +160,9 @@ def _superuser_cookie(hub: HubHarness) -> dict[str, str]:
     return {"Cookie": f"bz_session={token}"}
 
 
-def test_answer_question_resolves_the_session_exactly_once_under_oauth(tmp_path: Path) -> None:
+def test_answer_question_resolves_the_session_exactly_once_under_oauth(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Before: 2 (``require(QUESTION_ANSWER)``'s own resolve, plus ``resolved_username``'s
     separate manual resolve). After: 1 — a single ``Depends(require(...))`` parameter."""
     hub = build_hub(tmp_path, auth_mode="oauth")
@@ -196,7 +192,7 @@ def test_answer_question_resolves_the_session_exactly_once_under_oauth(tmp_path:
         headers=cookie,
     )
     assert asked.status_code == 201, asked.text
-    counting = _wire_counting_sessions(hub)
+    counting = _wire_counting_sessions(hub, monkeypatch)
 
     resp = hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"}, headers=cookie)
 
@@ -204,13 +200,15 @@ def test_answer_question_resolves_the_session_exactly_once_under_oauth(tmp_path:
     assert counting.get_by_hash_calls == 1
 
 
-def test_resolve_decision_resolves_the_session_exactly_once_under_oauth(tmp_path: Path) -> None:
+def test_resolve_decision_resolves_the_session_exactly_once_under_oauth(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Before: 2 (``require(GATE_RESOLVE)``'s own resolve, plus ``resolved_username``'s
     separate manual resolve). After: 1 — a single ``Depends(require(...))`` parameter."""
     hub = build_hub(tmp_path, auth_mode="oauth")
     cookie = _superuser_cookie(hub)
     decision_id = _open_decision_under_oauth(hub, cookie)
-    counting = _wire_counting_sessions(hub)
+    counting = _wire_counting_sessions(hub, monkeypatch)
 
     resp = hub.client.post(f"/api/decisions/{decision_id}/resolutions", json={"choice": "approve"}, headers=cookie)
 

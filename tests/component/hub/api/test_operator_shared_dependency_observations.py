@@ -22,6 +22,7 @@ from tests.support.hub_request_auth import bearer, cookie
 from tests.support.operator_dependency_discovery import operator_dependencies
 from tests.support.refusal_observation import RefusalObservation, observe_refusal, refusal_mismatches
 from tests.support.scaffolding import HubHarness, build_hub, link_project, seed_project, seed_session, seed_user
+from tests.support.store_free_process import store_free
 
 Operation = tuple[str, str]
 _PARAMETER = re.compile(r"\{([^}:]+)(?::[^}]+)?\}")
@@ -147,14 +148,14 @@ def test_tenant_refusals_match_each_operation(tmp_path: Path) -> None:
 def test_store_unavailable_refusals_match_each_operation(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     assert hub.app is not None
-    hub.app.state.services = None
-    mismatches = _observe_each(
-        hub,
-        _declaring(503, HubStoreUnavailableProblem),
-        503,
-        HubStoreUnavailableProblem,
-        lambda client, method, path: client.request(method, _url(path), json={}),
-    )
+    with store_free(hub.app):
+        mismatches = _observe_each(
+            hub,
+            _declaring(503, HubStoreUnavailableProblem),
+            503,
+            HubStoreUnavailableProblem,
+            lambda client, method, path: client.request(method, _url(path), json={}),
+        )
     assert mismatches == []
 
 

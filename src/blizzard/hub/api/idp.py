@@ -90,7 +90,6 @@ class IdpSurface:
     def keys(self) -> SigningKeyService | None:
         return self.resolver.get(SigningKeyService | None)
 
-    @property
     def signing(self) -> SigningKeyService:
         keys = self.keys
         if keys is None:
@@ -360,5 +359,5 @@ def cli_token(request: Request, body: CliTokenRequest) -> CliTokenResponse | JSO
 def rotate_signing_key(request: Request) -> Response:
     """Mint a fresh current signing key, demoting the old current to previous.
     Human-plane, gated on the hub-level ``hub-admin:grant`` and closed to a runner bearer token."""
-    IdpSurface.of(request).signing.rotate()
+    IdpSurface.of(request).signing().rotate()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

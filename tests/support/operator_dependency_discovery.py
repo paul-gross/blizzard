@@ -87,11 +87,13 @@ def operator_dependencies(app: Any) -> OperatorDependencies:
         if hub_level.hub_services in calls:
             store.add(operation)
         if auth_session.resolve_tenant in calls:
+            store.add(operation)  # it resolves the open tenants, which a store-free hub declares absent
             tenant.add(operation)
             authentication.add(operation)
         gates = [permissions for call in calls if (permissions := _gate_permissions(call)) is not None]
         if any(_made_by(call, auth_session.require_hub) for call in calls):
             authentication.add(operation)
+            store.add(operation)  # it resolves the session reader, which a store-free hub declares absent
         if any(not permissions <= floor for permissions in gates):
             permission.add(operation)
         if any(_made_by(call, flag_guard.flag_guard) for call in calls):

@@ -24,6 +24,7 @@ from blizzard.wire.problem import HubStoreUnavailableProblem
 from blizzard.wire.runner import RunnerRetiredProblem
 from tests.support.refusal_observation import RefusalObservation, coverage_mismatches, observe_refusal
 from tests.support.scaffolding import added_runner, build_hub, seed_runner, seed_session, seed_user
+from tests.support.store_free_process import store_free
 
 _PATH = "/api/auth/authorize"
 _REDIRECT = "https://runner.example/callback"
@@ -81,6 +82,6 @@ def test_authorize_problem_variants_match_runtime_responses(tmp_path: Path) -> N
         hub.client.get(_PATH, params={**_PARAMS, "client": "hs_test"}, follow_redirects=False), 403, HostRetiredProblem
     )
 
-    hub.app.state.services = None
-    observe(hub.client.get(_PATH, params=_PARAMS), 503, HubStoreUnavailableProblem)
+    with store_free(hub.app):
+        observe(hub.client.get(_PATH, params=_PARAMS), 503, HubStoreUnavailableProblem)
     assert coverage_mismatches(hub.app.openapi(), {("get", _PATH)}, observations) == []
