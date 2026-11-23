@@ -178,6 +178,7 @@ from blizzard.hub.domain.observability.tracing.repository import (
     TraceCheckpoint,
 )
 from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments
+from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectEdit, ProjectId, ProjectSlug
 from blizzard.hub.domain.projects.order import IReadProjectPositions
@@ -2504,18 +2505,19 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         )
 
     # --- projects and their links: last, so every write above lands in the tenant's one project ----
+    authoring = hub.default_adapter(ProjectAuthoring)
     [project] = hub.services.projects.list_all()
     census_source = hub.services.work_source_records.resolve("census-source")
     census_repo = hub.services.repository_records.resolve("census-repo")
     assert census_source is not None and census_repo is not None
-    source_link = hub.services.project_authoring.link_source(project, census_source, operator)
-    hub.services.project_authoring.unlink_source(source_link, operator)
-    hub.services.project_authoring.link_source(project, census_source, operator)
-    hub.services.project_authoring.link_repository(project, census_repo, operator)
-    hub.services.project_authoring.position_repository(project, census_repo, operator)
+    source_link = authoring.link_source(project, census_source, operator)
+    authoring.unlink_source(source_link, operator)
+    authoring.link_source(project, census_source, operator)
+    authoring.link_repository(project, census_repo, operator)
+    authoring.position_repository(project, census_repo, operator)
     hub.services.config_authoring.edit_repository(census_repo, RepositoryEdit(slug="census-repository"), operator)
     hub.services.config_authoring.edit_work_source(census_source, WorkSourceEdit(slug="census-work-source"), operator)
-    project = hub.services.project_authoring.edit(project, ProjectEdit(slug="census"), operator)
+    project = authoring.edit(project, ProjectEdit(slug="census"), operator)
 
     # --- cadence errand runs: the census cadence's `all` chore minted once per errand ----------
     census_facts = CadenceAttention(

@@ -11,6 +11,7 @@ from __future__ import annotations
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Header, status
 
 from blizzard.auth_core import Permission
@@ -18,21 +19,26 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import PathProject
 from blizzard.hub.api.repository_params import PathRepository
 from blizzard.hub.api.work_source_params import configurable_work_source, resolved_work_source
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.landing_policies import landing_sort_key
-from blizzard.hub.domain.config.repositories import ConfiguredRepository
-from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, is_built_in
+from blizzard.hub.domain.config.repositories import ConfiguredRepository, IReadRepositoryRecordRepository
+from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, IReadWorkSourceRepository, is_built_in
 from blizzard.hub.domain.kernel.unset import UNSET
-from blizzard.hub.domain.projects.links import BuiltInSourceLink, RepositoryLink, SourceLink, built_in_source_link
-from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectSlugTaken
+from blizzard.hub.domain.projects.authoring import ProjectAuthoring
+from blizzard.hub.domain.projects.links import (
+    BuiltInSourceLink,
+    IReadProjectLinks,
+    RepositoryLink,
+    SourceLink,
+    built_in_source_link,
+)
+from blizzard.hub.domain.projects.model import IReadProjectRepository, Project, ProjectEdit, ProjectSlugTaken
 from blizzard.hub.domain.projects.order import LandingOrderConflict, RepositoryNotLinked
 from blizzard.wire.project import (
     LandingOrderRequest,
@@ -55,6 +61,11 @@ router = APIRouter(
 _VIEW = Depends(require(Permission.FLEET_VIEW))
 Editor = Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))]
 IfMatch = Annotated[int | None, Header()]
+Authoring = FromDishka[ProjectAuthoring]
+ProjectReads = FromDishka[IReadProjectRepository]
+LinkReads = FromDishka[IReadProjectLinks]
+RepositoryReads = FromDishka[IReadRepositoryRecordRepository]
+WorkSourceReads = FromDishka[IReadWorkSourceRepository]
 
 
 def _view(record: Project) -> ProjectView:
@@ -134,21 +145,23 @@ def _edit(request: ProjectPatchRequest) -> ProjectEdit:
 
 
 @router.get("/projects", response_model=ProjectsListView, dependencies=[_VIEW])
-def list_projects(services: Services) -> ProjectsListView:
+@inject_sync
+def list_projects(projects: ProjectReads) -> ProjectsListView:
     """Every project of the tenant, by slug."""
-    return ProjectsListView(projects=[_view(record) for record in services.projects.list_all()])
+    return ProjectsListView(projects=[_view(record) for record in projects.list_all()])
 
 
 @router.post("/projects", response_model=ProjectView, status_code=status.HTTP_201_CREATED)
+@inject_sync
 def create_project(
-    request: ProjectCreateRequest, identity: Editor, door: RequestDoor, services: Services
+    request: ProjectCreateRequest, identity: Editor, door: RequestDoor, authoring: Authoring
 ) -> ProjectView:
     """Store a new project at revision 1, serving no source or repository but the built-in ``hub`` source until it is
     linked. With no ``color``, it takes the tenant's least-used one. 422 naming the field for a malformed slug, a blank
     or padded name or a color that is neither a palette name nor a #rrggbb; 409 when the slug is another project's
     current slug."""
     try:
-        record = services.project_authoring.create(
+        record = authoring.create(
             request.slug,
             request.name,
             change_context(identity, door),
@@ -163,18 +176,20 @@ def create_project(
 
 
 @router.get("/projects/{project}", response_model=ProjectView, dependencies=[_VIEW])
+@inject_sync
 def get_project(project: PathProject) -> ProjectView:
     """One project, named by its id, its slug, or a slug it left. 404 when it names none."""
     return _view(project)
 
 
 @router.patch("/projects/{project}", response_model=ProjectView)
+@inject_sync
 def patch_project(
     project: PathProject,
     request: ProjectPatchRequest,
     identity: Editor,
     door: RequestDoor,
-    services: Services,
+    authoring: Authoring,
     if_match: IfMatch = None,
 ) -> ProjectView:
     """Apply only the fields present; an explicit `null` is refused naming the field. A patch that changes nothing
@@ -182,7 +197,7 @@ def patch_project(
     stale `If-Match` (naming the current revision) or a slug another project holds; 422 naming the field."""
     edit = _edit(request)
     try:
-        edited = services.project_authoring.edit(project, edit, change_context(identity, door), if_match=if_match)
+        edited = authoring.edit(project, edit, change_context(identity, door), if_match=if_match)
     except ConfigFieldError as exc:
         raise _unprocessable(exc.field, exc.message) from exc
     except (ConfigRevisionConflict, ProjectSlugTaken) as exc:
@@ -194,23 +209,26 @@ def patch_project(
 
 
 @router.get("/projects/{project}/source-links", response_model=SourceLinksView, dependencies=[_VIEW])
-def list_source_links(project: PathProject, services: Services) -> SourceLinksView:
+@inject_sync
+def list_source_links(project: PathProject, links: LinkReads, work_sources: WorkSourceReads) -> SourceLinksView:
     """The project's standing source links by source id, each with the source's current slug, the built-in ``hub``
     source among them. 404 when the project is unknown."""
-    links = services.project_links.sources_of(project.project_id)
-    held = services.work_source_records.get_many([link.work_source_id for link in links])
-    views = [_source_view(link, held.get(link.work_source_id)) for link in links]
+    standing = links.sources_of(project.project_id)
+    held = work_sources.get_many([link.work_source_id for link in standing])
+    views = [_source_view(link, held.get(link.work_source_id)) for link in standing]
     views.append(_built_in_view(built_in_source_link(project)))
     return SourceLinksView(source_links=sorted(views, key=lambda view: view.slug or view.name))
 
 
 @router.put("/projects/{project}/source-links/{source}", response_model=SourceLinkView)
+@inject_sync
 def link_source(
     project: PathProject,
     source: str,
     identity: Editor,
     door: RequestDoor,
-    services: Services,
+    authoring: Authoring,
+    work_sources: WorkSourceReads,
     if_match: IfMatch = None,
 ) -> SourceLinkView:
     """Link the project to a stored work source, named by its id or slug (a slug it left included), retired or not —
@@ -218,34 +236,35 @@ def link_source(
     are. 404 for an unknown project or source; 409 for a stale `If-Match` on a stored link."""
     if is_built_in(source):
         return _built_in_view(built_in_source_link(project))
-    record = resolved_work_source(source, services.work_source_records)
+    record = resolved_work_source(source, work_sources)
     try:
-        link = services.project_authoring.link_source(
-            project, record, change_context(identity, door), if_match=if_match
-        )
+        link = authoring.link_source(project, record, change_context(identity, door), if_match=if_match)
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
     return _source_view(link, record)
 
 
 @router.post("/projects/{project}/source-links/{source}/retire", response_model=SourceLinkView)
+@inject_sync
 def unlink_source(
     project: PathProject,
     source: str,
     identity: Editor,
     door: RequestDoor,
-    services: Services,
+    authoring: Authoring,
+    links: LinkReads,
+    work_sources: WorkSourceReads,
     if_match: IfMatch = None,
 ) -> SourceLinkView:
     """Unlink the project from a work source, named by its id or slug, by retiring the link; unlinking an unlinked
     link changes nothing. 404 for an unknown project or source, or a source it never linked; 409 for the built-in
     ``hub`` source, which every project draws from, and for a stale `If-Match`."""
-    record = configurable_work_source(source, services.work_source_records)
-    link = services.project_links.source_link(project.project_id, record.work_source_id)
+    record = configurable_work_source(source, work_sources)
+    link = links.source_link(project.project_id, record.work_source_id)
     if link is None:
         raise _not_found(f"project {project.slug} has no link to work source {record.slug!r}")
     try:
-        unlinked = services.project_authoring.unlink_source(link, change_context(identity, door), if_match=if_match)
+        unlinked = authoring.unlink_source(link, change_context(identity, door), if_match=if_match)
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
     return _source_view(unlinked, record)
@@ -255,65 +274,67 @@ def unlink_source(
 
 
 @router.get("/projects/{project}/repository-links", response_model=RepositoryLinksView, dependencies=[_VIEW])
-def list_repository_links(project: PathProject, services: Services) -> RepositoryLinksView:
+@inject_sync
+def list_repository_links(project: PathProject, links: LinkReads, repositories: RepositoryReads) -> RepositoryLinksView:
     """The project's standing repository links in landing order, each with its `position` — null when unranked.
     404 when the project is unknown."""
-    return _repository_links(project, services)
+    return _repository_links(project, links, repositories)
 
 
-def _repository_links(project: Project, services: TenantServices) -> RepositoryLinksView:
+def _repository_links(
+    project: Project, links: IReadProjectLinks, repositories: IReadRepositoryRecordRepository
+) -> RepositoryLinksView:
     """The project's standing repository links, in landing order."""
-    links = services.project_links.repositories_of(project.project_id)
-    held = services.repository_records.get_many([link.repository_id for link in links])
-    views = [_repository_view(link, held[link.repository_id]) for link in links]
+    standing = links.repositories_of(project.project_id)
+    held = repositories.get_many([link.repository_id for link in standing])
+    views = [_repository_view(link, held[link.repository_id]) for link in standing]
     return RepositoryLinksView(
         repository_links=sorted(views, key=lambda view: landing_sort_key(view.position, view.slug))
     )
 
 
 @router.put("/projects/{project}/repository-links/{repository}", response_model=RepositoryLinkView)
+@inject_sync
 def link_repository(
     identity: Editor,
     project: PathProject,
     repository: PathRepository,
     door: RequestDoor,
-    services: Services,
+    authoring: Authoring,
     if_match: IfMatch = None,
 ) -> RepositoryLinkView:
     """Link the project to a stored repository, retired or not — a first link, or a relink of one it unlinked; a
     standing link is left as it is. 404 for an unknown project or repository; 409 for a stale `If-Match` on a stored
     link."""
     try:
-        link = services.project_authoring.link_repository(
-            project, repository, change_context(identity, door), if_match=if_match
-        )
+        link = authoring.link_repository(project, repository, change_context(identity, door), if_match=if_match)
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
     return _repository_view(link, repository)
 
 
 @router.patch("/projects/{project}/repository-links/{repository}", response_model=RepositoryLinkView)
+@inject_sync
 def patch_repository_link(
     identity: Editor,
     project: PathProject,
     repository: PathRepository,
     request: RepositoryLinkPatchRequest,
     door: RequestDoor,
-    services: Services,
+    authoring: Authoring,
+    links: LinkReads,
     if_match: IfMatch = None,
 ) -> RepositoryLinkView:
     """Apply only the fields present: `base_branch` names the link's own integration branch, and an explicit `null`
     clears it so the link inherits the repository's `base_branch` again. A patch that changes nothing writes nothing;
     whether the branch exists is not checked. 404 for an unknown project or a repository it never linked; 409 for a
     stale `If-Match` (naming the current revision); 422 on `base_branch` for a name that is no git branch name."""
-    link = services.project_links.repository_link(project.project_id, repository.repository_id)
+    link = links.repository_link(project.project_id, repository.repository_id)
     if link is None:
         raise _not_found(f"project {project.slug} has no link to repository {repository.slug!r}")
     base_branch = request.base_branch if "base_branch" in request.model_fields_set else UNSET
     try:
-        edited = services.project_authoring.set_base_branch(
-            link, base_branch, change_context(identity, door), if_match=if_match
-        )
+        edited = authoring.set_base_branch(link, base_branch, change_context(identity, door), if_match=if_match)
     except ConfigFieldError as exc:
         raise _unprocessable(exc.field, exc.message) from exc
     except ConfigRevisionConflict as exc:
@@ -322,21 +343,23 @@ def patch_repository_link(
 
 
 @router.post("/projects/{project}/repository-links/{repository}/retire", response_model=RepositoryLinkView)
+@inject_sync
 def unlink_repository(
     identity: Editor,
     project: PathProject,
     repository: PathRepository,
     door: RequestDoor,
-    services: Services,
+    authoring: Authoring,
+    links: LinkReads,
     if_match: IfMatch = None,
 ) -> RepositoryLinkView:
     """Unlink the project from a repository by retiring the link; unlinking an unlinked link changes nothing. 404 for
     an unknown project or a repository it never linked; 409 for a stale `If-Match`."""
-    link = services.project_links.repository_link(project.project_id, repository.repository_id)
+    link = links.repository_link(project.project_id, repository.repository_id)
     if link is None:
         raise _not_found(f"project {project.slug} has no link to repository {repository.slug!r}")
     try:
-        unlinked = services.project_authoring.unlink_repository(link, change_context(identity, door), if_match=if_match)
+        unlinked = authoring.unlink_repository(link, change_context(identity, door), if_match=if_match)
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
     return _repository_view(unlinked, repository)
@@ -345,22 +368,27 @@ def unlink_repository(
 # --- Landing order -----------------------------------------------------------------------------------------------
 
 
-def _linked_repository(reference: str, field: str, project: Project, services: TenantServices) -> ConfiguredRepository:
+def _linked_repository(
+    reference: str, field: str, project: Project, repositories: IReadRepositoryRecordRepository
+) -> ConfiguredRepository:
     """The repository ``reference`` names, by id, slug or former slug; a reference naming none names no repository the
     project links."""
-    found = services.repository_records.resolve(reference)
+    found = repositories.resolve(reference)
     if found is None:
         raise RepositoryNotLinked(field, reference, project.slug)
     return found
 
 
 @router.put("/projects/{project}/landing-order", response_model=RepositoryLinksView)
+@inject_sync
 def put_landing_order(
     project: PathProject,
     request: LandingOrderRequest,
     identity: Editor,
     door: RequestDoor,
-    services: Services,
+    authoring: Authoring,
+    links: LinkReads,
+    repositories: RepositoryReads,
 ) -> RepositoryLinksView:
     """Rank `repositories` `1.0`, `2.0`, … in the list's order and leave every other linked repository unranked,
     writing a fact only for a link whose position changes — putting the order the project has writes nothing.
@@ -368,22 +396,25 @@ def put_landing_order(
     repository the project does not link, and 422 for one named twice; 409 `landing_order_conflict` when concurrent
     landing-order writes keep changing the order between this one's read and its write."""
     try:
-        repositories = [_linked_repository(ref, "repositories", project, services) for ref in request.repositories]
-        services.project_authoring.order_repositories(project, repositories, change_context(identity, door))
+        ranked = [_linked_repository(ref, "repositories", project, repositories) for ref in request.repositories]
+        authoring.order_repositories(project, ranked, change_context(identity, door))
     except ConfigFieldError as exc:
         raise _unprocessable(exc.field, exc.message, exc.code) from exc
     except LandingOrderConflict as exc:
         raise _landing_order_conflict(exc) from exc
-    return _repository_links(project, services)
+    return _repository_links(project, links, repositories)
 
 
 @router.post("/projects/{project}/landing-order/position", response_model=RepositoryLinksView)
+@inject_sync
 def position_repository(
     project: PathProject,
     request: LandingPositionRequest,
     identity: Editor,
     door: RequestDoor,
-    services: Services,
+    authoring: Authoring,
+    links: LinkReads,
+    repositories: RepositoryReads,
 ) -> RepositoryLinksView:
     """Move `repository` to just after `after_repository`, to the front when that is null, or to unranked with
     `unranked: true`, writing one fact at the midpoint between its new neighbours — after renumbering the ranked
@@ -393,17 +424,17 @@ def position_repository(
     `landing_order_conflict` when concurrent landing-order writes keep changing the order between this one's read and
     its write."""
     try:
-        repository = _linked_repository(request.repository, "repository", project, services)
+        repository = _linked_repository(request.repository, "repository", project, repositories)
         after = (
             None
             if request.after_repository is None
-            else _linked_repository(request.after_repository, "after_repository", project, services)
+            else _linked_repository(request.after_repository, "after_repository", project, repositories)
         )
-        services.project_authoring.position_repository(
+        authoring.position_repository(
             project, repository, change_context(identity, door), after=after, unranked=request.unranked
         )
     except ConfigFieldError as exc:
         raise _unprocessable(exc.field, exc.message, exc.code) from exc
     except LandingOrderConflict as exc:
         raise _landing_order_conflict(exc) from exc
-    return _repository_links(project, services)
+    return _repository_links(project, links, repositories)

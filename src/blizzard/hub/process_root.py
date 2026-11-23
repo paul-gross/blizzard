@@ -30,6 +30,7 @@ from blizzard.hub.domain.config_apply import wiring as config_apply
 from blizzard.hub.domain.garden import wiring as garden_area
 from blizzard.hub.domain.garden.findings import wiring as findings
 from blizzard.hub.domain.graph import wiring as graph_area
+from blizzard.hub.domain.projects import wiring as projects
 from blizzard.hub.domain.urgency import wiring as urgency_area
 from blizzard.hub.events import wiring as events
 from blizzard.hub.forge import wiring as forge
@@ -95,6 +96,7 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
         garden_area.register(registry)
         cadence_area.register(registry)
         _register_config(registry)
+        _register_projects(registry)
         config_apply.register(registry)
         live_config.register(registry)
         forge.register_tenant(registry)
@@ -113,6 +115,8 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
         cadence_area.register_absent(registry)
         store.register_config_absent(registry)
         config_wiring.register_absent(registry)
+        store.register_projects_absent(registry)
+        projects.register_absent(registry)
         config_apply.register_absent(registry)
         live_config.register_absent(registry)
         forge.register_tenant_absent(registry)
@@ -123,6 +127,18 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
     else:
         settings_wiring.register_boot_source(registry)
         settings_wiring.register_absent(registry)
+
+
+def _register_projects(registry: LegacyRegistry) -> None:
+    """The project adapters, and the projects area's ports and services over them."""
+    refs = store.register_projects(registry)
+    projects.register(
+        registry,
+        projects=refs.projects,
+        links=refs.links,
+        positions=refs.positions,
+        chunk_targets=refs.chunk_targets,
+    )
 
 
 def _register_urgency(registry: LegacyRegistry) -> None:

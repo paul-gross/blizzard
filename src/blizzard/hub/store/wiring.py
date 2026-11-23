@@ -81,7 +81,6 @@ _TENANT_SERVICES: tuple[type[Any], ...] = (
     HostRegistryStore,
     GardenProposalStore,
     GardenProposalClosureStore,
-    ChunkTargetsStore,
     InvitationStore,
     TranscriptSegmentStore,
     TranscriptEventStore,
@@ -115,9 +114,6 @@ class StoreRefs:
 #: The tenant services a legacy-bridge alias targets, registered apart so their ``Ref`` is handed back.
 _TENANT_ALIASED: tuple[type[Any], ...] = (
     HubTransactions,
-    ProjectStore,
-    ProjectLinkStore,
-    ProjectPositionStore,
     WorkItemStore,
     ScopeStore,
     RoutineStore,
@@ -278,6 +274,38 @@ def register_graphs(registry: Registry) -> Ref[GraphStore]:
 def register_graphs_absent(registry: Registry) -> None:
     """Declare the tenant's graph adapter absent, for the store-free graph."""
     registry.absent(port(GraphStore), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
+
+
+#: The project-area adapters, whose ``Ref`` the projects area aliases its ports onto.
+_PROJECT_SERVICES: tuple[type[Any], ...] = (ProjectStore, ProjectLinkStore, ProjectPositionStore, ChunkTargetsStore)
+
+
+@adapter_model
+@dataclass(frozen=True)
+class ProjectRefs:
+    """The ``Ref`` of each project-area adapter, named for the projects area's port it fills."""
+
+    projects: Ref[ProjectStore]
+    links: Ref[ProjectLinkStore]
+    positions: Ref[ProjectPositionStore]
+    chunk_targets: Ref[ChunkTargetsStore]
+
+
+def register_projects(registry: Registry) -> ProjectRefs:
+    """Declare the tenant's project adapters, handing back the ``Ref`` of each, which the area's ports alias."""
+    refs = StoreRefs({each: registry.service(each, lifetime=Lifetime.TENANT) for each in _PROJECT_SERVICES})
+    return ProjectRefs(
+        projects=refs.of(ProjectStore),
+        links=refs.of(ProjectLinkStore),
+        positions=refs.of(ProjectPositionStore),
+        chunk_targets=refs.of(ChunkTargetsStore),
+    )
+
+
+def register_projects_absent(registry: Registry) -> None:
+    """Declare the tenant's project adapters absent, for the store-free graph."""
+    for missing in _PROJECT_SERVICES:
+        registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
 
 
 #: The urgency adapters the urgency area aliases its ports onto.

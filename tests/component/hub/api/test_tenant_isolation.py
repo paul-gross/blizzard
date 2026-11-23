@@ -42,6 +42,7 @@ from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectId
 from blizzard.hub.store import schema
+from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
 from blizzard.hub.tenancy import StoreScope
 from tests.support.route_classes import FLEET, FLEET_CLAIM, HUB_LEVEL, HUMAN, live_routes
 from tests.support.scaffolding import (
@@ -780,7 +781,7 @@ def test_a_tenants_projects_and_links_answer_only_in_their_own_tenant(two: Two) 
         authoring = ProjectAuthoring(
             projects=own.projects,
             links=own.project_links,
-            positions=own.project_positions,
+            positions=own.tenant.get(ProjectPositionStore),
             pick=first_color,
             clock=two.hub.clock,
         )

@@ -27,8 +27,11 @@ from blizzard.hub.domain.graph.model import (
     IWriteGraphRepository,
 )
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
-from blizzard.hub.domain.projects.links import IReadProjectLinks
-from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.domain.projects.bulk_resolve import IBulkProjectLookup
+from blizzard.hub.domain.projects.links import IReadProjectLinks, IWriteProjectLinks
+from blizzard.hub.domain.projects.model import IReadProjectRepository, IWriteProjectRepository
+from blizzard.hub.domain.projects.order import IReadProjectPositions, IWriteProjectPositions
+from blizzard.hub.domain.projects.targets import ChunkTargets, IReadChunkTargets, IWriteChunkTargets
 from blizzard.hub.domain.urgency.ports import (
     IReadTenantSettings,
     IReadUrgencyChunks,
@@ -87,8 +90,8 @@ from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 ADAPTER_PORTS: Mapping[type[Any], tuple[type[Any], ...]] = {
     ScopedConnections: (),
     HubTransactions: (IHubTransactions,),
-    ProjectStore: (IReadProjectRepository,),
-    ProjectLinkStore: (IReadProjectLinks,),
+    ProjectStore: (IReadProjectRepository, IWriteProjectRepository, IBulkProjectLookup),
+    ProjectLinkStore: (IReadProjectLinks, IWriteProjectLinks),
     RunnerRegistryStore: (),
     HostRegistryStore: (),
     WorkItemStore: (),
@@ -105,8 +108,8 @@ ADAPTER_PORTS: Mapping[type[Any], tuple[type[Any], ...]] = {
     ForgeReferrersStore: (),
     CredentialReferrersStore: (),
     ConfigChangeStore: (),
-    ChunkTargetsStore: (),
-    ProjectPositionStore: (),
+    ChunkTargetsStore: (IReadChunkTargets, IWriteChunkTargets),
+    ProjectPositionStore: (IReadProjectPositions, IWriteProjectPositions),
     ConfigApplyStore: (),
     ConfigImportStore: (),
     InvitationStore: (),
@@ -149,8 +152,6 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantStores.credential_referrers", stores.credential_referrers, CredentialReferrersStore),
         ("TenantStores.config_changes", stores.config_changes, ConfigChangeStore),
         ("TenantStores.project_links", stores.project_links, ProjectLinkStore),
-        ("TenantStores.chunk_targets", stores.chunk_targets, ChunkTargetsStore),
-        ("TenantStores.project_positions", stores.project_positions, ProjectPositionStore),
         ("TenantStores.config_apply", stores.config_apply, ConfigApplyStore),
         ("TenantStores.config_import", stores.config_import, ConfigImportStore),
         ("TenantStores.invitations", stores.invitations, InvitationStore),
@@ -171,6 +172,8 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantServices.credential_records", services.credential_records, CredentialRecordStore),
         ("TenantServices.transcripts", services.transcripts, TranscriptSegmentStore),
         ("TenantServices.projects", services.projects, IReadProjectRepository),
+        ("TenantServices.project_links", services.project_links, IReadProjectLinks),
+        ("TenantServices.chunk_targets", services.chunk_targets, ChunkTargets),
         ("TenantServices.findings", services.findings, IReadFindingRepository),
         ("TenantServices.finding_bucket", services.finding_bucket, FindingBucketReader),
         ("TenantServices.graph_yaml", services.graph_yaml, IConfigCodec),

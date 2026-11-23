@@ -38,6 +38,8 @@ from blizzard.hub.domain.config.secrets import ISecretCatalog
 from blizzard.hub.domain.config_apply.service import ConfigApplication
 from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
 from blizzard.hub.domain.graph.authoring import DefaultGraphService
+from blizzard.hub.domain.projects.authoring import ProjectAuthoring
+from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.readiness import CredentialReadiness
@@ -191,9 +193,11 @@ def test_every_routes_container_dependencies_resolve_at_the_lifetime_it_runs_in(
         ("POST /api/work-sources/{source}/items", DefaultGraphService),
         ("DELETE /api/work-sources/{source}/items/{ref}", ChunkFrameLoader),
         ("GET /api/work-sources/{source}/items", IReadChunkWorkRefsRepository),
+        ("POST /api/projects", ProjectAuthoring),
+        ("GET /api/projects", IReadProjectRepository),
     }
     narrowed = ("/api/findings", "/api/config", "/api/secrets", "/api/forges", "/api/credentials", "/api/repositories")
-    narrowed += ("/api/work-sources",)
+    narrowed += ("/api/work-sources", "/api/projects")
     assert all(each.tenant for each in _hub_routes if each.route.split(" ")[1].startswith(narrowed))
     assert unresolved_route_dependencies(_hub_routes, _process) == []
 

@@ -56,6 +56,10 @@ NARROWED_MODULES: tuple[Path, ...] = tuple(
         "record_reads.py",
         "user_names.py",
         "request_config.py",
+        "projects.py",
+        "project_params.py",
+        "project_labels.py",
+        "project_label_fields.py",
         "urgencies.py",
         "settings.py",
     )
