@@ -23,7 +23,7 @@ from tests.support.scaffolding import TEST_HUB_ACTIONS
 
 def test_host_seeds_and_restarts_from_stored_values(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     init_hub(tmp_path)
-    seen: list[tuple[bool, int]] = []
+    seen: list[tuple[bool, float]] = []
 
     def serve(
         config: HubConfig,
@@ -78,7 +78,7 @@ def test_invalid_late_seed_can_be_corrected_before_retry(tmp_path: Path, monkeyp
         .replace("annotation_interval_seconds = 120", "annotation_interval_seconds = 45")
         .replace("action_pass_seconds = 300", "action_pass_seconds = -1")
     )
-    seen: list[tuple[int, int]] = []
+    seen: list[tuple[int, float]] = []
 
     def serve(
         config: HubConfig,
@@ -321,7 +321,9 @@ def test_host_instruments_shared_settings_before_seed(tmp_path: Path, monkeypatc
         assert acquisitions == [(engine, connections)]
         with handle.tracer.root("startup seed complete"):
             pass
-        core = composition.build_hub_core(connections, clock=clock, actions=TEST_HUB_ACTIONS)
+        core = composition.build_hub_core(
+            connections, clock=clock, config=config, platform_tracing=handle, environ={}, actions=TEST_HUB_ACTIONS
+        )
         assert core.store_connections is connections
         snapshot = settings.reader.snapshot()
         settings.authoring.apply(

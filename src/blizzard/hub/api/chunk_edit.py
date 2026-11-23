@@ -68,7 +68,7 @@ class ChunkPatchBody:
             reference = required_urgency_reference(self.request.urgency)
         except ConfigFieldError as exc:
             raise urgency_refusal(exc) from exc
-        urgency = stated_urgency(reference, self.services)
+        urgency = stated_urgency(reference, self.services.urgency_reading)
         assert urgency is not None, "a named reference resolves to an urgency or is refused"
         return urgency
 

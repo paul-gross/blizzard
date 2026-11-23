@@ -710,7 +710,7 @@ def run_routine(
         services.routine_run.refuse_if_retired(routine)
     except RoutineRetiredError as exc:
         raise ProblemHTTPException(partial(problems_garden.routine_not_runnable_problem, str(exc))) from exc
-    urgency = stated_urgency(request.urgency, services)
+    urgency = stated_urgency(request.urgency, services.urgency_reading)
     try:
         slug = routine.effective_scope_slug(
             ScopeSlug.parse(request.scope_slug) if request.scope_slug is not None else None
@@ -744,9 +744,9 @@ def run_routine(
     except (RoutineGraphUnresolvedError, ScopeRetiredError, RoutineRetiredError) as exc:
         raise ProblemHTTPException(partial(problems_garden.routine_not_runnable_problem, str(exc))) from exc
     except IngestConflict as exc:
-        raise ingest_conflict_refusal(services, exc) from exc
+        raise ingest_conflict_refusal(services.work_sources, exc) from exc
     # The chunk is minted `not_ready`, so its post-write status reads `not_ready`.
-    chunk_events.ChunkChanged.of(services, result.chunk_id, prev_status=None).publish(
+    chunk_events.ChunkChanged.of(services.chunk_frames, result.chunk_id, prev_status=None).publish(
         cause="minted", key=f"chunks:{result.chunk_id}"
     )
     services.events.publish_queue_changed()  # the mint adds the chunk to the backlog list

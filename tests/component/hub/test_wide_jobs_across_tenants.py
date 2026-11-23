@@ -22,7 +22,7 @@ from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.sealing import IResealSecretRepository, Reseal, SealedSecret, SecretRotationConflict
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import app as hub_app
-from blizzard.hub.composition import TenantStores, build_config_authoring, build_hub_core, connections_for_engine
+from blizzard.hub.composition import TenantStores
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.carry_over import ImportStatus
@@ -43,9 +43,9 @@ from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
 from tests.support.scaffolding import (
     OP,
-    TEST_HUB_ACTIONS,
     add_tenant,
     close_tenant,
+    configured_core,
     default_project,
     default_tenant,
     hub_scoped,
@@ -78,13 +78,11 @@ class _Hub:
     second: TenantId
 
     def stores(self, tenant: TenantId) -> TenantStores:
-        return build_hub_core(
-            connections_for_engine(self.engine), clock=FixedClock(_NOW), actions=TEST_HUB_ACTIONS
-        ).open(StoreScope(tenant))
+        return configured_core(self.engine, self.config.root, clock=FixedClock(_NOW)).open(StoreScope(tenant))
 
     def authoring(self, tenant: TenantId) -> ConfigAuthoring:
-        keys = hub_key_provider({}, data_dir=self.config.data_dir)
-        return build_config_authoring(self.stores(tenant), cipher=secret_cipher(keys))
+        core = configured_core(self.engine, self.config.root, clock=FixedClock(_NOW))
+        return core.open(StoreScope(tenant)).tenant.get(ConfigAuthoring)
 
     def reveal(self, tenant: TenantId, name: str) -> str:
         """``name``'s value in ``tenant``, opened as a running hub opens it."""

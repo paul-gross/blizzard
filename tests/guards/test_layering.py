@@ -1837,7 +1837,7 @@ _FLAT_SEAMS = (
         package="hub/forge",
         adapters=frozenset({"github_auth", "github_landing", "github_readiness", "github_web"}),
         helpers=frozenset({"github_grants", "github_refusals", "github_rates", "github_reads", "read_only_transport"}),
-        wiring=frozenset({"internal/factory.py", "internal/authorizations.py", "web.py"}),
+        wiring=frozenset({"internal/factory.py", "internal/authorizations.py", "web.py", "wiring.py"}),
     ),
     _FlatSeam(package="hub/work_sources", adapters=frozenset({"github_work_source", "hub_work_source"})),
     _FlatSeam(package="hub/auth/oauth", adapters=frozenset({"github_provider", "oidc_provider"})),
@@ -3844,10 +3844,11 @@ _COMPOSITION_ROOT_FILES = (
 )
 
 
-# `TranscriptCaps` is a value object; `EventBroker` has a store-free `create_app` fallback; `ConfigError` is a
-# refusal, raised wherever a boot check or the config edge refuses; `StoreScope` is a value object naming one tenant,
-# built wherever a hub-wide job opens that tenant's stores or services.
-_REPEATABLE_CONSTRUCTIONS = frozenset({"TranscriptCaps", "EventBroker", "ConfigError", "StoreScope"})
+# Value objects, refusals and null objects, built wherever wanted (`TranscriptCaps`, `StoreScope`, `ConfigError`,
+# `DisabledPlatformTracing`); `EventBroker` has a store-free `create_app` fallback.
+_REPEATABLE_CONSTRUCTIONS = frozenset(
+    {"TranscriptCaps", "EventBroker", "ConfigError", "StoreScope", "DisabledPlatformTracing"}
+)
 
 
 def _blizzard_constructions(path: Path) -> list[tuple[str, int]]:
@@ -4573,6 +4574,7 @@ _CONFIGURED_WRITE_HOMES = frozenset(
         _HUB_DIR / "domain" / "config" / "work_sources.py",
         _HUB_DIR / "domain" / "config" / "repositories.py",
         _HUB_DIR / "domain" / "config" / "secrets.py",
+        _HUB_DIR / "domain" / "config" / "wiring.py",
         _HUB_DIR / "composition.py",
     }
 )

@@ -1,17 +1,18 @@
-"""The hub settings' registrations: the ports the admin-settings routes read, served from the borrowed graph.
+"""The hub settings' registrations: the admin-settings ports, each a member of the borrowed settings graph.
 
-The entrypoint builds the settings graph over the hub's store and borrows it into the process scope, so each port here
-is a member of that one graph and no settings store is constructed in the container. A graph without settings declares
-each port absent instead, so a route that reaches one answers the store's unavailability."""
+A graph without settings declares each port absent. Every graph holds the borrowed boot ``HubConfig`` and one
+:class:`HubConfigSource` over it, reading the settings graph's resolution when one is borrowed."""
 
 from __future__ import annotations
 
 from blizzard.foundation.registry.interface import Lifetime, Registry, port
+from blizzard.hub.config import HubConfig
 from blizzard.hub.settings.footing import HubSettingsFooting
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.settings.model import IReadHubSettingsAdmin
 from blizzard.hub.settings.reader import HubSettingsReader
 from blizzard.hub.settings.service import HubSettingsAuthoring
+from blizzard.hub.settings.source import HubConfigSource
 from blizzard.hub.tenancy import STORE_UNAVAILABLE
 
 
@@ -35,10 +36,31 @@ def settings_footing(graph: HubSettingsGraph) -> HubSettingsFooting:
     return graph.footing
 
 
+def settings_config_source(boot: HubConfig, graph: HubSettingsGraph) -> HubConfigSource:
+    """The live config source over the boot config and the borrowed graph."""
+    return HubConfigSource(boot, graph)
+
+
+def boot_config_source(boot: HubConfig) -> HubConfigSource:
+    """The live config source over the boot config alone."""
+    return HubConfigSource(boot, None)
+
+
+def register_boot(registry: Registry) -> None:
+    """Declare the borrowed boot config."""
+    registry.context(port(HubConfig), lifetime=Lifetime.PROCESS)
+
+
 def register(registry: Registry) -> None:
-    """Declare the settings ports over the borrowed graph."""
+    """Declare the settings ports and the live config source over the borrowed graph."""
     for build in (settings_admin, settings_reader, settings_authoring, settings_footing):
         registry.factory(build, lifetime=Lifetime.PROCESS)
+    registry.factory(settings_config_source, lifetime=Lifetime.PROCESS)
+
+
+def register_boot_source(registry: Registry) -> None:
+    """Declare the live config source over the boot config alone, for a graph with no settings."""
+    registry.factory(boot_config_source, lifetime=Lifetime.PROCESS)
 
 
 def register_absent(registry: Registry) -> None:

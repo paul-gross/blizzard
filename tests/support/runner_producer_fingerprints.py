@@ -11,7 +11,7 @@ src/blizzard/hub/api/auth_session.py 14 0f07ee5a634cb06f08fbc135a55bb39e9f1b6503
 src/blizzard/hub/api/cadences.py 6 94f2b47eb904eb173cc61d9f32ace4db2dd20be89ff32d1090826c04b4929077
 src/blizzard/hub/api/chunk_dependencies.py 7 e78b85b8bd0c0a0f4c73eeec2f7d4deb04393b576231fb849bd586c3b82573f6
 src/blizzard/hub/api/chunk_edit.py 3 b78147f9b8c131e7db259cd48ffa5488234ffa1f2e6c9b40973d73807dbd0d29
-src/blizzard/hub/api/chunk_views.py 1 955465abebb974a5e9fc1484b33fe1511a1bcc92f1f11c882b680eb294977348
+src/blizzard/hub/api/chunk_views.py 1 b76c0da7085a6f79cf674a9ee2cd3dba4cad778ed5390e55b04d7361ac40cbcd
 src/blizzard/hub/api/chunks.py 59 1c2d36cb46fd218aa8a2572e515657a0960728b526d75534b29dac0e0bffe2b7
 src/blizzard/hub/api/clock.py 6 745d3fe368177b14c1abc62605d05016683895e6da0c8bd54ebc2772e1affcf0
 src/blizzard/hub/api/config.py 5 a1e561089ec3706a31a41533eb9660dbb485086ac2fdd72f417cca4b236a8b1e
@@ -57,7 +57,7 @@ src/blizzard/hub/api/resolution.py 1 755aa50db4e0ccaaaf40bf99ce2fd5e740f8c44d5eb
 src/blizzard/hub/api/routines.py 23 056726b800ce2a7fb79ae3f96d655ab54831031901ab6f466a9a7c1edab8629d
 src/blizzard/hub/api/runners.py 21 fa6b629ddd1bfead84027947779b482cc0c53768bed2cc36e935cf568b62ccf0
 src/blizzard/hub/api/scopes.py 5 d63d356fa733e684afccbaaa8f476dbcbc72835bf705e68eb28a8ddc1c455cbf
-src/blizzard/hub/api/secrets.py 9 0528475433bfe098fec7e61b80d728a579130ec945b3d1fef5352dee25698da5
+src/blizzard/hub/api/secrets.py 9 d2363de2ebed1293b00db3a82eb695b5c4bf9873eb6b843ca54a48b20f151285
 src/blizzard/hub/api/settings.py 2 f8e9b363859f9138b4b84ce6fbda234040f161d1fbb3db8a2d50dd3989c2115b
 src/blizzard/hub/api/spend.py 1 9144b6ac7bb47184e058dbd5470136624c4751870da8c7432c11a3ce3e5f941c
 src/blizzard/hub/api/sweeps.py 5 3380a9d7a3cc9d28f0d246fd2e54baaf8934a531e23675292b11175a32dc568b
@@ -69,7 +69,7 @@ src/blizzard/hub/api/urgencies.py 9 8d472d683b7a46f265bdc626610e9b0de5ba6ce8e46f
 src/blizzard/hub/api/users.py 2 ce9fa82c1d8d280fa4917bb7b82c9ef1b3e6624419ef75d8ae34a898b8b016aa
 src/blizzard/hub/api/work_item_reads.py 1 1c765dfc14ea5520ebb9e82b327febc59d336c107c061cdbd019e73f2a1594f9
 src/blizzard/hub/api/work_source_params.py 4 729c5f26d5be9bd39ca9f14a15f432730ce8de18797be247ad509f1fe13af638
-src/blizzard/hub/api/work_sources.py 18 1e88bbda06dc8744808adeb86c5c836b333f162429eb16c6ae5449ed7074a01d
+src/blizzard/hub/api/work_sources.py 18 a19a89ad2ad0a4bc7a12e290597d1ca977a2821597a912705a483da57935866d
 src/blizzard/hub/app.py 9 51a25d0932614977a9b89ba3c6ecd07f77395717bd02693e313060cf86c74d83
 src/blizzard/hub/forge/internal/github_landing.py 1 36ab294bfe3a29a72e2b57e6a0df515babb6bd9643941f12eebbc7436dc557e1
 """

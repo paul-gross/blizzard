@@ -525,7 +525,7 @@ def retire_runner(runner_id: str, request: RunnerRetireRequest, services: Servic
     Run it again."""
     registration = _registration(services, runner_id)
     held = services.chunks.route.live_routes_of_runner(runner_id)
-    changes = chunk_events.ChunkChanged.before_many(services, [r.chunk_id for r in held])
+    changes = chunk_events.ChunkChanged.before_many(services.chunk_frames, [r.chunk_id for r in held])
     try:
         outcome = services.fleet.retire(registration, by=request.by, force=request.force)
     except RetireInterrupted as exc:
@@ -569,7 +569,7 @@ def _publish_releases(
     """A ``detached`` frame per released chunk, each from its state read before the write when ``changes`` holds
     it, and the queue's change when any was released."""
     for route in released:
-        change = changes.get(route.chunk_id) or chunk_events.ChunkChanged.before(services, route.chunk_id)
+        change = changes.get(route.chunk_id) or chunk_events.ChunkChanged.before(services.chunk_frames, route.chunk_id)
         change.publish(cause="detached", key=f"route_released:{route.released_id}")
     if released:
         services.events.publish_queue_changed()  # released chunks re-enter the ready queue
@@ -587,7 +587,7 @@ def reinstate_runner(runner_id: str, request: RunnerLifecycleRequest, services: 
     pass would, and its ``detached`` frame published."""
     registration = _registration(services, runner_id)
     held = services.chunks.route.live_routes_of_runner(runner_id)
-    changes = chunk_events.ChunkChanged.before_many(services, [r.chunk_id for r in held])
+    changes = chunk_events.ChunkChanged.before_many(services.chunk_frames, [r.chunk_id for r in held])
     try:
         outcome = services.fleet.reinstate(registration, by=request.by)
     except ReinstateInterrupted as exc:

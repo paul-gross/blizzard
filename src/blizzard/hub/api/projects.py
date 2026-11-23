@@ -23,7 +23,7 @@ from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import PathProject
 from blizzard.hub.api.repository_params import PathRepository
-from blizzard.hub.api.work_source_params import path_work_source, resolved_work_source
+from blizzard.hub.api.work_source_params import configurable_work_source, resolved_work_source
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
@@ -218,7 +218,7 @@ def link_source(
     are. 404 for an unknown project or source; 409 for a stale `If-Match` on a stored link."""
     if is_built_in(source):
         return _built_in_view(built_in_source_link(project))
-    record = resolved_work_source(source, services)
+    record = resolved_work_source(source, services.work_source_records)
     try:
         link = services.project_authoring.link_source(
             project, record, change_context(identity, door), if_match=if_match
@@ -240,7 +240,7 @@ def unlink_source(
     """Unlink the project from a work source, named by its id or slug, by retiring the link; unlinking an unlinked
     link changes nothing. 404 for an unknown project or source, or a source it never linked; 409 for the built-in
     ``hub`` source, which every project draws from, and for a stale `If-Match`."""
-    record = path_work_source(source, services)
+    record = configurable_work_source(source, services.work_source_records)
     link = services.project_links.source_link(project.project_id, record.work_source_id)
     if link is None:
         raise _not_found(f"project {project.slug} has no link to work source {record.slug!r}")

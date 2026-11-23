@@ -8,9 +8,11 @@ always as ``Door.APPLY`` — the door is never read from the request (``bzh:conf
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from functools import partial
 from typing import Annotated, Any
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ValidationError
 from starlette.concurrency import run_in_threadpool
@@ -19,35 +21,38 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.auth_session import RequestTenant, require, tenant_bound
 from blizzard.hub.api.cadences import admission_refused, cadence_shape, chore_scopes, chore_shapes, schedule_shape
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import PROJECT_REQUIRED, QueryProject
 from blizzard.hub.api.urgency_refs import urgency_slug
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import may_admit
-from blizzard.hub.composition import TenantServices
+from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.documents import ConfigDecodeError, codec_for_media_type
 from blizzard.hub.domain.cadence.model import Cadence, CadenceAdmissionRefused, CadenceEdit, Spacing
+from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
 from blizzard.hub.domain.config.apply import ApplyEntryRefused, EntryOutcome
-from blizzard.hub.domain.config.changes import ConfigChange, RecordKind
+from blizzard.hub.domain.config.changes import ConfigChange, IReadConfigChanges, RecordKind
 from blizzard.hub.domain.config.credential_naming import CredentialId
 from blizzard.hub.domain.config.credential_resolution import ExportedCredentials
-from blizzard.hub.domain.config.credentials import ConfiguredCredential, CredentialEdit
+from blizzard.hub.domain.config.credentials import ConfiguredCredential, CredentialEdit, IReadCredentialRepository
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
-from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeEdit, ForgeFields, ForgeId
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeEdit, ForgeFields, ForgeId, IReadForgeRepository
 from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY, POLICY_CAPABILITIES, landing_sort_key
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
+    IReadRepositoryRecordRepository,
     RepositoryDraft,
     RepositoryEdit,
     RepositoryId,
 )
+from blizzard.hub.domain.config.secrets import ISecretCatalog
 from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
+    IReadWorkSourceRepository,
     WorkSourceDraft,
     WorkSourceEdit,
     WorkSourceId,
@@ -62,15 +67,18 @@ from blizzard.hub.domain.config_apply.entries import (
     DeclaredWorkSource,
     DocumentEntries,
 )
-from blizzard.hub.domain.garden.routines import RoutineEdit
-from blizzard.hub.domain.garden.scopes import ScopeEdit
+from blizzard.hub.domain.config_apply.service import ConfigApplication
+from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository, RoutineEdit
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeEdit
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.declarations import EntryProjectRequired, ProjectDeclaration
-from blizzard.hub.domain.projects.links import RepositoryLink
-from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId
+from blizzard.hub.domain.projects.links import IReadProjectLinks, RepositoryLink
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectEdit, ProjectId
 from blizzard.hub.domain.urgency.declarations import UrgencyDeclaration, UrgencySections, urgency_color
 from blizzard.hub.domain.urgency.mark import IconShape
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
+from blizzard.hub.domain.urgency.services import UrgencyReading
+from blizzard.hub.events.broker import EventBroker
 from blizzard.wire.cadence import CadenceDocument, CadenceScheduleDocument, ChoreDocument
 from blizzard.wire.config import (
     CadenceEntry,
@@ -113,6 +121,73 @@ _VIEW = Depends(require(Permission.FLEET_VIEW))
 
 #: The largest page of the change log a caller may request.
 MAX_CHANGES_LIMIT = 200
+
+
+@dataclass(frozen=True)
+class _KeyedRecords:
+    """The tenant's slugged records a change-log row or filter is keyed by."""
+
+    repositories: IReadRepositoryRecordRepository
+    source_records: IReadWorkSourceRepository
+    forge_records: IReadForgeRepository
+    credentials: IReadCredentialRepository
+    projects: IReadProjectRepository
+
+
+@inject_sync
+def _keyed_records(
+    _tenant: RequestTenant,
+    repositories: FromDishka[IReadRepositoryRecordRepository],
+    source_records: FromDishka[IReadWorkSourceRepository],
+    forge_records: FromDishka[IReadForgeRepository],
+    credentials: FromDishka[IReadCredentialRepository],
+    projects: FromDishka[IReadProjectRepository],
+) -> _KeyedRecords:
+    return _KeyedRecords(repositories, source_records, forge_records, credentials, projects)
+
+
+@dataclass(frozen=True)
+class _Applying:
+    """The tenant's config application, and the broker a committed reorder publishes the queue's change on."""
+
+    application: ConfigApplication
+    events: EventBroker
+
+
+@inject_sync
+def _applying(
+    _tenant: RequestTenant, application: FromDishka[ConfigApplication], events: FromDishka[EventBroker]
+) -> _Applying:
+    return _Applying(application, events)
+
+
+@dataclass(frozen=True)
+class _ExportReads:
+    """Every read a config export takes of the tenant."""
+
+    records: _KeyedRecords
+    secrets: ISecretCatalog
+    routines: IReadRoutineRepository
+    routine_scopes: IReadRoutineScopeRepository
+    cadences: IReadCadenceRepository
+    scopes: IReadScopeRepository
+    links: IReadProjectLinks
+    urgencies: UrgencyReading
+
+
+@inject_sync
+def _export_reads(
+    records: Annotated[_KeyedRecords, Depends(_keyed_records)],
+    secrets: FromDishka[ISecretCatalog],
+    routines: FromDishka[IReadRoutineRepository],
+    routine_scopes: FromDishka[IReadRoutineScopeRepository],
+    cadences: FromDishka[IReadCadenceRepository],
+    scopes: FromDishka[IReadScopeRepository],
+    links: FromDishka[IReadProjectLinks],
+    urgencies: FromDishka[UrgencyReading],
+) -> _ExportReads:
+    return _ExportReads(records, secrets, routines, routine_scopes, cadences, scopes, links, urgencies)
+
 
 #: The document version a hub exports and serves schemas for when a read names none.
 DOCUMENT_VERSION = 2
@@ -170,7 +245,7 @@ def _invalid(errors: list[dict[str, object]]) -> HTTPException:
 
 
 def _labels(
-    changes: list[ConfigChange], services: TenantServices
+    changes: list[ConfigChange], records: _KeyedRecords
 ) -> tuple[dict[tuple[RecordKind, str], str], dict[str, str]]:
     """The current slug of each slugged record a page of changes names: one read each of the repositories, the work
     sources, the forges, the credentials and the projects it keys (``bzh:bulk-reconstitution``)."""
@@ -190,25 +265,25 @@ def _labels(
     credential_ids = list({CredentialId(c.record_key) for c in changes if c.record_kind in _CREDENTIAL_KEYED})
     project_ids = list({ProjectId(c.record_key) for c in changes if c.record_kind is RecordKind.PROJECT})
     labels: dict[tuple[RecordKind, str], str] = {}
-    for repository_id, repository in services.repository_records.get_many(repository_ids).items():
+    for repository_id, repository in records.repositories.get_many(repository_ids).items():
         labels.update({(kind, repository_id): repository.slug for kind in _REPOSITORY_KEYED})
-    for source_id, source in services.work_source_records.get_many(source_ids).items():
+    for source_id, source in records.source_records.get_many(source_ids).items():
         labels.update({(kind, source_id): source.slug for kind in _WORK_SOURCE_KEYED})
-    forges = services.forge_records.get_many(forge_ids)
+    forges = records.forge_records.get_many(forge_ids)
     forge_labels = {str(forge_id): f"{forge.slug} · {forge.name}" for forge_id, forge in forges.items()}
     for forge_id, forge in forges.items():
         labels.update({(kind, str(forge_id)): forge.slug for kind in _FORGE_KEYED})
-    for credential_id, credential in services.credential_records.get_many(credential_ids).items():
+    for credential_id, credential in records.credentials.get_many(credential_ids).items():
         labels.update({(kind, str(credential_id)): credential.slug for kind in _CREDENTIAL_KEYED})
-    for project_id, project in services.projects.get_many(project_ids).items():
+    for project_id, project in records.projects.get_many(project_ids).items():
         labels[(RecordKind.PROJECT, project_id)] = project.slug
     return labels, forge_labels
 
 
-def _actor_names(changes: list[ConfigChange], services: TenantServices) -> dict[str, str]:
+def _actor_names(changes: list[ConfigChange], users: IReadUserRepository) -> dict[str, str]:
     """The display name — else the username — of each user actor a page of changes names, in one read
     (``bzh:bulk-reconstitution``); an actor that is no user is absent."""
-    return user_names(services, (c.actor for c in changes))
+    return user_names(users, (c.actor for c in changes))
 
 
 def _view(
@@ -283,8 +358,11 @@ def get_schema(kind: str, version: Annotated[int, Query(ge=1)] = DOCUMENT_VERSIO
 
 
 @router.get("/changes", response_model=ConfigChangesPage, dependencies=[_VIEW])
+@inject_sync
 def list_changes(
-    services: Services,
+    changes: FromDishka[IReadConfigChanges],
+    records: Annotated[_KeyedRecords, Depends(_keyed_records)],
+    users: FromDishka[IReadUserRepository],
     before: Annotated[int | None, Query(ge=1)] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_CHANGES_LIMIT)] = 50,
     record_kind: RecordKind | None = None,
@@ -295,45 +373,45 @@ def list_changes(
     `before` for the next. Optionally narrowed to one `record_kind` and `record_key` — for a project or a repository
     the record's id or slug — and to the changes concerning one `project` (its id or slug; 422 when the tenant holds
     no such project)."""
-    rows = services.config_changes.page(
+    rows = changes.page(
         before=before,
         limit=limit + 1,
         record_kind=record_kind,
-        record_key=_key_of(record_kind, record_key, services),
+        record_key=_key_of(record_kind, record_key, records),
         project_id=project,
     )
     page = rows[:limit]
-    labels, forge_labels = _labels(page, services)
-    names = _actor_names(page, services)
+    labels, forge_labels = _labels(page, records)
+    names = _actor_names(page, users)
     return ConfigChangesPage(
         changes=[_view(c, labels, names, forge_labels) for c in page],
         next_before=page[-1].id if len(rows) > limit else None,
-        total=services.config_changes.count(
-            record_kind=record_kind, record_key=_key_of(record_kind, record_key, services), project_id=project
+        total=changes.count(
+            record_kind=record_kind, record_key=_key_of(record_kind, record_key, records), project_id=project
         ),
     )
 
 
-def _key_of(kind: RecordKind | None, key: str | None, services: TenantServices) -> str | None:
+def _key_of(kind: RecordKind | None, key: str | None, records: _KeyedRecords) -> str | None:
     """The stored key a change-log filter names: the id of the project, repository, work source, forge or credential an
     id or slug resolves to; the value as given when it resolves to none (so the page is empty) or the kind is keyed by
     its name."""
     if key is None:
         return None
     if kind is RecordKind.PROJECT:
-        found = services.projects.resolve(key)
+        found = records.projects.resolve(key)
         return key if found is None else found.project_id
     if kind in _REPOSITORY_KEYED:
-        repository = services.repository_records.resolve(key)
+        repository = records.repositories.resolve(key)
         return key if repository is None else repository.repository_id
     if kind in _WORK_SOURCE_KEYED:
-        source = services.work_source_records.resolve(key)
+        source = records.source_records.resolve(key)
         return key if source is None else source.work_source_id
     if kind in _FORGE_KEYED:
-        forge = services.forge_records.resolve(key)
+        forge = records.forge_records.resolve(key)
         return key if forge is None else forge.forge_id
     if kind in _CREDENTIAL_KEYED:
-        credential = services.credential_records.resolve(key)
+        credential = records.credentials.resolve(key)
         return key if credential is None else credential.credential_id
     return key
 
@@ -598,12 +676,12 @@ def _document(body: bytes, content_type: str | None) -> ConfigDocumentV2 | Confi
 def _apply(
     document: ConfigDocumentV2 | ConfigDocumentV3,
     identity: ResolvedIdentity,
-    services: TenantServices,
+    applying: _Applying,
     *,
     dry_run: bool,
 ) -> ConfigApplyResponse:
     try:
-        applied = services.config_application.apply(
+        applied = applying.application.apply(
             _entries(document), actor=identity.user_id, dry_run=dry_run, may_admit=may_admit(identity.permissions)
         )
     except ApplyEntryRefused as exc:
@@ -612,7 +690,7 @@ def _apply(
         raise admission_refused(exc) from exc
     if not dry_run and any(o.kind is RecordKind.URGENCY_ORDER and o.op is not None for o in applied.outcomes):
         # The apply has committed; a reordered set moves the queue's claim order as the reorder routes do.
-        services.events.publish_queue_changed()
+        applying.events.publish_queue_changed()
     return ConfigApplyResponse(
         dry_run=dry_run,
         apply_id=applied.apply_id,
@@ -647,7 +725,7 @@ _APPLY_BODY = {
 async def apply_config(
     request: Request,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
-    services: Services,
+    applying: Annotated[_Applying, Depends(_applying)],
     dry_run: bool = False,
 ) -> ConfigApplyResponse:
     """Reconcile a version-2 or version-3 document (YAML or JSON, by `Content-Type`; told apart by `version`) in one
@@ -659,12 +737,12 @@ async def apply_config(
     unknown `Content-Type`; a refusal leaves the store unchanged. 403 when a cadence write would leave it promoting its
     runs and the caller may not promote chunks."""
     document = _document(await request.body(), request.headers.get("content-type"))
-    return await run_in_threadpool(_apply, document, identity, services, dry_run=dry_run)
+    return await run_in_threadpool(_apply, document, identity, applying, dry_run=dry_run)
 
 
 @router.get("/export", response_model=ConfigDocumentV2 | ConfigDocumentV3, dependencies=[_VIEW])
 def export_config(
-    services: Services, version: Annotated[int, Query(ge=1)] = DOCUMENT_VERSION
+    reads: Annotated[_ExportReads, Depends(_export_reads)], version: Annotated[int, Query(ge=1)] = DOCUMENT_VERSION
 ) -> ConfigDocumentV2 | ConfigDocumentV3:
     """Every project with its standing links, every live urgency — an icon as its media type and base64 bytes — in
     order with the tenant's default, every active forge, every active, non-built-in work source and
@@ -676,36 +754,35 @@ def export_config(
     left out, since applying one would enable it. 422 `config_version_retired` for any other `version`."""
     if version not in DOCUMENT_VERSIONS:
         raise _version_retired(["query", "version"], version)
-    retired = services.secret_catalog.retired_names()
-    projects = services.projects.list_all()
+    records = reads.records
+    retired = reads.secrets.retired_names()
+    projects = records.projects.list_all()
     slug_of: dict[str, str] = {project.project_id: project.slug for project in projects}
     live_routines = [
-        r for r in sorted(services.routines.list_all(), key=lambda r: (slug_of[r.project_id], r.slug)) if not r.retired
+        r for r in sorted(reads.routines.list_all(), key=lambda r: (slug_of[r.project_id], r.slug)) if not r.retired
     ]
-    scope_links = services.routine_scopes.list_scopes_for([r.routine_id for r in live_routines])
+    scope_links = reads.routine_scopes.list_scopes_for([r.routine_id for r in live_routines])
     live_cadences = sorted(
-        (c for c in services.cadences.list_all() if not c.retired), key=lambda c: (slug_of[c.project_id], c.slug)
+        (c for c in reads.cadences.list_all() if not c.retired), key=lambda c: (slug_of[c.project_id], c.slug)
     )
-    sources = services.work_source_records.list_all(include_retired=False)
-    repositories = services.repository_records.list_all(include_retired=False)
-    held_credentials = (
-        services.credential_records.list_all(include_retired=True) if version == CREDENTIALS_VERSION else []
-    )
-    forges = services.forge_records.get_many(
+    sources = records.source_records.list_all(include_retired=False)
+    repositories = records.repositories.list_all(include_retired=False)
+    held_credentials = records.credentials.list_all(include_retired=True) if version == CREDENTIALS_VERSION else []
+    forges = records.forge_records.get_many(
         list(
             {r.fields.forge_id for r in sources}
             | {r.fields.forge_id for r in repositories}
             | {c.fields.forge_id for c in held_credentials if not c.retired}
         )
     )
-    repository_slugs = {r.repository_id: r.slug for r in services.repository_records.list_all(include_retired=True)}
-    source_slugs = {r.work_source_id: r.slug for r in services.work_source_records.list_all(include_retired=True)}
+    repository_slugs = {r.repository_id: r.slug for r in records.repositories.list_all(include_retired=True)}
+    source_slugs = {r.work_source_id: r.slug for r in records.source_records.list_all(include_retired=True)}
     project_ids = [project.project_id for project in projects]
-    source_links = services.project_links.sources_of_projects(project_ids)
-    repository_links = services.project_links.repositories_of_projects(project_ids)
-    live_urgencies = services.urgency_reading.ordered()
-    icons = services.urgency_reading.icons()
-    urgencies = services.urgency_reading.by_id()
+    source_links = reads.links.sources_of_projects(project_ids)
+    repository_links = reads.links.repositories_of_projects(project_ids)
+    live_urgencies = reads.urgencies.ordered()
+    icons = reads.urgencies.icons()
+    urgencies = reads.urgencies.by_id()
     exported = ConfigDocumentV2(
         version=DOCUMENT_VERSION,
         urgencies=[
@@ -721,7 +798,7 @@ def export_config(
             for u in live_urgencies
         ],
         urgency_order=[u.slug for u in live_urgencies],
-        settings=SettingsEntry(default_urgency=services.tenant_settings.show().default.slug),
+        settings=SettingsEntry(default_urgency=urgencies[reads.urgencies.default_id()].slug),
         projects=[
             ProjectDocument(
                 slug=project.slug,
@@ -739,10 +816,10 @@ def export_config(
             )
             for project in projects
         ],
-        secrets=[s.name for s in services.secret_catalog.list_all() if s.name not in retired],
+        secrets=[s.name for s in reads.secrets.list_all() if s.name not in retired],
         scopes=[
             ScopeEntry(slug=s.slug, description=s.description, project=slug_of[s.project_id])
-            for s in sorted(services.scopes.list_all(), key=lambda s: (slug_of[s.project_id], s.slug))
+            for s in sorted(reads.scopes.list_all(), key=lambda s: (slug_of[s.project_id], s.slug))
             if not s.retired
         ],
         routines=[
@@ -763,7 +840,7 @@ def export_config(
         cadences=[_cadence_entry(c, slug_of[c.project_id], urgencies) for c in live_cadences],
         forges=[
             ForgeEntry(slug=f.slug, name=f.name, kind=f.kind, api_base=f.fields.api_base, web_base=f.fields.web_base)
-            for f in services.forge_records.list_all(include_retired=False)
+            for f in records.forge_records.list_all(include_retired=False)
         ],
         work_sources=[
             WorkSourceEntry(
@@ -794,7 +871,7 @@ def export_config(
         ],
     )
     if version == CREDENTIALS_VERSION:
-        return _export_v3(exported, sources, repositories, held_credentials, forges, services)
+        return _export_v3(exported, sources, repositories, held_credentials, forges, records.credentials)
     return exported
 
 
@@ -804,12 +881,12 @@ def _export_v3(
     repositories: Sequence[ConfiguredRepository],
     held: Sequence[ConfiguredCredential],
     forges: Mapping[ForgeId, ConfiguredForge],
-    services: TenantServices,
+    credentials: IReadCredentialRepository,
 ) -> ConfigDocumentV3:
     """``exported`` as a version-3 document: every section but its work sources and repositories, then the live
     credentials — and each retired one a referrer names, so the document applies — work sources and repositories, each
     referrer naming its credential by slug."""
-    named = ExportedCredentials(held, services.credential_records.held_slugs)
+    named = ExportedCredentials(held, credentials.held_slugs)
     source_credentials = [
         named.slug_if_any(r.fields.forge_id, r.fields.credential_id, r.fields.secret) for r in sources
     ]

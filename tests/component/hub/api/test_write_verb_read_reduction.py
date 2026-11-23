@@ -50,7 +50,14 @@ class _CountingFactsStore(ChunkFactsStore):
 def _wire_counting_facts(hub: HubHarness) -> _CountingFactsStore:
     counting = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
-    serve_default_tenant(hub, replace(hub.services, chunks=replace(hub.services.chunks, facts=counting)))
+    serve_default_tenant(
+        hub,
+        replace(
+            hub.services,
+            chunks=replace(hub.services.chunks, facts=counting),
+            chunk_frames=replace(hub.services.chunk_frames, facts=counting),
+        ),
+    )
     return counting
 
 

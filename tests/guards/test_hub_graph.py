@@ -15,27 +15,44 @@ from blizzard.cli.config_inputs import packaged_flag_registry
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.flags import FlagRegistry
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
 from blizzard.foundation.registry.interface import Lifetime, port
 from blizzard.foundation.registry.internal.translation import HUB_LIFETIMES, build_container
 from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import OwnedChild, ScopeValues, supply
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.api.auth_session import tenant_bound
+from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.app import create_app_for_export
 from blizzard.hub.composition import build_hub_settings, memberships_leaf
+from blizzard.hub.config import HubConfig
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.delivery.action_registry import SHIPPED_ACTIONS, HubActions
+from blizzard.hub.domain.chunk.event_log import EventLogService
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
+from blizzard.hub.domain.config.authoring import ConfigAuthoring
+from blizzard.hub.domain.config.changes import IReadConfigChanges
+from blizzard.hub.domain.config.credentials import IReadCredentialRepository
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
+from blizzard.hub.domain.config.secrets import ISecretCatalog
+from blizzard.hub.domain.config_apply.service import ConfigApplication
 from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
+from blizzard.hub.domain.urgency.services import UrgencyReading
+from blizzard.hub.forge.budget import ForgeBudgets
+from blizzard.hub.forge.readiness import CredentialReadiness
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
 from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.process_root import register_hub
+from blizzard.hub.scopes.environ import HubEnviron
 from blizzard.hub.settings.footing import HubSettingsFooting
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from tests.support.container_guards import (
     alias_identity_violations,
     default_factory_violations,
@@ -138,6 +155,9 @@ def _process() -> Iterator[OwnedChild]:
                 supply(port(HubStoreConnections), connections),
                 supply(port(IClock), clock),
                 supply(port(HubSettingsGraph), build_hub_settings(connections, clock, footing)),
+                supply(port(HubConfig), HubConfig(root=Path(), db_url="sqlite://")),
+                supply(port(IPlatformTracing), DisabledPlatformTracing()),
+                supply(port(HubEnviron), HubEnviron({})),
                 supply(port(HubActions), SHIPPED_ACTIONS),
                 supply(port(PackagedGraphs), GRAPHS_PACKAGED),
                 supply(port(PackagedSystemArtifacts), SYSTEM_ARTIFACTS_PACKAGED),
@@ -157,8 +177,24 @@ def test_every_routes_container_dependencies_resolve_at_the_lifetime_it_runs_in(
     assert {(each.route, each.dependency) for each in _hub_routes} >= {
         ("GET /api/findings", IReadFindingRepository),
         ("POST /api/findings/resolve", FindingExitService),
+        ("GET /api/config/export", UrgencyReading),
+        ("POST /api/config/apply", ConfigApplication),
+        ("GET /api/config/changes", IReadConfigChanges),
+        ("GET /api/secrets", ISecretCatalog),
+        ("GET /api/forges/{forge}", ForgeBudgets),
+        ("POST /api/forges", ConfigAuthoring),
+        ("POST /api/credentials/{credential}/checks", CredentialReadiness),
+        ("GET /api/credentials/{credential}", IReadCredentialRepository),
+        ("GET /api/repositories/{repository}", IReadRepositoryRecordRepository),
+        ("PATCH /api/repositories/{repository}", EventLogService),
+        ("GET /api/work-sources", IWorkSourceRegistry),
+        ("POST /api/work-sources/{source}/items", DefaultGraphService),
+        ("DELETE /api/work-sources/{source}/items/{ref}", ChunkFrameLoader),
+        ("GET /api/work-sources/{source}/items", IReadChunkWorkRefsRepository),
     }
-    assert all(each.tenant for each in _hub_routes if each.route.split(" ")[1].startswith("/api/findings"))
+    narrowed = ("/api/findings", "/api/config", "/api/secrets", "/api/forges", "/api/credentials", "/api/repositories")
+    narrowed += ("/api/work-sources",)
+    assert all(each.tenant for each in _hub_routes if each.route.split(" ")[1].startswith(narrowed))
     assert unresolved_route_dependencies(_hub_routes, _process) == []
 
 

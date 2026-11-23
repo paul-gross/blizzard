@@ -44,7 +44,10 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
 from blizzard.foundation.project_colors import ProjectColor
+from blizzard.foundation.registry.internal.recording import RecordingRegistry, Rewrites
+from blizzard.foundation.registry.internal.translation import HUB_LIFETIMES, build_container
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.sealing import IKeyProvider
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -61,11 +64,10 @@ from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.oauth.provider import IOAuthProvider
 from blizzard.hub.auth.oauth.registry import OAuthProviderRegistry
+from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.composition import (
-    ForgeRegistryFactory,
     HubCore,
     HubServices,
-    LiveConfig,
     TenantServices,
     TenantStores,
     build_flow_driver,
@@ -73,7 +75,7 @@ from blizzard.hub.composition import (
     build_hub_settings,
     build_services,
     connections_for_engine,
-    default_forge_registry,
+    hub_core_over,
 )
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH, AuthConfig, HubConfig, LoginThrottleConfig
 from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
@@ -121,6 +123,7 @@ from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSo
 from blizzard.hub.domain.delivery.flows import Submission, flow_lock
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
+from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
 from blizzard.hub.domain.graph.actions import SHIPPED_CATALOGUE, TEST_ACTION_SPECS
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
@@ -155,14 +158,19 @@ from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
 from blizzard.hub.domain.urgency.model import NO_MARK, Urgency, UrgencyId
 from blizzard.hub.domain.urgency.order import FIRST_POSITION
 from blizzard.hub.domain.urgency.settings import TenantSettings
-from blizzard.hub.domain.work_items.editing import mint_item
+from blizzard.hub.domain.work_items.editing import WorkItemEditService, mint_item
+from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
 from blizzard.hub.egress.writer import validate_batch
 from blizzard.hub.events.broker import EventBroker
-from blizzard.hub.forge.budget import ForgeBudgets
+from blizzard.hub.forge.auth import IForgeAuthorizations
 from blizzard.hub.forge.readiness import ICredentialProbe
+from blizzard.hub.layout import DATA_DIRNAME
+from blizzard.hub.live_config import ConfigObjectCache
+from blizzard.hub.process_root import HUB_OWNER, registered, store_backed_process, store_backed_values
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.settings.footing import HubSettingsFooting
+from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
@@ -208,6 +216,7 @@ from blizzard.hub.work_sources.source import (
 )
 from tests.support import engine_lifecycle
 from tests.support.config_inputs import HUB_FLAGS, VERSION_WINDOW, create_hub_app
+from tests.support.registry_overrides import ForgeRegistryBuild, replaced_adapters
 
 _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -626,6 +635,74 @@ OP = ChangeContext(actor="op", door=Door.API)
 
 #: The clock a test's hub migration hands the revisions that stamp a time (``migration_clock``).
 MIGRATION_CLOCK = FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
+
+
+def configured_core(engine: Engine, root: Path, *, clock: IClock) -> HubCore:
+    """A hub core over ``engine`` whose boot config is rooted at ``root``, so its secret keys are the ones
+    ``hub_key_provider({}, data_dir=root / "data")`` holds — the core a test reads its tenants' configured adapters
+    through."""
+    return build_hub_core(
+        connections_for_engine(engine),
+        clock=clock,
+        actions=TEST_HUB_ACTIONS,
+        config=HubConfig(root=root, db_url=str(engine.url)),
+        platform_tracing=DisabledPlatformTracing(),
+        environ={},
+    )
+
+
+def overridden_core(
+    connections: HubStoreConnections,
+    *,
+    clock: IClock,
+    config: HubConfig,
+    platform_tracing: IPlatformTracing,
+    actions: HubActions,
+    overrides: Callable[[RecordingRegistry], Rewrites],
+    settings: HubSettingsGraph | None = None,
+    system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
+) -> HubCore:
+    """A store-backed hub core whose registered graph carries the test root's ``overrides``, over an empty
+    environment."""
+    registry = registered(store_backed=True, settings=settings is not None)
+    values = store_backed_values(
+        connections,
+        clock=clock,
+        config=config,
+        platform_tracing=platform_tracing,
+        environ={},
+        actions=actions,
+        settings=settings,
+        system_artifacts=system_artifacts,
+    )
+    owner = build_container(registry, HUB_LIFETIMES, owner=HUB_OWNER, values=values, overrides=overrides(registry))
+    return hub_core_over(store_backed_process(owner), connections, clock=clock)
+
+
+def second_core(hub: HubHarness) -> HubCore:
+    """A second hub core over ``hub``'s store and boot config, beside the one its services were built over."""
+    assert hub.config is not None
+    return build_hub_core(
+        connections_for_engine(hub.engine),
+        clock=hub.clock,
+        config=hub.config,
+        platform_tracing=DisabledPlatformTracing(),
+        environ={},
+        actions=TEST_HUB_ACTIONS,
+    )
+
+
+@dataclass(frozen=True)
+class TenantLive:
+    """A tenant's built-object cache and its forge authorization boundary, as its container scope holds them."""
+
+    objects: ConfigObjectCache
+    authorizations: IForgeAuthorizations
+
+
+def tenant_live(stores: TenantStores) -> TenantLive:
+    """The cache and authorization boundary of the tenant ``stores`` serve."""
+    return TenantLive(stores.tenant.get(ConfigObjectCache), stores.tenant.get(IForgeAuthorizations))
 
 
 def config_authoring(
@@ -1427,6 +1504,8 @@ class HubHarness:
     app: FastAPI | None = None
     #: The hub core the services were built over — its per-tenant stores, and the process container beneath them.
     core: HubCore | None = None
+    #: The boot config the hub was built over — what a test root opening its own process supplies.
+    config: HubConfig | None = None
     _driver: FlowDriver | None = field(default=None, repr=False)
 
     @property
@@ -1659,7 +1738,9 @@ def seed_repositories(
     if not repositories:
         return
     authoring = config_authoring(
-        engine, keys=hub_key_provider({}, data_dir=tmp_path), clock=FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
+        engine,
+        keys=hub_key_provider({}, data_dir=tmp_path / DATA_DIRNAME),
+        clock=FixedClock(datetime(2026, 7, 12, tzinfo=UTC)),
     )
     forges = ForgeRecordStore(hub_store_connections(engine))
     for fields in repositories:
@@ -1693,7 +1774,9 @@ def seed_fake_work_sources(engine: Engine, names: Iterable[str], *, tmp_path: Pa
     stores = WorkSourceRecordStore(hub_store_connections(engine))
     at = datetime(2026, 7, 12, tzinfo=UTC)
     authoring = config_authoring(
-        engine, keys=hub_key_provider({}, data_dir=tmp_path), clock=FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
+        engine,
+        keys=hub_key_provider({}, data_dir=tmp_path / DATA_DIRNAME),
+        clock=FixedClock(datetime(2026, 7, 12, tzinfo=UTC)),
     )
     for name in names:
         if stores.resolve(name) is not None:
@@ -1744,18 +1827,14 @@ def build_hub(
     extractors: Sequence[ITurnEventExtractor] = shipped_extractors(),
     action_pass_seconds: float = DEFAULT_ACTION_PASS_SECONDS,
     action_pass_grace: timedelta = ACTION_PASS_GRACE,
-    forges: ForgeRegistryFactory = default_forge_registry,
+    forges: ForgeRegistryBuild | None = None,
     credential_probes: Mapping[str, ICredentialProbe] | None = None,
     with_settings: bool = False,
 ) -> HubHarness:
-    """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
-
-    ``hub.client`` is a :class:`RunnerFleetClient`.
-    ``work_sources=None`` defaults to one fake source, while ``{}`` is a deliberately **empty** registry;
-    each fake source is stored as a configured record linked to the tenant's only project, and each seeded
-    repository is linked to it too, while ``link=False`` leaves the sources unstored, serving no project, as a
-    file-configured source is, and the repositories stored but unlinked; ``hub_version`` and ``version_window`` default to the installed and packaged; ``credential_probes`` replaces every forge kind's credential check; ``with_settings`` supplies the hub's settings
-    graph to the container as ``hub host`` does, and leaves the ports absent otherwise."""
+    """A migrated, fully-wired hub over ``tmp_path`` with fake external seams; ``hub.client`` is a
+    :class:`RunnerFleetClient`. ``work_sources=None`` seeds one fake source and ``{}`` none; ``link=False`` leaves
+    them unstored and the repositories unlinked. ``forges`` and ``credential_probes`` replace the registered forge
+    registry and credential checks; ``with_settings`` supplies the settings graph as ``hub host`` does."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(
         root=tmp_path,
@@ -1767,6 +1846,7 @@ def build_hub(
         trusted_proxies=tuple(trusted_proxies),
         tracing=tracing or TracingConfig(),
         egress=egress or EgressConfig(),
+        action_pass_seconds=action_pass_seconds,
     )
     # A second build over the same ``tmp_path`` reopens the store the first one wrote;
     # copying over it would discard that state, so only a fresh directory takes the copy.
@@ -1800,14 +1880,34 @@ def build_hub(
         if with_settings
         else None
     )
-    core = build_hub_core(
+    default = StoreScope(default_tenant(engine))
+
+    def tenant_work_sources(
+        scope: StoreScope,
+        items: IReadWorkItemRepository,
+        edits: WorkItemEditService,
+        users: IReadUserRepository,
+        resolution: GardenProposalDeliveryResolution,
+    ) -> IWorkSourceRegistry:
+        # The default tenant reads the fakes; any other tenant holds only its own built-in source.
+        if scope == default:
+            return work_source_registry
+        source = HubWorkSource(items, edits, users, resolution)
+        named = {RESERVED_HUB_SOURCE_NAME: source}
+        return WorkSourceRegistry(dict(named), closers=dict(named), editors=dict(named))
+
+    core = overridden_core(
         connections,
         clock=clock,
+        system_artifacts=system_artifacts or SYSTEM_ARTIFACTS_PACKAGED,
+        config=config,
+        platform_tracing=DisabledPlatformTracing(),
         actions=actions,
         settings=settings,
-        system_artifacts=system_artifacts or SYSTEM_ARTIFACTS_PACKAGED,
+        overrides=lambda registry: replaced_adapters(
+            registry, probes=credential_probes, forges=forges, work_sources=tenant_work_sources
+        ),
     )
-    default = StoreScope(default_tenant(engine))
     default_stores = core.open(default)
     hub_source = HubWorkSource(
         default_stores.work_item_store,
@@ -1820,43 +1920,24 @@ def build_hub(
     closers[RESERVED_HUB_SOURCE_NAME] = hub_source
     work_source_registry = WorkSourceRegistry(built_sources, closers=closers, editors=editors)
 
-    def tenant_work_sources(stores: TenantStores, _live: LiveConfig, _budgets: ForgeBudgets) -> IWorkSourceRegistry:
-        # The default tenant reads the fakes; any other tenant holds only its own built-in source.
-        if stores.scope == default:
-            return work_source_registry
-        source = HubWorkSource(
-            stores.work_item_store, stores.work_item_edits, core.users, stores.garden_proposal_resolution
-        )
-        named = {RESERVED_HUB_SOURCE_NAME: source}
-        return WorkSourceRegistry(dict(named), closers=dict(named), editors=dict(named))
-
-    secret_keys = hub_key_provider({}, data_dir=tmp_path)
     hub_services = build_services(
         core,
-        work_sources=tenant_work_sources,
         public_url=public_url,
         follow_latest_default=config.follow_latest,
         oauth_registry=OAuthProviderRegistry(oauth_providers) if oauth_providers is not None else None,
         # The IdP signing-key lifecycle — wired only under `oauth`, mirroring
         # `src/blizzard/hub/app.py`'s own `build_hosted_app` gating exactly.
         signing_keys_dir=(tmp_path / "auth" / "signing-keys") if auth_mode == AUTH_MODE_OAUTH else None,
-        secret_keys=secret_keys,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
         login_throttle=login_throttle,
         transcript_caps=transcript_caps,
         trace_exporter=trace_exporter,
         tracing_settings=tracing_settings,
-        tracing=config.tracing,
-        egress=config.egress,
         egress_path_key=egress_path_key,
-        annotation_interval_seconds=config.annotation_interval_seconds,
         hub_version=hub_version or __version__,
         version_window=version_window,
         extractors=extractors,
-        action_pass_seconds=action_pass_seconds,
         action_pass_grace=action_pass_grace,
-        forges=forges,
-        credential_probes=credential_probes,
         cadences_on=lambda: (flags or HUB_FLAGS).on("cadences"),
         announce_minted=announce_minted,
     )
@@ -1879,6 +1960,7 @@ def build_hub(
         events=services.events,
         app=app,
         core=core,
+        config=config,
     )
 
 

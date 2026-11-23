@@ -224,7 +224,11 @@ def tenant_request(
         yield tenant
 
 
-async def tenant_bound(request: Request, tenant: Annotated[AdmittedTenant, Depends(tenant_request)]) -> None:
+#: The admitted tenant a dependency resolves its reads beneath — its request scope is open once this resolves.
+RequestTenant = Annotated[AdmittedTenant, Depends(tenant_request)]
+
+
+async def tenant_bound(request: Request, tenant: RequestTenant) -> None:
     """A router dependency: resolve the request's tenant, and record it on every log line and span
     the request produces, and on ``request.state.tenant_id`` for a handler that runs outside the
     request's log context. Async, so the log binding lands in the request's own context rather than
@@ -253,7 +257,7 @@ class TenantBoundAdmitting:
         if self.permission not in HUB_PERMISSIONS:
             raise ValueError(f"{self.permission!r} is no hub-level permission; only one of those admits a non-member")
 
-    async def __call__(self, request: Request, tenant: Annotated[AdmittedTenant, Depends(tenant_request)]) -> None:
+    async def __call__(self, request: Request, tenant: RequestTenant) -> None:
         await tenant_bound(request, tenant)
 
 

@@ -4,6 +4,7 @@ icon, the retire moving open work, and the settings edit."""
 from __future__ import annotations
 
 import base64
+import json
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     count_queries,
+    emitted_events,
     hub_store_connections,
     ingest,
     seed_session,
@@ -318,3 +320,21 @@ def test_reads_need_fleet_view_and_writes_config_edit(tmp_path: Path) -> None:
     assert hub.client.post("/api/urgencies/nope/retire", json={}, headers=contributor).status_code == 403
     assert hub.client.post("/api/urgencies/nope/enable", headers=contributor).status_code == 403
     assert hub.client.patch("/api/urgencies/nope", json={"name": "x"}, headers=admin).status_code == 404
+
+
+def test_a_retire_moving_open_work_publishes_each_moved_chunks_frame_then_the_queues_change(hub: HubHarness) -> None:
+    urgent = _create(hub, "urgent")
+    open_ids = [ingest(hub, [{"source": "default", "ref": f"open-{n}"}]) for n in range(2)]
+    _carry(hub, urgent["urgency_id"], *open_ids)
+    since = hub.events.latest_id()
+
+    assert hub.client.post("/api/urgencies/urgent/retire", json={"move_to": "standard"}).status_code == 200
+
+    events = emitted_events(hub, since=since)
+    assert [e["event"] for e in events] == ["chunk-changed", "chunk-changed", "queue-changed"]
+    frames = [json.loads(e["data"]) for e in events[:2]]
+    assert sorted(f["chunk_id"] for f in frames) == sorted(open_ids)
+    for frame in frames:
+        assert (frame["cause"], frame["status"], frame["prev_status"]) == ("edited", "ready", "ready")
+        assert frame["graph_id"] is not None
+        assert frame["node"] is not None

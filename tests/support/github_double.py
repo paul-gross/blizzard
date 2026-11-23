@@ -10,10 +10,11 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from blizzard.hub.composition import ForgeRegistryFactory, LiveConfig, TenantStores
 from blizzard.hub.domain.config.capabilities import Capability
-from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
-from blizzard.hub.domain.config.repositories import RepositoryId
+from blizzard.hub.domain.config.credentials import IReadCredentialRepository
+from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, IReadForgeRepository
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryId
+from blizzard.hub.forge.auth import IForgeAuthorizations
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.landing import (
     Change,
@@ -41,7 +42,9 @@ from blizzard.hub.forge.landing import (
 )
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter, WriteLocks
+from blizzard.hub.live_config import ConfigObjectCache
 from tests.support.forge_auth import sent_token
+from tests.support.registry_overrides import ForgeRegistryBuild
 
 
 def check(
@@ -150,24 +153,29 @@ class GitHubDouble:
         self.tokens[repo] = sent_token(binding.authorization)
         return _Adapter(self, repo)
 
-    def forges(
-        self, stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets, write_locks: WriteLocks
-    ) -> ForgeRegistry:
-        """The :data:`ForgeRegistryFactory` a hub under test builds each tenant's registry with."""
-        return self.forges_offering(FORGE_KIND_CAPABILITIES)(stores, live, budgets, write_locks)
+    @property
+    def forges(self) -> ForgeRegistryBuild:
+        """The registry factory a hub under test builds each tenant's registry with."""
+        return self.forges_offering(FORGE_KIND_CAPABILITIES)
 
-    def forges_offering(self, capabilities: Mapping[str, frozenset[Capability]]) -> ForgeRegistryFactory:
+    def forges_offering(self, capabilities: Mapping[str, frozenset[Capability]]) -> ForgeRegistryBuild:
         """A registry factory whose forges offer only ``capabilities``, by kind."""
 
         def build(
-            stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets, write_locks: WriteLocks
+            records: IReadRepositoryRecordRepository,
+            forges: IReadForgeRepository,
+            credentials: IReadCredentialRepository,
+            objects: ConfigObjectCache,
+            authorizations: IForgeAuthorizations,
+            budgets: ForgeBudgets,
+            write_locks: WriteLocks,
         ) -> ForgeRegistry:
             return ForgeRegistry(
-                records=stores.repository_records,
-                forges=stores.forge_records,
-                credentials=stores.credential_records,
-                objects=live.objects,
-                authorizations=live.authorizations,
+                records=records,
+                forges=forges,
+                credentials=credentials,
+                objects=objects,
+                authorizations=authorizations,
                 build=self.adapter,
                 capabilities=capabilities,
                 budgets=budgets,

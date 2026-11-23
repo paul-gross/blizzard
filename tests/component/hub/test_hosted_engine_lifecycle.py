@@ -19,7 +19,6 @@ from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing,
 from blizzard.hub import app as hub_app
 from blizzard.hub import composition as hub_composition
 from blizzard.hub.cli import runtime as hub_cli
-from blizzard.hub.composition import TenantCache
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.runners.version_window import VersionWindow
@@ -118,12 +117,13 @@ def test_failed_shutdown_releases_engine(tmp_path: Path, monkeypatch: pytest.Mon
         stopped.append(True)
         original_stop(loop)
 
-    def fail(_cache: TenantCache) -> None:
+    def fail() -> None:
         raise RuntimeError("shutdown failed")
 
     monkeypatch.setattr(ActionLoop, "stop", stop)
-    monkeypatch.setattr(TenantCache, "close_served", fail)
     app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
+    # The hosted hub's own tenant scopes fail to close at its shutdown.
+    monkeypatch.setattr(app.state.services.process.tenants, "close", fail)
     raw = _pooled_connection(app.state.engine)
     with pytest.raises(RuntimeError, match="shutdown failed"), TestClient(app):
         pass

@@ -89,7 +89,7 @@ def ask_question(fact: QuestionAsked, services: Services) -> dict[str, str]:
     chunk = services.chunks.record.get(fact.chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, fact.chunk_id))
-    change = chunk_events.ChunkChanged.before(services, fact.chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, fact.chunk_id)
     refusal = services.questions.record_asked(asked_question(fact))
     if refusal is not None:
         raise ProblemHTTPException(partial(problems_chunks.question_write_fenced_problem, refusal.detail))
@@ -113,7 +113,7 @@ def answer_question(
     pre_answer = services.chunks.questions.get_question(question_id)
     if pre_answer is None:
         raise ProblemHTTPException(partial(problems.question_not_found_problem, question_id))
-    change = chunk_events.ChunkChanged.before(services, pre_answer.chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, pre_answer.chunk_id)
     try:
         outcome = services.questions.answer(pre_answer, answer=request.answer, answered_by=identity.username)
     except QuestionClosed as exc:
@@ -140,16 +140,16 @@ def answer_question(
     # The winning answer row alone flips the chunk out of waiting_on_human; the question's
     # own chunk_id never changes, so the pre-answer read already named it — no re-read.
     key = f"question_answers:{question_id}"
-    state = chunk_events.ChunkFrameState.load(services, pre_answer.chunk_id)
+    state = chunk_events.ChunkFrameState.load(services.chunk_frames, pre_answer.chunk_id)
     services.events.publish_question_answered(
         pre_answer.chunk_id,
         question_id,
         key=key,
         project_id=state.chunk.project_id if state.chunk is not None else None,
     )
-    chunk_events.ChunkChanged.of(services, pre_answer.chunk_id, prev_status=change.prev_status).publish_from(
-        state, cause="question-answered", key=key
-    )
+    chunk_events.ChunkChanged.of(
+        services.chunk_frames, pre_answer.chunk_id, prev_status=change.prev_status
+    ).publish_from(state, cause="question-answered", key=key)
     return result
 
 

@@ -35,7 +35,7 @@ from blizzard.auth_core import Role
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.app import Sweep
-from blizzard.hub.composition import TenantStores, build_hub_core, connections_for_engine
+from blizzard.hub.composition import TenantStores
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId
 from blizzard.hub.domain.observability.egress.config import EgressConfig
@@ -46,7 +46,6 @@ from blizzard.hub.tenancy import StoreScope
 from tests.support.route_classes import FLEET, FLEET_CLAIM, HUB_LEVEL, HUMAN, live_routes
 from tests.support.scaffolding import (
     OP,
-    TEST_HUB_ACTIONS,
     HubHarness,
     InMemoryTraceExporter,
     build_hub,
@@ -56,6 +55,7 @@ from tests.support.scaffolding import (
     first_color,
     hub_scoped,
     runner_token,
+    second_core,
     seed_session,
     seed_user,
 )
@@ -772,7 +772,7 @@ def _project_answers(stores: TenantStores, project_id: ProjectId, owner: _Tenant
 def test_a_tenants_projects_and_links_answer_only_in_their_own_tenant(two: Two) -> None:
     """At the store: the other tenant's project, slugs and links answer as a project never minted does, while their own
     tenant reads them."""
-    core = build_hub_core(connections_for_engine(two.hub.engine), clock=two.hub.clock, actions=TEST_HUB_ACTIONS)
+    core = second_core(two.hub)
     stores = {t.label: core.open(StoreScope(t.harness.tenant)) for t in two.both()}
     projects: dict[str, Project] = {}
     for t in two.both():

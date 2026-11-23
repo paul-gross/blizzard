@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.forge_resolution import FORGE_FIELD, ForgeChoice, MovedField
+from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
 
@@ -20,13 +20,13 @@ class _NamesForge(Protocol):
     def moved(self) -> tuple[tuple[str, object], ...]: ...
 
 
-def forge_choice(request: _NamesForge, services: TenantServices) -> ForgeChoice:
+def forge_choice(request: _NamesForge, forges: IReadForgeRepository) -> ForgeChoice:
     """``request``'s ``forge`` with the forge it resolves to, and every address field it sent."""
     forge: str | UnsetType = UNSET
     if FORGE_FIELD in request.model_fields_set:
         forge = ForgeChoice.named_forge(request.forge)
     return ForgeChoice(
         forge=forge,
-        named=None if forge is UNSET else services.forge_records.resolve(forge),
+        named=None if forge is UNSET else forges.resolve(forge),
         moved=tuple(MovedField(name, value if isinstance(value, str) else None) for name, value in request.moved),
     )

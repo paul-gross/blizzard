@@ -404,7 +404,7 @@ def test_before_many_snapshots_carry_prev_status_only_and_read_fewer_statements(
     ids = _seed_scale(hub, 3)
 
     with capture_statements(hub.engine) as narrow:
-        snapshots = ChunkChanged.before_many(hub.services, [*ids, "ch_never_minted"])
+        snapshots = ChunkChanged.before_many(hub.services.chunk_frames, [*ids, "ch_never_minted"])
     with capture_statements(hub.engine) as wide:
         hub.services.chunks.facts.load_facts_for(ids)
 

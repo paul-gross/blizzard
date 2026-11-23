@@ -11,7 +11,6 @@ import pytest
 
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.composition import build_hub_core, connections_for_engine
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
 from blizzard.hub.store.errors import HubStoreError
@@ -19,7 +18,7 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.tenancy import StoreScope, TenantId
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
-from tests.support.scaffolding import TEST_HUB_ACTIONS, add_tenant, build_hub, default_tenant, tenant_services_of
+from tests.support.scaffolding import add_tenant, build_hub, configured_core, default_tenant, tenant_services_of
 from tests.support.transition_identity import (
     process_identity_violations,
     process_sharing_violations,
@@ -79,14 +78,14 @@ def test_the_stores_the_core_opens_for_a_tenant_are_scoped_to_it(tmp_path: Path)
     hub = build_hub(tmp_path)
     scope = StoreScope(default_tenant(hub.engine))
 
-    core = build_hub_core(connections_for_engine(hub.engine), clock=hub.clock, actions=TEST_HUB_ACTIONS)
+    core = configured_core(hub.engine, tmp_path, clock=hub.clock)
 
     assert core.open(scope).connections.scope == scope
 
 
 def test_transaction_binding_is_shared_only_within_one_tenant(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    core = build_hub_core(connections_for_engine(hub.engine), clock=hub.clock, actions=TEST_HUB_ACTIONS)
+    core = configured_core(hub.engine, tmp_path, clock=hub.clock)
     first = core.open(StoreScope(default_tenant(hub.engine)))
     second = core.open(StoreScope(add_tenant(hub.engine, "other")))
 
@@ -97,7 +96,7 @@ def test_transaction_binding_is_shared_only_within_one_tenant(tmp_path: Path) ->
 def test_the_core_reads_no_tenant_until_one_is_opened_so_a_stale_store_still_builds(tmp_path: Path) -> None:
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'empty.db'}")
 
-    core = build_hub_core(connections_for_engine(engine), clock=SystemClock(), actions=TEST_HUB_ACTIONS)
+    core = configured_core(engine, tmp_path, clock=SystemClock())
 
     with pytest.raises(HubStoreError):
         core.open(StoreScope(TenantId("ten_01J0000000000000000000000")))

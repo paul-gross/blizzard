@@ -34,7 +34,30 @@ PROCESS_ROOTS: frozenset[Path] = frozenset(
 
 #: The route modules whose area resolves through the container, relative to the source root: each names the services
 #: it uses and never the legacy bags.
-NARROWED_MODULES: tuple[Path, ...] = (Path("hub/api/findings.py"), Path("hub/api/graphs.py"))
+NARROWED_MODULES: tuple[Path, ...] = tuple(
+    Path("hub/api") / name
+    for name in (
+        "findings.py",
+        "graphs.py",
+        "admin_settings.py",
+        "config.py",
+        "secrets.py",
+        "forges.py",
+        "credentials.py",
+        "repositories.py",
+        "work_sources.py",
+        "work_source_params.py",
+        "credential_choice.py",
+        "credential_params.py",
+        "forge_choice.py",
+        "forge_params.py",
+        "forge_warnings.py",
+        "repository_params.py",
+        "record_reads.py",
+        "user_names.py",
+        "request_config.py",
+    )
+)
 #: The legacy bags a narrowed module may not name.
 _LEGACY_BAGS = frozenset({"Services", "TenantServices"})
 

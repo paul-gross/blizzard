@@ -605,7 +605,7 @@ class HubConfig:
     #: Forge-status sweep cadence in seconds; consulted only when a source annotates.
     annotation_interval_seconds: int = DEFAULT_ANNOTATION_INTERVAL_SECONDS
     #: A hub action pass's bound in seconds: an overrun is cancelled at its next `await`.
-    action_pass_seconds: int = DEFAULT_ACTION_PASS_SECONDS
+    action_pass_seconds: float = DEFAULT_ACTION_PASS_SECONDS
     #: Instance-level forge-write posture for closing — false declines every
     #: configured source's closer (never the built-in hub source's, which writes no forge)
     #: so a non-canonical hub can't close real items; true (the default) is unconditional, so a

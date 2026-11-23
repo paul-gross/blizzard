@@ -50,6 +50,7 @@ from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
 from blizzard.hub.forge.web import web_links
 from blizzard.hub.work_sources.registry import SelectedWorkSources
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from blizzard.wire.chunk import (
     ArtifactView,
     BlockedView,
@@ -134,7 +135,7 @@ def blocked_view(unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedV
     return BlockedView(prerequisite_chunk_id=marking.prerequisite_chunk_id, unmet_count=marking.unmet_count)
 
 
-def ingest_conflict_refusal(services: TenantServices, exc: IngestConflict) -> ProblemHTTPException:
+def ingest_conflict_refusal(sources: IWorkSourceRegistry, exc: IngestConflict) -> ProblemHTTPException:
     """The ``409`` an ingest answers when a live chunk already holds one of its pointers: the pointer by its source's
     key, with the source's current slug and the pointer's label beside it."""
     pointer = exc.pointer
@@ -144,8 +145,8 @@ def ingest_conflict_refusal(services: TenantServices, exc: IngestConflict) -> Pr
             exc.existing_chunk_id,
             pointer.source,
             pointer.ref,
-            services.work_sources.source_label(pointer.source),
-            services.work_sources.label(pointer),
+            sources.source_label(pointer.source),
+            sources.label(pointer),
         )
     )
 

@@ -20,7 +20,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
 from blizzard.hub.api import problems, problems_admin
-from blizzard.hub.api.auth_session import AdmittedTenant, tenant_request
+from blizzard.hub.api.auth_session import RequestTenant
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problem_rendering import declared_problem_response
 from blizzard.hub.domain.projects.model import (
@@ -37,10 +37,6 @@ PROJECT_REQUIRED = "project_required"
 UNKNOWN_PROJECT = "unknown_project"
 
 
-#: The admitted tenant a project dependency resolves its reads beneath — its request scope is open once this resolves.
-_Admitted = Annotated[AdmittedTenant, Depends(tenant_request)]
-
-
 def project_of_call(projects: IReadProjectRepository) -> Project:
     """The project a call naming none acts in — the tenant's only one; :class:`ProjectRequired` otherwise. For an
     edge that needs a project only for part of what it was sent."""
@@ -48,7 +44,7 @@ def project_of_call(projects: IReadProjectRepository) -> Project:
 
 
 @inject_sync
-def call_project(_tenant: _Admitted, projects: FromDishka[IReadProjectRepository]) -> Project:
+def call_project(_tenant: RequestTenant, projects: FromDishka[IReadProjectRepository]) -> Project:
     """The project of a call that needs one (:func:`project_of_call`), as a dependency."""
     return project_of_call(projects)
 
@@ -67,7 +63,7 @@ def _unprocessable(where: str, field: str, value: str) -> HTTPException:
 
 
 @inject_sync
-def path_project(project: str, _tenant: _Admitted, projects: FromDishka[IReadProjectRepository]) -> Project:
+def path_project(project: str, _tenant: RequestTenant, projects: FromDishka[IReadProjectRepository]) -> Project:
     """The project the ``{project}`` path segment names, by id, slug or former slug; ``404`` when it names none."""
     found = projects.resolve(project)
     if found is None:
@@ -80,7 +76,7 @@ PathProject = Annotated[Project, Depends(path_project)]
 
 @inject_sync
 def query_project(
-    _tenant: _Admitted, projects: FromDishka[IReadProjectRepository], project: str | None = None
+    _tenant: RequestTenant, projects: FromDishka[IReadProjectRepository], project: str | None = None
 ) -> ProjectId | None:
     """The project ``?project=`` narrows a read to — ``None`` when the query names none, so the read takes the whole
     tenant; ``422`` when it names a project the tenant does not hold."""

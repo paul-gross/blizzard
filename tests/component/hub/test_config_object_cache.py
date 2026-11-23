@@ -13,9 +13,7 @@ import pytest
 from sqlalchemy import Engine, update
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.composition import LiveConfig, build_hub_core, build_live_config, connections_for_engine
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.credentials import (
     ConfiguredCredential,
@@ -35,12 +33,14 @@ from blizzard.hub.tenancy import StoreScope
 from tests.support.forge_auth import sent_token
 from tests.support.scaffolding import (
     OP,
-    TEST_HUB_ACTIONS,
+    TenantLive,
     config_authoring,
+    configured_core,
     default_tenant,
     hub_store_connections,
     migrated_hub_at,
     seed_forge,
+    tenant_live,
 )
 
 _NOW = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
@@ -65,20 +65,23 @@ class _World:
         self.engine = create_engine_from_url(db_url)
         self.keys = hub_key_provider({}, data_dir=tmp_path / "data")
         clock = FixedClock(_NOW)
-        self.core = build_hub_core(connections_for_engine(self.engine), clock=clock, actions=TEST_HUB_ACTIONS)
+        self.tmp_path = tmp_path
+        self.clock = clock
+        self.core = configured_core(self.engine, tmp_path, clock=clock)
         self.stores = self.core.open(StoreScope(default_tenant(self.engine)))
         self.authoring = config_authoring(self.engine, keys=self.keys, clock=clock)
         self.authoring.create_secret(SecretName.parse("gh"), "tok-a", OP)
         self.source_id = self.authoring.create_work_source_naming(
             "demo", None, _FIELDS, _on_github(self.engine), OP
         ).record.work_source_id
-        self.live = self.second_process()
+        self.live = tenant_live(self.stores)
         self.builds = 0
 
-    def second_process(self) -> LiveConfig:
-        return build_live_config(self.stores, cipher=secret_cipher(self.keys))
+    def second_process(self) -> TenantLive:
+        core = configured_core(self.engine, self.tmp_path, clock=self.clock)
+        return tenant_live(core.open(StoreScope(default_tenant(self.engine))))
 
-    def client(self, live: LiveConfig | None = None) -> _Client | None:
+    def client(self, live: TenantLive | None = None) -> _Client | None:
         live = live or self.live
 
         def build() -> _Client:

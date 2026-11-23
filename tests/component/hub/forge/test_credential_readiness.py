@@ -16,9 +16,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.clock import FixedClock, ManualMonotonicClock
 from blizzard.foundation.credential_check import CheckOutcome
-from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.composition import build_hub_core, build_live_config, connections_for_engine
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.config.changes import RecordKind, RecordRef
 from blizzard.hub.domain.config.credential_resolution import CredentialChoice
@@ -50,11 +48,12 @@ from blizzard.hub.store import schema
 from blizzard.hub.tenancy import StoreScope
 from tests.support.scaffolding import (
     OP,
-    TEST_HUB_ACTIONS,
     config_authoring,
+    configured_core,
     default_tenant,
     migrated_hub_at,
     seed_forge,
+    tenant_live,
 )
 
 _NOW = datetime(2026, 11, 16, 12, 0, tzinfo=UTC)
@@ -128,9 +127,7 @@ class _World:
         self.engine = create_engine_from_url(db_url)
         keys = hub_key_provider({}, data_dir=tmp_path / "data")
         clock = FixedClock(_NOW)
-        self.stores = build_hub_core(connections_for_engine(self.engine), clock=clock, actions=TEST_HUB_ACTIONS).open(
-            StoreScope(default_tenant(self.engine))
-        )
+        self.stores = configured_core(self.engine, tmp_path, clock=clock).open(StoreScope(default_tenant(self.engine)))
         self.authoring = config_authoring(self.engine, keys=keys, clock=clock)
         forge_id = seed_forge(self.engine, "http://forge.fixture")
         forge = self.stores.forge_records.get(forge_id)
@@ -145,7 +142,7 @@ class _World:
         self.issues = self._work_source("issues", self.deploy)
         self.requests: list[str] = []
         self.event_log = EventLogService(events=self.stores.chunk_stores.events, publisher=EventBroker())
-        self.live = build_live_config(self.stores, cipher=secret_cipher(keys))
+        self.live = tenant_live(self.stores)
 
     def _credential(self, slug: str) -> ConfiguredCredential:
         self.authoring.create_secret(SecretName.parse(slug), f"ghp_{slug}{'0' * 30}", OP)

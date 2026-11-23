@@ -16,6 +16,7 @@ from alembic.operations import Operations
 from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
+from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.tenancy import StoreScope
 from exemplar.hub.api import permits
@@ -48,11 +49,18 @@ def oauth_hub(tmp_path: Path) -> Iterator[HubHarness]:
 
 
 def _mounted(hub: HubHarness) -> Iterator[HubHarness]:
-    assert hub.app is not None and hub.core is not None
+    assert hub.app is not None and hub.core is not None and hub.config is not None
     with hub.engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
         _PERMITS.upgrade()
         _PERMIT_REVISION.upgrade()
-    process = open_store_backed(hub.core.store_connections, clock=hub.clock, actions=TEST_HUB_ACTIONS)
+    process = open_store_backed(
+        hub.core.store_connections,
+        clock=hub.clock,
+        actions=TEST_HUB_ACTIONS,
+        config=hub.config,
+        platform_tracing=DisabledPlatformTracing(),
+        environ={},
+    )
     hub.app.state.hub_process = process
     hub.app.include_router(permits.router)
     routes = hub.app.router.routes

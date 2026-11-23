@@ -15,16 +15,19 @@ import sqlalchemy as sa
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.foundation.ids import Id, IdPrefix
-from blizzard.hub.composition import LiveConfig, TenantStores
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
-from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
+from blizzard.hub.domain.config.credentials import IReadCredentialRepository
+from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, IReadForgeRepository
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
+from blizzard.hub.forge.auth import IForgeAuthorizations
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter, WriteLocks
 from blizzard.hub.graphs import PACKAGED
+from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.store import schema
 from tests.support.chunk_units import chunk_unit
 from tests.support.forge_auth import retire_secrets, sent_token
@@ -148,14 +151,21 @@ class _Forge:
         return self.double.adapter(binding)
 
     def forges(
-        self, stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets, write_locks: WriteLocks
+        self,
+        records: IReadRepositoryRecordRepository,
+        forges: IReadForgeRepository,
+        credentials: IReadCredentialRepository,
+        objects: ConfigObjectCache,
+        authorizations: IForgeAuthorizations,
+        budgets: ForgeBudgets,
+        write_locks: WriteLocks,
     ) -> ForgeRegistry:
         return ForgeRegistry(
-            records=stores.repository_records,
-            forges=stores.forge_records,
-            credentials=stores.credential_records,
-            objects=live.objects,
-            authorizations=live.authorizations,
+            records=records,
+            forges=forges,
+            credentials=credentials,
+            objects=objects,
+            authorizations=authorizations,
             build=self.adapter,
             capabilities=FORGE_KIND_CAPABILITIES,
             budgets=budgets,

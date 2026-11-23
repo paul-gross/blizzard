@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Header, status
 
 from blizzard.auth_core import Permission
@@ -16,12 +17,12 @@ from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.credential_params import PathCredential
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import TenantServices
+from blizzard.hub.auth.users import IReadUserRepository
+from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import RecordRef
 from blizzard.hub.domain.config.credential_bindings import CREDENTIAL_BINDINGS, bindings_for_kind
 from blizzard.hub.domain.config.credential_resolution import CredentialCapabilityMissing
@@ -34,11 +35,15 @@ from blizzard.hub.domain.config.credentials import (
     CredentialNotUsedBy,
     CredentialSlugTaken,
     CredentialUnavailable,
+    ICredentialReferences,
+    IReadCredentialRepository,
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
-from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId, IReadForgeRepository
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
+from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.kernel.forge_refusals import ForgeDiagnostic
-from blizzard.hub.forge.readiness import CredentialCheck, OperationResult
+from blizzard.hub.forge.readiness import CredentialCheck, CredentialReadiness, OperationResult
 from blizzard.wire.credential import (
     CredentialBindingView,
     CredentialCheckRequest,
@@ -63,6 +68,12 @@ router = APIRouter(
     tags=["credentials"],
     dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)],
 )
+
+#: The tenant's credential and forge records, its config writer and the user reads, resolved per request.
+Credentials = FromDishka[IReadCredentialRepository]
+ForgeRecords = FromDishka[IReadForgeRepository]
+Authoring = FromDishka[ConfigAuthoring]
+Users = FromDishka[IReadUserRepository]
 
 #: Each request field a patch may carry, with the :class:`CredentialEdit` field it sets.
 _EDIT_FIELDS = {
@@ -96,11 +107,13 @@ def _summary(record: ConfiguredCredential, forge: ConfiguredForge, names: Mappin
     )
 
 
-def _shown(record: ConfiguredCredential, services: TenantServices) -> CredentialSummary:
+def _shown(
+    record: ConfiguredCredential, forge_records: IReadForgeRepository, users: IReadUserRepository
+) -> CredentialSummary:
     """``record``'s summary, with the forge it names."""
-    forge = services.forge_records.get(record.fields.forge_id)
+    forge = forge_records.get(record.fields.forge_id)
     assert forge is not None
-    return _summary(record, forge, user_names(services, [record.created_by]))
+    return _summary(record, forge, user_names(users, [record.created_by]))
 
 
 def _referrers(refs: list[RecordRef]) -> list[RecordReferrer]:
@@ -137,15 +150,22 @@ def _conflict(exc: Exception) -> ProblemHTTPException:
 
 
 @router.get("", response_model=CredentialsListView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def list_credentials(services: Services, include_retired: bool = False) -> CredentialsListView:
+@inject_sync
+def list_credentials(
+    credentials: Credentials,
+    forge_records: ForgeRecords,
+    references: FromDishka[ICredentialReferences],
+    users: Users,
+    include_retired: bool = False,
+) -> CredentialsListView:
     """Every stored credential by slug, retired ones hidden unless `include_retired`, each with the count of enabled
     repositories and work sources naming it; and every binding a credential may name, with the kind of forge it
     authenticates against and each setting's choices; and, for each enabled forge, the bindings a credential on it may
     name."""
-    records = services.credential_records.list_all(include_retired=include_retired)
-    names = user_names(services, (r.created_by for r in records))
-    forges = services.forge_records.get_many(list({r.fields.forge_id for r in records}))
-    referrers = services.credential_references.referrers_of([r.credential_id for r in records])
+    records = credentials.list_all(include_retired=include_retired)
+    names = user_names(users, (r.created_by for r in records))
+    forges = forge_records.get_many(list({r.fields.forge_id for r in records}))
+    referrers = references.referrers_of([r.credential_id for r in records])
     return CredentialsListView(
         credentials=[
             CredentialListItem(
@@ -167,17 +187,20 @@ def list_credentials(services: Services, include_retired: bool = False) -> Crede
         ],
         forge_bindings=[
             ForgeBindingsView(forge_id=forge.forge_id, bindings=list(bindings_for_kind(forge.kind)))
-            for forge in services.forge_records.list_all(include_retired=False)
+            for forge in forge_records.list_all(include_retired=False)
         ],
     )
 
 
 @router.post("", response_model=CredentialSummary, status_code=status.HTTP_201_CREATED)
+@inject_sync
 def create_credential(
     request: CredentialCreateRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    services: Services,
+    forge_records: ForgeRecords,
+    authoring: Authoring,
+    users: Users,
 ) -> CredentialSummary:
     """Create a credential at revision 1 on the forge `forge` names, under `binding`, reading `secret`; its `name` is
     its `slug` when omitted. 422 naming the field for a malformed `slug` or `name`, with the code
@@ -185,7 +208,7 @@ def create_credential(
     than the binding's, `credential_settings_invalid` for settings the binding refuses, `forge_unavailable` for an
     unknown or retired forge, and `secret_unavailable` for an unknown or retired secret; 409 for a slug some credential
     holds, or an authority another credential on the forge acts as, naming it."""
-    forge = services.forge_records.resolve(request.forge)
+    forge = forge_records.resolve(request.forge)
     draft = CredentialDraft(
         slug=request.slug,
         name=request.name,
@@ -195,23 +218,30 @@ def create_credential(
         settings=request.settings,
     )
     try:
-        record = services.config_authoring.create_credential(draft, change_context(identity, door))
+        record = authoring.create_credential(draft, change_context(identity, door))
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (CredentialSlugTaken, CredentialAuthorityTaken) as exc:
         raise _conflict(exc) from exc
-    return _shown(record, services)
+    return _shown(record, forge_records, users)
 
 
 @router.get("/{credential}", response_model=CredentialDocument, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def get_credential(credential: PathCredential, services: Services) -> CredentialDocument:
+@inject_sync
+def get_credential(
+    credential: PathCredential,
+    repository_records: FromDishka[IReadRepositoryRecordRepository],
+    source_records: FromDishka[IReadWorkSourceRepository],
+    forge_records: ForgeRecords,
+    users: Users,
+) -> CredentialDocument:
     """One credential by id, current slug or former slug, retired or not, with every repository and work source
     naming it. 404 on an unknown credential."""
     credential_id = credential.credential_id
-    repositories = services.repository_records.naming_credential(credential_id)
-    sources = services.work_source_records.naming_credential(credential_id)
+    repositories = repository_records.naming_credential(credential_id)
+    sources = source_records.naming_credential(credential_id)
     return CredentialDocument(
-        **_shown(credential, services).model_dump(),
+        **_shown(credential, forge_records, users).model_dump(),
         referrers=[
             *(
                 CredentialReferenceView(kind=UseKind.REPOSITORY, key=r.repository_id, label=r.slug)
@@ -223,12 +253,15 @@ def get_credential(credential: PathCredential, services: Services) -> Credential
 
 
 @router.patch("/{credential}", response_model=CredentialSummary)
+@inject_sync
 def patch_credential(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     credential: PathCredential,
     request: CredentialPatchRequest,
     door: RequestDoor,
-    services: Services,
+    forge_records: ForgeRecords,
+    authoring: Authoring,
+    users: Users,
     if_match: Annotated[int | None, Header()] = None,
 ) -> CredentialSummary:
     """Apply only the fields present; a patch that changes nothing writes nothing, and a slug that changes keeps
@@ -239,62 +272,63 @@ def patch_credential(
     acting with the credential needs, listing each."""
     edit = CredentialEdit(**{_EDIT_FIELDS[field]: getattr(request, field) for field in request.model_fields_set})
     try:
-        record = services.config_authoring.edit_credential(
-            credential, edit, change_context(identity, door), if_match=if_match
-        )
+        record = authoring.edit_credential(credential, edit, change_context(identity, door), if_match=if_match)
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (ConfigRevisionConflict, CredentialSlugTaken, CredentialAuthorityTaken) as exc:
         raise _conflict(exc) from exc
-    return _shown(record, services)
+    return _shown(record, forge_records, users)
 
 
 @router.post("/{credential}/retire", response_model=CredentialSummary)
+@inject_sync
 def retire_credential(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     credential: PathCredential,
     door: RequestDoor,
-    services: Services,
+    forge_records: ForgeRecords,
+    authoring: Authoring,
+    users: Users,
     if_match: Annotated[int | None, Header()] = None,
 ) -> CredentialSummary:
     """Retire a credential only when no enabled repository or work source names it; retiring a retired credential
     changes nothing. 404 unknown; 409 for a stale `If-Match`, or naming each enabled record still naming it."""
     try:
-        record = services.config_authoring.retire_credential(
-            credential, change_context(identity, door), if_match=if_match
-        )
+        record = authoring.retire_credential(credential, change_context(identity, door), if_match=if_match)
     except (ConfigRevisionConflict, CredentialInUse) as exc:
         raise _conflict(exc) from exc
-    return _shown(record, services)
+    return _shown(record, forge_records, users)
 
 
 @router.post("/{credential}/enable", response_model=CredentialSummary)
+@inject_sync
 def enable_credential(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     credential: PathCredential,
     door: RequestDoor,
-    services: Services,
+    forge_records: ForgeRecords,
+    authoring: Authoring,
+    users: Users,
     if_match: Annotated[int | None, Header()] = None,
 ) -> CredentialSummary:
     """Enable a retired credential; enabling an enabled one changes nothing. 404 unknown, 409 for a stale `If-Match`,
     422 when its forge or secret has since been retired."""
     try:
-        record = services.config_authoring.enable_credential(
-            credential, change_context(identity, door), if_match=if_match
-        )
+        record = authoring.enable_credential(credential, change_context(identity, door), if_match=if_match)
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
-    return _shown(record, services)
+    return _shown(record, forge_records, users)
 
 
 @router.post("/{credential}/checks", response_model=CredentialCheckView)
+@inject_sync
 def check_credential(
     _identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     credential: PathCredential,
     request: CredentialCheckRequest,
-    services: Services,
+    readiness: FromDishka[CredentialReadiness],
 ) -> CredentialCheckView:
     """Check a credential read-only against the repositories and work sources named by id or slug, else against every
     enabled record acting with it: each read landing and ingestion make, and each write judged from the grant the
@@ -303,9 +337,7 @@ def check_credential(
     `credential-check` event. 404 unknown; 422 `credential_not_used_by` naming each named record not acting with the
     credential, and `secret_unavailable` for a retired credential or an unknown or retired secret."""
     try:
-        check = services.credential_readiness.check(
-            credential, repositories=request.repositories, work_sources=request.work_sources
-        )
+        check = readiness.check(credential, repositories=request.repositories, work_sources=request.work_sources)
     except CredentialNotUsedBy as exc:
         uses = [RecordReferrer(kind=use.kind.value, key=use.key, label=use.label) for use in exc.uses]
         raise ProblemHTTPException(partial(problems_admin.credential_not_used_by_problem, str(exc), uses)) from exc

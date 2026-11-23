@@ -17,7 +17,6 @@ from sqlalchemy import update
 from blizzard.foundation.clock import ControlledClock, FixedClock
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.composition import build_hub_core, build_live_config, connections_for_engine
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.capabilities import Capability
@@ -49,11 +48,12 @@ from tests.support.forge_auth import sent_header
 from tests.support.github_app import API_BASE, APP_ID, FULL_GRANT, INSTALLATION_ID, AppGitHub, app_key_pem
 from tests.support.scaffolding import (
     OP,
-    TEST_HUB_ACTIONS,
     config_authoring,
+    configured_core,
     default_tenant,
     migrated_hub_at,
     seed_forge,
+    tenant_live,
 )
 
 _NOW = datetime(2026, 11, 14, 12, 0, 0, tzinfo=UTC)
@@ -74,7 +74,7 @@ class _World:
         self.engine = create_engine_from_url(db_url)
         keys = hub_key_provider({}, data_dir=tmp_path / "data")
         store_clock = FixedClock(_NOW)
-        core = build_hub_core(connections_for_engine(self.engine), clock=store_clock, actions=TEST_HUB_ACTIONS)
+        core = configured_core(self.engine, tmp_path, clock=store_clock)
         self.stores = core.open(StoreScope(default_tenant(self.engine)))
         self.authoring = config_authoring(self.engine, keys=keys, clock=store_clock)
         self.clock = ControlledClock(_NOW)
@@ -92,7 +92,7 @@ class _World:
             OP,
         ).work_source_id
         self._act_as_the_installation()
-        live = build_live_config(self.stores, cipher=secret_cipher(keys))
+        live = tenant_live(self.stores)
         authorizations = ForgeAuthorizations(
             secrets=StoreSecretReader(
                 catalog=self.stores.secrets, sealed=self.stores.secrets, cipher=secret_cipher(keys)

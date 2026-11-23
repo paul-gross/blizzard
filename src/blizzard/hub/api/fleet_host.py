@@ -152,7 +152,7 @@ def retire_host_runner(
     if registration is None or registration.host_id != principal.host_id:
         return problem_response(problems.runner_not_found_problem(runner_id, instance=http_request.url.path))
     held = services.chunks.route.live_routes_of_runner(runner_id)
-    changes = chunk_events.ChunkChanged.before_many(services, [r.chunk_id for r in held])
+    changes = chunk_events.ChunkChanged.before_many(services.chunk_frames, [r.chunk_id for r in held])
     try:
         outcome: RetireOutcome = services.fleet.retire(registration, by=request.by, force=request.force)
     except RetireInterrupted as exc:

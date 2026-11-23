@@ -337,7 +337,7 @@ def retire_host(host_id: str, request: HostRetireRequest, services: Services) ->
     host = _host(services, host_id)
     under = services.registry.list_runners(include_retired=True, host_id=host_id)
     held = [route for r in under for route in services.chunks.route.live_routes_of_runner(r.runner_id)]
-    changes = chunk_events.ChunkChanged.before_many(services, [r.chunk_id for r in held])
+    changes = chunk_events.ChunkChanged.before_many(services.chunk_frames, [r.chunk_id for r in held])
     try:
         outcome = services.host_retirement.retire(host, by=request.by, force=request.force)
     except (HostHoldsRoutes, HostLifecycleConflict) as exc:

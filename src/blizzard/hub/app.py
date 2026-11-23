@@ -41,6 +41,7 @@ from blizzard.foundation.registry.interface import ServiceAbsent
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.rotation import RotationResult
+from blizzard.foundation.secrets.sealing import IRotatableKeyProvider
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.trace_attributes import CHUNK_ID
@@ -129,9 +130,6 @@ from blizzard.hub.auth.memberships import MembershipRoleRefused
 from blizzard.hub.composition import (
     HubServices,
     HubSettingsGraph,
-    LiveConfig,
-    TenantStores,
-    build_config_authoring,
     build_flow_driver,
     build_hub_core,
     build_hub_flags,
@@ -150,6 +148,7 @@ from blizzard.hub.config import (
 )
 from blizzard.hub.delivery.action_registry import build_hub_actions
 from blizzard.hub.delivery.flow_driver import FlowDriver
+from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.carry_over import ExistingConfig, ImportResult, LegacyStart, LegacyStartRefused
 from blizzard.hub.domain.config.forge_check import ForgeCheck
 from blizzard.hub.domain.config.oauth_providers import ProvidersOrphaned, require_providers_configured
@@ -170,22 +169,16 @@ from blizzard.hub.domain.runners.registration import RunnerRetired
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.sweeps.locks import SweepInProgress
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
-from blizzard.hub.forge.auth import ForgeScope, ScopedAuthorizations
-from blizzard.hub.forge.budget import ForgeBudgets
-from blizzard.hub.forge.internal.factory import build_forge_registry
-from blizzard.hub.forge.refusals import refusal_reader
-from blizzard.hub.forge.registry import ForgeRegistry, WriteLocks
 from blizzard.hub.layout import SIGNING_KEYS_PARTS, remove_retired_workdirs
 from blizzard.hub.process_root import open_store_free
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import rotate_keys
-from blizzard.hub.settings.pass_config import bind_pass_config, current_pass_config
+from blizzard.hub.settings.pass_config import bind_pass_config
+from blizzard.hub.settings.source import HubConfigSource
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreError
 from blizzard.hub.store.forge_check_reads import UnreadableStore, read_forge_addresses
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
-from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
-from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from blizzard.wire.components import HUB_SCHEMA_COMPONENTS
 
 #: The transcript-event derivation sweep's own interval.
@@ -235,6 +228,10 @@ class Sweep:
         config: HubConfig = app.state.config
         tracer = app.state.platform_tracing.tracer
         settings: HubSettingsGraph | None = getattr(app.state, "hub_settings", None)
+        # A hub holding a settings graph reads each pass's config, and each live interval, from its live config source.
+        source: HubConfigSource | None = (
+            app.state.hub_process.resolver.get(HubConfigSource) if settings is not None else None
+        )
         for name in services.sweeps.names():
             if config.sweeps.of(name) is SweepMode.STEPPED:
                 continue
@@ -251,11 +248,11 @@ class Sweep:
                 app.state.shutdown,
                 jitter_seconds=random.uniform(0, interval),
                 live_interval=(
-                    partial(_live_sweep_interval, name, settings) if settings is not None and interval_key else None
+                    partial(_live_sweep_interval, name, source) if source is not None and interval_key else None
                 ),
                 subscribe=settings.authoring.subscribe if settings is not None and interval_key else None,
                 interval_key=interval_key,
-                pass_config=(partial(_resolve_live_config, settings) if settings is not None else None),
+                pass_config=(source.resolved if source is not None else None),
             )
 
     @property
@@ -374,13 +371,8 @@ class Sweep:
             first = False
 
 
-def _live_sweep_interval(name: SweepName, settings: HubSettingsGraph) -> int:
-    return _sweep_interval(name, _resolve_live_config(settings))
-
-
-def _resolve_live_config(settings: HubSettingsGraph) -> HubConfig:
-    snapshot = settings.reader.snapshot()
-    return settings.footing.resolve(snapshot.entries)
+def _live_sweep_interval(name: SweepName, source: HubConfigSource) -> int:
+    return _sweep_interval(name, source.resolved())
 
 
 def _sweep_interval(name: SweepName, config: HubConfig) -> int:
@@ -440,7 +432,7 @@ def rotate_secret_keys(config: HubConfig, environ: Mapping[str, str]) -> Rotatio
     tenant's secrets re-sealed."""
     engine, connections = open_hub_store(config.db_url)
     try:
-        core = build_process_core(connections, actions=build_hub_actions(environ))
+        core = build_process_core(connections, config, environ)
         try:
             tenants = core.every_open()
             keys = hub_key_provider(environ, data_dir=config.data_dir)
@@ -461,14 +453,11 @@ def import_legacy_config(
     legacy = read_legacy_keys(config.config_path, environ, strict=config.strict)
     engine, connections = open_hub_store(config.db_url)
     try:
-        core = build_process_core(connections, actions=build_hub_actions(environ))
+        core = build_process_core(connections, config, environ)
         with contextlib.closing(core.process):
             target = _legacy_import_tenant(core.open_tenants(), named=tenant)
             stores = core.open(StoreScope(target))
-            authoring = build_config_authoring(
-                stores,
-                cipher=secret_cipher(hub_key_provider(environ, data_dir=config.data_dir)),
-            )
+            authoring = stores.tenant.get(ConfigAuthoring)
             existing = ExistingConfig(
                 secrets=frozenset(secret.name for secret in stores.secrets.list_all()),
                 work_sources=tuple(stores.work_source_records.list_all(include_retired=True)),
@@ -582,7 +571,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         else:
             if services is not None:
                 cleanup.callback(services.action_loop.stop)
-                cleanup.callback(services.close_tenant_objects)
+                cleanup.callback(services.process.tenants.close)
             else:
                 cleanup.callback(app.state.hub_process.close)
         try:
@@ -655,7 +644,17 @@ def create_app(
     app.state.readiness = readiness
     app.state.services = services
     # The store-backed process the services were built over, else the store-free one, which lifespan closes.
-    app.state.hub_process = services.process if services is not None else open_store_free(clock=build_system_clock())
+    app.state.hub_process = (
+        services.process
+        if services is not None
+        else open_store_free(
+            clock=build_system_clock(),
+            config=config,
+            platform_tracing=platform_tracing,
+            environ=os.environ,
+            actions=build_hub_actions(os.environ),
+        )
+    )
     # Set on shutdown by ``lifespan``; every SSE stream races it.
     app.state.shutdown = asyncio.Event()
     # The hosted hub's flow driver, set by ``build_hosted_app`` alone; ``lifespan`` runs it beside the sweeps.
@@ -784,55 +783,20 @@ def build_hosted_app(
         readiness = ReadinessService(reader=reader, expected_revision=expected)
 
         core = build_hub_core(
-            connections, clock=resolved_clock, actions=build_hub_actions(os.environ), settings=settings
+            connections,
+            clock=resolved_clock,
+            actions=build_hub_actions(os.environ),
+            settings=settings,
+            config=config,
+            platform_tracing=platform_tracing,
+            environ=os.environ,
         )
         # Closed after everything registered below: the tenant scopes, then the process scope; the engine, tracing
         # and settings stay borrowed from `hub host`.
         cleanup.callback(core.process.close)
         # Minted here on first start when no key source exists yet.
-        secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
+        secret_keys = core.process.resolver.get(IRotatableKeyProvider)
         remove_retired_workdirs(config.data_dir)
-
-        def live_config() -> HubConfig:
-            bound = current_pass_config()
-            if bound is not None:
-                return bound
-            if settings is None:
-                return config
-            return _resolve_live_config(settings)
-
-        def work_source_registry(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> IWorkSourceRegistry:
-            return WorkSourceEntry.registry(
-                records=stores.work_source_records,
-                forges=stores.forge_records,
-                credentials=stores.credential_records,
-                objects=live.objects,
-                authorizations=ScopedAuthorizations(live.authorizations, ForgeScope.WORK_SOURCE),
-                users=core.users,
-                work_item_store=stores.work_item_store,
-                edits=stores.work_item_edits,
-                resolution=stores.garden_proposal_resolution,
-                budgets=budgets,
-                refusals=refusal_reader,
-                close_forge_writes_enabled=lambda: live_config().close_forge_writes_enabled,
-                instrument_client=platform_tracing.instrument_client,
-            )
-
-        def forge_registry(
-            stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets, write_locks: WriteLocks
-        ) -> ForgeRegistry:
-            return build_forge_registry(
-                records=stores.repository_records,
-                forges=stores.forge_records,
-                credentials=stores.credential_records,
-                objects=live.objects,
-                authorizations=live.authorizations,
-                clock=stores.clock,
-                budgets=budgets,
-                write_locks=write_locks,
-                instrument=platform_tracing.instrument_client,
-            )
-
         tracing = TracingSettings.of(os.environ)
 
         # The provider-login seam is built only under `oauth`: under `none`
@@ -851,14 +815,11 @@ def build_hosted_app(
         flags = build_hub_flags(config)
         services = build_services(
             core,
-            work_sources=work_source_registry,
-            forges=forge_registry,
             public_url=config.public_url,
             follow_latest_default=config.follow_latest,
             oauth_providers=oauth_providers,
             oauth_http_client=oauth_client,
             signing_keys_dir=signing_keys_dir,
-            secret_keys=secret_keys,
             trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
             login_throttle=config.auth.login_throttle,
             transcript_caps=config.transcripts.transcript_caps(),
@@ -872,22 +833,17 @@ def build_hosted_app(
                 if tracing.enabled()
                 else None
             ),
-            tracing=config.tracing,
             tracing_settings=tracing,
-            platform_tracer=platform_tracing.tracer,
             extractors=shipped_extractors(),
-            egress=config.egress,
             egress_path_key=_egress_path_key(config.egress),
-            annotation_interval_seconds=config.annotation_interval_seconds,
-            action_pass_seconds=config.action_pass_seconds,
             version_window=version_window,
             cadences_on=lambda: flags.on("cadences"),
             announce_minted=announce_minted,
-            live_config=live_config,
-            pass_config=(partial(_resolve_live_config, settings) if settings is not None else None),
         )
+        # Closed before the action loop stops: each tenant scope's finalizer closes the configured clients its
+        # records built on the loop they run on.
         cleanup.callback(services.action_loop.stop)
-        cleanup.callback(services.close_tenant_objects)
+        cleanup.callback(core.process.tenants.close)
         # Only once the store is at the expected schema head: a store mid-migration must
         # fail *readiness*, not *boot* (pinned:
         # `tests/component/test_readiness.py::test_ready_probe_false_on_unmigrated_store`).

@@ -8,24 +8,20 @@ and its ``{source}/items``/``{source}/items/{ref}`` children."""
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
-from dataclasses import replace
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
 from blizzard.auth_core import Role
-from blizzard.foundation.clock import IClock
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.foundation.work_items import WorkItemClosure
-from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef
+from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
-from blizzard.hub.domain.kernel.transactions import Transaction
-from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.tenancy import StoreScope
 from tests.support.scaffolding import (
     FakeWorkSource,
     HubHarness,
@@ -38,39 +34,8 @@ from tests.support.scaffolding import (
     make_ready,
     seed_session,
     seed_user,
-    serve_default_tenant,
 )
 from tests.support.work_item_units import close_item
-
-
-class _CountingFactsStore(ChunkFactsStore):
-    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
-        super().__init__(store, clock)
-        self.load_facts_calls = 0
-
-    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
-        self.load_facts_calls += 1
-        return super().load_facts(chunk_id, transaction=transaction)
-
-
-class _CountingWorkRefsStore(ChunkWorkRefsStore):
-    """Counts calls to the pointer-liveness reads (mirrors
-    ``tests/component/hub/api/test_list_chunks_bulk_reads.py``'s own counting store)."""
-
-    def __init__(self, store: ScopedConnections, clock: IClock, *, facts: ChunkFactsStore) -> None:
-        super().__init__(store, clock, facts=facts)
-        self.find_live_holder_calls = 0
-        self.live_holders_calls = 0
-
-    def find_live_holder(self, pointer: WorkRef) -> str | None:
-        self.find_live_holder_calls += 1
-        return super().find_live_holder(pointer)
-
-    def live_holders(
-        self, pointers: Iterable[WorkRef], *, transaction: Transaction | None = None
-    ) -> dict[WorkRef, str]:
-        self.live_holders_calls += 1
-        return super().live_holders(pointers, transaction=transaction)
 
 
 def test_a_hub_owned_pointer_ingests_and_renders_its_title_and_body(tmp_path: Path) -> None:
@@ -179,19 +144,19 @@ def test_list_work_items_resolves_liveness_with_one_bulk_call_regardless_of_item
         hub.client.post("/api/work-sources/hub/items", json={"title": f"t{i}", "body": "b"}).json() for i in range(3)
     ]
 
-    counting_facts = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
-    counting_work_refs = _CountingWorkRefsStore(hub_store_connections(hub.engine), hub.clock, facts=counting_facts)
-    assert hub.app is not None
-    serve_default_tenant(
-        hub,
-        replace(hub.services, chunks=replace(hub.services.chunks, facts=counting_facts, work_refs=counting_work_refs)),
+    work_refs = hub.hub_services.process.tenants.resolve(
+        StoreScope(default_tenant(hub.engine)), IReadChunkWorkRefsRepository
     )
 
-    listed = hub.client.get("/api/work-sources/hub/items").json()["items"]
+    with (
+        patch.object(work_refs, "live_holders", wraps=work_refs.live_holders) as live_holders,
+        patch.object(work_refs, "find_live_holder", wraps=work_refs.find_live_holder) as find_live_holder,
+    ):
+        listed = hub.client.get("/api/work-sources/hub/items").json()["items"]
 
     assert {item["web_url"] for item in listed} == {f"/board/chunk/{c['chunk_id']}" for c in created}
-    assert counting_work_refs.live_holders_calls == 1
-    assert counting_work_refs.find_live_holder_calls == 0
+    assert live_holders.call_count == 1
+    assert find_live_holder.call_count == 0
 
 
 def test_editor_listing_resolves_its_source_label_once_only_when_nonempty(

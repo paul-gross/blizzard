@@ -192,7 +192,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services, http_request: 
     # Resolution before minting, and before the live-holder check: an unresolvable
     # token should not consult the store, and the request rejects as a whole.
     named = body_project(request.project, services.projects).project_id if request.project is not None else None
-    urgency = stated_urgency(request.urgency, services)
+    urgency = stated_urgency(request.urgency, services.urgency_reading)
     pointers: list[WorkRef] = []
     for token in request.tokens:
         pointer = services.work_sources.resolve(token)
@@ -228,8 +228,10 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services, http_request: 
     except IngestSourceNotLinked as exc:  # unlinked after the project was chosen
         return ingest_project_refusal(http_request, services, exc)
     except IngestConflict as exc:
-        raise ingest_conflict_refusal(services, exc) from exc
-    chunk_events.ChunkChanged.of(services, chunk_id, prev_status=None).publish(cause="minted", key=f"chunks:{chunk_id}")
+        raise ingest_conflict_refusal(services.work_sources, exc) from exc
+    chunk_events.ChunkChanged.of(services.chunk_frames, chunk_id, prev_status=None).publish(
+        cause="minted", key=f"chunks:{chunk_id}"
+    )
     services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
     return ChunkIngestResponse(chunk_id=chunk_id, **project_label_fields(project, services.projects.get(project)))
 
@@ -608,7 +610,7 @@ def requeue_chunk(
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
     try:
         requeue_id = services.requeue.requeue(
             chunk, by=identity.username, note=request.note if request is not None else None
@@ -641,7 +643,7 @@ def restart_chunk(chunk_id: str, request: ChunkRestartRequest, services: Service
     if graph is None:
         raise ProblemHTTPException(problems.pinned_graph_missing_problem)
     to_graph = graph_by_ref(services.graphs, request.to_graph) if request.to_graph is not None else None
-    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
     try:
         restarted = services.restart.restart(
             chunk, graph, node_name=request.node, by=request.by, to_graph=to_graph, note=request.note
@@ -678,7 +680,7 @@ def detach_chunk(chunk_id: str, services: Services) -> ChunkSummary:
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
     try:
         released_id = services.detach.detach(chunk)
     except NotRouted as exc:
@@ -699,7 +701,7 @@ def pause_chunk(chunk_id: str, request: ChunkPauseRequest, services: Services) -
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
     try:
         pause_fact_id = services.pause.pause(chunk, by=request.by)
     except ChunkNotFound as exc:
@@ -722,7 +724,7 @@ def resume_chunk(chunk_id: str, request: ChunkPauseRequest, services: Services) 
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
     pause_fact_id = services.pause.resume(chunk, by=request.by)
     facts = change.publish(cause="resumed", key=f"chunk_pause_facts:{pause_fact_id}")
     services.events.publish_queue_changed()  # a resume can re-admit the chunk to the queue
@@ -744,7 +746,7 @@ def stop_chunk(chunk_id: str, request: ChunkStopRequest, services: Services) -> 
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
     try:
         stopped = services.stop.stop(chunk, by=request.by)
     except ChunkNotFound as exc:
@@ -772,7 +774,7 @@ def complete_chunk(chunk_id: str, request: ChunkCompleteRequest, services: Servi
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
     try:
         completed = services.complete.complete(chunk, by=request.by)
     except ChunkNotFound as exc:
@@ -812,7 +814,7 @@ def promote_chunk(chunk_id: str, services: Services, request: ChunkPlacementRequ
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
     try:
         promoted_id = services.promote.promote(chunk, placement=placement)
     except ChunkNotFound as exc:
@@ -846,7 +848,7 @@ def demote_chunk(chunk_id: str, services: Services, request: ChunkPlacementReque
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
     try:
         demoted_id = services.demote.demote(chunk, placement=placement)
     except ChunkNotFound as exc:
@@ -876,7 +878,7 @@ def patch_chunk(chunk_id: str, request: ChunkPatchRequest, services: Services) -
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
     try:
         plan = ChunkPatchBody(request, services).apply(chunk)
     except ChunkNotFound as exc:
@@ -927,7 +929,7 @@ def delete_chunk(chunk_id: str, request: ChunkDeleteRequest, services: Services)
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
     try:
         deleted_id = services.delete.delete(chunk, by=request.by)
     except ChunkNotFound as exc:

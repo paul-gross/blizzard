@@ -672,7 +672,7 @@ def group_chunks(
     already finished, or one of another project than the survivor's. The survivor also
     absorbs each folded chunk's standing dependency edges; 409 refuses a fold that would
     close a cycle."""
-    before = chunk_events.ChunkChanged.before(services, chunk_id)
+    before = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
     try:
         result = services.group.group(chunk_id, request.merge_chunk_ids)
     except ChunkNotFound as exc:
@@ -688,7 +688,7 @@ def group_chunks(
     survivor = result.survivor
     services.events.publish_queue_changed()
     key = f"chunk_grouped:{result.grouped_id}" if result.grouped_id is not None else None
-    chunk_events.ChunkChanged.of(services, survivor.chunk_id, prev_status=before.prev_status).publish(
+    chunk_events.ChunkChanged.of(services.chunk_frames, survivor.chunk_id, prev_status=before.prev_status).publish(
         cause="grouped", status=result.status.value, key=key
     )
     return ChunkGroupResponse(
