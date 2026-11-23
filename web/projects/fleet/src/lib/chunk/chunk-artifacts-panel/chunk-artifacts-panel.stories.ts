@@ -34,7 +34,7 @@ const meta: Meta<ChunkArtifactsPanel> = {
   },
   render: (args) => ({
     props: args,
-    template: `<div style="height: 420px"><fleet-chunk-artifacts-panel [artifacts]="artifacts" [selectedKey]="selectedKey" [drilldown]="drilldown" [testidPrefix]="testidPrefix" (pickArtifact)="pickArtifact($event)" (clearArtifact)="clearArtifact()" /></div>`,
+    template: `<div style="height: 420px"><fleet-chunk-artifacts-panel [artifacts]="artifacts" [selectedKey]="selectedKey" [drilldown]="drilldown" [testidPrefix]="testidPrefix" (pickArtifact)="selectedKey = $event; pickArtifact($event)" (clearArtifact)="selectedKey = null; clearArtifact()" /></div>`,
   }),
 };
 export default meta;
