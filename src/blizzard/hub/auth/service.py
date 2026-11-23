@@ -145,6 +145,10 @@ class Slug:
         return slug or "user"
 
 
+#: Opens a tenant's invitation writer over its connections — what a sign-in accepting an invitation writes through.
+InvitationWriters = Callable[[ScopedConnections], IWriteInvitationRepository]
+
+
 class AuthService:
     """Mint, resolve, and slide sessions; mint collision-free usernames."""
 
@@ -161,7 +165,7 @@ class AuthService:
         memberships: IReadMembershipRepository,
         hub_admins: IReadHubAdminRepository,
         transactions: IIdentityTransactions,
-        invitations: Callable[[ScopedConnections], IWriteInvitationRepository],
+        invitations: InvitationWriters,
         idle_ttl: timedelta = IDLE_TTL,
         absolute_max_age: timedelta = ABSOLUTE_MAX_AGE,
         touch_granularity: timedelta = TOUCH_GRANULARITY,

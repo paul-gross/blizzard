@@ -14,6 +14,7 @@ from __future__ import annotations
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import JSONResponse
 
@@ -22,20 +23,22 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import TenantBoundAdmitting, require, require_either, tenant_bound
-from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
+from blizzard.hub.auth.identities import IReadIdentityRepository
 from blizzard.hub.auth.memberships import (
     LastAdminKept,
     Member,
     MembershipChangeRefused,
     MembershipRoleRefused,
     NotAMember,
+    TenantMembers,
     assignable_roles,
     revocable,
 )
 from blizzard.hub.auth.models import Identity, ResolvedIdentity
-from blizzard.hub.composition import HubServices
-from blizzard.hub.tenancy import StoreScope, TenantId
+from blizzard.hub.auth.users import IReadUserRepository
+from blizzard.hub.events.broker import EventBroker
+from blizzard.hub.tenancy import TenantId
 from blizzard.wire.user import MemberRoleRequest, MemberView, UserIdentityView
 
 router = APIRouter(
@@ -64,17 +67,22 @@ def identity_views(identities: list[Identity]) -> list[UserIdentityView]:
     return [UserIdentityView(provider_name=i.provider_name, handle=i.handle) for i in identities]
 
 
-def change_membership(services: HubServices, actor: ResolvedIdentity, user_id: str, to_role: Role | None) -> Member:
+def change_membership(
+    users: IReadUserRepository,
+    members: TenantMembers,
+    events: EventBroker,
+    actor: ResolvedIdentity,
+    user_id: str,
+    to_role: Role | None,
+) -> Member:
     """Move ``user_id`` to ``to_role`` (``None`` revokes) in the actor's tenant, answering each refusal: ``404`` for a
     user that does not exist or is no member, alike; ``422`` for a role no membership holds; ``403`` for changing your
     own role; ``409`` for the tenant's last admin. A revocation ends the user's open event streams in the tenant."""
-    subject = services.users.get(user_id)
+    subject = users.get(user_id)
     if subject is None:
         raise _unknown(NotAMember(user_id))
     try:
-        member = services.members.change(
-            actor=actor, subject=services.members.member(subject, tenant=tenant_of(actor)), to_role=to_role
-        )
+        member = members.change(actor=actor, subject=members.member(subject, tenant=tenant_of(actor)), to_role=to_role)
     except NotAMember as exc:
         raise _unknown(exc) from exc
     except MembershipChangeRefused as exc:
@@ -84,7 +92,7 @@ def change_membership(services: HubServices, actor: ResolvedIdentity, user_id: s
     if member.role is None:
         # The revocation has committed: the user's open event streams in the tenant end. Every membership role
         # holds the stream's permission, so a role change ends none.
-        services.tenants.open_services(StoreScope(member.tenant)).events.end_subscriber(user_id)
+        events.end_subscriber(user_id)
     return member
 
 
@@ -116,36 +124,54 @@ def _member_view(member: Member, *, identities: list[Identity], actor: ResolvedI
 
 
 @router.get("/members", response_model=list[MemberView])
+@inject_sync
 def list_members(
-    services: Hub,
+    members_of: FromDishka[TenantMembers],
+    identity_reads: FromDishka[IReadIdentityRepository],
     actor: Annotated[ResolvedIdentity, Depends(require(Permission.USER_MANAGE))],
 ) -> list[MemberView]:
     """Every member of the request's tenant, with the changes the actor may make to each."""
-    members = services.members.listing(tenant_of(actor))
-    identities = services.identities.list_for_users([m.user.user_id for m in members])
+    members = members_of.listing(tenant_of(actor))
+    identities = identity_reads.list_for_users([m.user.user_id for m in members])
     admins = sum(1 for m in members if m.role is Role.ADMIN)
     return [_member_view(m, identities=identities.get(m.user.user_id, []), actor=actor, admins=admins) for m in members]
 
 
 @grants_router.put("/members/{user_id}", response_model=MemberView)
-def grant_membership(user_id: str, body: MemberRoleRequest, services: Hub, actor: _Granter) -> MemberView:
+@inject_sync
+def grant_membership(
+    user_id: str,
+    body: MemberRoleRequest,
+    users: FromDishka[IReadUserRepository],
+    members_of: FromDishka[TenantMembers],
+    identity_reads: FromDishka[IReadIdentityRepository],
+    events: FromDishka[EventBroker],
+    actor: _Granter,
+) -> MemberView:
     """Grant ``user_id`` ``role`` in the request's tenant, or change the role they hold there. A role equal to the one
     in force writes nothing. Refused: a user that does not exist or — without ``membership:grant-any`` — is no member
     (``404``, alike), a role that is no membership role (``422``, after the user is found), your own role (``403``),
     and demoting the tenant's last admin (``409``)."""
-    member = change_membership(services, actor, user_id, body.role)
+    member = change_membership(users, members_of, events, actor, user_id, body.role)
     return _member_view(
         member,
-        identities=services.identities.list_for_user(user_id),
+        identities=identity_reads.list_for_user(user_id),
         actor=actor,
-        admins=services.members.admins(member.tenant),
+        admins=members_of.admins(member.tenant),
     )
 
 
-@grants_router.delete("/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def revoke_membership(user_id: str, services: Hub, actor: _Granter) -> Response:
+@grants_router.delete("/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@inject_sync
+def revoke_membership(
+    user_id: str,
+    users: FromDishka[IReadUserRepository],
+    members_of: FromDishka[TenantMembers],
+    events: FromDishka[EventBroker],
+    actor: _Granter,
+) -> Response:
     """Revoke ``user_id``'s membership in the request's tenant. Refused as a grant is: a user that is no member
     (``404``, unless the actor holds ``membership:grant-any``, for whom it writes nothing), your own (``403``), and the
     tenant's last admin (``409``)."""
-    change_membership(services, actor, user_id, None)
+    change_membership(users, members_of, events, actor, user_id, None)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

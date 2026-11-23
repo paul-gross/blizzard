@@ -109,10 +109,10 @@ nodes:
     hub.app.state.services = services
 
     def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
-        principal = RunnerAuth.of(request, services).demand()
+        principal = RunnerAuth.of(request).demand()
         close_tenant(hub.engine, principal.tenant_id)
         services.tenants.open_tenants.refresh()
-        return resolve_tenant(request, services)
+        return resolve_tenant(request)
 
     hub.app.dependency_overrides[resolve_tenant] = close_before_resolution
     observe(client.post(url, json=body, headers=bearer(holder)), 404, TenantNotFoundProblem)

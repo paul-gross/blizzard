@@ -82,10 +82,10 @@ def test_runner_read_tenant_closes_between_authentication_and_resolution(
         template = "/api/fleet/chunks/{chunk_id}/findings/{finding_id}"
 
     def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
-        principal = RunnerAuth.of(request, services).demand()
+        principal = RunnerAuth.of(request).demand()
         close_tenant(hub.engine, principal.tenant_id)
         services.tenants.open_tenants.refresh()
-        return resolve_tenant(request, services)
+        return resolve_tenant(request)
 
     monkeypatch.setitem(hub.app.dependency_overrides, resolve_tenant, close_before_resolution)
     response = hub.client.get(path)

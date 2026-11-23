@@ -30,7 +30,6 @@ from starlette.routing import Route
 from blizzard import __version__
 from blizzard.foundation.clock import ControlledClock, IClock, resolve_clock
 from blizzard.foundation.flags import FlagOffError, FlagRegistry, Flags, resolve_flags
-from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.attributes import annotate
 from blizzard.foundation.platform_tracing.handle import (
@@ -127,7 +126,11 @@ from blizzard.hub.api.work_item_reads import router as work_item_reads_router
 from blizzard.hub.api.work_source_params import refuse_built_in_work_source
 from blizzard.hub.api.work_sources import router as work_sources_router
 from blizzard.hub.auth.bootstrap import Superuser
+from blizzard.hub.auth.identities import IReadIdentityRepository
 from blizzard.hub.auth.memberships import MembershipRoleRefused
+from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
+from blizzard.hub.auth.service import AuthService
+from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.composition import (
     HubServices,
     HubSettingsGraph,
@@ -139,7 +142,6 @@ from blizzard.hub.composition import (
     open_hub_store,
 )
 from blizzard.hub.config import (
-    AUTH_MODE_OAUTH,
     ConfigError,
     HubConfig,
     StoreUrl,
@@ -169,7 +171,7 @@ from blizzard.hub.domain.runners.registration import RunnerRetired
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.sweeps.locks import SweepInProgress
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
-from blizzard.hub.layout import SIGNING_KEYS_PARTS, remove_retired_workdirs
+from blizzard.hub.layout import remove_retired_workdirs
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.process_root import HubProcess, open_store_backed, open_store_free
 from blizzard.hub.runtime import migration_runner
@@ -790,7 +792,7 @@ def build_hosted_app(
     """The ``host`` composition root: wire every fleet seam over caller-owned resources.
 
     The engine and tracing handle are borrowed; outbound clients are instrumented through the handle.
-    ``oauth_http_client`` replaces the OAuth providers' client.
+    ``oauth_http_client`` replaces the OAuth providers' client, and is never closed here.
     ``version_window`` judges each registering runner's version."""
     resolved_clock = clock if clock is not None else resolve_clock(os.environ)
     controlled = isinstance(resolved_clock, ControlledClock)
@@ -808,6 +810,7 @@ def build_hosted_app(
             config=config,
             platform_tracing=platform_tracing,
             environ=os.environ,
+            oauth_http_client=oauth_http_client,
         )
         # Closed after everything registered below: the tenant scopes, then the process scope; the engine, tracing
         # and settings stay borrowed from `hub host`.
@@ -817,29 +820,16 @@ def build_hosted_app(
         remove_retired_workdirs(config.data_dir)
         tracing = TracingSettings.of(os.environ)
 
-        # The provider-login seam is built only under `oauth`: under `none`
-        # there is no login mechanism to serve.
-        oauth_providers = config.auth.oauth_providers if config.auth.mode == AUTH_MODE_OAUTH else ()
-        # The IdP signing-key lifecycle — likewise built only under `oauth`; a
-        # `none` deployment never touches disk for a keypair it will never mint or publish.
-        signing_keys_dir = (
-            config.data_dir.joinpath(*SIGNING_KEYS_PARTS) if config.auth.mode == AUTH_MODE_OAUTH else None
-        )
-        oauth_client = oauth_http_client if oauth_http_client is not None else httpx2.Client(timeout=15.0)
-        if oauth_http_client is None:
-            cleanup.callback(oauth_client.close)
-        platform_tracing.instrument_client(oauth_client)
+        # Resolved before serving, so a misconfigured provider or an unusable signing-keys directory fails boot rather
+        # than the first request. Both are built only under `oauth`: under `none` there is no login mechanism to serve.
+        core.process.resolver.get(IOAuthProviderRegistry)
+        core.process.resolver.get(SigningKeyService | None)
 
         flags = build_hub_flags(config)
         services = build_services(
             core,
             public_url=config.public_url,
             follow_latest_default=config.follow_latest,
-            oauth_providers=oauth_providers,
-            oauth_http_client=oauth_client,
-            signing_keys_dir=signing_keys_dir,
-            trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
-            login_throttle=config.auth.login_throttle,
             transcript_caps=config.transcripts.transcript_caps(),
             # No exporter is built unless OpenTelemetry's own variables enable tracing.
             trace_exporter=(
@@ -887,7 +877,7 @@ def build_hosted_app(
             try:
                 require_providers_configured(
                     {provider.name for provider in config.auth.oauth_providers},
-                    services.identities.distinct_provider_names(),
+                    core.process.resolver.get(IReadIdentityRepository).distinct_provider_names(),
                 )
             except ProvidersOrphaned as refusal:
                 raise ConfigError(str(refusal)) from refusal
@@ -916,7 +906,7 @@ def build_hosted_app(
                     get_logger("blizzard.hub.flow_driver").exception(
                         "flow driver boot recovery failed", tenant_id=stores.scope.tenant
                     )
-            Superuser(email=config.auth.superuser, auth=services.auth).ensure()
+            Superuser(email=config.auth.superuser, auth=core.process.resolver.get(AuthService)).ensure()
             _announce_started(expected, services)
             announce_rejected_tracing(tracing, services)
             announce_rejected_egress(config.egress, services)

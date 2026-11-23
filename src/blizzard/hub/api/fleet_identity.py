@@ -7,15 +7,16 @@ This route reads the token itself and answers every outcome, 200 or a typed 401.
 
 from __future__ import annotations
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.hub.api.auth import RunnerAuth, RunnerPrincipal
-from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.api.problem_rendering import problem_response
 from blizzard.hub.api.problems import runner_identity_problem
 from blizzard.hub.domain.runners.registration import RunnerTokenRefused
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.wire.runner import RunnerIdentityView
 
 router = APIRouter(prefix="/api/fleet", tags=["fleet"])
@@ -25,20 +26,21 @@ router = APIRouter(prefix="/api/fleet", tags=["fleet"])
     "/identity",
     response_model=RunnerIdentityView,
 )
-def get_runner_identity(request: Request, services: Hub) -> RunnerIdentityView | JSONResponse:
+@inject_sync
+def get_runner_identity(request: Request, open_tenants: FromDishka[OpenTenants]) -> RunnerIdentityView | JSONResponse:
     """The id and name of the runner the presented bearer token names, and the tenant it was added
     in, or a 401 saying why the hub refuses it: ``missing``, ``unknown``, ``revoked`` or
     ``retired``, the last two naming the runner the token was issued to. Registers nothing and
     records no liveness."""
     try:
-        identified = _identified(RunnerAuth.of(request, services))
+        identified = _identified(RunnerAuth.of(request))
     except RunnerTokenRefused as exc:
         return problem_response(runner_identity_problem(exc, instance=request.url.path))
     return RunnerIdentityView(
         runner_id=identified.runner_id,
         runner_name=identified.runner_name,
         tenant_id=identified.tenant_id,
-        tenant_name=services.tenants.open_tenants.name(identified.tenant_id),
+        tenant_name=open_tenants.name(identified.tenant_id),
         fleet_flags=request.app.state.flags.fleet_answer(),
     )
 

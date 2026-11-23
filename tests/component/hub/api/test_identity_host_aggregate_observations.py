@@ -31,6 +31,7 @@ from blizzard.wire.tenant import TenantCredentialMismatchProblem, TenantNotFound
 from tests.support.hub_request_auth import bearer, cookie
 from tests.support.refusal_observation import RefusalObservation, coverage_mismatches, observe_refusal
 from tests.support.scaffolding import build_hub, seed_runner, seed_session, seed_user
+from tests.support.store_free_process import store_free
 
 
 def test_identity_and_host_problem_variants_are_aggregated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -130,10 +131,8 @@ def test_identity_and_host_problem_variants_are_aggregated(tmp_path: Path, monke
     )
     observe(hub.client.post(hosts, json={"name": "x"}), "post", hosts, 409, TenantRequiredProblem)
     for app, path, method in ((hub.app, hosts, "post"), (oauth.app, jwks, "get"), (oauth.app, me, "get")):
-        services = app.state.services
-        app.state.services = None
-        response = TestClient(app).request(method, path, json={"name": "x"})
+        with store_free(app):
+            response = TestClient(app).request(method, path, json={"name": "x"})
         observe(response, method, path, 503, HubStoreUnavailableProblem)
-        app.state.services = services
 
     assert coverage_mismatches(hub.app.openapi(), {("get", jwks), ("get", me), ("post", hosts)}, observations) == []

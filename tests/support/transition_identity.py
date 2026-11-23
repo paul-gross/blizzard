@@ -8,8 +8,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from blizzard.hub.auth.errors import RepoErrorFactory
+from blizzard.hub.auth.facts import AuthFactsService
+from blizzard.hub.auth.internal.identity_repository import IdentityRepository
+from blizzard.hub.auth.internal.membership_repository import MembershipRepository
+from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
+from blizzard.hub.auth.service import AuthService
+from blizzard.hub.auth.throttle import LiveIpThrottle
 from blizzard.hub.composition import HubCore, HubServices, TenantServices, TenantStores
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_registry import HubActions
@@ -204,11 +209,9 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
 def process_identity_violations(core: HubCore, services: HubServices) -> list[str]:
     """Each retained hub-level field that is not the process container's instance."""
     process = core.process.resolver
-    retained: tuple[tuple[str, object, type[Any]], ...] = (
+    retained: tuple[tuple[str, object, Any], ...] = (
         ("HubCore.hub_scoped_reads", core.hub_scoped_reads, HubScopedReads),
         ("HubCore.hub_events", core.hub_events, HubEventLogStore),
-        ("HubCore.auth_errors", core.auth_errors, RepoErrorFactory),
-        ("HubCore.users", core.users, UserRepository),
         ("HubServices.hub_scoped_reads", services.hub_scoped_reads, HubScopedReads),
         ("HubServices.hub_events", services.hub_events, HubEventLogStore),
         ("HubActions.catalogue", process.get(HubActions).catalogue, HubActionCatalogue),
@@ -216,6 +219,12 @@ def process_identity_violations(core: HubCore, services: HubServices) -> list[st
         ("HubServices.step_wake", services.step_wake, StepWake),
         ("HubServices.event_brokers", services.event_brokers, TenantBrokers),
         ("HubServices.users", services.users, UserRepository),
+        ("HubServices.sessions", services.sessions, SessionRepository),
+        ("HubServices.identities", services.identities, IdentityRepository),
+        ("HubServices.memberships", services.memberships, MembershipRepository),
+        ("HubServices.auth", services.auth, AuthService),
+        ("HubServices.auth_throttle", services.auth_throttle, LiveIpThrottle),
+        ("HubServices.auth_facts", services.auth_facts, AuthFactsService),
     )
     return [f"{name} is not its container instance" for name, field, key in retained if field is not process.get(key)]
 

@@ -211,14 +211,14 @@ def test_real_class_factory_is_traversed() -> None:
     assert any("RunnerAuth.demand" in item and "HTTPException" in item for item in found)
     assert not any(item.endswith("unresolved call RunnerAuth.of") for item in unknown)
     assert any("RunnerAuth.of" in item and "unresolved call cls" in item for item in unknown)
-    assert any("unresolved call RunnerAuth.of(request, services).demand" in item for item in unknown)
+    assert any("unresolved call RunnerAuth.of(request).demand" in item for item in unknown)
     for function, method in (
         (reject_runner_principal, "RunnerAuth.refuse_runner"),
         (require_host_principal, "HostAuth.demand"),
     ):
         found, unknown = delegation_candidates(function)
         assert any(method in item and "HTTPException" in item for item in found)
-        assert any("unresolved call" in item and ".of(request, services)." in item for item in unknown)
+        assert any("unresolved call" in item and ".of(request)." in item for item in unknown)
 
 
 def test_auth_factory_candidates_are_additive_and_static(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -229,10 +229,10 @@ def test_auth_factory_candidates_are_additive_and_static(tmp_path: Path, monkeyp
         "from fastapi import HTTPException\n"
         "from blizzard.hub.api.auth import RunnerAuth, HostAuth\n"
         "def planted(self):\n raise HTTPException(418)\n"
-        "def endpoint(request, services):\n return RunnerAuth.of(request, services).demand()\n"
+        "def endpoint(request, services):\n return RunnerAuth.of(request).demand()\n"
         "def shadow(RunnerAuth):\n return RunnerAuth.of(1, 2).demand()\n"
         "def imported():\n from other import RunnerAuth\n return RunnerAuth.of(1, 2).demand()\n"
-        "def wrong(request, services):\n return HostAuth.of(request, services).refuse_runner()\n"
+        "def wrong(request, services):\n return HostAuth.of(request).refuse_runner()\n"
     )
     spec = importlib.util.spec_from_file_location("blizzard.hub.planted_auth_candidate", path)
     assert spec and spec.loader
@@ -241,7 +241,7 @@ def test_auth_factory_candidates_are_additive_and_static(tmp_path: Path, monkeyp
     monkeypatch.setattr(RunnerAuth, "demand", module.planted)
     found, unknown = delegation_candidates(module.endpoint)
     assert any("planted" in item and "418" in item for item in found)
-    assert any("unresolved call RunnerAuth.of(request, services).demand" in item for item in unknown)
+    assert any("unresolved call RunnerAuth.of(request).demand" in item for item in unknown)
     assert producer_inventory_failures(("GET", "/planted"), found, {("GET", "/planted"): set()})
     for function in (module.shadow, module.imported, module.wrong):
         found, unknown = delegation_candidates(function)
@@ -250,7 +250,7 @@ def test_auth_factory_candidates_are_additive_and_static(tmp_path: Path, monkeyp
     monkeypatch.setattr(RunnerAuth, "demand", property(lambda self: 1))
     found, unknown = delegation_candidates(module.endpoint)
     assert not any("418" in item for item in found)
-    assert any("unresolved call RunnerAuth.of(request, services).demand" in item for item in unknown)
+    assert any("unresolved call RunnerAuth.of(request).demand" in item for item in unknown)
 
 
 def test_bound_dependency_traverses_method_and_keeps_instance_calls_unknown(tmp_path: Path) -> None:
@@ -347,7 +347,7 @@ def test_me_boundary_keeps_reviewed_unknowns_visible() -> None:
     assert not unknown
     found, unresolved = operation_evidence(routes[("GET", "/api/me")])
     assert any("authentication_required_problem" in item for item in found)
-    assert any("services.memberships.memberships_for" in item for item in unresolved)
+    assert any("memberships_for" in item for item in unresolved)
     assert any("request.headers.get" in item for item in unresolved)
     assert not producer_inventory_failures(("GET", "/api/me"), found, REVIEWED)
 
@@ -524,7 +524,7 @@ def test_real_operation_detects_new_transitive_module_refusal(tmp_path: Path, mo
         spec.loader.exec_module(module)
         modules.append(module)
     endpoint = _me_endpoint()
-    monkeypatch.setitem(endpoint.__globals__, "hub_services", vars(modules[1])["call"])
+    monkeypatch.setitem(endpoint.__globals__, "request_resolver", vars(modules[1])["call"])
     routes, _ = route_inventory(create_app_for_export(packaged_flag_registry()))
     failures = _boundary_failures(("GET", "/api/me"), operation_evidence(routes[("GET", "/api/me")]))
     assert any("planted_helper.refuse" in failure and "409" in failure for failure in failures)

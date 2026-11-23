@@ -16,6 +16,7 @@ from blizzard.wire.problem import HubStoreUnavailableProblem
 from tests.support.oauth_login_double import FakeOAuthProvider, state_from_redirect
 from tests.support.refusal_observation import RefusalObservation, coverage_mismatches, observe_refusal
 from tests.support.scaffolding import build_hub
+from tests.support.store_free_process import store_free
 
 _AUTHORIZE = "/api/auth/{name}/authorize"
 _CALLBACK = "/api/auth/{name}/callback"
@@ -80,10 +81,12 @@ def test_login_and_cli_token_problem_variants_match_openapi(tmp_path: Path) -> N
             LoginThrottledProblem,
         )
 
-    hub.app.state.services = None
-    for operation, path in ((_AUTHORIZE, authorize), (_CALLBACK, callback)):
-        observe_refusal(observations, hub.client.get(path), "get", operation, 503, HubStoreUnavailableProblem)
-    observe_refusal(observations, hub.client.post(_TOKEN, json=_BODY), "post", _TOKEN, 503, HubStoreUnavailableProblem)
+    with store_free(hub.app):
+        for operation, path in ((_AUTHORIZE, authorize), (_CALLBACK, callback)):
+            observe_refusal(observations, hub.client.get(path), "get", operation, 503, HubStoreUnavailableProblem)
+        observe_refusal(
+            observations, hub.client.post(_TOKEN, json=_BODY), "post", _TOKEN, 503, HubStoreUnavailableProblem
+        )
     assert (
         coverage_mismatches(
             hub.app.openapi(), {("get", _AUTHORIZE), ("get", _CALLBACK), ("post", _TOKEN)}, observations

@@ -10,6 +10,8 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+import httpx2
+
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.platform_tracing import wiring as platform_tracing_wiring
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing
@@ -20,6 +22,8 @@ from blizzard.foundation.registry.scopes import OwnedChild, Resolver, ScopeValue
 from blizzard.foundation.roles import collaborator
 from blizzard.hub.api import wiring as api
 from blizzard.hub.api.version_window import HubVersionWindow
+from blizzard.hub.auth import wiring as auth
+from blizzard.hub.auth.wiring import BorrowedOAuthClient
 from blizzard.hub.composition import register_legacy, register_legacy_absent
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery import wiring as delivery
@@ -71,6 +75,11 @@ class HubProcess:
         """The process scope's guarded resolver."""
         return self.owner.resolver
 
+    @property
+    def credentials(self):
+        """The hub-scoped credential reads: which tenant a runner or host token, or id, belongs to."""
+        return self.resolver.get(HubScopedReads).credentials
+
     def close(self) -> None:
         """Close every tenant scope, then the process scope, attempting the second when the first fails."""
         try:
@@ -95,6 +104,7 @@ def register_hub(
     if store_backed:
         delivery.register(registry)
         register_legacy(registry)
+        auth.register(registry)
         secrets.register(registry)
         findings.register(registry, store.register_findings(registry))
         graph_area.register(registry, store.register_graphs(registry))
@@ -111,6 +121,7 @@ def register_hub(
         api.register(registry)
     else:
         register_legacy_absent(registry)
+        auth.register_absent(registry)
         secrets.register_absent(registry)
         store.register_findings_absent(registry)
         findings.register_absent(registry)
@@ -225,13 +236,16 @@ def store_backed_values(
     actions: HubActions,
     settings: HubSettingsGraph | None = None,
     versions: HubVersionWindow | None = None,
+    oauth_http_client: httpx2.Client | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> ScopeValues:
     """The store-backed graph's scope values; ``settings`` is supplied only to a graph declaring the settings ports, and
-    ``versions`` only to one declaring the version window."""
+    ``versions`` only to one declaring the version window. ``oauth_http_client`` is the OAuth client the caller lends,
+    left ``None`` for the hub to open its own."""
     values: list[ScopeValue[Any]] = [
         supply(port(HubStoreConnections), connections),
+        supply(port(BorrowedOAuthClient), BorrowedOAuthClient(oauth_http_client)),
         *process_values(
             clock=clock,
             config=config,
@@ -260,6 +274,7 @@ def build_store_backed(
     actions: HubActions,
     settings: HubSettingsGraph | None = None,
     versions: HubVersionWindow | None = None,
+    oauth_http_client: httpx2.Client | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> HubProcess:
@@ -273,6 +288,7 @@ def build_store_backed(
         actions=actions,
         settings=settings,
         versions=versions,
+        oauth_http_client=oauth_http_client,
         graphs=graphs,
         system_artifacts=system_artifacts,
     )
@@ -324,6 +340,7 @@ def open_store_backed(
     actions: HubActions,
     settings: HubSettingsGraph | None = None,
     versions: HubVersionWindow | None = None,
+    oauth_http_client: httpx2.Client | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> HubProcess:
@@ -341,6 +358,7 @@ def open_store_backed(
         actions=actions,
         settings=settings,
         versions=versions,
+        oauth_http_client=oauth_http_client,
     )
 
 

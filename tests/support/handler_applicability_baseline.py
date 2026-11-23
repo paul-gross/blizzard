@@ -99,10 +99,23 @@ DIRECT_ENDPOINTS = {
     ("GET", "/api/fleet/chunks/{chunk_id}/envelope"): ("get_envelope", PROBLEM_EXCEPTION),
     ("POST", "/api/fleet/chunks/{chunk_id}/completions"): ("submit_completion", PROBLEM_EXCEPTION),
 }
+#: The operations whose only route on the hub-level services was the tenant resolution, which now takes none.
+NO_HUB_SERVICES = {
+    ("GET", "/api/fleet/system-artifacts"),
+    ("GET", "/api/fleet/system-artifacts/{name}"),
+    ("GET", "/api/fleet/host"),
+    ("GET", "/api/fleet/runners/{runner_id}"),
+    ("POST", "/api/fleet/host"),
+    ("POST", "/api/fleet/host/events"),
+    ("POST", "/api/fleet/host/runners"),
+    ("POST", "/api/fleet/host/runners/{runner_id}/retire"),
+    ("POST", "/api/fleet/runners"),
+    ("POST", "/api/hosts"),
+}
 DIRECT_DISPATCH: dict[tuple[str, str], dict[str, set[str]]] = {
     operation: {
-        HTTP_HANDLER: {HUB_SERVICES}
-        | ({TENANT} if operation != ("GET", "/api/fleet/identity") else set())
+        HTTP_HANDLER: (set() if operation in NO_HUB_SERVICES else {HUB_SERVICES})
+        | {TENANT}
         | (
             {f"blizzard.hub.api.fleet.{DIRECT_ENDPOINTS[operation][0]} raises {DIRECT_ENDPOINTS[operation][1]}"}
             if operation in DIRECT_ENDPOINTS
@@ -110,5 +123,6 @@ DIRECT_DISPATCH: dict[tuple[str, str], dict[str, set[str]]] = {
         )
     }
     for operation in OPERATIONS
-    if operation[1].startswith("/api/fleet/") or operation == ("POST", "/api/hosts")
+    if (operation[1].startswith("/api/fleet/") or operation == ("POST", "/api/hosts"))
+    and operation != ("GET", "/api/fleet/identity")
 }

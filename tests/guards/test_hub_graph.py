@@ -26,7 +26,13 @@ from blizzard.hub.api.auth_session import tenant_bound
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.app import create_app_for_export
-from blizzard.hub.composition import build_hub_settings, memberships_leaf
+from blizzard.hub.auth.hub_admins import HubAdministrators
+from blizzard.hub.auth.internal.membership_repository import MembershipRepository
+from blizzard.hub.auth.invitations import InvitationService
+from blizzard.hub.auth.memberships import TenantMembers
+from blizzard.hub.auth.sign_in import SignIn
+from blizzard.hub.auth.wiring import BorrowedOAuthClient
+from blizzard.hub.composition import build_hub_settings
 from blizzard.hub.config import HubConfig
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.delivery.action_registry import SHIPPED_ACTIONS, HubActions
@@ -49,6 +55,7 @@ from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.host_enrollment import HostEnrollmentService
 from blizzard.hub.domain.runners.host_report import HostReportService
 from blizzard.hub.domain.urgency.services import UrgencyReading
+from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.readiness import CredentialReadiness
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
@@ -101,6 +108,10 @@ def _second_open_tenants(reads: HubScopedReads) -> OpenTenants:
     return OpenTenants(reads.tenants.open_tenants)
 
 
+def _second_memberships(connections: HubStoreConnections) -> MembershipRepository:
+    return MembershipRepository(connections)
+
+
 @pytest.mark.parametrize(
     ("store_backed", "settings", "versions"),
     [(True, True, True), (True, False, True), (True, True, False), (False, False, False)],
@@ -134,7 +145,7 @@ def test_the_hub_graph_gate_fails_a_planted_second_owner_and_role_key() -> None:
 
 def test_the_hub_graph_gate_fails_a_planted_alias_onto_a_doubled_owner() -> None:
     registry = _hub(store_backed=True)
-    registry.leaf(memberships_leaf, lifetime=Lifetime.PROCESS)
+    registry.leaf(_second_memberships, lifetime=Lifetime.PROCESS)
     assert alias_identity_violations(registry) == [
         "alias IReadMembershipRepository targets MembershipRepository, which has 2 owners"
     ]
@@ -171,6 +182,7 @@ def _process() -> Iterator[OwnedChild]:
                 supply(port(HubConfig), HubConfig(root=Path(), db_url="sqlite://")),
                 supply(port(IPlatformTracing), DisabledPlatformTracing()),
                 supply(port(HubEnviron), HubEnviron({})),
+                supply(port(BorrowedOAuthClient), BorrowedOAuthClient(None)),
                 supply(port(HubActions), SHIPPED_ACTIONS),
                 supply(port(PackagedGraphs), GRAPHS_PACKAGED),
                 supply(port(PackagedSystemArtifacts), SYSTEM_ARTIFACTS_PACKAGED),
@@ -216,8 +228,31 @@ def test_every_routes_container_dependencies_resolve_at_the_lifetime_it_runs_in(
         ("POST /api/fleet/runners", FleetService),
     }
     narrowed = ("/api/findings", "/api/config", "/api/secrets", "/api/forges", "/api/credentials", "/api/repositories")
-    narrowed += ("/api/work-sources", "/api/projects", "/api/hosts", "/api/fleet/host")
+    narrowed += (
+        "/api/work-sources",
+        "/api/projects",
+        "/api/hosts",
+        "/api/fleet/host",
+        "/api/members",
+        "/api/users",
+        "/api/invitations",
+    )
     assert all(each.tenant for each in _hub_routes if each.route.split(" ")[1].startswith(narrowed))
+    hub_only = ("/api/auth", "/api/me", "/api/admin/hub-admins", "/api/fleet/identity")
+    assert [
+        each.route
+        for each in _hub_routes
+        if each.tenant
+        and any(each.route.split(" ")[1] == p or each.route.split(" ")[1].startswith(f"{p}/") for p in hub_only)
+    ] == []
+    assert {(each.route, each.dependency) for each in _hub_routes} >= {
+        ("GET /api/fleet/identity", OpenTenants),
+        ("PUT /api/admin/hub-admins/{user_id}", HubAdministrators),
+        ("GET /api/auth/{name}/callback", SignIn),
+        ("GET /api/members", TenantMembers),
+        ("POST /api/users/{user_id}/role", EventBroker),
+        ("POST /api/invitations", InvitationService),
+    }
     assert unresolved_route_dependencies(_hub_routes, _process) == []
 
 

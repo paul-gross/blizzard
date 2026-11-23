@@ -24,6 +24,7 @@ from tests.support.credential_runners import seed_credential_runners
 from tests.support.hub_request_auth import bearer
 from tests.support.refusal_observation import RefusalObservation, coverage_mismatches, observe_refusal
 from tests.support.scaffolding import build_hub, close_tenant
+from tests.support.store_free_process import store_free
 
 
 @pytest.mark.parametrize(
@@ -61,16 +62,14 @@ def test_fleet_artifacts_and_events_refusals(tmp_path: Path, method: str, path: 
     if path.endswith("{name}"):
         observe(request(bearer(live)), 404, SystemArtifactNotFoundProblem)
 
-    services = hub.app.state.services
-    hub.app.state.services = None
-    observe(request(bearer(live)), 503, HubStoreUnavailableProblem)
-    hub.app.state.services = services
+    with store_free(hub.app):
+        observe(request(bearer(live)), 503, HubStoreUnavailableProblem)
 
     def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
-        principal = RunnerAuth.of(request, services).demand()
+        principal = RunnerAuth.of(request).demand()
         close_tenant(hub.engine, principal.tenant_id)
         services.tenants.open_tenants.refresh()
-        return resolve_tenant(request, services)
+        return resolve_tenant(request)
 
     hub.app.dependency_overrides[resolve_tenant] = close_before_resolution
     observe(request(bearer(live)), 404, TenantNotFoundProblem)

@@ -14,6 +14,7 @@ import pytest
 from click.testing import CliRunner, Result
 
 from blizzard.auth_core import Role
+from blizzard.hub.auth.invitations import InvitationService
 from blizzard.hub.auth.models import User
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import AUTH_MODE_OAUTH
@@ -103,8 +104,8 @@ def test_the_hub_administrator_invites_into_the_tenant_named(hub: HubHarness) ->
 
     _link_token(cli("invite", "create", "--email", "first@example.com", "--role", "admin", "--tenant", bravo.tenant))
 
-    assert [i.invitation.email for i in bravo.services.invitations.list()] == ["first@example.com"]
-    assert hub.open_services(default_tenant(hub.engine)).invitations.list() == []
+    assert [i.invitation.email for i in hub.resolve(bravo.tenant, InvitationService).list()] == ["first@example.com"]
+    assert hub.default_adapter(InvitationService).list() == []
 
 
 @pytest.mark.parametrize(

@@ -17,6 +17,7 @@ from tests.support.credential_runners import seed_credential_runners
 from tests.support.hub_request_auth import bearer
 from tests.support.refusal_observation import RefusalObservation, refusal_mismatches
 from tests.support.scaffolding import build_hub
+from tests.support.store_free_process import store_free
 
 OPERATIONS = [
     ("GET", "/api/fleet/system-artifacts/{name}"),
@@ -57,8 +58,8 @@ def test_shared_refusals_on_runner_reads(tmp_path: Path, method: str, path: str)
         observation = RefusalObservation(method, path, status, response.headers["content-type"], model, response.json())
         assert refusal_mismatches(hub.app.openapi(), observation) == []
 
-    hub.app.state.services = None
-    response = client.request(method, url, headers=bearer(live))
+    with store_free(hub.app):
+        response = client.request(method, url, headers=bearer(live))
     assert response.status_code == 503, response.text
     observation = RefusalObservation(
         method, path, 503, response.headers["content-type"], HubStoreUnavailableProblem, response.json()

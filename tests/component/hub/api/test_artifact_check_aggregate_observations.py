@@ -68,10 +68,10 @@ def test_artifact_check_problem_variants_are_aggregated(tmp_path: Path, monkeypa
     assert hub.services.chunks.facts.load_facts(chunk) == facts
 
     def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
-        principal = RunnerAuth.of(request, services).demand()
+        principal = RunnerAuth.of(request).demand()
         close_tenant(hub.engine, principal.tenant_id)
         services.tenants.open_tenants.refresh()
-        return resolve_tenant(request, services)
+        return resolve_tenant(request)
 
     hub.app.dependency_overrides[resolve_tenant] = close_before_resolution
     observe(client.post(url, json=body, headers=bearer(live)), 404, TenantNotFoundProblem)

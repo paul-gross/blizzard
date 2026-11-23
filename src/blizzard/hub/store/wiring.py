@@ -13,11 +13,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
 from blizzard.foundation.roles import adapter_model
 from blizzard.hub.auth.invitations import IInvitationTokenReads
+from blizzard.hub.auth.service import InvitationWriters
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.observability.egress.repository import IReadUsageCorpus
 from blizzard.hub.store.errors import HubStoreConnections
@@ -80,7 +81,6 @@ from blizzard.hub.tenancy import STORE_UNAVAILABLE, StoreScope
 _TENANT_SERVICES: tuple[type[Any], ...] = (
     GardenProposalStore,
     GardenProposalClosureStore,
-    InvitationStore,
     TranscriptSegmentStore,
     TranscriptEventStore,
     AnalyticsEventQueryStore,
@@ -118,6 +118,7 @@ _TENANT_ALIASED: tuple[type[Any], ...] = (
     RoutineStore,
     RoutineScopeStore,
     CadenceStore,
+    InvitationStore,
 )
 
 #: The configured-record adapters, whose ``Ref`` the config area aliases its ports onto.
@@ -191,12 +192,18 @@ def invitation_token_reads(reads: HubScopedReads) -> IInvitationTokenReads:
     return reads.invitations
 
 
+def invitation_writers() -> InvitationWriters:
+    """Opens a tenant's invitation writer: the invitation store, over the tenant's connections."""
+    return InvitationStore
+
+
 def register_process(registry: Registry) -> Ref[HubEventLogStore]:
     """Declare every hub-level adapter once per process, handing back the hub event log's ``Ref``, which the legacy
     bridge's ``IReadHubEventLog`` aliases."""
     registry.factory(build_hub_scoped_reads, lifetime=Lifetime.PROCESS)
     registry.factory(usage_corpus, lifetime=Lifetime.PROCESS)
     registry.factory(invitation_token_reads, lifetime=Lifetime.PROCESS)
+    registry.factory(invitation_writers, lifetime=Lifetime.PROCESS)
     hub_events = registry.service(HubEventLogStore, lifetime=Lifetime.PROCESS)
     for each in _PROCESS_SERVICES:
         registry.service(each, lifetime=Lifetime.PROCESS)
@@ -207,6 +214,8 @@ def register_process_absent(registry: Registry) -> None:
     """Declare every hub-level adapter absent, for the store-free graph."""
     for missing in _PROCESS_KEYS:
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+    # A callable alias keys the opener, so it is named as its key rather than as a class.
+    registry.absent(port(cast("type[Any]", InvitationWriters)), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
 
 
 @adapter_model
