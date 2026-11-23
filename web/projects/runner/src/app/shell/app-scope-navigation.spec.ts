@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource, runnerClient, type runnerApi, ViewportService } from 'fleet';
+import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource, runnerClient, ViewportService } from 'fleet';
 import {
   chunkDetail,
   chunkNeighborView,
@@ -11,6 +11,7 @@ import {
   hostRegistrationView,
   hostRunnerView,
   type RequestClientStub,
+  runnerLeaseView,
   settle,
   stubRunnerClient,
 } from 'fleet/testing';
@@ -34,8 +35,8 @@ class FakeEventSource {
 const CHUNK = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 const NEIGHBOR = 'ch_01KXKVVF1J3D6H6VYZ3XYNR2R2';
 
-function lease(runnerChunk: string, projectId: string, leaseId: string): runnerApi.LeaseView {
-  return {
+function lease(runnerChunk: string, projectId: string, leaseId: string) {
+  return runnerLeaseView({
     lease_id: leaseId,
     chunk_id: runnerChunk,
     graph_id: 'gr_1',
@@ -63,7 +64,7 @@ function lease(runnerChunk: string, projectId: string, leaseId: string): runnerA
     git_commits: [],
     harness_id: null,
     project_id: projectId,
-  };
+  });
 }
 
 /** The host's two runners: `r1` (`rn_1`) leasing {@link CHUNK} in project `p`, `r2` (`rn_2`) leasing its neighbor in `q`. */
@@ -73,7 +74,7 @@ const RUNNERS = {
     hostRunnerView({ runner_id: 'rn_2', name: 'r2', bindings: [{ project: 'q', workspace_id: 'ws', agents: 4 }], max_agents: 4 }),
   ],
 };
-const LEASES: Record<string, runnerApi.LeaseView[]> = {
+const LEASES: Record<string, ReturnType<typeof runnerLeaseView>[]> = {
   rn_1: [lease(CHUNK, 'p', 'lease_1')],
   rn_2: [lease(NEIGHBOR, 'q', 'lease_2')],
 };

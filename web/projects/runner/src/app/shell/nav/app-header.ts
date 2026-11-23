@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { BoardHeader, FlagStore, KitErrorLine } from 'fleet/shell';
 import { type StatCell } from 'fleet/runner-shell';
 import { PanelFilters } from '../../core/panel-filters';
-import { injectHostEnvironmentsQuery, injectHostRunnersQuery } from '../../core/host.query';
+import { injectHostEnvironmentDomainsQuery, injectHostRunnerDomainsQuery } from '../../core/host.query';
 import { LocalIdentity } from '../../core/identity/app-identity';
 import { RunnerLogout } from '../../core/identity/runner-logout';
 import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';
@@ -45,8 +45,8 @@ import { AppProfileMenu } from './app-profile-menu';
   styleUrl: './app-header.css',
 })
 export class AppHeader {
-  private readonly runnersQuery = injectHostRunnersQuery();
-  private readonly environmentsQuery = injectHostEnvironmentsQuery();
+  private readonly runnersQuery = injectHostRunnerDomainsQuery();
+  private readonly environmentsQuery = injectHostEnvironmentDomainsQuery();
   private readonly liveUpdates = inject(RunnerLiveUpdates);
 
   /** The host's flags — the header shows what the operator overrode. */
