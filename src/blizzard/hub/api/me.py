@@ -13,15 +13,16 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import Role
+from blizzard.foundation.registry.interface import ServiceAbsent
 from blizzard.hub.api.auth_session import TENANT_HEADER, implicit_operator, resolve_identity
-from blizzard.hub.api.hub_level import hub_services
 from blizzard.hub.api.problem_rendering import problem_response
 from blizzard.hub.api.problems import authentication_required_problem
-from blizzard.hub.auth.memberships import Membership
+from blizzard.hub.api.resolution import request_resolver
+from blizzard.hub.auth.memberships import IReadMembershipRepository, Membership
 from blizzard.hub.auth.permissions import permissions_for
 from blizzard.hub.auth.service import ASSIGNABLE_ROLES
-from blizzard.hub.composition import HubServices
 from blizzard.hub.config import AUTH_MODE_NONE
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.tenancy import TenantId
 from blizzard.wire.me import MeResponse, MeTenant
 
@@ -34,7 +35,8 @@ def me(request: Request) -> MeResponse | JSONResponse:
     ``oauth`` with a resolving session, the session's person; under ``oauth`` with none, 401.
     A header naming a tenant the caller cannot enter resolves no tenant — never a 404 here."""
     mode = request.app.state.config.auth.mode
-    services = None if mode == AUTH_MODE_NONE else hub_services(request)
+    # An unwired store answers before anything is asked of the caller's session.
+    memberships_reader = None if mode == AUTH_MODE_NONE else request_resolver(request).get(IReadMembershipRepository)
     identity = resolve_identity(request)
     if identity is None:
         return problem_response(
@@ -44,9 +46,9 @@ def me(request: Request) -> MeResponse | JSONResponse:
         tenants = _operator_tenants(request)
         only = tenants[0] if len(tenants) == 1 else None
     else:
-        assert services is not None  # oauth resolved services above
-        memberships = services.memberships.memberships_for(identity.user_id)
-        tenants = _open(services, memberships, hub_admin=identity.hub_admin)
+        assert memberships_reader is not None  # oauth resolved the reader above
+        memberships = memberships_reader.memberships_for(identity.user_id)
+        tenants = _open(request_resolver(request).get(OpenTenants), memberships, hub_admin=identity.hub_admin)
         # A headerless tenant route settles on the one membership in force, a closed tenant's counted.
         only = tenants[0] if len(memberships) == 1 and len(tenants) == 1 else None
     named = request.headers.get(TENANT_HEADER)
@@ -70,17 +72,17 @@ def _tenant(tenant: TenantId, name: str, role: Role, *, hub_admin: bool) -> MeTe
 
 def _operator_tenants(request: Request) -> list[MeTenant]:
     """The implicit operator's: an ``admin`` membership in every open tenant."""
-    services: HubServices | None = getattr(request.app.state, "services", None)
-    if services is None:
+    try:
+        open_tenants = request_resolver(request).get(OpenTenants)
+    except ServiceAbsent:
         return []
     operator = implicit_operator(None)
-    every = services.tenants.open_tenants.every()
+    every = open_tenants.every()
     return [_tenant(t, every[t], Role.ADMIN, hub_admin=operator.hub_admin) for t in sorted(every)]
 
 
-def _open(services: HubServices, memberships: list[Membership], *, hub_admin: bool) -> list[MeTenant]:
+def _open(open_tenants: OpenTenants, memberships: list[Membership], *, hub_admin: bool) -> list[MeTenant]:
     """``memberships``, each in a tenant that is still open."""
-    open_tenants = services.tenants.open_tenants
     return [
         _tenant(m.tenant_id, name, m.role, hub_admin=hub_admin)
         for m in memberships

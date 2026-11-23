@@ -126,8 +126,10 @@ from blizzard.hub.api.work_item_reads import router as work_item_reads_router
 from blizzard.hub.api.work_source_params import refuse_built_in_work_source
 from blizzard.hub.api.work_sources import router as work_sources_router
 from blizzard.hub.auth.bootstrap import Superuser
+from blizzard.hub.auth.identities import IReadIdentityRepository
 from blizzard.hub.auth.memberships import MembershipRoleRefused
 from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
+from blizzard.hub.auth.service import AuthService
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.composition import (
     HubServices,
@@ -875,7 +877,7 @@ def build_hosted_app(
             try:
                 require_providers_configured(
                     {provider.name for provider in config.auth.oauth_providers},
-                    services.identities.distinct_provider_names(),
+                    core.process.resolver.get(IReadIdentityRepository).distinct_provider_names(),
                 )
             except ProvidersOrphaned as refusal:
                 raise ConfigError(str(refusal)) from refusal
@@ -904,7 +906,7 @@ def build_hosted_app(
                     get_logger("blizzard.hub.flow_driver").exception(
                         "flow driver boot recovery failed", tenant_id=stores.scope.tenant
                     )
-            Superuser(email=config.auth.superuser, auth=services.auth).ensure()
+            Superuser(email=config.auth.superuser, auth=core.process.resolver.get(AuthService)).ensure()
             _announce_started(expected, services)
             announce_rejected_tracing(tracing, services)
             announce_rejected_egress(config.egress, services)

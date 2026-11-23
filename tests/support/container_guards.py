@@ -66,6 +66,14 @@ NARROWED_MODULES: tuple[Path, ...] = tuple(
         "fleet_host.py",
         "auth_session.py",
         "auth.py",
+        "auth_login.py",
+        "idp.py",
+        "me.py",
+        "members.py",
+        "users.py",
+        "hub_admins.py",
+        "invitations.py",
+        "fleet_identity.py",
     )
 )
 #: The legacy bags a narrowed module may not name.

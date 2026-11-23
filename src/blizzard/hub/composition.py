@@ -25,7 +25,6 @@ from blizzard.foundation.flags import (
     warn_held_keys,
     warn_ignored_flags,
 )
-from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
@@ -41,19 +40,15 @@ from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.auth.facts import AuthFactsService
-from blizzard.hub.auth.hub_admins import HubAdministrators
 from blizzard.hub.auth.identities import IReadIdentityRepository
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
 from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
-from blizzard.hub.auth.invitations import InvitationService, IWriteInvitationRepository
-from blizzard.hub.auth.memberships import IReadMembershipRepository, TenantMembers
-from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
+from blizzard.hub.auth.invitations import IWriteInvitationRepository
+from blizzard.hub.auth.memberships import IReadMembershipRepository
 from blizzard.hub.auth.service import AuthService
 from blizzard.hub.auth.sessions import IReadSessionRepository
-from blizzard.hub.auth.sign_in import SignIn
-from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.throttle import LiveIpThrottle
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import HubConfig
@@ -451,8 +446,6 @@ class TenantServices:
     finding_bucket: FindingBucketReader
     #: Judges content offered for staging against the formats its chunk's graph owes the artifact's name.
     garden_stage_check: GardenStageCheck
-    #: Issue, list and revoke the tenant's invitations.
-    invitations: InvitationService
     #: A project's resolver of a cited commit, against the forge of a repository the project links.
     commit_resolver_for: Callable[[ProjectId], ICommitResolver]
     #: A routine's finding inflow-against-outflow over a window.
@@ -525,23 +518,10 @@ class HubServices:
     memberships: IReadMembershipRepository
     #: The identity domain service — sessions, the first-login linking rule, ``state``.
     auth: AuthService
-    #: Whom a provider callback admits — the invitation it accepts, or a plain sign-in.
-    sign_in: SignIn
-    #: A tenant's members, and the membership grants, changes and revocations made under the rules.
-    members: TenantMembers
-    #: The hub administrators, and their grants and revocations.
-    hub_admins: HubAdministrators
-    #: The configured OAuth provider registry — empty when none is configured.
-    oauth_providers: IOAuthProviderRegistry
     #: Per-IP token-bucket login throttle — ``None`` when ``[auth.login_throttle]`` turns the throttle off.
     auth_throttle: LiveIpThrottle | None
     #: The non-chunk auth/security fact log — ``login_failed``/``sso_refused``.
     auth_facts: AuthFactsService
-    #: The hub's IdP signing-key lifecycle — ``None`` when composed without a signing-keys directory.
-    signing: SigningKeyService | None
-    #: The reverse-proxy trust set — empty by default, so forwarded headers
-    #: are ignored from every peer.
-    trusted_proxies: TrustedProxies
     #: The hub half of the invariant checker over every tenant, one run at a time — run by hub administrators alone.
     invariants: HubInvariantCheck
     #: The transcript-event derivation sweep — one pass per hub, acting in each segment's tenant.
@@ -1609,7 +1589,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             formats=garden_formats,
             clock=clock,
         ),
-        invitations=tenant.get(InvitationService),
     )
     sweeps = TenantSweeps(
         close_drain=CloseIntentDrainer(
@@ -1913,14 +1892,8 @@ def build_services(
         users=user_store,
         memberships=memberships,
         auth=auth,
-        sign_in=process.get(SignIn),
-        members=process.get(TenantMembers),
-        hub_admins=process.get(HubAdministrators),
-        oauth_providers=process.get(IOAuthProviderRegistry),
         auth_throttle=process.get(LiveIpThrottle),
         auth_facts=process.get(AuthFactsService),
-        signing=process.get(SigningKeyService | None),
-        trusted_proxies=process.get(TrustedProxies),
         event_derivation=event_derivation,
         annotation=annotation,
         sweeps=SweepRoster(

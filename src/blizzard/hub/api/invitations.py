@@ -11,20 +11,22 @@ from datetime import datetime
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, status
 
 from blizzard.auth_core import Permission
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import TenantBoundAdmitting, require_either
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.invitations import (
     InvitationAlreadyResolved,
     InvitationNotFound,
     InvitationOutcomeKind,
     InvitationRecord,
+    InvitationService,
 )
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.wire.invitation import (
@@ -67,23 +69,28 @@ def invitation_view(record: InvitationRecord, *, now: datetime) -> InvitationVie
 
 
 @router.post("/invitations", response_model=InvitationCreateResponse, status_code=status.HTTP_201_CREATED)
+@inject_sync
 def create_invitation(
-    request: InvitationCreateRequest, services: Services, identity: Manager
+    request: InvitationCreateRequest,
+    invitations: FromDishka[InvitationService],
+    clock: FromDishka[IClock],
+    identity: Manager,
 ) -> InvitationCreateResponse:
     """Invite ``email`` into the tenant as ``role``. The link's token is returned this once; only its hash is kept."""
-    issued = services.invitations.issue(
+    issued = invitations.issue(
         email=request.email, role=request.role, lifetime_days=request.expires_in, by=identity.user_id
     )
     return InvitationCreateResponse(
-        invitation=invitation_view(issued.record, now=services.clock.now()), token=issued.token.plaintext
+        invitation=invitation_view(issued.record, now=clock.now()), token=issued.token.plaintext
     )
 
 
 @router.get("/invitations", response_model=InvitationListResponse, dependencies=[Depends(_INVITATION_MANAGER)])
-def list_invitations(services: Services) -> InvitationListResponse:
+@inject_sync
+def list_invitations(invitations: FromDishka[InvitationService], clock: FromDishka[IClock]) -> InvitationListResponse:
     """Every invitation of the tenant with its state — never a link."""
-    now = services.clock.now()
-    return InvitationListResponse(invitations=[invitation_view(r, now=now) for r in services.invitations.list()])
+    now = clock.now()
+    return InvitationListResponse(invitations=[invitation_view(r, now=now) for r in invitations.list()])
 
 
 @router.post(
@@ -91,13 +98,16 @@ def list_invitations(services: Services) -> InvitationListResponse:
     response_model=InvitationView,
     status_code=status.HTTP_201_CREATED,
 )
-def revoke_invitation(invitation_id: str, services: Services, identity: Manager) -> InvitationView:
+@inject_sync
+def revoke_invitation(
+    invitation_id: str, invitations: FromDishka[InvitationService], clock: FromDishka[IClock], identity: Manager
+) -> InvitationView:
     """Revoke a live or expired invitation: 404 for one the tenant does not hold, 409 for one already accepted or
     revoked."""
     try:
-        record = services.invitations.revoke(invitation_id, by=identity.user_id)
+        record = invitations.revoke(invitation_id, by=identity.user_id)
     except InvitationNotFound as exc:
         raise ProblemHTTPException(partial(problems_admin.invitation_not_found_problem, str(exc))) from exc
     except InvitationAlreadyResolved as exc:
         raise ProblemHTTPException(partial(problems_admin.invitation_already_resolved_problem, str(exc))) from exc
-    return invitation_view(record, now=services.clock.now())
+    return invitation_view(record, now=clock.now())

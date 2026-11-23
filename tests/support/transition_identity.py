@@ -8,18 +8,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.hub.auth.facts import AuthFactsService
-from blizzard.hub.auth.hub_admins import HubAdministrators
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
 from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
-from blizzard.hub.auth.memberships import TenantMembers
-from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
 from blizzard.hub.auth.service import AuthService
-from blizzard.hub.auth.sign_in import SignIn
-from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.throttle import LiveIpThrottle
 from blizzard.hub.composition import HubCore, HubServices, TenantServices, TenantStores
 from blizzard.hub.delivery.action_loop import ActionLoop
@@ -229,14 +223,8 @@ def process_identity_violations(core: HubCore, services: HubServices) -> list[st
         ("HubServices.identities", services.identities, IdentityRepository),
         ("HubServices.memberships", services.memberships, MembershipRepository),
         ("HubServices.auth", services.auth, AuthService),
-        ("HubServices.sign_in", services.sign_in, SignIn),
-        ("HubServices.members", services.members, TenantMembers),
-        ("HubServices.hub_admins", services.hub_admins, HubAdministrators),
-        ("HubServices.oauth_providers", services.oauth_providers, IOAuthProviderRegistry),
         ("HubServices.auth_throttle", services.auth_throttle, LiveIpThrottle),
         ("HubServices.auth_facts", services.auth_facts, AuthFactsService),
-        ("HubServices.signing", services.signing, SigningKeyService | None),
-        ("HubServices.trusted_proxies", services.trusted_proxies, TrustedProxies),
     )
     return [f"{name} is not its container instance" for name, field, key in retained if field is not process.get(key)]
 

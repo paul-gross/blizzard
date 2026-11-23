@@ -347,7 +347,7 @@ def test_me_boundary_keeps_reviewed_unknowns_visible() -> None:
     assert not unknown
     found, unresolved = operation_evidence(routes[("GET", "/api/me")])
     assert any("authentication_required_problem" in item for item in found)
-    assert any("services.memberships.memberships_for" in item for item in unresolved)
+    assert any("memberships_for" in item for item in unresolved)
     assert any("request.headers.get" in item for item in unresolved)
     assert not producer_inventory_failures(("GET", "/api/me"), found, REVIEWED)
 
@@ -524,7 +524,7 @@ def test_real_operation_detects_new_transitive_module_refusal(tmp_path: Path, mo
         spec.loader.exec_module(module)
         modules.append(module)
     endpoint = _me_endpoint()
-    monkeypatch.setitem(endpoint.__globals__, "hub_services", vars(modules[1])["call"])
+    monkeypatch.setitem(endpoint.__globals__, "request_resolver", vars(modules[1])["call"])
     routes, _ = route_inventory(create_app_for_export(packaged_flag_registry()))
     failures = _boundary_failures(("GET", "/api/me"), operation_evidence(routes[("GET", "/api/me")]))
     assert any("planted_helper.refuse" in failure and "409" in failure for failure in failures)

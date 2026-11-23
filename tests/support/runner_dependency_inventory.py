@@ -90,7 +90,7 @@ GET /api/auth/jwks.json
 GET /api/me
 """,
     ),
-    ({ANNOTATE, HUB}, "GET /api/fleet/identity"),
+    ({ANNOTATE}, "GET /api/fleet/identity"),
     (
         HOST,
         """

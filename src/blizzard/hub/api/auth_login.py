@@ -20,26 +20,31 @@ from dataclasses import dataclass
 from functools import partial
 from urllib.parse import urlencode
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
+from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.origin import Origin
 from blizzard.foundation.return_to import ReturnTo
 from blizzard.foundation.sign_in_refusal import SignInRefusal
 from blizzard.hub.api import problems
 from blizzard.hub.api.auth_session import SESSION_COOKIE_NAME, PresentedSession
-from blizzard.hub.api.hub_level import hub_services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problem_rendering import problem_response
 from blizzard.hub.api.request_config import request_config
+from blizzard.hub.api.resolution import request_resolver
 from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.invitations import InvitationToken
 from blizzard.hub.auth.oauth.provider import IOAuthProvider, OAuthExchangeError
-from blizzard.hub.auth.service import ABSOLUTE_MAX_AGE, PROVIDER_LOGIN_STATE_KIND, InvitationAccepted
+from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
+from blizzard.hub.auth.service import ABSOLUTE_MAX_AGE, PROVIDER_LOGIN_STATE_KIND, AuthService, InvitationAccepted
+from blizzard.hub.auth.sessions import IReadSessionRepository
+from blizzard.hub.auth.sign_in import SignIn
 from blizzard.hub.auth.throttle import LiveIpThrottle
-from blizzard.hub.composition import HubServices
 from blizzard.hub.config import AUTH_MODE_NONE, HubConfig
+from blizzard.hub.events.brokers import TenantBrokers
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -83,21 +88,33 @@ class ProviderLogin:
     """One call at a named provider's login routes, and the hub state it is judged against."""
 
     request: Request
-    services: HubServices
     name: str
     config: HubConfig
+    trusted_proxies: TrustedProxies
+    providers: IOAuthProviderRegistry
+    facts: AuthFactsService
+    throttle: LiveIpThrottle
 
     @classmethod
-    def of(cls, request: Request, name: str) -> ProviderLogin:
-        return cls(request, hub_services(request), name, request_config(request))
+    def of(
+        cls,
+        request: Request,
+        name: str,
+        *,
+        trusted_proxies: TrustedProxies,
+        providers: IOAuthProviderRegistry,
+        facts: AuthFactsService,
+        throttle: LiveIpThrottle,
+    ) -> ProviderLogin:
+        return cls(request, name, request_config(request), trusted_proxies, providers, facts, throttle)
 
     @property
     def origin(self) -> Origin:
-        return Origin(self.request, self.services.trusted_proxies)
+        return Origin(self.request, self.trusted_proxies)
 
     @property
     def provider(self) -> IOAuthProvider | None:
-        return self.services.oauth_providers.get(self.name)
+        return self.providers.get(self.name)
 
     @property
     def callback_url(self) -> str:
@@ -105,17 +122,10 @@ class ProviderLogin:
 
     @property
     def refusal(self) -> LoginRefusal:
-        return LoginRefusal(
-            self.services.auth_facts, actor=self.origin.ip, subject=self.name, instance=self.request.url.path
-        )
+        return LoginRefusal(self.facts, actor=self.origin.ip, subject=self.name, instance=self.request.url.path)
 
     def assert_not_throttled(self) -> None:
-        throttle = self.services.auth_throttle
-        if isinstance(throttle, LiveIpThrottle):
-            allowed = throttle.allow(self.origin.ip, self.request.state.auth_throttle_generation)
-        else:
-            allowed = throttle is None or throttle.allow(self.origin.ip)
-        if not allowed:
+        if not self.throttle.allow(self.origin.ip, self.request.state.auth_throttle_generation):
             raise ProblemHTTPException(problems.login_throttled_problem)
 
 
@@ -123,22 +133,33 @@ class ProviderLogin:
 def list_providers(request: Request) -> list[ProviderSummary]:
     if request.app.state.config.auth.mode == AUTH_MODE_NONE:
         return []
-    services = hub_services(request)
-    return [
-        ProviderSummary(name=p.name, display_name=p.display_name, type=p.type) for p in services.oauth_providers.list()
-    ]
+    providers = request_resolver(request).get(IOAuthProviderRegistry)
+    return [ProviderSummary(name=p.name, display_name=p.display_name, type=p.type) for p in providers.list()]
 
 
-@router.get("/{name}/authorize")
-def authorize(name: str, request: Request, return_to: str | None = None, invite: str | None = None) -> RedirectResponse:
-    login = ProviderLogin.of(request, name)
+@router.get("/{name}/authorize", response_model=None)
+@inject_sync
+def authorize(
+    name: str,
+    request: Request,
+    auth: FromDishka[AuthService],
+    trusted_proxies: FromDishka[TrustedProxies],
+    providers: FromDishka[IOAuthProviderRegistry],
+    facts: FromDishka[AuthFactsService],
+    throttle: FromDishka[LiveIpThrottle],
+    return_to: str | None = None,
+    invite: str | None = None,
+) -> RedirectResponse:
+    login = ProviderLogin.of(
+        request, name, trusted_proxies=trusted_proxies, providers=providers, facts=facts, throttle=throttle
+    )
     if login.config.auth.mode == AUTH_MODE_NONE:
         raise ProblemHTTPException(problems.login_disabled_problem)
     login.assert_not_throttled()
     provider = login.provider
     if provider is None:
         raise ProblemHTTPException(partial(problems.login_provider_unknown_problem, name))
-    state = login.services.auth.start_state(
+    state = auth.start_state(
         kind=PROVIDER_LOGIN_STATE_KIND,
         provider_name=name,
         return_to=ReturnTo(return_to).safe,
@@ -147,15 +168,29 @@ def authorize(name: str, request: Request, return_to: str | None = None, invite:
     return RedirectResponse(provider.authorize_url(state=state, redirect_uri=login.callback_url))
 
 
-@router.get("/{name}/callback")
-def callback(name: str, request: Request, code: str | None = None, state: str | None = None) -> Response:
-    login = ProviderLogin.of(request, name)
+@router.get("/{name}/callback", response_model=None)
+@inject_sync
+def callback(
+    name: str,
+    request: Request,
+    auth: FromDishka[AuthService],
+    sign_in: FromDishka[SignIn],
+    trusted_proxies: FromDishka[TrustedProxies],
+    providers: FromDishka[IOAuthProviderRegistry],
+    facts: FromDishka[AuthFactsService],
+    throttle: FromDishka[LiveIpThrottle],
+    code: str | None = None,
+    state: str | None = None,
+) -> Response:
+    login = ProviderLogin.of(
+        request, name, trusted_proxies=trusted_proxies, providers=providers, facts=facts, throttle=throttle
+    )
     if login.config.auth.mode == AUTH_MODE_NONE:
         raise ProblemHTTPException(problems.login_disabled_problem)
     login.assert_not_throttled()
     refusal = login.refusal
 
-    entry = login.services.auth.consume_state(state) if state else None
+    entry = auth.consume_state(state) if state else None
     if entry is None or entry.kind != PROVIDER_LOGIN_STATE_KIND:
         return refusal.login_failed("bad or expired state")
     if entry.provider_name != name:
@@ -171,9 +206,7 @@ def callback(name: str, request: Request, code: str | None = None, state: str | 
     except OAuthExchangeError as exc:
         return refusal.login_failed(str(exc))
 
-    admitted = login.services.sign_in.admit(
-        identity, provider_name=name, invitation_token_hash=entry.invitation_token_hash
-    )
+    admitted = sign_in.admit(identity, provider_name=name, invitation_token_hash=entry.invitation_token_hash)
     if isinstance(admitted, SignInRefusal):
         refused = f"{SIGN_IN_REFUSED}?{urlencode({'refusal': admitted.value})}"
         return RedirectResponse(refused, status_code=status.HTTP_302_FOUND)
@@ -199,15 +232,15 @@ def callback(name: str, request: Request, code: str | None = None, state: str | 
 def logout(request: Request, response: Response) -> Response:
     mode = request.app.state.config.auth.mode
     if mode != AUTH_MODE_NONE:
-        services = hub_services(request)
+        resolver = request_resolver(request)
         id_hash = PresentedSession(request).id_hash
         if id_hash is not None:
-            session = services.sessions.get_by_hash(id_hash)
+            session = resolver.get(IReadSessionRepository).get_by_hash(id_hash)
             if session is not None:
-                services.auth.revoke(session)
+                resolver.get(AuthService).revoke(session)
                 # The delete has committed: the session's open event streams end in every tenant, and every
                 # other session of its user keeps streaming.
-                services.event_brokers.end_session(id_hash)
+                resolver.get(TenantBrokers).end_session(id_hash)
     response.delete_cookie(SESSION_COOKIE_NAME)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response

@@ -104,7 +104,7 @@ NO_HUB_SERVICES = {("GET", "/api/fleet/system-artifacts"), ("GET", "/api/fleet/s
 DIRECT_DISPATCH: dict[tuple[str, str], dict[str, set[str]]] = {
     operation: {
         HTTP_HANDLER: (set() if operation in NO_HUB_SERVICES else {HUB_SERVICES})
-        | ({TENANT} if operation != ("GET", "/api/fleet/identity") else set())
+        | {TENANT}
         | (
             {f"blizzard.hub.api.fleet.{DIRECT_ENDPOINTS[operation][0]} raises {DIRECT_ENDPOINTS[operation][1]}"}
             if operation in DIRECT_ENDPOINTS
@@ -112,5 +112,6 @@ DIRECT_DISPATCH: dict[tuple[str, str], dict[str, set[str]]] = {
         )
     }
     for operation in OPERATIONS
-    if operation[1].startswith("/api/fleet/") or operation == ("POST", "/api/hosts")
+    if (operation[1].startswith("/api/fleet/") or operation == ("POST", "/api/hosts"))
+    and operation != ("GET", "/api/fleet/identity")
 }

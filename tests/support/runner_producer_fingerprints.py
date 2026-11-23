@@ -1,8 +1,8 @@
 """Source-bound change detector; not a reviewed operation/refusal inventory."""
 
 FINGERPRINTS = """\
-src/blizzard/hub/api/admin_settings.py 3 94b706743c5b0ea3d59069d9a657dab0dc82a960cb78ce5049dac65285351f17
 src/blizzard/hub/api/admin_invariants.py 2 3b7a7969c36d6e20b5a5b84738c13f894c38329ecaa4c01d5a4b99a595e897b8
+src/blizzard/hub/api/admin_settings.py 3 94b706743c5b0ea3d59069d9a657dab0dc82a960cb78ce5049dac65285351f17
 src/blizzard/hub/api/admin_tenants.py 9 dfc8f084e6dfd45c2a25ef48955ce4f58b6eabd1909fc3869de25d7500718757
 src/blizzard/hub/api/analytics.py 12 78121178001f8dfc47d3ca9444023657cd4a0e4c21e6bbfa2bc8fc6d74560f56
 src/blizzard/hub/api/auth.py 5 12ac8948923033da98c0be3f084798ab23f1f1be9f9306a73736ad0eac3db863
@@ -40,7 +40,7 @@ src/blizzard/hub/api/hosts.py 21 9c22a5146cffbc6a0156924bbeab91dfb4368f7a323bbea
 src/blizzard/hub/api/hub_admins.py 2 a7e5df759cc996a9ca1d6643e2ec44ed982d67230778c4bd8e18c4bf1cf9cd1e
 src/blizzard/hub/api/hub_level.py 1 7cc32584034a4bc0dd0c9dddfb6c4a2502d16c93d958a11c1e4558ce63fc4676
 src/blizzard/hub/api/idp.py 18 986466eccd4a962b71587b9b54638868689bbea7eeb9dafd070fcacf5aae84b6
-src/blizzard/hub/api/invitations.py 4 b85e4bdd08e9c129cb1f567c25e5bb74a3aafcb3a1afa6c35a04d365dd8400e2
+src/blizzard/hub/api/invitations.py 4 64c412b992af31293238c5a0d9668dccd042fdff74144eb2a1a7c736b32c5a96
 src/blizzard/hub/api/me.py 2 00f7cc4e738edfa6637e860199acc40c44acb6cda141e74eb7ae1eed64e49bfc
 src/blizzard/hub/api/members.py 4 0ea0afa8741794756325ec88ead8dca616866109b6740e299660fcdfcbd44509
 src/blizzard/hub/api/node_steps.py 1 cfb7a32a69876b97756f47ebdfb9285011a47cd16f83618ac482ce8ecbfe4f14

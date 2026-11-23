@@ -33,6 +33,7 @@ from tests.support.credential_runners import seed_credential_runners
 from tests.support.hub_request_auth import bearer
 from tests.support.refusal_observation import RefusalObservation, coverage_mismatches, observe_refusal
 from tests.support.scaffolding import build_hub, close_tenant
+from tests.support.store_free_process import store_free
 
 
 def test_identity_problem_variants(tmp_path: Path) -> None:
@@ -56,8 +57,8 @@ def test_identity_problem_variants(tmp_path: Path) -> None:
                 "get", path, 401, response.headers["content-type"], RunnerIdentityProblem, response.json()
             )
         )
-    hub.app.state.services = None
-    response = client.get(path)
+    with store_free(hub.app):
+        response = client.get(path)
     assert response.status_code == 503, response.text
     observations.append(
         RefusalObservation(
@@ -135,10 +136,8 @@ def test_runner_registration_and_reads_problem_variants(
             observe(request(bearer(live)), 404, RunnerNotFoundProblem)
             del hub.app.dependency_overrides[FleetRequest.of]
 
-    services = hub.app.state.services
-    hub.app.state.services = None
-    observe(request(bearer(live)), 503, HubStoreUnavailableProblem)
-    hub.app.state.services = services
+    with store_free(hub.app):
+        observe(request(bearer(live)), 503, HubStoreUnavailableProblem)
 
     def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
         principal = RunnerAuth.of(request).demand()

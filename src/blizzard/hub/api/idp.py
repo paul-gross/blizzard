@@ -20,6 +20,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from blizzard.auth_core import Permission
+from blizzard.foundation.clock import IClock
+from blizzard.foundation.registry.scopes import Resolver
 from blizzard.foundation.roles import dto
 from blizzard.hub.api import problems
 from blizzard.hub.api.auth import (
@@ -31,11 +33,13 @@ from blizzard.hub.api.auth import (
     runner_signing_in,
 )
 from blizzard.hub.api.auth_session import require_hub, resolve_identity
-from blizzard.hub.api.hub_level import hub_services
 from blizzard.hub.api.problem_rendering import problem_response
-from blizzard.hub.auth.service import CLI_CLIENT_ID
+from blizzard.hub.api.resolution import request_resolver
+from blizzard.hub.auth.memberships import IReadMembershipRepository
+from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
+from blizzard.hub.auth.service import CLI_CLIENT_ID, AuthService
 from blizzard.hub.auth.signing import SigningKeyService
-from blizzard.hub.composition import HubServices
+from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import AUTH_MODE_NONE
 from blizzard.hub.domain.runners.federation import FederationClient, UnknownFederationClient
 from blizzard.wire.cli_token import CliTokenResponse
@@ -68,29 +72,50 @@ class CliRedirect:
         return self.out_of_band or bool(_CLI_LOOPBACK_REDIRECT_RE.match(self.uri))
 
 
-@dataclass(frozen=True)
 class IdpSurface:
     """The hub's own IdP, resolved for one request — absent, and so a ``404``, without an
-    oauth-mode hub and a signing keypair."""
+    oauth-mode hub and a signing keypair. Each service it names is resolved from the request's resolver
+    once the mode check has passed, so an unwired store answers only an oauth-mode request."""
 
-    request: Request
+    def __init__(self, resolver: Resolver) -> None:
+        self.resolver = resolver
 
     @classmethod
     def of(cls, request: Request) -> IdpSurface:
         if request.app.state.config.auth.mode == AUTH_MODE_NONE:
             raise cls._absent()
-        return cls(request)
+        return cls(request_resolver(request))
 
     @property
-    def services(self) -> HubServices:
-        return hub_services(self.request)
+    def keys(self) -> SigningKeyService | None:
+        return self.resolver.get(SigningKeyService | None)
 
     @property
-    def signing(self) -> SigningKeyService:  # ast-grep-ignore: bzh:property-delegates
-        signing = self.services.signing
-        if signing is None:
+    def signing(self) -> SigningKeyService:
+        keys = self.keys
+        if keys is None:
             raise self._absent()
-        return signing
+        return keys
+
+    @property
+    def providers(self) -> IOAuthProviderRegistry:
+        return self.resolver.get(IOAuthProviderRegistry)
+
+    @property
+    def users(self) -> IReadUserRepository:
+        return self.resolver.get(IReadUserRepository)
+
+    @property
+    def memberships(self) -> IReadMembershipRepository:
+        return self.resolver.get(IReadMembershipRepository)
+
+    @property
+    def auth(self) -> AuthService:
+        return self.resolver.get(AuthService)
+
+    @property
+    def clock(self) -> IClock:
+        return self.resolver.get(IClock)
 
     @staticmethod
     def _absent() -> HTTPException:
@@ -206,8 +231,7 @@ def authorize(
         return problem_response(problems.idp_disabled_problem(instance=request.url.path))
     if response_mode not in _RESPONSE_MODES:
         return problem_response(problems.federation_response_mode_problem(response_mode, instance=request.url.path))
-    services = surface.services
-    signing = services.signing
+    signing = surface.keys
     if signing is None:
         return problem_response(problems.idp_disabled_problem(instance=request.url.path))
 
@@ -234,7 +258,7 @@ def authorize(
 
     identity = resolve_identity(request)
     if identity is None:
-        providers = services.oauth_providers.list()
+        providers = surface.providers.list()
         if not providers:
             return problem_response(problems.federation_no_provider_problem(instance=request.url.path))
         return_to = request.url.path
@@ -248,17 +272,17 @@ def authorize(
         # browser to a chooser carrying this pending request as its return target.
         return RedirectResponse(f"/login?return_to={quote(return_to, safe='')}")
 
-    user = services.users.get(identity.user_id)
+    user = surface.users.get(identity.user_id)
     if is_cli:
         assert user is not None, f"resolved identity {identity.user_id!r} has no backing user row"
         assert code_challenge is not None  # already validated above
-        code = services.auth.mint_cli_code(user, code_challenge=code_challenge, redirect_uri=redirect_uri)
+        code = surface.auth.mint_cli_code(user, code_challenge=code_challenge, redirect_uri=redirect_uri)
         return Delivery.cli_code(redirect_uri=redirect_uri, code=code, state=state).response()
 
     assert federation_client is not None  # every client but cli resolved its runner or host above
     # The client's tenant settles the sign-in, never a header. Past the redirect and the membership, only a member can
     # tell a retired client apart (403, the app handler's).
-    role = services.memberships.role_in(federation_client.tenant, identity.user_id)
+    role = surface.memberships.role_in(federation_client.tenant, identity.user_id)
     try:
         role = federation_client.federate(redirect_uri, role=role)
     except UnknownFederationClient:
@@ -272,7 +296,7 @@ def authorize(
         "aud": client,
         "jti": secrets.token_urlsafe(18),
     }
-    token = signing.sign(claims, now=services.clock.now(), ttl=JWT_TTL)
+    token = signing.sign(claims, now=surface.clock.now(), ttl=JWT_TTL)
     delivery = Delivery.federation_token(
         redirect_uri=redirect_uri, token=token, state=state, response_mode=response_mode
     )
@@ -298,7 +322,7 @@ def jwks(request: Request) -> dict[str, object] | JSONResponse:
         surface = IdpSurface.of(request)
     except HTTPException:
         return problem_response(problems.idp_disabled_problem(instance=request.url.path))
-    signing = surface.services.signing
+    signing = surface.keys
     if signing is None:
         return problem_response(problems.idp_disabled_problem(instance=request.url.path))
     return signing.public_jwks()
@@ -322,8 +346,7 @@ def cli_token(request: Request, body: CliTokenRequest) -> CliTokenResponse | JSO
         surface = IdpSurface.of(request)
     except HTTPException:
         return problem_response(problems.idp_disabled_problem(instance=request.url.path))
-    services = surface.services
-    token = services.auth.exchange_cli_code(body.code, code_verifier=body.code_verifier, redirect_uri=body.redirect_uri)
+    token = surface.auth.exchange_cli_code(body.code, code_verifier=body.code_verifier, redirect_uri=body.redirect_uri)
     if token is None:
         return problem_response(problems.cli_token_refused_problem(instance=request.url.path))
     return CliTokenResponse(token=token)

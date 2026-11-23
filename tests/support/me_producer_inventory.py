@@ -3,10 +3,6 @@
 REVIEWED = {
     ("GET", "/api/me"): {
         (
-            "blizzard.hub.api.hub_level.hub_services",
-            "ProblemHTTPException(problems.hub_store_unavailable_problem)",
-        ),
-        (
             "blizzard.hub.api.me.me",
             "problem_response(authentication_required_problem(instance=request.url.path, detail='not authenticated'))",
         ),
