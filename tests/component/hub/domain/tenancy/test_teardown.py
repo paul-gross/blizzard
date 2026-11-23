@@ -24,6 +24,7 @@ from blizzard.foundation.tenants import TenantDeletionState
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.config import AUTH_MODE_OAUTH
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.tenancy import teardown
 from blizzard.hub.domain.tenancy.teardown import (
     CloseOutcome,
@@ -319,7 +320,7 @@ def test_after_a_close_a_member_signing_in_to_its_runner_is_answered_as_an_unkno
     services = hub.open_services(tenant)
     seed_runner(services, "rn-acme-1", register=False)
     callback = "https://rn-acme-1.example/api/auth/callback"
-    services.fleet.register(
+    hub.resolve(tenant, FleetService).register(
         added_runner(services, "rn-acme-1"), "w1", public_url="https://rn-acme-1.example", redirect_uris=(callback,)
     )
     assert hub.app is not None
@@ -348,7 +349,7 @@ def test_a_delete_removes_every_row_of_the_tenant_and_nothing_of_another(hub: Hu
     other = _created(hub, "bystander")
     member = seed_user(hub, username="mia", role=Role.PENDING)
     seed_membership(hub.engine, tenant, member.user_id, Role.ADMIN)
-    seed_runner(hub.open_services(tenant), "rn-acme-1")
+    seed_runner(hub.open_services(tenant), "rn-acme-1", fleet=hub.resolve(tenant, FleetService))
     before = _rows_of(hub, tenant)
     others_before = _rows_of(hub, other)
     carried_before = _rows_of(hub, default_tenant(hub.engine))

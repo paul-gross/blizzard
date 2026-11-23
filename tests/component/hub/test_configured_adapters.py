@@ -18,11 +18,13 @@ import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
+from blizzard import __version__
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.foundation.registry.internal.overrides import OverrideSet
 from blizzard.foundation.registry.internal.recording import RecordingRegistry
 from blizzard.hub.api.chunk_events import announce_minted
+from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.composition import HubCore, HubServices, build_services, connections_for_engine
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.model import WorkRef, WorkRefLabel
@@ -258,11 +260,11 @@ def _hosted(
         platform_tracing=tracing,
         actions=TEST_HUB_ACTIONS,
         overrides=overrides,
+        versions=HubVersionWindow(__version__, VERSION_WINDOW),
     )
     services = build_services(
         core,
         follow_latest_default=False,
-        version_window=VERSION_WINDOW,
         extractors=shipped_extractors(),
         cadences_on=lambda: False,
         announce_minted=announce_minted,

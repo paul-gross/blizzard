@@ -16,6 +16,7 @@ from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_driver import StepWake
 from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository, IWriteFindingRepository
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
@@ -32,6 +33,8 @@ from blizzard.hub.domain.projects.links import IReadProjectLinks, IWriteProjectL
 from blizzard.hub.domain.projects.model import IReadProjectRepository, IWriteProjectRepository
 from blizzard.hub.domain.projects.order import IReadProjectPositions, IWriteProjectPositions
 from blizzard.hub.domain.projects.targets import ChunkTargets, IReadChunkTargets, IWriteChunkTargets
+from blizzard.hub.domain.runners.host import IReadHostRegistry, IWriteHostRegistry
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, IWriteRunnerRegistry
 from blizzard.hub.domain.urgency.ports import (
     IReadTenantSettings,
     IReadUrgencyChunks,
@@ -92,8 +95,8 @@ ADAPTER_PORTS: Mapping[type[Any], tuple[type[Any], ...]] = {
     HubTransactions: (IHubTransactions,),
     ProjectStore: (IReadProjectRepository, IWriteProjectRepository, IBulkProjectLookup),
     ProjectLinkStore: (IReadProjectLinks, IWriteProjectLinks),
-    RunnerRegistryStore: (),
-    HostRegistryStore: (),
+    RunnerRegistryStore: (IReadRunnerRegistry, IWriteRunnerRegistry),
+    HostRegistryStore: (IReadHostRegistry, IWriteHostRegistry),
     WorkItemStore: (),
     ChunkStores: (),
     GardenProposalStore: (),
@@ -181,6 +184,9 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantServices.default_graph", services.default_graph, DefaultGraphService),
         ("TenantServices.urgency_reading", services.urgency_reading, UrgencyReading),
         ("TenantServices.events", services.events, EventBroker),
+        ("TenantServices.registry", services.registry, IReadRunnerRegistry),
+        ("TenantServices.hosts", services.hosts, IReadHostRegistry),
+        ("TenantServices.detach", services.detach, DetachService),
     )
     problems = [
         f"{name} is not its container instance" for name, field, key in retained if field is not tenant.get(key)

@@ -8,7 +8,7 @@ from typing import TypedDict, Unpack
 
 import pytest
 
-from blizzard.hub.domain.execution.fleet import Registered
+from blizzard.hub.domain.execution.fleet import FleetService, Registered
 from blizzard.hub.domain.runners.registration import (
     STALE_AFTER,
     DeclaredSubscription,
@@ -49,7 +49,7 @@ def _register(hub: HubHarness, **overrides: Unpack[_RegisterFields]) -> Register
         "projects": ("proj",),
     }
     fields.update(overrides)
-    return hub.services.fleet.register(held, "w1", **fields)
+    return hub.default_adapter(FleetService).register(held, "w1", **fields)
 
 
 def _hub(tmp_path: Path) -> HubHarness:

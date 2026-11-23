@@ -10,6 +10,7 @@ from httpx2 import Response
 from pydantic import BaseModel
 
 from blizzard.auth_core import Role
+from blizzard.hub.domain.runners.host_enrollment import HostEnrollmentService
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerRegistration
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
@@ -90,7 +91,7 @@ def test_identity_and_host_problem_variants_are_aggregated(tmp_path: Path, monke
     )
     seed_runner(hub, "racing")
     registry = cast(IWriteRunnerRegistry, hub.services.registry)
-    runners_named = hub.services.host_enrollment._runners_named  # pyright: ignore[reportPrivateUsage]  # interleave the race
+    runners_named = hub.default_adapter(HostEnrollmentService)._runners_named  # pyright: ignore[reportPrivateUsage]  # interleave the race
 
     def retire_after_read(runner_ids: Sequence[str]) -> list[RunnerRegistration]:
         runners: list[RunnerRegistration] = runners_named(runner_ids)
@@ -98,7 +99,7 @@ def test_identity_and_host_problem_variants_are_aggregated(tmp_path: Path, monke
         return runners
 
     with monkeypatch.context() as patch:
-        patch.setattr(hub.services.host_enrollment, "_runners_named", retire_after_read)
+        patch.setattr(hub.default_adapter(HostEnrollmentService), "_runners_named", retire_after_read)
         conflict = hub.client.post(hosts, json={"name": "other", "adopt": ["racing"]})
     observe(conflict, "post", hosts, 409, RunnerLifecycleConflictProblem)
     assert "racing" in conflict.json()["detail"]

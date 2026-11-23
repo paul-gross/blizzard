@@ -44,6 +44,7 @@ from tests.support.scaffolding import (
     hub_scoped_engine,
     seed_runner,
     seed_user,
+    tenant_fleet_of,
     tenant_services_of,
 )
 from tests.support.worker_http import bind_transport
@@ -208,7 +209,8 @@ _TRACEPARENT = {"traceparent": f"00-{_PLANTED_TRACE:032x}-{_PLANTED_SPAN:016x}-0
 def _registered_runner_token(config: HubConfig, runner_id: str, *, name: str | None = None) -> str:
     """Add and register ``runner_id`` through an untraced app over the same store, so the seeding
     leaves no spans behind."""
-    return seed_runner(tenant_services_of(build_hosted_hub_app(config)), runner_id, name=name, workspace_id="ws-a")
+    app = build_hosted_hub_app(config)
+    return seed_runner(tenant_services_of(app), runner_id, name=name, workspace_id="ws-a", fleet=tenant_fleet_of(app))
 
 
 def _server_span(spans: list[ReadableSpan], prefix: str) -> ReadableSpan:
@@ -371,7 +373,7 @@ def test_a_hub_action_pass_parents_on_its_turns_hub_exec_span_which_the_trace_co
     config = _config(tmp_path)
     handle = _handle(config, exporter)
     app = build_hosted_hub_app(config, platform_tracing=handle)
-    with RunnerFleetClient(app, services=tenant_services_of(app)) as client:
+    with RunnerFleetClient(app, services=tenant_services_of(app), fleet=tenant_fleet_of(app)) as client:
         assert client.post("/api/graphs", json={"definition_yaml": _PASS_GRAPH_YAML}).status_code == 201
         chunk_id = client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["chunk_id"]
         assert client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202

@@ -12,6 +12,7 @@ import sqlalchemy as sa
 from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.models import User
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
 from tests.support.scaffolding import (
@@ -31,7 +32,7 @@ _RUNNER = "rn_bravo"
 def _second_tenant(hub: HubHarness) -> TenantId:
     """A second tenant holding one runner, ``_RUNNER``, that the default tenant does not hold."""
     tenant = add_tenant(hub.engine, "bravo")
-    seed_runner(hub.open_services(tenant), _RUNNER)
+    seed_runner(hub.open_services(tenant), _RUNNER, fleet=hub.resolve(tenant, FleetService))
     return tenant
 
 

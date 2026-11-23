@@ -17,7 +17,7 @@ from blizzard.hub.delivery.flow_driver import StepWake
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
-from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository, IWriteChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.operations.delete import DeleteService
@@ -39,6 +39,7 @@ LEGACY_INVENTORY: Mapping[object, str] = {
     IReadChunkFactsRepository: "chunk operations",
     IReadChunkRecordRepository: "chunk operations",
     IReadChunkRouteRepository: "chunk operations",
+    IWriteChunkRouteRepository: "chunk operations",
     IReadChunkWorkRefsRepository: "chunk operations",
     GardenProposalDeliveryResolution: "garden authoring",
 }

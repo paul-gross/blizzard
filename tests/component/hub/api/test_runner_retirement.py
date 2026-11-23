@@ -14,6 +14,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
 from blizzard.wire.route import RouteClaimPausedDenial
@@ -197,7 +198,7 @@ def test_a_forced_retire_leaves_a_finished_chunk_untouched(tmp_path: Path) -> No
     registration = hub.services.registry.get_runner("runner-a")
     assert registration is not None
 
-    outcome = hub.services.fleet.retire(registration, by="op", force=True)
+    outcome = hub.default_adapter(FleetService).retire(registration, by="op", force=True)
 
     assert outcome.released == ()
     assert hub.services.chunks.route.route_of(chunk_id) is not None

@@ -19,6 +19,7 @@ from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import OwnedChild, Resolver, ScopeValue, ScopeValues, supply
 from blizzard.foundation.roles import collaborator
 from blizzard.hub.api import wiring as api
+from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.composition import register_legacy, register_legacy_absent
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery import wiring as delivery
@@ -27,10 +28,12 @@ from blizzard.hub.documents import wiring as documents
 from blizzard.hub.domain.cadence import wiring as cadence_area
 from blizzard.hub.domain.config import wiring as config_wiring
 from blizzard.hub.domain.config_apply import wiring as config_apply
+from blizzard.hub.domain.execution import wiring as execution
 from blizzard.hub.domain.garden import wiring as garden_area
 from blizzard.hub.domain.garden.findings import wiring as findings
 from blizzard.hub.domain.graph import wiring as graph_area
 from blizzard.hub.domain.projects import wiring as projects
+from blizzard.hub.domain.runners import wiring as runners
 from blizzard.hub.domain.urgency import wiring as urgency_area
 from blizzard.hub.events import wiring as events
 from blizzard.hub.forge import wiring as forge
@@ -76,10 +79,13 @@ class HubProcess:
             self.owner.close()
 
 
-def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool = False) -> None:
+def register_hub(
+    registry: LegacyRegistry, *, store_backed: bool, settings: bool = False, versions: bool = False
+) -> None:
     """Declare the hub graph: the scope inputs, the legacy bridge's leaves, the store adapters and the adopted areas
     over them — or, store-free, each store-backed registration absent. The settings ports resolve from the borrowed
-    settings graph when ``settings`` is set, and are absent otherwise, whether or not the graph is store-backed."""
+    settings graph when ``settings`` is set, and are absent otherwise, whether or not the graph is store-backed. The
+    version window is the supplied one when ``versions`` is set on a store-backed graph, and is absent otherwise."""
     scopes.register(registry)
     documents.register(registry)
     platform_tracing_wiring.register(registry)
@@ -97,6 +103,7 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
         cadence_area.register(registry)
         _register_config(registry)
         _register_projects(registry)
+        _register_fleet(registry, versions=versions)
         config_apply.register(registry)
         live_config.register(registry)
         forge.register_tenant(registry)
@@ -117,6 +124,10 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
         config_wiring.register_absent(registry)
         store.register_projects_absent(registry)
         projects.register_absent(registry)
+        store.register_fleet_absent(registry)
+        runners.register_absent(registry)
+        execution.register_absent(registry)
+        api.register_version_window_absent(registry)
         config_apply.register_absent(registry)
         live_config.register_absent(registry)
         forge.register_tenant_absent(registry)
@@ -139,6 +150,18 @@ def _register_projects(registry: LegacyRegistry) -> None:
         positions=refs.positions,
         chunk_targets=refs.chunk_targets,
     )
+
+
+def _register_fleet(registry: LegacyRegistry, *, versions: bool) -> None:
+    """The fleet registry adapters, the runners area's ports and services over them, and the execution area's fleet
+    services over the version window the root supplies — or none, its window absent."""
+    refs = store.register_fleet(registry)
+    runners.register(registry, runners=refs.runners, hosts=refs.hosts)
+    if versions:
+        execution.register(registry, versions=api.register_version_window(registry))
+    else:
+        api.register_version_window_absent(registry)
+        execution.register(registry, versions=None)
 
 
 def _register_urgency(registry: LegacyRegistry) -> None:
@@ -201,10 +224,12 @@ def store_backed_values(
     environ: Mapping[str, str],
     actions: HubActions,
     settings: HubSettingsGraph | None = None,
+    versions: HubVersionWindow | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> ScopeValues:
-    """The store-backed graph's scope values; ``settings`` is supplied only to a graph declaring the settings ports."""
+    """The store-backed graph's scope values; ``settings`` is supplied only to a graph declaring the settings ports, and
+    ``versions`` only to one declaring the version window."""
     values: list[ScopeValue[Any]] = [
         supply(port(HubStoreConnections), connections),
         *process_values(
@@ -219,6 +244,8 @@ def store_backed_values(
     ]
     if settings is not None:
         values.append(supply(port(HubSettingsGraph), settings))
+    if versions is not None:
+        values.append(supply(port(HubVersionWindow), versions))
     return _scoped(values)
 
 
@@ -232,6 +259,7 @@ def build_store_backed(
     environ: Mapping[str, str],
     actions: HubActions,
     settings: HubSettingsGraph | None = None,
+    versions: HubVersionWindow | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> HubProcess:
@@ -244,6 +272,7 @@ def build_store_backed(
         environ=environ,
         actions=actions,
         settings=settings,
+        versions=versions,
         graphs=graphs,
         system_artifacts=system_artifacts,
     )
@@ -294,12 +323,14 @@ def open_store_backed(
     environ: Mapping[str, str],
     actions: HubActions,
     settings: HubSettingsGraph | None = None,
+    versions: HubVersionWindow | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> HubProcess:
-    """The hub's store-backed process, registered and opened; the settings ports are present only with ``settings``."""
+    """The hub's store-backed process, registered and opened; the settings ports are present only with ``settings``,
+    and the version window only with ``versions``."""
     return build_store_backed(
-        registered(store_backed=True, settings=settings is not None),
+        registered(store_backed=True, settings=settings is not None, versions=versions is not None),
         connections,
         clock=clock,
         graphs=graphs,
@@ -309,6 +340,7 @@ def open_store_backed(
         environ=environ,
         actions=actions,
         settings=settings,
+        versions=versions,
     )
 
 
@@ -335,10 +367,10 @@ def open_store_free(
     )
 
 
-def registered(*, store_backed: bool, settings: bool = False) -> LegacyRegistry:
+def registered(*, store_backed: bool, settings: bool = False, versions: bool = False) -> LegacyRegistry:
     """A fresh registry holding the hub graph :func:`register_hub` declares."""
     registry = LegacyRegistry()
-    register_hub(registry, store_backed=store_backed, settings=settings)
+    register_hub(registry, store_backed=store_backed, settings=settings, versions=versions)
     return registry
 
 

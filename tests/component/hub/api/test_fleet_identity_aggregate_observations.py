@@ -10,10 +10,8 @@ from pydantic import BaseModel
 
 from blizzard.hub.api.auth import RunnerAuth, RunnerPrincipal, require_runner_principal
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
-from blizzard.hub.api.deps import tenant_services
 from blizzard.hub.api.fleet import FleetRequest
 from blizzard.hub.api.hub_level import Hub
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
@@ -124,9 +122,8 @@ def test_runner_registration_and_reads_problem_variants(
                 request: Request,
                 principal: RunnerPrincipal = Depends(require_runner_principal),
                 tenant: AdmittedTenant = Depends(resolve_tenant),
-                services: TenantServices = Depends(tenant_services),
             ) -> FleetRequest:
-                fleet = FleetRequest.of(request, principal, tenant, services)
+                fleet = FleetRequest.of(request, principal, tenant)
 
                 def missing_runner(_runner_id: str) -> None:
                     return None

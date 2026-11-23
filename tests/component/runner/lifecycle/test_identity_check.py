@@ -22,6 +22,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.flags import FlagRegistry, resolve_flags
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_version import VersionRefusalReason
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.runner.composition import held_hub_token
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -398,7 +399,11 @@ def test_the_check_reads_the_token_runner_from_a_real_hub(
     hub = build_hub(tmp_path)
     assert hub.app is not None
     ctx = _ctx(tmp_path, FakeHub(default_runner_id="rn_store"), runner_id="rn_store")
-    real = HttpHubClient(RunnerFleetClient(hub.app, services=hub.services, default_runner_id=token_runner))
+    real = HttpHubClient(
+        RunnerFleetClient(
+            hub.app, services=hub.services, fleet=hub.default_adapter(FleetService), default_runner_id=token_runner
+        )
+    )
 
     IdentityCheck(dataclasses.replace(ctx, token_identity=real)).run()
 

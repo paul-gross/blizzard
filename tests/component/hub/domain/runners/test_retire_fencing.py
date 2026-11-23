@@ -14,6 +14,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.tokens import TokenHash
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerRegistration, TokenRotation
 from tests.support.scaffolding import HubHarness, build_hub, emitted_events, pointer_token
 
@@ -140,7 +141,7 @@ def test_a_stale_retire_rerun_leaves_a_rescued_runner_its_token_and_route(
         _claim(hub, chunk_id, _bearer(tokens[0]))
 
     # The re-run decides on the retired registration its route loaded, then the rescue lands before its revocation.
-    _once(monkeypatch, hub.services.fleet, "holdings", rescue)
+    _once(monkeypatch, hub.default_adapter(FleetService), "holdings", rescue)
 
     refused = _retire(hub, by="stale")
 
@@ -210,7 +211,7 @@ def test_a_reinstate_decided_before_a_reinstate_and_re_retire_leaves_the_runner_
         _ok(_reinstate(hub))
         _ok(_retire(hub, by="later"))
 
-    _once(monkeypatch, hub.services.fleet._transactions, "begin", reinstate_and_retire_again)  # pyright: ignore[reportPrivateUsage]  # the fleet service's transaction seam is the only point between the read and the unit
+    _once(monkeypatch, hub.default_adapter(FleetService)._transactions, "begin", reinstate_and_retire_again)  # pyright: ignore[reportPrivateUsage]  # the fleet service's transaction seam is the only point between the read and the unit
 
     refused = _reinstate(hub)
 
@@ -233,7 +234,7 @@ def test_a_host_retire_leaves_a_runner_released_and_rescued_while_its_loop_ran(
         tokens.append(_enroll(hub))
 
     # The host's fact has landed and its roster read holds the retired runner; the rescue lands before its turn.
-    _once(monkeypatch, hub.services.fleet, "holdings", release_and_rescue)
+    _once(monkeypatch, hub.default_adapter(FleetService), "holdings", release_and_rescue)
 
     interrupted = hub.client.post(f"/api/hosts/{host_id}/retire", json={"by": "op", "force": True})
 
@@ -349,7 +350,7 @@ def test_a_stale_reinstate_revokes_nothing_of_a_newer_lifecycle(
         _ok(_reinstate(hub))
         tokens.append(_enroll(hub))
 
-    _once(monkeypatch, hub.services.fleet._transactions, "begin", rescue_and_enroll)  # pyright: ignore[reportPrivateUsage]  # the fleet service's transaction seam is the only point between the read and the unit
+    _once(monkeypatch, hub.default_adapter(FleetService)._transactions, "begin", rescue_and_enroll)  # pyright: ignore[reportPrivateUsage]  # the fleet service's transaction seam is the only point between the read and the unit
 
     refused = _reinstate(hub)
 

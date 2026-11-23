@@ -25,6 +25,7 @@ from blizzard.hub.domain.chunk.ports.dependencies import DEPENDENCIES_LOCK
 from blizzard.hub.domain.chunk.ports.fence import EpochOwner
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.execution.detach import DetachService
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.observability.analytics.derivation import ReDeriveScope
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, DeleteService
 from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
@@ -290,7 +291,9 @@ def test_retire_reads_its_routes_records_once_across_route_counts(
         counts.append(
             count_queries(
                 hub.engine,
-                lambda hub=hub, registration=registration: hub.services.fleet.retire(registration, by="op", force=True),
+                lambda hub=hub, registration=registration: hub.default_adapter(FleetService).retire(
+                    registration, by="op", force=True
+                ),
             )
         )
         monkeypatch.undo()

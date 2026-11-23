@@ -13,9 +13,11 @@ from datetime import datetime
 from functools import partial
 from typing import Annotated, ClassVar
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Query, status
 
 from blizzard.auth_core import Permission
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.foundation.hub_event_types import RunnerChangeKind
 from blizzard.foundation.node_steps import Executor
@@ -25,22 +27,28 @@ from blizzard.hub.api import chunk_events, problems, problems_runners
 from blizzard.hub.api import queue as queue_api
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import TenantServices
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.execution.fleet import (
+    FleetService,
     ReinstateFailed,
     ReinstateInterrupted,
     ReleasedRoute,
     RetireInterrupted,
     RetireOutcome,
 )
-from blizzard.hub.domain.projects.model import Project, ProjectId
+from blizzard.hub.domain.graph.model import IReadNodeExecutors
+from blizzard.hub.domain.projects.model import IReadProjectRepository, Project, ProjectId
 from blizzard.hub.domain.runners.bindings import BindingFlags, claimable_projects, flag_bindings, offered_projects
+from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.gate_enforceability import flag_unenforceable_gates
-from blizzard.hub.domain.runners.host import Host, HostRetired
+from blizzard.hub.domain.runners.host import Host, HostRetired, IReadHostRegistry
+from blizzard.hub.domain.runners.host_enrollment import HostEnrollmentService
 from blizzard.hub.domain.runners.registration import (
+    IReadRunnerRegistry,
     PerSubscriptionUsageView,
     RunnerBinding,
     RunnerHoldsRoutes,
@@ -53,6 +61,7 @@ from blizzard.hub.domain.runners.registration import (
     ServedEntry,
 )
 from blizzard.hub.domain.runners.served import UnknownServedProject
+from blizzard.hub.events.broker import EventBroker
 from blizzard.wire.queue import NextClaimResponse
 from blizzard.wire.runner import (
     ExternalSubscriptionUsageWindowView,
@@ -84,13 +93,60 @@ router = APIRouter(
     prefix="/api", tags=["runners"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
 )
 
+Fleet = FromDishka[FleetService]
+Runners = FromDishka[IReadRunnerRegistry]
+Hosts = FromDishka[IReadHostRegistry]
+Projects = FromDishka[IReadProjectRepository]
+Executors = FromDishka[IReadNodeExecutors]
+Routes = FromDishka[IReadChunkRouteRepository]
+Events = FromDishka[EventBroker]
+Frames = FromDishka[ChunkFrameLoader]
+Clock = FromDishka[IClock]
+Enrollment = FromDishka[RunnerEnrollmentService]
+HostEnrollment = FromDishka[HostEnrollmentService]
+
+
+@dataclass(frozen=True)
+class RunnerReads:
+    """What one runner's registry view is read through: its registry, its liveness, and the projects, hosts and node
+    executors the view is resolved against."""
+
+    registry: IReadRunnerRegistry
+    fleet: FleetService
+    clock: IClock
+    projects: IReadProjectRepository
+    hosts: IReadHostRegistry
+    executors: IReadNodeExecutors
+
+    def registration(self, runner_id: str) -> RunnerRegistration:
+        """The runner's loaded registration, 404 on an unknown one."""
+        registration = self.registry.get_runner(runner_id)
+        if registration is None:
+            raise ProblemHTTPException(partial(problems.runner_not_found_problem, runner_id))
+        return registration
+
+    def detail(self, registration: RunnerRegistration) -> RunnerRegistryView:
+        """One runner's registry view, its served projects read alongside."""
+        return registry_view(
+            self.fleet.get_liveness(registration),
+            now=self.clock.now(),
+            projects=served_projects(self.projects, registration.served),
+            hosts=hosts_of(self.hosts, [registration]),
+            executors=executors_for(self.executors, [registration]),
+        )
+
+    def reread(self, runner_id: str) -> RunnerRegistryView:
+        """The runner read back after a write, so the response reports what the write set."""
+        return self.detail(self.registration(runner_id))
+
 
 @dataclass(frozen=True)
 class RunnerBrake:
     """One operator write of a runner's fleet pause brake. Which way the brake moves is
     the subclass's, and is the only thing that differs between the two verbs."""
 
-    services: TenantServices
+    reads: RunnerReads
+    events: EventBroker
     runner_id: str
     by: str
 
@@ -99,11 +155,9 @@ class RunnerBrake:
 
     def set(self) -> RunnerRegistryView:
         """Write the fact, publish the frame, and read the runner back; 404 on an unknown one."""
-        registration = self.services.registry.get_runner(self.runner_id)
-        if registration is None:
-            raise ProblemHTTPException(partial(problems.runner_not_found_problem, self.runner_id))
-        fact_id = self.services.fleet.set_paused(registration, paused=self.paused, by=self.by)
-        self.services.events.publish_runner_changed(
+        registration = self.reads.registration(self.runner_id)
+        fact_id = self.reads.fleet.set_paused(registration, paused=self.paused, by=self.by)
+        self.events.publish_runner_changed(
             self.runner_id,
             kind=self.kind,
             runner_name=registration.name,
@@ -112,15 +166,9 @@ class RunnerBrake:
         )
         # Re-resolved after the write (not the pre-write `registration`) so the response
         # reports the brake this call just set, not its pre-write value.
-        refreshed = self.services.registry.get_runner(self.runner_id)
+        refreshed = self.reads.registry.get_runner(self.runner_id)
         assert refreshed is not None  # just set_paused succeeded, so the runner exists
-        return registry_view(
-            self.services.fleet.get_liveness(refreshed),
-            now=self.services.clock.now(),
-            projects=served_projects(self.services, refreshed.served),
-            hosts=hosts_of(self.services, [refreshed]),
-            executors=executors_for(self.services, [refreshed]),
-        )
+        return self.reads.detail(refreshed)
 
 
 class Paused(RunnerBrake):
@@ -172,13 +220,13 @@ def runner_view(
 
 
 def executors_for(
-    services: TenantServices, registrations: Iterable[RunnerRegistration]
+    executors: IReadNodeExecutors, registrations: Iterable[RunnerRegistration]
 ) -> Mapping[str, Collection[Executor]]:
     """Where each node name runs across the tenant's graphs — read only when some registration declares a gate, since
     nothing else consults it."""
     if not any(r.gates for r in registrations):
         return {}
-    return services.node_executors.executors_by_node_name()
+    return executors.executors_by_node_name()
 
 
 def unenforceable_views(
@@ -238,13 +286,13 @@ def registry_view(
     )
 
 
-def hosts_of(services: TenantServices, registrations: Sequence[RunnerRegistration]) -> Mapping[str, Host]:
+def hosts_of(hosts: IReadHostRegistry, registrations: Sequence[RunnerRegistration]) -> Mapping[str, Host]:
     """The hosts the registrations stand under, by id — one subset read for the hosts named,
     none for runners that stand alone."""
     ids = {r.host_id for r in registrations if r.host_id is not None}
     if not ids:
         return {}
-    return services.hosts.get_hosts(sorted(ids))
+    return hosts.get_hosts(sorted(ids))
 
 
 def host_of(registration: RunnerRegistration, hosts: Mapping[str, Host]) -> Host | None:
@@ -275,10 +323,10 @@ def binding_views(
     ]
 
 
-def served_projects(services: TenantServices, served: Iterable[ServedEntry]) -> Mapping[ProjectId, Project]:
+def served_projects(projects: IReadProjectRepository, served: Iterable[ServedEntry]) -> Mapping[ProjectId, Project]:
     """The projects the served entries resolved to, in one read."""
     ids = sorted({ProjectId(e.project_id) for e in served if e.project_id is not None})
-    return services.projects.get_many(ids) if ids else {}
+    return projects.get_many(ids) if ids else {}
 
 
 def served_views(
@@ -363,28 +411,12 @@ def _capability_views(r: RunnerRegistration) -> list[RunnerCapabilityWire]:
     ]
 
 
-def _registration(services: TenantServices, runner_id: str) -> RunnerRegistration:
+def _registration(registry: IReadRunnerRegistry, runner_id: str) -> RunnerRegistration:
     """The runner's loaded registration, 404 on an unknown one."""
-    registration = services.registry.get_runner(runner_id)
+    registration = registry.get_runner(runner_id)
     if registration is None:
         raise ProblemHTTPException(partial(problems.runner_not_found_problem, runner_id))
     return registration
-
-
-def _reread(services: TenantServices, runner_id: str) -> RunnerRegistryView:
-    """The runner read back after a write, so the response reports what the write set."""
-    return _detail(services, _registration(services, runner_id))
-
-
-def _detail(services: TenantServices, registration: RunnerRegistration) -> RunnerRegistryView:
-    """One runner's registry view, its served projects read alongside."""
-    return registry_view(
-        services.fleet.get_liveness(registration),
-        now=services.clock.now(),
-        projects=served_projects(services, registration.served),
-        hosts=hosts_of(services, [registration]),
-        executors=executors_for(services, [registration]),
-    )
 
 
 @router.post(
@@ -392,10 +424,14 @@ def _detail(services: TenantServices, registration: RunnerRegistration) -> Runne
     response_model=RunnerAddResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@inject_sync
 def add_runner(
     request: RunnerAddRequest,
-    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.RUNNER_ADD))],
+    enrollment: Enrollment,
+    host_enrollment: HostEnrollment,
+    hosts: Hosts,
+    events: Events,
 ) -> RunnerAddResponse:
     """Add a runner under the initial ``name`` — the hub mints its id and bearer token together,
     and the plaintext token is returned once. The runner is never connected until it first
@@ -404,19 +440,17 @@ def add_runner(
     project of the tenant is refused 422, and nothing is added."""
     try:
         if request.host_id is None:
-            added = services.enrollment.add(request.name, by=identity.username, projects=request.projects)
+            added = enrollment.add(request.name, by=identity.username, projects=request.projects)
         else:
-            host = services.hosts.get_host(request.host_id)
+            host = hosts.get_host(request.host_id)
             if host is None:
                 raise ProblemHTTPException(partial(problems_runners.host_not_found_problem, request.host_id))
-            added = services.host_enrollment.add_runner(
-                host, request.name, by=identity.username, projects=request.projects
-            )
+            added = host_enrollment.add_runner(host, request.name, by=identity.username, projects=request.projects)
     except UnknownServedProject as exc:
         raise ProblemHTTPException(partial(problems.unknown_served_project_problem, exc)) from exc
     except HostRetired as exc:
         raise ProblemHTTPException(partial(problems.host_retired_problem, exc, status_code=409)) from exc
-    services.events.publish_runner_changed(added.runner_id, kind="added", runner_name=added.name, by=identity.username)
+    events.publish_runner_changed(added.runner_id, kind="added", runner_name=added.name, by=identity.username)
     return RunnerAddResponse(runner_id=added.runner_id, runner_name=added.name, token=added.token)
 
 
@@ -426,16 +460,17 @@ def add_runner(
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require(Permission.RUNNER_ADD))],
 )
-def enroll_runner(runner_id: str, services: Services) -> RunnerEnrollmentResponse:
+@inject_sync
+def enroll_runner(runner_id: str, registry: Runners, enrollment: Enrollment) -> RunnerEnrollmentResponse:
     """Rotate ``runner_id``'s bearer token — the plaintext is returned once, and the token it
     replaces stops resolving, the one ``add`` minted included.
 
     Requires an added runner (404 otherwise), connected or not. A retired runner is refused
     409: ``reinstate`` is the one reinstatement lever. So is a runner retired or reinstated while the enroll was
     deciding: 409, with nothing minted or revoked."""
-    registration = _registration(services, runner_id)
+    registration = _registration(registry, runner_id)
     try:
-        token = services.enrollment.enroll(registration)
+        token = enrollment.enroll(registration)
     except RunnerRetired as exc:
         raise ProblemHTTPException(partial(problems.runner_retired_problem, exc, status_code=409)) from exc
     except RunnerLifecycleConflict as exc:
@@ -446,30 +481,44 @@ def enroll_runner(runner_id: str, services: Services) -> RunnerEnrollmentRespons
 @router.get(
     "/runners", response_model=RunnerRegistryListResponse, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
+@inject_sync
 def list_runners(
-    services: Services,
+    fleet: Fleet,
+    clock: Clock,
+    projects: Projects,
+    hosts: Hosts,
+    executors: Executors,
     include_retired: Annotated[bool, Query()] = False,
 ) -> RunnerRegistryListResponse:
     """The fleet registry — every added runner, oldest first, with its connection condition and
     paused state; a retired runner excluded by default, included and marked when ``include_retired``. Not paged: a
     tenant has tens of runners, and callers read the whole roster."""
-    now = services.clock.now()
-    listed = services.fleet.list_with_liveness(now=now, include_retired=include_retired)
-    projects = served_projects(services, (e for item in listed for e in item.registration.served))
-    hosts = hosts_of(services, [item.registration for item in listed])
-    executors = executors_for(services, [item.registration for item in listed])
+    now = clock.now()
+    listed = fleet.list_with_liveness(now=now, include_retired=include_retired)
+    served = served_projects(projects, (e for item in listed for e in item.registration.served))
+    standing = hosts_of(hosts, [item.registration for item in listed])
+    running = executors_for(executors, [item.registration for item in listed])
     return RunnerRegistryListResponse(
-        runners=[registry_view(item, now=now, projects=projects, hosts=hosts, executors=executors) for item in listed]
+        runners=[registry_view(item, now=now, projects=served, hosts=standing, executors=running) for item in listed]
     )
 
 
 @router.get(
     "/runners/{runner_id}", response_model=RunnerRegistryView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
-def get_runner(runner_id: str, services: Services) -> RunnerRegistryView:
+@inject_sync
+def get_runner(
+    runner_id: str,
+    registry: Runners,
+    fleet: Fleet,
+    clock: Clock,
+    projects: Projects,
+    hosts: Hosts,
+    executors: Executors,
+) -> RunnerRegistryView:
     """One runner's connection condition and paused state — the operator's detail read,
     symmetric with the list. 404 on unknown."""
-    return _detail(services, _registration(services, runner_id))
+    return RunnerReads(registry, fleet, clock, projects, hosts, executors).reread(runner_id)
 
 
 @router.get(
@@ -481,7 +530,7 @@ def get_runner_next_claim(runner_id: str, services: Services) -> NextClaimRespon
     """The hub's best account of the chunk one runner reaches for next and every chunk it passes on the way — walked
     from the runner's served projects and bindings and its latest capability snapshot. A retired or paused runner is
     answered like any other; 404 on unknown."""
-    registration = _registration(services, runner_id)
+    registration = _registration(services.registry, runner_id)
     host = services.hosts.get_host(registration.host_id) if registration.host_id is not None else None
     return queue_api.NextClaim.of(
         services,
@@ -496,9 +545,21 @@ def get_runner_next_claim(runner_id: str, services: Services) -> NextClaimRespon
     response_model=RunnerRegistryView,
     dependencies=[Depends(require(Permission.RUNNER_PAUSE))],
 )
-def pause_runner(runner_id: str, request: RunnerPauseRequest, services: Services) -> RunnerRegistryView:
+@inject_sync
+def pause_runner(
+    runner_id: str,
+    request: RunnerPauseRequest,
+    registry: Runners,
+    fleet: Fleet,
+    clock: Clock,
+    projects: Projects,
+    hosts: Hosts,
+    executors: Executors,
+    events: Events,
+) -> RunnerRegistryView:
     """Set a runner's pause brake — no new claims; in-flight chunks run on."""
-    return Paused(services, runner_id, request.by).set()
+    reads = RunnerReads(registry, fleet, clock, projects, hosts, executors)
+    return Paused(reads, events, runner_id, request.by).set()
 
 
 @router.post(
@@ -506,9 +567,21 @@ def pause_runner(runner_id: str, request: RunnerPauseRequest, services: Services
     response_model=RunnerRegistryView,
     dependencies=[Depends(require(Permission.RUNNER_PAUSE))],
 )
-def resume_runner(runner_id: str, request: RunnerPauseRequest, services: Services) -> RunnerRegistryView:
+@inject_sync
+def resume_runner(
+    runner_id: str,
+    request: RunnerPauseRequest,
+    registry: Runners,
+    fleet: Fleet,
+    clock: Clock,
+    projects: Projects,
+    hosts: Hosts,
+    executors: Executors,
+    events: Events,
+) -> RunnerRegistryView:
     """Clear a runner's pause brake — it resumes claiming on its next pull."""
-    return Resumed(services, runner_id, request.by).set()
+    reads = RunnerReads(registry, fleet, clock, projects, hosts, executors)
+    return Resumed(reads, events, runner_id, request.by).set()
 
 
 @router.post(
@@ -516,33 +589,48 @@ def resume_runner(runner_id: str, request: RunnerPauseRequest, services: Service
     response_model=RunnerRetireResponse,
     dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
-def retire_runner(runner_id: str, request: RunnerRetireRequest, services: Services) -> RunnerRetireResponse:
+@inject_sync
+def retire_runner(
+    runner_id: str,
+    request: RunnerRetireRequest,
+    registry: Runners,
+    fleet: Fleet,
+    clock: Clock,
+    projects: Projects,
+    hosts: Hosts,
+    executors: Executors,
+    routes: Routes,
+    events: Events,
+    frames: Frames,
+) -> RunnerRetireResponse:
     """Retire a runner — its token is revoked and its claims and registrations refused;
     409 naming each held chunk unless ``force``, which releases them. Re-running on a
     retired runner re-runs the release pass. A retire — a re-run included — whose runner
     was retired or reinstated after it was read is refused 409, revoking no token and
     releasing no route the runner holds since; what it committed first is still published.
     Run it again."""
-    registration = _registration(services, runner_id)
-    held = services.chunks.route.live_routes_of_runner(runner_id)
-    changes = chunk_events.ChunkChanged.before_many(services.chunk_frames, [r.chunk_id for r in held])
+    reads = RunnerReads(registry, fleet, clock, projects, hosts, executors)
+    registration = reads.registration(runner_id)
+    held = routes.live_routes_of_runner(runner_id)
+    changes = chunk_events.ChunkChanged.before_many(frames, [r.chunk_id for r in held])
     try:
-        outcome = services.fleet.retire(registration, by=request.by, force=request.force)
+        outcome = fleet.retire(registration, by=request.by, force=request.force)
     except RetireInterrupted as exc:
-        publish_retirement(services, registration, exc.committed, by=request.by, changes=changes)
+        publish_retirement(events, frames, registration, exc.committed, by=request.by, changes=changes)
         raise ProblemHTTPException(partial(problems.runner_retire_interrupted_problem, exc)) from exc
     except RunnerHoldsRoutes as exc:
         raise ProblemHTTPException(partial(problems.runner_holds_routes_problem, exc)) from exc
     except RunnerLifecycleConflict as exc:
         raise ProblemHTTPException(partial(problems.runner_lifecycle_conflict_problem, exc)) from exc
-    publish_retirement(services, registration, outcome, by=request.by, changes=changes)
+    publish_retirement(events, frames, registration, outcome, by=request.by, changes=changes)
     return RunnerRetireResponse(
-        runner=_reread(services, runner_id), released_chunk_ids=[r.chunk_id for r in outcome.released]
+        runner=reads.reread(runner_id), released_chunk_ids=[r.chunk_id for r in outcome.released]
     )
 
 
 def publish_retirement(
-    services: TenantServices,
+    events: EventBroker,
+    frames: ChunkFrameLoader,
     registration: RunnerRegistration,
     outcome: RetireOutcome,
     *,
@@ -552,9 +640,9 @@ def publish_retirement(
     """Publish what one runner retire wrote: a ``detached`` frame per released chunk (``changes`` holds each one read
     before the retire), the queue's change when any was released, and the runner's ``retired`` frame unless the retire
     was a re-run."""
-    _publish_releases(services, outcome.released, changes)
+    _publish_releases(events, frames, outcome.released, changes)
     if outcome.fact_id is not None:
-        services.events.publish_runner_changed(
+        events.publish_runner_changed(
             registration.runner_id,
             kind="retired",
             runner_name=registration.name,
@@ -564,15 +652,18 @@ def publish_retirement(
 
 
 def _publish_releases(
-    services: TenantServices, released: Sequence[ReleasedRoute], changes: Mapping[str, chunk_events.ChunkChanged]
+    events: EventBroker,
+    frames: ChunkFrameLoader,
+    released: Sequence[ReleasedRoute],
+    changes: Mapping[str, chunk_events.ChunkChanged],
 ) -> None:
     """A ``detached`` frame per released chunk, each from its state read before the write when ``changes`` holds
     it, and the queue's change when any was released."""
     for route in released:
-        change = changes.get(route.chunk_id) or chunk_events.ChunkChanged.before(services.chunk_frames, route.chunk_id)
+        change = changes.get(route.chunk_id) or chunk_events.ChunkChanged.before(frames, route.chunk_id)
         change.publish(cause="detached", key=f"route_released:{route.released_id}")
     if released:
-        services.events.publish_queue_changed()  # released chunks re-enter the ready queue
+        events.publish_queue_changed()  # released chunks re-enter the ready queue
 
 
 @router.post(
@@ -580,21 +671,35 @@ def _publish_releases(
     response_model=RunnerRegistryView,
     dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
-def reinstate_runner(runner_id: str, request: RunnerLifecycleRequest, services: Services) -> RunnerRegistryView:
+@inject_sync
+def reinstate_runner(
+    runner_id: str,
+    request: RunnerLifecycleRequest,
+    registry: Runners,
+    fleet: Fleet,
+    clock: Clock,
+    projects: Projects,
+    hosts: Hosts,
+    executors: Executors,
+    routes: Routes,
+    events: Events,
+    frames: Frames,
+) -> RunnerRegistryView:
     """Reinstate a retired runner — any token it still carries is revoked with the reversal, and it stays unenrolled
     until enrolled afresh; 409 when not retired, when it stands under a retired host, and when its lifecycle moved
     while the reinstate was decided. A route its retirement left held is released first, as the retire's own release
     pass would, and its ``detached`` frame published."""
-    registration = _registration(services, runner_id)
-    held = services.chunks.route.live_routes_of_runner(runner_id)
-    changes = chunk_events.ChunkChanged.before_many(services.chunk_frames, [r.chunk_id for r in held])
+    reads = RunnerReads(registry, fleet, clock, projects, hosts, executors)
+    registration = reads.registration(runner_id)
+    held = routes.live_routes_of_runner(runner_id)
+    changes = chunk_events.ChunkChanged.before_many(frames, [r.chunk_id for r in held])
     try:
-        outcome = services.fleet.reinstate(registration, by=request.by)
+        outcome = fleet.reinstate(registration, by=request.by)
     except ReinstateInterrupted as exc:
-        _publish_releases(services, exc.released, changes)
+        _publish_releases(events, frames, exc.released, changes)
         raise ProblemHTTPException(partial(problems_runners.runner_reinstate_interrupted_problem, exc)) from exc
     except ReinstateFailed as exc:
-        _publish_releases(services, exc.released, changes)
+        _publish_releases(events, frames, exc.released, changes)
         raise exc.cause from exc
     except RunnerNotRetired as exc:
         raise ProblemHTTPException(partial(problems_runners.runner_not_retired_problem, exc)) from exc
@@ -602,15 +707,15 @@ def reinstate_runner(runner_id: str, request: RunnerLifecycleRequest, services: 
         raise ProblemHTTPException(partial(problems.host_retired_problem, exc, status_code=409)) from exc
     except RunnerLifecycleConflict as exc:
         raise ProblemHTTPException(partial(problems.runner_lifecycle_conflict_problem, exc)) from exc
-    _publish_releases(services, outcome.released, changes)
-    services.events.publish_runner_changed(
+    _publish_releases(events, frames, outcome.released, changes)
+    events.publish_runner_changed(
         runner_id,
         kind="reinstated",
         runner_name=registration.name,
         by=request.by,
         key=f"runner_lifecycle_facts:{outcome.fact_id}",
     )
-    return _reread(services, runner_id)
+    return reads.reread(runner_id)
 
 
 @router.post(
@@ -619,23 +724,33 @@ def reinstate_runner(runner_id: str, request: RunnerLifecycleRequest, services: 
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
+@inject_sync
 def revoke_runner_token(
-    runner_id: str, request: RunnerLifecycleRequest, services: Services
+    runner_id: str,
+    request: RunnerLifecycleRequest,
+    registry: Runners,
+    fleet: Fleet,
+    clock: Clock,
+    projects: Projects,
+    hosts: Hosts,
+    executors: Executors,
+    events: Events,
 ) -> RunnerTokenRevocationResponse:
     """Revoke a runner's token — it stays added and must be re-enrolled; 409 when unenrolled, and when it was retired
     or reinstated while the revocation was decided."""
-    registration = _registration(services, runner_id)
+    reads = RunnerReads(registry, fleet, clock, projects, hosts, executors)
+    registration = reads.registration(runner_id)
     try:
-        revocation_id = services.fleet.revoke_token(registration, by=request.by)
+        revocation_id = fleet.revoke_token(registration, by=request.by)
     except RunnerNotEnrolled as exc:
         raise ProblemHTTPException(partial(problems_runners.runner_not_enrolled_problem, exc)) from exc
     except RunnerLifecycleConflict as exc:
         raise ProblemHTTPException(partial(problems.runner_lifecycle_conflict_problem, exc)) from exc
-    services.events.publish_runner_changed(
+    events.publish_runner_changed(
         runner_id,
         kind="token-revoked",
         runner_name=registration.name,
         by=request.by,
         key=f"runner_token_revocations:{revocation_id}",
     )
-    return RunnerTokenRevocationResponse(runner=_reread(services, runner_id))
+    return RunnerTokenRevocationResponse(runner=reads.reread(runner_id))

@@ -1587,7 +1587,9 @@ def direct_exception_dispatch(route: Any, app: Any) -> dict[str, set[str]]:
         functions.append(dependency.call)
         pending.extend(dependency.dependencies)
     evidence: dict[str, set[str]] = {}
-    for function in functions:
+    for call in functions:
+        # A container-injected endpoint is dishka's generated wrapper; its raises are the wrapped function's.
+        function = getattr(call, "__dishka_orig_func__", call)
         if not inspect.isfunction(function):
             continue
         try:

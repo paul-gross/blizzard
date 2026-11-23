@@ -78,7 +78,6 @@ from blizzard.hub.tenancy import STORE_UNAVAILABLE, StoreScope
 
 #: Every other tenant adapter built as a service over the tenant's connections (one also takes the link port).
 _TENANT_SERVICES: tuple[type[Any], ...] = (
-    HostRegistryStore,
     GardenProposalStore,
     GardenProposalClosureStore,
     InvitationStore,
@@ -119,7 +118,6 @@ _TENANT_ALIASED: tuple[type[Any], ...] = (
     RoutineStore,
     RoutineScopeStore,
     CadenceStore,
-    RunnerRegistryStore,
 )
 
 #: The configured-record adapters, whose ``Ref`` the config area aliases its ports onto.
@@ -337,4 +335,30 @@ def register_urgency(registry: Registry) -> UrgencyRefs:
 def register_urgency_absent(registry: Registry) -> None:
     """Declare the tenant's urgency adapters absent, for the store-free graph."""
     for missing in _URGENCY_SERVICES:
+        registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
+
+
+#: The fleet registry adapters, whose ``Ref`` the runners area aliases its ports onto.
+_FLEET_SERVICES: tuple[type[Any], ...] = (RunnerRegistryStore, HostRegistryStore)
+
+
+@adapter_model
+@dataclass(frozen=True)
+class FleetRefs:
+    """The ``Ref`` of each fleet registry adapter, named for the runners area's port family it fills."""
+
+    runners: Ref[RunnerRegistryStore]
+    hosts: Ref[HostRegistryStore]
+
+
+def register_fleet(registry: Registry) -> FleetRefs:
+    """Declare the tenant's runner and host registry adapters, handing back the ``Ref`` of each, which the runners
+    area's ports alias."""
+    refs = StoreRefs({each: registry.service(each, lifetime=Lifetime.TENANT) for each in _FLEET_SERVICES})
+    return FleetRefs(runners=refs.of(RunnerRegistryStore), hosts=refs.of(HostRegistryStore))
+
+
+def register_fleet_absent(registry: Registry) -> None:
+    """Declare the tenant's fleet registry adapters absent, for the store-free graph."""
+    for missing in _FLEET_SERVICES:
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)

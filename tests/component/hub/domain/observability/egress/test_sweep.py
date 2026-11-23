@@ -20,6 +20,7 @@ from fastapi import FastAPI
 from blizzard.foundation.lane_retry import BACKOFF_CAP
 from blizzard.hub import app as hub_app
 from blizzard.hub.app import Sweep
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.ports import (
     DatasetSchema,
@@ -407,7 +408,7 @@ def test_rows_name_their_runner_as_it_last_registered_and_a_later_copy_follows_a
     egress_sweep(hub, writer).sweep()
 
     # A rename by restart: same id, new name.
-    hub.services.fleet.register(added_runner(hub, "r1"), "w1", name="day-runner")
+    hub.default_adapter(FleetService).register(added_runner(hub, "r1"), "w1", name="day-runner")
     hub.clock.advance(timedelta(hours=3))
     _push_usage(hub, chunk_id, graph_node_id(graph))
     egress_sweep(hub, writer).sweep()

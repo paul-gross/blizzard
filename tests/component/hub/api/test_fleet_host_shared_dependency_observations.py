@@ -14,6 +14,7 @@ from blizzard.hub.api.auth import HostAuth
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.runners.host import HostTokenRotation
 from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
@@ -128,7 +129,7 @@ def test_shared_refusals_match_each_host_operation(
         retire_url = path.format(runner_id="runner-a")
         observe(client.post(retire_url, json={}, headers=headers), 409, RunnerHoldsRoutesProblem)
         registry = cast(IWriteRunnerRegistry, hub.services.registry)
-        holdings = hub.services.fleet.holdings
+        holdings = hub.default_adapter(FleetService).holdings
 
         def retire_after_read(runner_id: str) -> list[Route]:
             routes = holdings(runner_id)
@@ -136,7 +137,7 @@ def test_shared_refusals_match_each_host_operation(
             return routes
 
         with monkeypatch.context() as patch:
-            patch.setattr(hub.services.fleet, "holdings", retire_after_read)
+            patch.setattr(hub.default_adapter(FleetService), "holdings", retire_after_read)
             observe(client.post(retire_url, json={"force": True}, headers=headers), 409, RunnerLifecycleConflictProblem)
 
         registration = registry.get_runner("runner-a")

@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import Connection
 
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.store.internal import chunk_record_store as work_item_store_module
 from tests.support.scaffolding import added_runner, build_hub, ingest, seed_runner
 
@@ -31,7 +32,7 @@ def test_a_claim_blocks_while_a_delete_holds_the_shared_lock_mid_write(
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])  # promote=True by default -> ready
     # Registered up front, so the claim's only wait is the delete's lock, not a registration write.
     seed_runner(hub, "r1", register=False)
-    hub.services.fleet.register(added_runner(hub, "r1"), "w1")
+    hub.default_adapter(FleetService).register(added_runner(hub, "r1"), "w1")
 
     entered_write = threading.Event()
     release_write = threading.Event()

@@ -13,6 +13,7 @@ import httpx2
 from sqlalchemy import func, select
 
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
 from blizzard.hub.store import schema as s
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -122,7 +123,12 @@ class _RealRunner:
         assert hub.app is not None
         # The hub resolves this runner from its own token, so it presents ``runner_id``'s.
         self.recording = _RecordingClient(
-            RunnerFleetClient(hub.app, services=hub.services, default_runner_id=runner_id)
+            RunnerFleetClient(
+                hub.app,
+                services=hub.services,
+                fleet=hub.default_adapter(FleetService),
+                default_runner_id=runner_id,
+            )
         )
         hub_client = HttpHubClient(cast(httpx2.Client, self.recording))
         provider = FakeProvider({"e1": "/ws/e1"})

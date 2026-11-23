@@ -170,8 +170,8 @@ def test_hosts_of_reads_the_named_hosts_only_and_a_missing_host_falls_back(
     assert len(registrations) == 2
     ghost = dataclasses.replace(registrations[0], host_id="ho_gone")
 
-    found = hosts_of(services, registrations)
-    with_missing = hosts_of(services, [*registrations, ghost])
+    found = hosts_of(services.hosts, registrations)
+    with_missing = hosts_of(services.hosts, [*registrations, ghost])
 
     assert set(found) == {first, second}
     assert with_missing == found

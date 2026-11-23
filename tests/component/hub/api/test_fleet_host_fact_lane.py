@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.foundation.fact_kinds import EXTERNAL_SUBSCRIPTION_USAGE_MISSED, EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
 from blizzard.hub.domain.execution.facts import PushedFact
-from blizzard.hub.domain.execution.host_facts import HostFactIngestResult
+from blizzard.hub.domain.execution.host_facts import HostFactIngestResult, HostFactIngestService
 from blizzard.hub.domain.kernel.high_water import HighWaterConflict
 from blizzard.hub.domain.runners.host import Host
 from blizzard.hub.store import schema as s
@@ -162,7 +162,7 @@ def test_a_push_paused_after_its_mark_read_applies_no_seq_a_competing_push_appli
     mark stays at B's highest seq — A neither overwrites B's sample nor moves the mark back to its own."""
     hub = build_hub(tmp_path)
     held = _held(hub, _host(hub))
-    service = hub.services.host_facts
+    service = hub.default_adapter(HostFactIngestService)
     competed: list[HostFactIngestResult] = []
 
     _after_first_mark_read(monkeypatch, lambda: competed.append(service.ingest(held, _samples(competing))))
@@ -182,7 +182,7 @@ def test_a_push_resumes_from_the_mark_a_competing_push_left_below_its_own_seqs(
     mark B left."""
     hub = build_hub(tmp_path)
     held = _held(hub, _host(hub))
-    service = hub.services.host_facts
+    service = hub.default_adapter(HostFactIngestService)
     competed: list[HostFactIngestResult] = []
 
     _after_first_mark_read(monkeypatch, lambda: competed.append(service.ingest(held, _samples(range(1, 2)))))
@@ -214,12 +214,12 @@ def test_a_mid_batch_crash_lands_neither_the_in_flight_fact_nor_its_mark(
 
     monkeypatch.setattr(HostRegistryStore, "record_external_usage", crash_on_second_call)
     with pytest.raises(RuntimeError, match="simulated crash mid-batch"):
-        hub.services.host_facts.ingest(held, _samples(range(1, 4)))
+        hub.default_adapter(HostFactIngestService).ingest(held, _samples(range(1, 4)))
     monkeypatch.undo()
 
     assert _stored_pcts(hub, held.host_id) == [10.0]
     assert hub.services.hosts.high_water(held.host_id) == 1
-    replay = hub.services.host_facts.ingest(held, _samples(range(1, 3)))
+    replay = hub.default_adapter(HostFactIngestService).ingest(held, _samples(range(1, 3)))
     assert (replay.applied, replay.already_applied) == ([2], [1])
     assert _stored_pcts(hub, held.host_id) == [20.0]
 
@@ -254,7 +254,7 @@ def test_a_mid_batch_crash_rolls_the_in_flight_miss_back_with_its_mark(
         for seq, slug in ((1, "first"), (2, "second"))
     ]
     with pytest.raises(RuntimeError, match="simulated crash mid-batch"):
-        hub.services.host_facts.ingest(held, misses)
+        hub.default_adapter(HostFactIngestService).ingest(held, misses)
 
     assert _stored_miss_slugs(hub, held.host_id) == ["first"]
     assert hub.services.hosts.high_water(held.host_id) == 1
@@ -277,7 +277,7 @@ def test_a_conflict_on_a_mark_no_push_moved_surfaces_rather_than_retrying(
 
     monkeypatch.setattr(HostRegistryStore, "set_high_water", refuse)
     with pytest.raises(HighWaterConflict):
-        hub.services.host_facts.ingest(held, _samples(range(1, 2)))
+        hub.default_adapter(HostFactIngestService).ingest(held, _samples(range(1, 2)))
 
     assert attempts == [1]
     assert _stored_pcts(hub, held.host_id) == []
@@ -346,7 +346,7 @@ def test_the_host_service_refuses_a_retired_host_whatever_token_admitted_it(tmp_
     assert retired is not None and retired.retired
 
     with pytest.raises(HostRetired):
-        hub.services.host_facts.ingest(
+        hub.default_adapter(HostFactIngestService).ingest(
             retired, [PushedFact(1, EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED, _sample(1)["payload"])]
         )
 

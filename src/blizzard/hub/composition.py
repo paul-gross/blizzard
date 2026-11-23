@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING, Any, Protocol
 import httpx2
 from sqlalchemy import Engine
 
-from blizzard import __version__
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.flags import (
     Flags,
@@ -91,7 +90,7 @@ from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
-from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository, IWriteChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
@@ -110,8 +109,6 @@ from blizzard.hub.domain.execution.decisions import DecisionService, RequeueServ
 from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.execution.facts import FactIngestService
 from blizzard.hub.domain.execution.fleet import FleetService
-from blizzard.hub.domain.execution.host_facts import HostFactIngestService
-from blizzard.hub.domain.execution.host_retirement import HostRetirementService
 from blizzard.hub.domain.execution.questions import QuestionService
 from blizzard.hub.domain.execution.release import ReleaseService
 from blizzard.hub.domain.garden.delivery.materialize import GardenDelivery
@@ -195,18 +192,12 @@ from blizzard.hub.domain.operations.promote import PromoteService
 from blizzard.hub.domain.operations.queue import GroupService, QueueService
 from blizzard.hub.domain.operations.restart import RestartService
 from blizzard.hub.domain.operations.stop import StopService
-from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
 from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
 from blizzard.hub.domain.projects.targets import ChunkTargetCapture, ChunkTargets
-from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.host import IReadHostRegistry
-from blizzard.hub.domain.runners.host_enrollment import HostEnrollmentService
-from blizzard.hub.domain.runners.host_report import HostReportService
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
-from blizzard.hub.domain.runners.version import IVersionWindow
-from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.sweeps.locks import SweepLocks
 from blizzard.hub.domain.sweeps.names import SweepName
 from blizzard.hub.domain.sweeps.roster import SweepRoster
@@ -336,8 +327,6 @@ class TenantServices:
     #: The unacquired-chunk delete/withdraw service.
     delete: DeleteService
     facts: FactIngestService
-    #: The host's own fact lane — the host registry's mark and usage, apart from the runner lane's.
-    host_facts: HostFactIngestService
     #: The transcript lane's ingest policy — the write side; ``transcripts``
     #: above is the same store's read Protocol.
     transcript_ingest: TranscriptIngestService
@@ -348,15 +337,10 @@ class TenantServices:
     questions: QuestionService
     queue: QueueService
     group: GroupService
-    fleet: FleetService
-    enrollment: RunnerEnrollmentService
-    #: The fleet registry's read Protocol — the same store instance as ``fleet``'s writes.
+    #: The fleet registry's read Protocol — the same store instance as the fleet service's writes.
     registry: IReadRunnerRegistry
-    #: The host registry's read Protocol — the same store instance as the three host services' writes.
+    #: The host registry's read Protocol — the same store instance as the host services' writes.
     hosts: IReadHostRegistry
-    host_enrollment: HostEnrollmentService
-    host_report: HostReportService
-    host_retirement: HostRetirementService
     #: Wakes the hosted hub's flow driver; nothing elsewhere.
     hub_step_wake: StepWake
     events: EventBroker
@@ -1009,6 +993,12 @@ def chunk_route_leaf(chunks: ChunkStores) -> IReadChunkRouteRepository:
     return chunks.route
 
 
+def chunk_route_writes_leaf(chunks: ChunkStores) -> IWriteChunkRouteRepository:
+    """The tenant's chunk-route writes, projected from its chunk stores — a legacy leaf the chunk operations area owns
+    until it adopts it."""
+    return chunks.route
+
+
 def chunk_work_refs_leaf(chunks: ChunkStores) -> IReadChunkWorkRefsRepository:
     """The tenant's live-holder reads of each work ref, projected from its chunk stores — a legacy leaf the chunk
     operations area owns until it adopts it."""
@@ -1042,12 +1032,11 @@ def register_legacy(registry: LegacyRegistry) -> None:
     # The routine and cadence writes the urgency clearings are built over, until their areas adopt them.
     registry.alias(port(IWriteRoutineRepository), tenant.of(RoutineStore))
     registry.alias(port(IWriteCadenceRepository), tenant.of(CadenceStore))
-    # The reads a chunk-changed frame is enriched from.
-    registry.alias(port(IReadRunnerRegistry), tenant.of(RunnerRegistryStore))
     for leaf in (
         chunk_facts_leaf,
         chunk_record_leaf,
         chunk_route_leaf,
+        chunk_route_writes_leaf,
         chunk_work_refs_leaf,
         delete_leaf,
         work_item_edits_leaf,
@@ -1067,10 +1056,10 @@ _LEGACY_TENANT_KEYS: tuple[type[Any], ...] = (
     IReadCadenceRepository,
     IWriteRoutineRepository,
     IWriteCadenceRepository,
-    IReadRunnerRegistry,
     IReadChunkFactsRepository,
     IReadChunkRecordRepository,
     IReadChunkRouteRepository,
+    IWriteChunkRouteRepository,
     IReadChunkWorkRefsRepository,
     DeleteService,
     WorkItemEditService,
@@ -1110,11 +1099,13 @@ def build_hub_core(
     environ: Mapping[str, str],
     actions: HubActions,
     settings: HubSettingsGraph | None = None,
+    versions: HubVersionWindow | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> HubCore:
     """Build the :class:`HubCore` over the hub's process container, opened here over the borrowed inputs; the core's
-    ``process`` closes it. A core built without the ``settings`` graph declares the settings ports absent."""
+    ``process`` closes it. A core built without the ``settings`` graph declares the settings ports absent, and one
+    without the ``versions`` window, serving no runner, declares the window absent."""
     from blizzard.hub.process_root import open_store_backed  # the root registers this module's leaves
 
     process = open_store_backed(
@@ -1127,6 +1118,7 @@ def build_hub_core(
         environ=environ,
         actions=actions,
         settings=settings,
+        versions=versions,
     )
     return hub_core_over(process, store_connections, clock=clock)
 
@@ -1183,7 +1175,6 @@ class TenantServiceParts:
     follow_latest_default: bool
     transcript_caps: TranscriptCaps | None
     platform_tracer: IPlatformTracer | None
-    versions: IVersionWindow
     extractors: Sequence[ITurnEventExtractor]
     action_passes: ActionPassDriver
     #: The config a turn binds: the settings graph's resolution, or the boot config without one.
@@ -1207,7 +1198,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     finding_store = stores.finding_store
     garden_proposal_store = stores.garden_proposal_store
     garden_proposal_closure_store = stores.garden_proposal_closure_store
-    registry_store = stores.registry
+    registry_store = tenant.get(IReadRunnerRegistry)
+    host_store = tenant.get(IReadHostRegistry)
     chunk_facts = chunk_stores.facts
     chunk_record = chunk_stores.record
     chunk_lifecycle = chunk_stores.lifecycle
@@ -1237,31 +1229,10 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     analytics_event_queries = tenant.get(AnalyticsEventQueryStore)
     operational_analytics = tenant.get(AnalyticsOperationalStore)
     event_log = tenant.get(EventLogService)
-    detach = DetachService(route=chunk_route, facts=chunk_facts, transactions=stores.transactions, clock=clock)
+    detach = tenant.get(DetachService)
     # One id-keyed retired-runner refusal, shared by every runner-contact operation.
-    retired = RetiredRunnerGuard(registry=registry_store)
-    # A served declaration resolves against the tenant's projects in one read per add or registration.
-    served_projects = tenant.get(BulkProjectResolver)
-    fleet = FleetService(
-        registry=registry_store,
-        hosts=stores.hosts,
-        transactions=stores.transactions,
-        routes=chunk_route,
-        records=chunk_record,
-        facts=chunk_facts,
-        detach=detach,
-        retired=retired,
-        served_projects=served_projects,
-        versions=parts.versions,
-        clock=clock,
-    )
-    enrollment = RunnerEnrollmentService(registry=registry_store, served_projects=served_projects, clock=clock)
-    host_store = stores.hosts
-    host_enrollment = HostEnrollmentService(
-        hosts=host_store, runners=registry_store, runner_enrollment=enrollment, clock=clock
-    )
-    host_report = HostReportService(hosts=host_store, clock=clock)
-    host_retirement = HostRetirementService(hosts=host_store, runners=registry_store, fleet=fleet, clock=clock)
+    retired = tenant.get(RetiredRunnerGuard)
+    fleet = tenant.get(FleetService)
     graph_mint = tenant.get(GraphMintService)
     default_graph = tenant.get(DefaultGraphService)
     default_graph_yaml = packaged_default_yaml()
@@ -1541,14 +1512,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             record=chunk_record,
             clock=clock,
         ),
-        fleet=fleet,
-        enrollment=enrollment,
         registry=registry_store,
         hosts=host_store,
-        host_facts=HostFactIngestService(hosts=host_store, transactions=stores.transactions, clock=clock),
-        host_enrollment=host_enrollment,
-        host_report=host_report,
-        host_retirement=host_retirement,
         hub_step_wake=parts.step_wake,
         events=events,
         chunk_frames=tenant.get(ChunkFrameLoader),
@@ -1740,8 +1705,6 @@ def build_services(
     trace_exporter: ITraceExporter | None = None,
     tracing_settings: TracingSettings | None = None,
     egress_path_key: bytes | None = None,
-    version_window: VersionWindow,
-    hub_version: str = __version__,
     extractors: Sequence[ITurnEventExtractor],
     action_pass_grace: timedelta = ACTION_PASS_GRACE,
     cadences_on: Callable[[], bool],
@@ -1771,7 +1734,6 @@ def build_services(
         follow_latest_default=follow_latest_default,
         transcript_caps=transcript_caps,
         platform_tracer=process.get(IPlatformTracer),
-        versions=HubVersionWindow(hub_version, version_window),
         extractors=extractors,
         action_passes=ActionPassDriver(action_loop, lambda: action_bound(config_source.current().action_pass_seconds)),
         pass_config=config_source.resolved,

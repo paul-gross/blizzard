@@ -118,6 +118,7 @@ from blizzard.hub.domain.config.work_sources import (
 )
 from blizzard.hub.domain.delivery.flows import FlowResource, QueueStanding, Submission
 from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus, IReadFlows, IReadFlowViews
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryPlan,
     DeltaMaterialization,
@@ -183,7 +184,9 @@ from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectEdit, ProjectId, ProjectSlug
 from blizzard.hub.domain.projects.order import IReadProjectPositions
 from blizzard.hub.domain.projects.targets import IReadChunkTargets
+from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.host import IReadHostRegistry
+from blizzard.hub.domain.runners.host_enrollment import HostEnrollmentService
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
@@ -1535,29 +1538,31 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     # --- registry -------------------------------------------------------------------------
     seed_runner(hub, HUB_RUNNER_ID, register=False)
     seed_runner(hub, HUB_RUNNER_ID_2, register=False)
-    hub.services.fleet.register(
+    hub.default_adapter(FleetService).register(
         added_runner(hub, HUB_RUNNER_ID),
         "workspace-1",
         env_capacity=2,
         public_url="http://r1.local",
         redirect_uris=("http://r1.local/cb",),
     )
-    hub.services.fleet.register(added_runner(hub, HUB_RUNNER_ID_2), "workspace-2")
+    hub.default_adapter(FleetService).register(added_runner(hub, HUB_RUNNER_ID_2), "workspace-2")
     registration = hub.services.registry.get_runner(HUB_RUNNER_ID)
     assert registration is not None
-    runner_token = hub.services.enrollment.enroll(registration)
+    runner_token = hub.default_adapter(RunnerEnrollmentService).enroll(registration)
     runner_token_hash = TokenHash(runner_token).hex
 
     # --- hosts ------------------------------------------------------------------------------
-    added_host = hub.services.host_enrollment.add("census-box", by="operator")
+    added_host = hub.default_adapter(HostEnrollmentService).add("census-box", by="operator")
     host_token_hash = TokenHash(added_host.token).hex
-    revoked_host = hub.services.host_enrollment.add("census-revoked", by="operator")
+    revoked_host = hub.default_adapter(HostEnrollmentService).add("census-revoked", by="operator")
     revoked_host_token_hash = TokenHash(revoked_host.token).hex
     revoked_record = hub.services.hosts.get_host(revoked_host.host_id)
     assert revoked_record is not None
-    hub.services.host_enrollment.revoke_token(revoked_record, by="operator")
-    hub.services.fleet.set_paused(registration, paused=True, by="operator")
-    hub.services.fleet.record_local_pause(HUB_RUNNER_ID_2, paused=True, at=_ht(6), by="runner", reason="disk full")
+    hub.default_adapter(HostEnrollmentService).revoke_token(revoked_record, by="operator")
+    hub.default_adapter(FleetService).set_paused(registration, paused=True, by="operator")
+    hub.default_adapter(FleetService).record_local_pause(
+        HUB_RUNNER_ID_2, paused=True, at=_ht(6), by="runner", reason="disk full"
+    )
 
     # --- scopes and routines ---------------------------------------------------------------
     operator = ChangeContext(actor="operator", door=Door.API)
