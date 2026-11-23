@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
-import { type GraphNodeView, type GraphSessionView, type GraphView, errorMessage, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, injectPendingMutationVariables, isPendingFor, asyncState } from 'fleet';
+import { errorMessage, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, injectPendingMutationVariables, isPendingFor, asyncState } from 'fleet';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { graphLifecycleMutationKey } from '../core/mutation-keys';
 import { GraphDetailHeader } from './graph-detail-header';
@@ -11,6 +11,7 @@ import { entryNodeName, graphOverrideRetired } from './graph-detail.model';
 import { GraphNodeTable } from './graph-node-table';
 import { GraphSessionTable } from './graph-session-table';
 import { injectHubGraphQuery } from './graphs.query';
+import type { Graph, GraphNode, GraphSession } from './graph.domain';
 
 /**
  * The graph explorer's **detail** view — one minted graph's immutable structure,
@@ -21,7 +22,7 @@ import { injectHubGraphQuery } from './graphs.query';
  * construction (`bzh:generated-client`; no hand-written fetch).
  *
  * Mounts `<app-graph-diagram-view>` above the node table — the selectable DAG
- * render of the same `GraphView` plus its detail pane, no re-fetch.
+ * render of the same `Graph` plus its detail pane, no re-fetch.
  *
  * Container only: keeps the injections (`injectHubGraphQuery`,
  * `injectGraphLifecycleMutation`, `injectMeQuery`) and the derived state, and
@@ -111,15 +112,15 @@ export class GraphDetail {
    * one for the given graph, else the real `graph.retired` (`bzh:frontend-pending-
    * override`'s container-applies-overrides rule: {@link GraphDetailHeader} receives
    * only this already-merged result, never the raw override to reconcile itself). */
-  protected renderedRetired(graph: GraphView): boolean {
-    return this.overrideRetired() ?? !!graph.retired;
+  protected renderedRetired(graph: Graph): boolean {
+    return this.overrideRetired() ?? graph.retired;
   }
 
-  protected readonly nodes = computed<readonly GraphNodeView[]>(() => this.graph()?.nodes ?? []);
+  protected readonly nodes = computed<readonly GraphNode[]>(() => this.graph()?.nodes ?? []);
 
   /** The graph's declared sessions — empty for every graph minted before
-   * #144, which is what makes the session table render nothing at all there. */
-  protected readonly sessions = computed<readonly GraphSessionView[]>(() => this.graph()?.sessions ?? []);
+   * session declarations existed, which is what makes the session table render nothing at all there. */
+  protected readonly sessions = computed<readonly GraphSession[]>(() => this.graph()?.sessions ?? []);
 
   protected readonly entryNodeName = computed<string>(() => entryNodeName(this.graph(), this.nodes()));
 

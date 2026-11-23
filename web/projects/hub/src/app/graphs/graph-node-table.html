@@ -11,22 +11,22 @@
     </tr>
   </thead>
   <tbody>
-    @for (node of nodes(); track node.node_id) {
-      <tr data-testid="graph-detail-node-row" [attr.data-node-id]="node.node_id">
+    @for (node of nodes(); track node.nodeId) {
+      <tr data-testid="graph-detail-node-row" [attr.data-node-id]="node.nodeId">
         <td class="nid">
           {{ node.name }}
-          @if (node.node_id === entryNodeId()) {
+          @if (node.nodeId === entryNodeId()) {
             <fleet-kit-badge class="entry-badge" data-testid="graph-detail-entry-badge" tone="waiting" variant="soft"
               >entry</fleet-kit-badge
             >
           }
         </td>
-        <td>{{ node.executor }}</td>
+        <td>{{ vocabularyText(node.executor) }}</td>
         <td>{{ sessionLabel(node) }}</td>
-        <td>{{ node.judged_by }}</td>
+        <td>{{ vocabularyText(node.judgedBy) }}</td>
         <td>{{ retriesLabel(node) }}</td>
         <td>{{ listOrDash(node.checks) }}</td>
-        <td>{{ listOrDash(producesNames(node)) }}</td>
+        <td>{{ listOrDash(node.produces) }}</td>
       </tr>
     }
   </tbody>

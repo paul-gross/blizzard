@@ -1,33 +1,13 @@
-import { type FindingDetailView } from 'fleet';
+import { fixtureInstant } from 'fleet/testing';
 
+import type { FindingDetail } from '../core/finding.domain';
+import { gardenFindingDetail } from '../core/finding.builders';
 import { findingForSelection, findingPanelVm } from './gardening-finding-detail.model';
 
-function finding(overrides: Partial<FindingDetailView> = {}): FindingDetailView {
-  return {
-    finding_id: 'fnd_1',
-    class: 'stale-docstring',
-    locus: 'a.py:1',
-    summary: 'summary a',
-    state: 'live',
-    live: true,
-    scope_slug: 'blizzard',
-    observed_count: 2,
-    last_seen_at: '2026-01-05T00:00:00Z',
-    facts: [],
-    exit: null,
-    first_observed_at: null,
-    introduced: null,
-    introduced_at: null,
-    note: null,
-    project_id: null,
-    project_name: null,
-    project_slug: null,
-    raised_by_chunk_id: null,
-    severity: null,
-    source: 'routine',
-    routine_name: null,
-    ...overrides,
-  };
+const LAST_SEEN = fixtureInstant(-3600);
+
+function finding(overrides: Partial<FindingDetail> = {}): FindingDetail {
+  return gardenFindingDetail({ locus: 'a.py:1', summary: 'summary a', observedCount: 2, lastSeenAt: LAST_SEEN, ...overrides });
 }
 
 describe('findingForSelection', () => {
@@ -56,7 +36,7 @@ describe('findingPanelVm', () => {
     expect(findingPanelVm(null, noWorkItem)).toBeNull();
   });
 
-  it('nulls every absent optional field and defaults the source to routine', () => {
+  it('nulls every absent optional field and reads a routine-raised source', () => {
     expect(findingPanelVm(finding(), noWorkItem)).toEqual({
       findingId: 'fnd_1',
       findingClass: 'stale-docstring',
@@ -67,7 +47,7 @@ describe('findingPanelVm', () => {
       introducedRev: null,
       introducedAt: null,
       firstObservedAt: null,
-      lastSeenAt: '2026-01-05T00:00:00Z',
+      lastSeenAt: LAST_SEEN,
       summary: 'summary a',
       note: null,
       facts: [],
@@ -83,13 +63,13 @@ describe('findingPanelVm', () => {
     const vm = findingPanelVm(
       finding({
         exit: 'withdrawn',
-        introduced: '4ba7ef06d',
-        introduced_at: '2026-01-01T00:00:00Z',
-        first_observed_at: '2026-01-02T00:00:00Z',
+        introducedRev: '4ba7ef06d',
+        introducedAt: '2026-01-01T00:00:00Z',
+        firstObservedAt: '2026-01-02T00:00:00Z',
         note: 'a note',
         source: 'review',
         severity: 'blocking',
-        raised_by_chunk_id: 'ch_9',
+        raisedByChunkId: 'ch_9',
       }),
       (findingId) => {
         asked.push(findingId);

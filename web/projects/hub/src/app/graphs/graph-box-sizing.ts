@@ -1,5 +1,6 @@
-import type { GraphNodeView } from 'fleet';
-import { producesNames, sessionLabel } from './graph-node';
+import { sessionLabel } from './graph-node';
+import { graphVocabularyText } from './graph.domain';
+import type { GraphNode } from './graph.domain';
 
 /**
  * Pure text-measurement and box-sizing for a node's measured text.
@@ -51,14 +52,13 @@ export type TextMeasurer = (text: string, kind: TextKind) => number;
 /** The meta line's segments, in render order — the atoms wrapping packs into lines.
  * `session` renders in its authored form (`resume:<node>` for a targeted resume) via
  * the shared {@link sessionLabel}, so the diagram and the detail table agree. */
-function nodeMetaSegments(node: GraphNodeView): string[] {
+function nodeMetaSegments(node: GraphNode): string[] {
   const meta: string[] = [];
   if (node.session) meta.push(sessionLabel(node));
-  if (node.judged_by === 'human') meta.push('judged: human');
-  if (node.retries_max !== undefined && node.retries_max !== null) meta.push(`retries ${node.retries_max}`);
-  const produces = producesNames(node);
-  if (produces && produces.length > 0) {
-    meta.push(`→ ${produces.join(', ')}`);
+  if (node.judgedBy === 'human') meta.push('judged: human');
+  if (node.retriesMax !== undefined && node.retriesMax !== null) meta.push(`retries ${node.retriesMax}`);
+  if (node.produces.length > 0) {
+    meta.push(`→ ${node.produces.join(', ')}`);
   }
   return meta;
 }
@@ -94,8 +94,8 @@ export interface NodeBox {
 /** Sizes one node's box to its *measured* text: the name row (never wrapped) sets a
  * floor, and the meta line wraps at {@link MAX_NODE_WIDTH} with the box growing
  * downward by {@link META_LINE_HEIGHT} per extra line. */
-export function nodeBox(node: GraphNodeView, measure: TextMeasurer): NodeBox {
-  const badgeWidth = measure(node.executor.toUpperCase(), 'badge') + BADGE_PAD_X * 2;
+export function nodeBox(node: GraphNode, measure: TextMeasurer): NodeBox {
+  const badgeWidth = measure(graphVocabularyText(node.executor).toUpperCase(), 'badge') + BADGE_PAD_X * 2;
   const nameRow = NAME_PAD_L + measure(node.name, 'name') + NAME_GAP + badgeWidth + BADGE_GAP_R;
   const metaLines = wrapMetaSegments(nodeMetaSegments(node), measure, MAX_NODE_WIDTH - META_PAD_X * 2);
   const metaRow = metaLines.reduce((max, line) => Math.max(max, META_PAD_X * 2 + measure(line, 'meta')), 0);

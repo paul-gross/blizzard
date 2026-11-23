@@ -1,5 +1,11 @@
 import { CadenceAnchor as WireCadenceAnchor, type ChoreView, readRefusal } from 'fleet';
-import { gardenCadenceAttentionView, gardenCadenceView, gardenChoreView } from 'fleet/testing';
+import {
+  gardenCadenceAttentionView,
+  gardenCadenceErrandView,
+  gardenCadenceView,
+  gardenChoreView,
+  gardenErrandRunView,
+} from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
 import { CADENCE_ANCHORS, EMPTY_CADENCE_DRAFT } from './cadence.domain';
@@ -10,6 +16,7 @@ import {
   choresAdding,
   choresRemoving,
   choresReplacing,
+  fromCadenceErrandView,
   fromCadenceView,
   spacingDraftText,
   choreRefusals,
@@ -108,6 +115,35 @@ describe('fromCadenceView', () => {
     expect(cadence.schedule).toBeNull();
     expect(cadence.spacingMinutes).toBeNull();
     expect(cadence.anchor).toBeNull();
+  });
+});
+
+describe('fromCadenceErrandView', () => {
+  it('carries the chore, scope, state, attention, last run, and due moment', () => {
+    const run = gardenErrandRunView();
+    expect(
+      fromCadenceErrandView(
+        gardenCadenceErrandView({
+          state: 'stopped',
+          last_run: run,
+          due_at: null,
+          attention: [gardenCadenceAttentionView({ reason: 'scope_unknown' })],
+        }),
+      ),
+    ).toEqual({
+      chore: 'nightly',
+      scope: 'blizzard',
+      state: 'stopped',
+      attention: [{ chore: 'nightly', scope: 'gone', reason: 'scope_unknown' }],
+      lastRun: { chunkId: run.chunk_id, scheduledAt: run.scheduled_at },
+      dueAt: null,
+    });
+  });
+
+  it('holds a state this build does not know as unlisted, and a never-run errand as no last run', () => {
+    const errand = fromCadenceErrandView(gardenCadenceErrandView({ state: 'parked' as never }));
+    expect(errand.state).toEqual({ unlisted: 'parked' });
+    expect(errand.lastRun).toBeNull();
   });
 });
 

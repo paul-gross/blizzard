@@ -43,7 +43,7 @@
                         [attr.data-testid]="'gardening-finding-severity-' + row.findingId"
                         [tone]="severityTone(row)"
                         variant="soft"
-                        >{{ row.severity }}</fleet-kit-badge
+                        >{{ text(row.severity) }}</fleet-kit-badge
                       >
                     }
                     @if (row.raisedByChunkId; as raisedByChunkId) {
@@ -73,7 +73,7 @@
                 [attr.data-testid]="'gardening-finding-state-' + row.findingId"
                 [tone]="stateTone(row)"
                 variant="soft"
-                >{{ row.state }}</fleet-kit-badge
+                >{{ text(row.state) }}</fleet-kit-badge
               >
             </p>
           </div>

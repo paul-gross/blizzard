@@ -14,14 +14,12 @@ import {
   KitSelect,
   KitTextInput,
   type KitAsyncStateValue,
-  type RoutineBaselineView,
-  type RoutineRunResponse,
-  type ScopeView,
   type Urgency,
 } from 'fleet';
 import { AppLink } from 'fleet/shell';
 
-import type { RunDraft } from '../core/run.domain';
+import type { RoutineBaseline, RunDraft, RunResponse } from '../core/run.domain';
+import type { Scope } from '../core/scope.domain';
 import { urgencyOptions } from '../../core/urgency-options.model';
 import { GardeningRunScopeField } from './gardening-run-scope-field';
 
@@ -65,13 +63,13 @@ export class GardeningRunDialogView {
 
   /** Every non-retired scope, previously-swept-by-this-routine first;
    * rendered in the order given. */
-  readonly scopes = input.required<readonly ScopeView[]>();
+  readonly scopes = input.required<readonly Scope[]>();
 
   readonly sweptSlugs = input.required<ReadonlySet<string>>();
 
   /** The delta baseline for the chosen scope, or `undefined` for a never-swept pair or no choice yet — the one fact
    * the baseline display and the delta option's availability rest on. */
-  readonly baseline = input<RoutineBaselineView | undefined>(undefined);
+  readonly baseline = input<RoutineBaseline | undefined>(undefined);
 
   /** The scope/baseline reads' combined async state — gates the form body. */
   readonly state = input.required<KitAsyncStateValue>();
@@ -80,7 +78,7 @@ export class GardeningRunDialogView {
 
   /** The completed run, once submitted successfully — flips the dialog from the form
    * to the confirmation. */
-  readonly confirmedRun = input<RoutineRunResponse | null>(null);
+  readonly confirmedRun = input<RunResponse | null>(null);
 
   readonly closed = output<void>();
 

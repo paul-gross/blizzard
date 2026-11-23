@@ -3,7 +3,7 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type FindingView, type RoutineView, type ScopeView, ViewportService } from 'fleet';
+import { ViewportService } from 'fleet';
 import { injectReopenFindingsMutation, injectResolveFindingsMutation } from '../core/finding.mutations';
 import {
   gardenFindingView,
@@ -21,17 +21,18 @@ import { GardeningFindingsPage } from './gardening-findings-page';
 
 type HubRoutes = Parameters<typeof stubHubClient>[0];
 
-const ROUTINES: RoutineView[] = [
+const ROUTINES = [
   gardenRoutineView({ routine_id: 'rt_1', slug: 'nightly', name: 'Nightly sweep', graph_name: 'sweep', default_scope_slug: 'blizzard' }),
   gardenRoutineView({ routine_id: 'rt_2', slug: 'weekly', name: 'Weekly sweep', graph_name: 'sweep', default_scope_slug: 'web' }),
 ];
 
-const SCOPES: ScopeView[] = [
+const SCOPES = [
   gardenScopeView({ slug: 'blizzard', description: 'the blizzard repo' }),
   gardenScopeView({ slug: 'web', description: 'the web workspace' }),
 ];
 
-function findingFixture(overrides: Pick<FindingView, 'finding_id' | 'state'> & Partial<FindingView>): FindingView {
+/** A served finding — the stubbed transport's answer, overridden per case. */
+function findingFixture(overrides: NonNullable<Parameters<typeof gardenFindingView>[0]> & { readonly finding_id: string; readonly state: string }) {
   return gardenFindingView({
     routine_name: 'nightly',
     scope_slug: 'blizzard',

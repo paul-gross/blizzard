@@ -1,8 +1,13 @@
 import { formatAbsolute } from 'fleet';
-import { gardenCadenceErrandView, gardenErrandRunView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
-import { gardenCadence, gardenCadenceAttention, gardenChore } from '../core/cadence.builders';
+import {
+  gardenCadence,
+  gardenCadenceAttention,
+  gardenCadenceErrand,
+  gardenChore,
+  gardenErrandRun,
+} from '../core/cadence.builders';
 import {
   cadenceBySlug,
   cadenceOverrideRetired,
@@ -52,14 +57,14 @@ describe('choreScopesText', () => {
 
 describe('errandRow', () => {
   it('carries the scope, state, last run, due, and why it is stopped', () => {
-    const run = gardenErrandRunView();
+    const run = gardenErrandRun();
     expect(
       errandRow(
-        gardenCadenceErrandView({
+        gardenCadenceErrand({
           scope: 'gone',
           state: 'stopped',
-          due_at: null,
-          last_run: run,
+          dueAt: null,
+          lastRun: run,
           attention: [{ chore: 'nightly', scope: 'gone', reason: 'scope_unknown' }],
         }),
       ),
@@ -67,15 +72,15 @@ describe('errandRow', () => {
       scope: 'gone',
       label: 'stopped',
       tone: 'stale',
-      lastRunChunkId: run.chunk_id,
-      lastRunAt: run.scheduled_at,
+      lastRunChunkId: run.chunkId,
+      lastRunAt: run.scheduledAt,
       dueAt: null,
       attention: 'the scope does not exist',
     });
   });
 
   it('renders a state this build does not know raw, in the idle tone', () => {
-    const row = errandRow(gardenCadenceErrandView({ state: 'parked' as never }));
+    const row = errandRow(gardenCadenceErrand({ state: { unlisted: 'parked' } }));
     expect(row.label).toBe('parked');
     expect(row.tone).toBe('idle');
   });
@@ -111,9 +116,9 @@ describe('cadencePanelVm', () => {
   it('holds each chore’s errands loading until they are read, then that chore’s own', () => {
     expect(cadencePanelVm(cadence, null, undefined)!.chores.map((c) => c.errandsState)).toEqual(['loading', 'loading']);
     const vm = cadencePanelVm(cadence, null, [
-      gardenCadenceErrandView({ chore: 'nightly', scope: 'a' }),
-      gardenCadenceErrandView({ chore: 'nightly', scope: 'b' }),
-      gardenCadenceErrandView({ chore: 'odd', scope: 'web' }),
+      gardenCadenceErrand({ chore: 'nightly', scope: 'a' }),
+      gardenCadenceErrand({ chore: 'nightly', scope: 'b' }),
+      gardenCadenceErrand({ chore: 'odd', scope: 'web' }),
     ])!;
     expect(vm.chores[0].errands?.map((e) => e.scope)).toEqual(['a', 'b']);
     expect(vm.chores[1].errands?.map((e) => e.scope)).toEqual(['web']);
@@ -121,7 +126,7 @@ describe('cadencePanelVm', () => {
   });
 
   it('derives each chore state from the query and its filtered errands, including a background refetch', () => {
-    const errands = [gardenCadenceErrandView({ chore: 'nightly', scope: 'a' })];
+    const errands = [gardenCadenceErrand({ chore: 'nightly', scope: 'a' })];
     const query = (pending: boolean, error: boolean) => ({ isPending: () => pending, isError: () => error });
     expect(cadencePanelVm(cadence, null, undefined, query(true, false))!.chores.map((c) => c.errandsState)).toEqual(['loading', 'loading']);
     expect(cadencePanelVm(cadence, null, undefined, query(false, true))!.chores.map((c) => c.errandsState)).toEqual(['error', 'error']);

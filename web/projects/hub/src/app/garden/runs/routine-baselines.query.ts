@@ -2,10 +2,12 @@ import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { type RoutineBaselineView, routineBaselinesApiRoutinesRoutineIdBaselinesGet } from 'fleet';
 import { hubRoutineBaselinesKey } from '../../core/query-keys';
+import type { RoutineBaseline } from '../core/run.domain';
+import { fromRoutineBaselineView } from '../core/run.translate';
 
 /**
  * Hub `GET /api/routines/{routine_id}/baselines` read — every scope a routine has
- * swept; absence means never swept.
+ * swept, as {@link RoutineBaseline}s; absence means never swept.
  *
  * Reactive over the selected routine id, exactly like {@link injectHubChunkDetailQuery}:
  * pass an accessor — the query re-keys as the selection changes and disables itself
@@ -26,6 +28,7 @@ export function injectHubRoutineBaselinesQuery(routineId: () => string | undefin
         if (error) throw error;
         return data ?? [];
       },
+      select: (wire: RoutineBaselineView[]): readonly RoutineBaseline[] => wire.map(fromRoutineBaselineView),
     };
   });
 }

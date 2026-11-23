@@ -3,7 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type GardenProposalView, type MeResponse } from 'fleet';
 import {
   gardenEvidenceFindingView,
   gardenProposalAcceptResponse,
@@ -23,7 +22,7 @@ import { GardeningProposalDetail } from './gardening-proposal-detail';
 
 /** A read-only identity — every permission `OPERATOR_ME_RESPONSE` carries except
  * `chunk:control` — the default for tests unconcerned with the Pass/Accept gate. */
-const VIEWER_ME_RESPONSE: MeResponse = {
+const VIEWER_ME_RESPONSE: typeof OPERATOR_ME_RESPONSE = {
   ...OPERATOR_ME_RESPONSE,
   permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'chunk:control'),
 };
@@ -84,7 +83,7 @@ const ACCEPTED_MINTED = gardenProposalView({
 type DetailRoutes = Parameters<typeof stubHubClient>[0];
 
 /** The reads and verbs the detail pane reaches, over the docket `proposals` and identity `me`. */
-function detailRoutes(proposals: GardenProposalView[], me: MeResponse): DetailRoutes {
+function detailRoutes(proposals: ReturnType<typeof gardenProposalView>[], me: typeof OPERATOR_ME_RESPONSE): DetailRoutes {
   return {
     'GET /api/garden-proposals': () => gardenProposalsPageView({ proposals }),
     'GET /api/me': () => me,
@@ -111,8 +110,8 @@ describe('GardeningProposalDetail', () => {
   afterEach(() => stub?.restore());
 
   async function render(
-    proposals: GardenProposalView[] = [WAITING_A, WAITING_B, PASSED],
-    me: MeResponse = VIEWER_ME_RESPONSE,
+    proposals: ReturnType<typeof gardenProposalView>[] = [WAITING_A, WAITING_B, PASSED],
+    me: typeof OPERATOR_ME_RESPONSE = VIEWER_ME_RESPONSE,
     proposalId: string | null = null,
   ) {
     const paramMap$ = new BehaviorSubject(convertToParamMap(proposalId === null ? {} : { proposalId }));

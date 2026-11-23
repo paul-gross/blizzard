@@ -1,43 +1,34 @@
-import type { GraphNodeView } from 'fleet';
-
-/** A node's `produces:` names, kind dropped — `produces:` is kind-carrying on the wire
- * (`{name, kind}[]`), but both the detail table's Produces column
- * (`graph-detail.ts`) and the diagram's meta line (`graph-layout.ts`) render a
- * name-only summary, matching the pre-#143 display exactly. Shared so the two callers
- * can't drift on how `produces` collapses to a display string. */
-export function producesNames(node: GraphNodeView): readonly string[] | undefined {
-  return node.produces?.map((p) => p.name);
-}
+import type { GraphNode } from './graph.domain';
 
 /** A node's `session:` in the form it was **authored** — `resume:<node>` for a targeted
  * resume, `fresh:<session>` / `resume:<session>` for a graph-level named
  * session, bare `resume`/`fresh` otherwise. The wire splits the authored
- * value in two (`session` carries the mode, `session_source` the reference target, per
+ * value in two (`session` carries the mode, `sessionSource` the reference target, per
  * `SessionRef`), so rendering `session` alone silently drops the targeting and an
  * operator cannot tell a targeted resume from a plain one. Recombining the two covers
- * all five forms with no branching: `session_source` is null exactly for the two bare
+ * all five forms with no branching: `sessionSource` is null exactly for the two bare
  * ones. The target name alone does not say whether it is a declared session or a node —
  * the graph's Sessions table (`graph-session-table.ts`) is what resolves that. Shared so
  * the detail table's Session column (`graph-node-table.ts`) and the diagram's meta line
  * (`graph-layout.ts`) can't drift on how the two fields recombine. */
-export function sessionLabel(node: GraphNodeView): string {
-  return node.session_source ? `${node.session}:${node.session_source}` : node.session;
+export function sessionLabel(node: GraphNode): string {
+  return node.sessionSource ? `${node.session}:${node.sessionSource}` : node.session;
 }
 
 /** A node's retries in `max → exhausted` form (the `→ exhausted` suffix only when
  * set), or `—` when the node declares no retry limit at all. Shared so the detail
  * table's Retries column (`graph-node-table.ts`) and the diagram's detail pane
  * (`graph-diagram-detail.ts`) can't drift on how the two fields combine. */
-export function retriesLabel(node: GraphNodeView): string {
-  if (node.retries_max === undefined || node.retries_max === null) return '—';
-  const exhausted = node.retries_exhausted ? ` → ${node.retries_exhausted}` : '';
-  return `${node.retries_max}${exhausted}`;
+export function retriesLabel(node: GraphNode): string {
+  if (node.retriesMax === null) return '—';
+  const exhausted = node.retriesExhausted ? ` → ${node.retriesExhausted}` : '';
+  return `${node.retriesMax}${exhausted}`;
 }
 
 /** A hub node's `with:` arguments in `name: value, value` form, one argument per `;`, or `—`
  * when it passes none. */
-export function actionArgsLabel(node: GraphNodeView): string {
-  const args = Object.entries(node.action_args ?? {});
+export function actionArgsLabel(node: GraphNode): string {
+  const args = Object.entries(node.actionArgs);
   return args.length > 0 ? args.map(([name, values]) => `${name}: ${values.join(', ')}`).join('; ') : '—';
 }
 

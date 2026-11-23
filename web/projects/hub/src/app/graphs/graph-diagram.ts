@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, InjectionToken, computed, inject, input, output } from '@angular/core';
 
-import { hubApi, type GraphView } from 'fleet';
 import { type DiagramSelection, endpointNodeIds, incidentEdgeIds } from './graph-diagram-selection';
 import { GraphDiagramMigration } from './graph-diagram-migration';
 import { GraphDiagramNodeShape } from './graph-diagram-node-shape';
@@ -8,18 +7,19 @@ import { GraphDiagramStart } from './graph-diagram-start';
 import { type LaidOutEdge, type LaidOutSelfLoop, type LayoutOutcome, layoutGraph } from './graph-layout';
 import { type TextMeasurer } from './graph-box-sizing';
 import { GRAPH_TEXT_MEASURER } from './graph-text-measurer';
+import type { Graph } from './graph.domain';
 
 /** Layout seam: defaults to the real dagre-backed {@link layoutGraph}, overridable
  * in tests so `graph-diagram.spec.ts` can render from a canned {@link LayoutOutcome}
  * without depending on dagre's actual coordinates (mirrors the `EVENT_SOURCE_FACTORY`
  * injectable-seam pattern already used for SSE, `sse.service.ts`). */
-export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextMeasurer) => LayoutOutcome>(
+export const GRAPH_LAYOUT = new InjectionToken<(graph: Graph, measure: TextMeasurer) => LayoutOutcome>(
   'fleet.GRAPH_LAYOUT',
   { providedIn: 'root', factory: () => layoutGraph },
 );
 
 /**
- * The graph diagram — a static SVG DAG rendered from one immutable `GraphView`,
+ * The graph diagram — a static SVG DAG rendered from one immutable `Graph`,
  * Layout runs once per input graph via `computed()` — no live re-layout, no
  * pan/zoom; horizontal overflow scrolls in `.diagram-scroll`;
  * a layout failure or degenerate graph (see {@link layoutGraph}) shows an
@@ -55,9 +55,9 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
 })
 export class GraphDiagram {
   /** The already-fetched graph to render — no re-fetch here (`bzh:generated-client`);
-   * `graph-detail.ts` passes in the same `GraphView` its structured table already
+   * `graph-detail.ts` passes in the same `Graph` its structured table already
    * holds. */
-  readonly graph = input.required<GraphView>();
+  readonly graph = input.required<Graph>();
 
   /** The current selection, fully controlled by the parent — this component never
    * mutates its own copy, only renders whichever selection it is handed. */
@@ -121,7 +121,7 @@ export class GraphDiagram {
       kind: 'edge',
       edgeId: loop.id,
       fromNodeId: loop.nodeId,
-      target: { kind: hubApi.ChoiceTargetKind.NODE, nodeId: loop.nodeId },
+      target: { kind: 'node', nodeId: loop.nodeId },
       choiceId: loop.choiceId,
       edgeKind: 'retry',
     });

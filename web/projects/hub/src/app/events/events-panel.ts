@@ -5,7 +5,8 @@ import { injectQueryFilters } from '../core/route-state';
 import { injectHostFactsQuery } from '../core/hosts.query';
 import { EventsView } from './events-view';
 import { eventChunkIds, eventRunnerIds, eventRunnerNames } from './events-panel.model';
-import { injectHubEventsQuery, narrowEventSeverity } from './events.query';
+import { narrowEventSeverity } from './event-log.domain';
+import { injectHubEventsQuery } from './events.query';
 
 /**
  * The Events tab's **container** — the board's operational

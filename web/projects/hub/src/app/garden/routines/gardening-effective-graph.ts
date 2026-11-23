@@ -1,4 +1,4 @@
-import type { GraphSummaryView } from 'fleet';
+import type { GraphSummary } from '../../graphs/graph.domain';
 
 /**
  * The effective graph for a routine's `graph_name` — the same
@@ -15,17 +15,17 @@ import type { GraphSummaryView } from 'fleet';
  * never flashes every routine blocked before the graph list resolves.
  */
 export function effectiveGraphByName(
-  graphs: readonly GraphSummaryView[],
+  graphs: readonly GraphSummary[],
   graphsPending: boolean,
   graphName: string,
-): GraphSummaryView | null {
+): GraphSummary | null {
   if (graphsPending) return null;
   return graphs.find((g) => g.name === graphName && g.effective) ?? null;
 }
 
 /** Whether a routine on `graphName` is blocked — no effective mint to run against. */
 export function isRoutineBlocked(
-  graphs: readonly GraphSummaryView[],
+  graphs: readonly GraphSummary[],
   graphsPending: boolean,
   graphName: string,
 ): boolean {

@@ -29,7 +29,7 @@ describe('injectHubScopesQuery', () => {
     const fixture = TestBed.createComponent(TestScopesQueryHost);
     await settle(fixture);
 
-    expect(fixture.componentInstance.query.data()).toHaveLength(1);
+    expect(fixture.componentInstance.query.data()).toMatchObject([{ slug: 'blizzard', description: 'the hub itself' }]);
     expect(stub.forRoute('/api/scopes', 'GET')).toHaveLength(1);
   });
 });

@@ -1,6 +1,7 @@
-import { asyncState, type AsyncStateQuery, type CadenceErrandView, formatAbsolute } from 'fleet';
+import { asyncState, type AsyncStateQuery, formatAbsolute } from 'fleet';
 
-import { type Cadence, type CadenceAttention, type Chore, type ChoreDraft, vocabularyText } from '../core/cadence.domain';
+import { type Cadence, type CadenceAttention, type CadenceErrand, type Chore, type ChoreDraft } from '../core/cadence.domain';
+import { vocabularyText } from '../core/vocabulary.domain';
 import type { ChoresBaseline } from './chore.service';
 import type { CadenceLifecycleVars } from './cadence-lifecycle.mutations';
 import type { AttentionVm, CadencePanelVm, ChorePanelVm, ErrandRowVm } from './cadence-panel';
@@ -35,19 +36,19 @@ export function choreScopesText(scopes: Chore['scopes']): string {
 }
 
 /** One errand as a chore's table row: its scope, state, last run, when it is next due, and why it is stopped. */
-export function errandRow(errand: CadenceErrandView): ErrandRowVm {
+export function errandRow(errand: CadenceErrand): ErrandRowVm {
   return {
     scope: errand.scope,
-    ...errandStateLook(errand.state),
-    lastRunChunkId: errand.last_run?.chunk_id ?? null,
-    lastRunAt: errand.last_run?.scheduled_at ?? null,
-    dueAt: errand.due_at,
-    attention: errand.attention.map((a) => attentionReasonLabel(a.reason)).join('; '),
+    ...errandStateLook(vocabularyText(errand.state)),
+    lastRunChunkId: errand.lastRun?.chunkId ?? null,
+    lastRunAt: errand.lastRun?.scheduledAt ?? null,
+    dueAt: errand.dueAt,
+    attention: errand.attention.map((a) => attentionReasonLabel(vocabularyText(a.reason))).join('; '),
   };
 }
 
 /** The cadence's chores, each with its own errands and read state. */
-export function choreRows(cadence: Cadence, errands: readonly CadenceErrandView[] | undefined, query: AsyncStateQuery): readonly ChorePanelVm[] {
+export function choreRows(cadence: Cadence, errands: readonly CadenceErrand[] | undefined, query: AsyncStateQuery): readonly ChorePanelVm[] {
   return cadence.chores.map((chore) => ({
     key: chore.key,
     routine: chore.routine,
@@ -65,7 +66,7 @@ export function choreRows(cadence: Cadence, errands: readonly CadenceErrandView[
 export function cadencePanelVm(
   cadence: Cadence | null,
   overrideRetired: boolean | null,
-  errands: readonly CadenceErrandView[] | undefined,
+  errands: readonly CadenceErrand[] | undefined,
   query: AsyncStateQuery = { isPending: () => errands === undefined, isError: () => false },
 ): CadencePanelVm | null {
   if (cadence === null) return null;

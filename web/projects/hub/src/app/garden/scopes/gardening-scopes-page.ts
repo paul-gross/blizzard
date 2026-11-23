@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@a
 import { Router, RouterOutlet } from '@angular/router';
 import { FLEET_CLOCK, asyncState, KitMasterDetail, KitPanel, type KitAsyncStateValue, ViewportService } from 'fleet';
 import { FleetScopeList, type ScopeRowVm } from './scope-list';
-import { injectHubDomainScopesQuery } from '../core/scopes.query';
+import { injectHubScopesQuery } from '../core/scopes.query';
 
 import { injectChildRouteParam } from '../../core/route-state';
 import { presentScopeSlug, scopeRows } from './gardening-scopes-page.model';
@@ -42,7 +42,7 @@ export class GardeningScopesPage {
 
   protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
 
-  private readonly scopesQuery = injectHubDomainScopesQuery();
+  private readonly scopesQuery = injectHubScopesQuery();
   private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());
   private readonly runsQuery = injectHubScopeSweepsQuery(() => this.window.since);
   private readonly project = injectLensedProject();

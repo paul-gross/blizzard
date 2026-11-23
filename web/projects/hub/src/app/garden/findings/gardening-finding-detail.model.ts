@@ -1,4 +1,4 @@
-import { type FindingDetailView } from 'fleet';
+import type { FindingDetail } from '../core/finding.domain';
 import { type FindingPanelVm } from './finding-panel';
 import { type ProposalWorkItemVm } from '../proposals/proposal-panel';
 
@@ -6,39 +6,39 @@ import { type ProposalWorkItemVm } from '../proposals/proposal-panel';
  * bare route, and `null` while a read for a previous id is still what is cached. */
 export function findingForSelection(
   id: string | null,
-  finding: FindingDetailView | null,
-): FindingDetailView | null {
+  finding: FindingDetail | null,
+): FindingDetail | null {
   if (id === null) return null;
-  return finding?.finding_id === id ? finding : null;
+  return finding?.id === id ? finding : null;
 }
 
-/** `introducedRev` carries `FindingView.introduced` verbatim — a git revision, not
+/** `introducedRev` carries the finding's introducing revision verbatim — a git revision, not
  * a timestamp (`finding-panel.ts`'s own doc comment on why it never rides
- * `fleet-when`). `introducedAt` and `firstObservedAt` carry `FindingView`'s two
+ * `fleet-when`). `introducedAt` and `firstObservedAt` carry the finding's two
  * instants verbatim; `introducedAt` is null wherever the hub never resolved the
  * commit (`finding-panel.ts`'s own doc comment on what that means). */
 export function findingPanelVm(
-  finding: FindingDetailView | null,
+  finding: FindingDetail | null,
   workItemFor: (findingId: string) => ProposalWorkItemVm | null,
 ): FindingPanelVm | null {
   if (finding === null) return null;
   return {
-    findingId: finding.finding_id,
-    findingClass: finding.class,
+    findingId: finding.id,
+    findingClass: finding.findingClass,
     locus: finding.locus,
     state: finding.state,
-    exit: finding.exit ?? null,
-    observedCount: finding.observed_count,
-    introducedRev: finding.introduced ?? null,
-    introducedAt: finding.introduced_at ?? null,
-    firstObservedAt: finding.first_observed_at ?? null,
-    lastSeenAt: finding.last_seen_at,
+    exit: finding.exit,
+    observedCount: finding.observedCount,
+    introducedRev: finding.introducedRev,
+    introducedAt: finding.introducedAt,
+    firstObservedAt: finding.firstObservedAt,
+    lastSeenAt: finding.lastSeenAt,
     summary: finding.summary,
-    note: finding.note ?? null,
+    note: finding.note,
     facts: finding.facts,
-    workItem: workItemFor(finding.finding_id),
-    source: finding.source ?? 'routine',
-    severity: finding.severity ?? null,
-    raisedByChunkId: finding.raised_by_chunk_id ?? null,
+    workItem: workItemFor(finding.id),
+    source: finding.source,
+    severity: finding.severity,
+    raisedByChunkId: finding.raisedByChunkId,
   };
 }

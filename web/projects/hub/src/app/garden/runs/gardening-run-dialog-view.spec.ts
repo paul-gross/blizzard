@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { form } from '@angular/forms/signals';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { ScopeView } from 'fleet';
+import { gardenScope } from '../core/scope.builders';
 import { EMPTY_RUN_DRAFT, type RunDraft } from '../core/run.domain';
 import { runRules } from './run.form';
 import { GardeningRunDialogView } from './gardening-run-dialog-view';
@@ -19,7 +19,7 @@ describe('GardeningRunDialogView read states', () => {
     await TestBed.configureTestingModule({ imports: [GardeningRunDialogView], providers: [provideZonelessChangeDetection(), provideRouter([])] }).compileComponents();
     const fixture = TestBed.createComponent(GardeningRunDialogView);
     fixture.componentRef.setInput('routineName', 'nightly');
-    fixture.componentRef.setInput('scopes', [{ slug: 'web', description: 'web' } as ScopeView]);
+    fixture.componentRef.setInput('scopes', [gardenScope({ slug: 'web' })]);
     fixture.componentRef.setInput('sweptSlugs', new Set());
     fixture.componentRef.setInput('form', runForm());
     fixture.componentRef.setInput('state', 'ready');

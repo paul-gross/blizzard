@@ -2,9 +2,14 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { form } from '@angular/forms/signals';
 import { provideRouter } from '@angular/router';
-import { gardenCadenceErrandView, gardenErrandRunView } from 'fleet/testing';
 
-import { gardenCadence, gardenCadenceAttention, gardenChore } from '../core/cadence.builders';
+import {
+  gardenCadence,
+  gardenCadenceAttention,
+  gardenCadenceErrand,
+  gardenChore,
+  gardenErrandRun,
+} from '../core/cadence.builders';
 import { type CadenceDraft, type ChoreDraft, EMPTY_CHORE_DRAFT } from '../core/cadence.domain';
 import { toChoreDraft, toDraft } from '../core/cadence.translate';
 import { cadenceEditRules } from './cadence.form';
@@ -19,9 +24,9 @@ const CADENCE = gardenCadence({
   attention: [gardenCadenceAttention()],
 });
 const ERRANDS = [
-  gardenCadenceErrandView({ scope: 'blizzard', last_run: gardenErrandRunView() }),
-  gardenCadenceErrandView({ scope: 'gone', state: 'stopped', due_at: null, attention: [{ chore: 'nightly', scope: 'gone', reason: 'scope_unknown' }] }),
-  gardenCadenceErrandView({ chore: 'odd', scope: 'web', state: 'due' }),
+  gardenCadenceErrand({ scope: 'blizzard', lastRun: gardenErrandRun() }),
+  gardenCadenceErrand({ scope: 'gone', state: 'stopped', dueAt: null, attention: [{ chore: 'nightly', scope: 'gone', reason: 'scope_unknown' }] }),
+  gardenCadenceErrand({ chore: 'odd', scope: 'web', state: 'due' }),
 ];
 const VM = cadencePanelVm(CADENCE, null, ERRANDS)!;
 

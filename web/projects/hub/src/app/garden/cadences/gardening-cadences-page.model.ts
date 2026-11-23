@@ -1,4 +1,5 @@
-import { type Cadence, vocabularyText } from '../core/cadence.domain';
+import { type Cadence } from '../core/cadence.domain';
+import { vocabularyText } from '../core/vocabulary.domain';
 import type { CadenceCountVm, CadenceRowVm } from './cadence-list';
 import { ERRAND_STATES, errandStateLook } from './cadence-vocabulary';
 

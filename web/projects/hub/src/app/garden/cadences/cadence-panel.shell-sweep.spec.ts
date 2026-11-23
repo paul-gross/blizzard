@@ -2,10 +2,15 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { form } from '@angular/forms/signals';
 import { provideRouter } from '@angular/router';
-import { gardenCadenceErrandView, gardenErrandRunView } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
-import { gardenCadence, gardenCadenceAttention, gardenChore } from '../core/cadence.builders';
+import {
+  gardenCadence,
+  gardenCadenceAttention,
+  gardenCadenceErrand,
+  gardenChore,
+  gardenErrandRun,
+} from '../core/cadence.builders';
 
 import { type ChoreDraft, EMPTY_CHORE_DRAFT } from '../core/cadence.domain';
 import { toChoreDraft } from '../core/cadence.translate';
@@ -41,14 +46,14 @@ const CADENCE = gardenCadence({
 });
 
 const ERRANDS = [
-  gardenCadenceErrandView({ scope: 'blizzard', last_run: gardenErrandRunView() }),
-  gardenCadenceErrandView({ scope: 'blizzard-context', state: 'running', due_at: null, last_run: gardenErrandRunView({ finished_at: null }) }),
-  gardenCadenceErrandView({ chore: 'samples', scope: 'web', state: 'due' }),
-  gardenCadenceErrandView({
+  gardenCadenceErrand({ scope: 'blizzard', lastRun: gardenErrandRun() }),
+  gardenCadenceErrand({ scope: 'blizzard-context', state: 'running', dueAt: null, lastRun: gardenErrandRun() }),
+  gardenCadenceErrand({ chore: 'samples', scope: 'web', state: 'due' }),
+  gardenCadenceErrand({
     chore: 'samples',
     scope: 'a-scope-the-project-does-not-hold',
     state: 'stopped',
-    due_at: null,
+    dueAt: null,
     attention: [{ chore: 'samples', scope: 'a-scope-the-project-does-not-hold', reason: 'scope_unknown' }],
   }),
 ];

@@ -50,7 +50,7 @@ describe('injectHubRoutineBaselinesQuery', () => {
     fixture.componentInstance.routineId.set('rtn_1');
     await settle(fixture);
 
-    expect(fixture.componentInstance.query.data()).toHaveLength(1);
+    expect(fixture.componentInstance.query.data()).toMatchObject([{ scopeSlug: 'blizzard', repos: [{ repo: 'blizzard', landedSince: 3 }] }]);
     expect(stub.forRoute('/api/routines/rtn_1/baselines', 'GET')).toHaveLength(1);
   });
 });

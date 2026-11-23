@@ -1,32 +1,20 @@
-import { type RoutineView, type RunDeltaView } from 'fleet';
-import { runCadenceView } from 'fleet/testing';
+import { gardenRoutine } from '../core/routine.builders';
+import { gardenRunDelta, gardenRunDeltaSet, gardenRunEscalation } from '../core/run.builders';
+import type { RunDelta } from '../core/run.domain';
 import { describe, expect, it } from 'vitest';
 
 import { runDeltaVm } from './gardening-run-detail.model';
 
-type DeliveredSet = RunDeltaView['sets'][number];
+const delta = (fields: Partial<RunDelta> = {}): RunDelta =>
+  gardenRunDelta({ chunkId: 'ch_1', routineSlug: 'docs', scopeSlug: 'web', ...fields });
 
-const delta = (fields: Partial<RunDeltaView> = {}): RunDeltaView =>
-  ({
-    chunk_id: 'ch_1',
-    escalation: null,
-    cadence: null,
-    mode: 'sweep',
-    outcome: 'done',
-    routine_name: 'docs',
-    scope_slug: 'web',
-    sets: [],
-    ...fields,
-  }) as RunDeltaView;
-
-const set = {
-  finding_set_id: 'fs_1',
+const set = gardenRunDeltaSet({
+  findingSetId: 'fs_1',
   revisions: { zeta: 'b2', alpha: 'a1' },
-  measurement: null,
-  added: [{ finding_id: 'f1', class: 'drift', locus: 'a.ts', summary: 'new', introduced: true }],
-  observed: [{ finding_id: 'f2', class: 'drift', locus: 'b.ts', summary: 'still' }],
-  gone: [{ finding_id: 'f3', note: 'fixed' }],
-} as unknown as DeliveredSet;
+  added: [{ findingId: 'f1', findingClass: 'drift', locus: 'a.ts', summary: 'new', introduced: '2026-01-01T00:00:00Z' }],
+  observed: [{ findingId: 'f2', findingClass: 'drift', locus: 'b.ts', summary: 'still' }],
+  gone: [{ findingId: 'f3', note: 'fixed' }],
+});
 
 const noMintedAt = (): string | null => null;
 
@@ -36,7 +24,7 @@ describe('runDeltaVm', () => {
   });
 
   it("names the run's routine by its display name, looked up by the slug the delta carries", () => {
-    expect(runDeltaVm(delta(), noMintedAt, [{ slug: 'docs', name: 'Docs sweep' } as RoutineView])?.routineName).toBe(
+    expect(runDeltaVm(delta(), noMintedAt, [gardenRoutine({ slug: 'docs', name: 'Docs sweep' })])?.routineName).toBe(
       'Docs sweep',
     );
   });
@@ -48,7 +36,7 @@ describe('runDeltaVm', () => {
 
   it('maps no escalation to null and a present one field by field', () => {
     expect(runDeltaVm(delta(), noMintedAt, [])?.escalation).toBeNull();
-    const escalation = { node_name: 'build', takeover_command: 'tk', wrapped_takeover_command: 'wtk' };
+    const escalation = gardenRunEscalation({ nodeName: 'build', takeoverCommand: 'tk', wrappedTakeoverCommand: 'wtk' });
     expect(runDeltaVm(delta({ escalation }), noMintedAt, [])?.escalation).toEqual({
       nodeName: 'build',
       takeoverCommand: 'tk',
@@ -61,7 +49,7 @@ describe('runDeltaVm', () => {
   });
 
   it('names the cadence and chore of a run a cadence minted', () => {
-    expect(runDeltaVm(delta({ cadence: runCadenceView({ cadence_name: 'Evening' }) }), noMintedAt, [])?.cadence).toEqual({
+    expect(runDeltaVm(delta({ cadence: { slug: 'evening', name: 'Evening', choreKey: 'nightly' } }), noMintedAt, [])?.cadence).toEqual({
       slug: 'evening',
       name: 'Evening',
       choreKey: 'nightly',
@@ -69,7 +57,7 @@ describe('runDeltaVm', () => {
   });
 
   it('keeps the cadence but no chore key once the chore was removed', () => {
-    expect(runDeltaVm(delta({ cadence: runCadenceView({ chore_key: null }) }), noMintedAt, [])?.cadence).toEqual({
+    expect(runDeltaVm(delta({ cadence: { slug: 'evening', name: 'evening', choreKey: null } }), noMintedAt, [])?.cadence).toEqual({
       slug: 'evening',
       name: 'evening',
       choreKey: null,
@@ -82,7 +70,7 @@ describe('runDeltaVm', () => {
         findingSetId: 'fs_1',
         revisionsLabel: 'alpha@a1, zeta@b2',
         measurement: null,
-        added: [{ findingId: 'f1', findingClass: 'drift', locus: 'a.ts', summary: 'new', introduced: true }],
+        added: [{ findingId: 'f1', findingClass: 'drift', locus: 'a.ts', summary: 'new', introduced: '2026-01-01T00:00:00Z' }],
         observed: [{ findingId: 'f2', findingClass: 'drift', locus: 'b.ts', summary: 'still' }],
         gone: [{ findingId: 'f3', note: 'fixed' }],
       },
@@ -90,7 +78,7 @@ describe('runDeltaVm', () => {
   });
 
   it('labels a set with no revisions as a dash', () => {
-    const bare = { ...set, revisions: {} } as DeliveredSet;
+    const bare = { ...set, revisions: {} };
     expect(runDeltaVm(delta({ sets: [bare] }), noMintedAt, [])?.sets[0].revisionsLabel).toBe('—');
   });
 });

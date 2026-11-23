@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, effect, input, signal } from '@angular/core';
 
-import type { GraphView } from 'fleet';
 import { GraphDiagram } from './graph-diagram';
 import { GraphDiagramDetail } from './graph-diagram-detail';
 import type { DiagramSelection } from './graph-diagram-selection';
+import type { Graph } from './graph.domain';
 
 /**
  * The diagram's 50/50 split — `GraphDiagram` left, `GraphDiagramDetail` right —
@@ -21,7 +21,7 @@ import type { DiagramSelection } from './graph-diagram-selection';
 export class GraphDiagramView {
   /** The already-fetched graph — passed straight through to both children
    * (`bzh:generated-client`; no re-fetch here). */
-  readonly graph = input.required<GraphView>();
+  readonly graph = input.required<Graph>();
 
   protected readonly selection = signal<DiagramSelection | null>(null);
 
@@ -31,7 +31,7 @@ export class GraphDiagramView {
    * to an unrelated id that happens to collide) in the new one. */
   constructor() {
     effect(() => {
-      void this.graph().graph_id;
+      void this.graph().graphId;
       this.selection.set(null);
     });
   }

@@ -16,7 +16,7 @@ import {
   surfaceOf,
 } from './gardening-page.model';
 import { injectHubGardenProposalsQuery } from './proposals/garden-proposals.query';
-import { injectHubRunsQuery } from './runs/garden-runs.query';
+import { injectHubRunRowsQuery } from './runs/garden-runs.query';
 
 /**
  * One project's garden — the `/p/{project}/gardening` route, a top-level tab beside the board, not a
@@ -47,7 +47,7 @@ export class GardeningPage {
   private readonly scopesQuery = injectHubScopesQuery();
   private readonly routinesQuery = injectHubRoutinesQuery();
   private readonly cadencesQuery = injectHubCadencesQuery();
-  private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
+  private readonly runsQuery = injectHubRunRowsQuery(() => this.window.since);
   private readonly proposalsQuery = injectHubGardenProposalsQuery();
   private readonly url = toSignal(
     this.router.events.pipe(

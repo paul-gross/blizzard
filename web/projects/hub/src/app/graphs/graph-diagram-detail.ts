@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { type GraphNodeView, type GraphView, hubApi, KitFactList, type KitFact, KitPanel, KitProseBlock, unlisted } from 'fleet';
+import { KitFactList, type KitFact, KitPanel, KitProseBlock, unlisted } from 'fleet';
 import {
   type DiagramSelection,
   type ResolvedChoiceSelection,
@@ -9,12 +9,13 @@ import {
 } from './graph-diagram-selection';
 import { type IncomingAddendum, incomingAddenda } from './graph-incoming-addenda';
 import type { EdgeTarget } from './graph-edge-target';
-import { actionArgsLabel, listOrDash, producesNames, retriesLabel, sessionLabel } from './graph-node';
+import { actionArgsLabel, listOrDash, retriesLabel, sessionLabel } from './graph-node';
+import { type Graph, type GraphNode, graphVocabularyText } from './graph.domain';
 
 /**
- * The diagram's detail pane — the selected node's full `GraphNodeView` (including
- * `prompt`/`judgement_prompt` and every inbound edge's `prompt_addendum`), the selected edge's choice
- * (including its `prompt_addendum`), or a neutral hint when nothing is
+ * The diagram's detail pane — the selected node's full `GraphNode` (including
+ * `prompt`/`judgementPrompt` and every inbound edge's `promptAddendum`), the selected edge's choice
+ * (including its `promptAddendum`), or a neutral hint when nothing is
  * selected. Presentational only: `graph`/`selection` are plain inputs, resolved
  * against `graph-diagram-selection.ts`'s pure resolvers
  * (`bzh:frontend-container-presentational`). Chrome comes from `fleet/lib/kit/` (`bzh:frontend-kit-floor`):
@@ -31,13 +32,13 @@ import { actionArgsLabel, listOrDash, producesNames, retriesLabel, sessionLabel 
   styleUrl: './graph-diagram-detail.css',
 })
 export class GraphDiagramDetail {
-  readonly graph = input.required<GraphView>();
+  readonly graph = input.required<Graph>();
   readonly selection = input<DiagramSelection | null>(null);
 
-  protected readonly selectedNode = computed<GraphNodeView | null>(() => resolveSelectedNode(this.graph(), this.selection()));
+  protected readonly selectedNode = computed<GraphNode | null>(() => resolveSelectedNode(this.graph(), this.selection()));
   protected readonly selectedChoice = computed(() => resolveSelectedChoice(this.graph(), this.selection()));
 
-  /** Every inbound edge's `prompt_addendum` for the selected node — empty when
+  /** Every inbound edge's `promptAddendum` for the selected node — empty when
    * nothing is selected, the selection is an edge, or the node has no inbound
    * addenda at all. */
   protected readonly incomingAddenda = computed<readonly IncomingAddendum[]>(() => {
@@ -46,7 +47,7 @@ export class GraphDiagramDetail {
   });
 
   protected nodeName(nodeId: string): string {
-    return (this.graph().nodes ?? []).find((n) => n.node_id === nodeId)?.name ?? nodeId;
+    return this.graph().nodes.find((n) => n.nodeId === nodeId)?.name ?? nodeId;
   }
 
   /** The selected edge's target, rendered for the "Target" row: a node's name, the
@@ -54,11 +55,11 @@ export class GraphDiagramDetail {
   protected targetLabel(target: EdgeTarget): string {
     const kind = target.kind;
     switch (kind) {
-      case hubApi.ChoiceTargetKind.NODE:
+      case 'node':
         return this.nodeName(target.nodeId);
-      case hubApi.ChoiceTargetKind.DONE:
+      case 'done':
         return 'done';
-      case hubApi.ChoiceTargetKind.GRAPH:
+      case 'graph':
         return target.targetGraph;
       default:
         return unlisted(kind);
@@ -68,7 +69,7 @@ export class GraphDiagramDetail {
   /** The selected node's record as an aligned fact grid (`fleet-kit-fact-list`) —
    * every row is plain text, so this is a straight `KitFactText` list rather than
    * the templated form `finding-panel.ts`'s own `factRows` needs. */
-  protected nodeFactRows(node: GraphNodeView): readonly KitFact[] {
+  protected nodeFactRows(node: GraphNode): readonly KitFact[] {
     // Only a hub node naming an action shows it, with what its `with:` passes.
     const action: readonly KitFact[] = node.action
       ? [
@@ -78,13 +79,13 @@ export class GraphDiagramDetail {
       : [];
     return [
       { label: 'Node', value: node.name },
-      { label: 'Executor', value: node.executor },
+      { label: 'Executor', value: graphVocabularyText(node.executor) },
       ...action,
       { label: 'Session', value: sessionLabel(node) },
-      { label: 'Judged by', value: node.judged_by },
+      { label: 'Judged by', value: graphVocabularyText(node.judgedBy) },
       { label: 'Retries', value: retriesLabel(node) },
       { label: 'Checks', value: listOrDash(node.checks) },
-      { label: 'Produces', value: listOrDash(producesNames(node)) },
+      { label: 'Produces', value: listOrDash(node.produces) },
     ];
   }
 

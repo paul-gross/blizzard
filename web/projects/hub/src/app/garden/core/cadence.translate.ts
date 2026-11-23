@@ -4,12 +4,14 @@ import {
   AttentionReason,
   CadenceAnchor as WireCadenceAnchor,
   type CadenceAttentionView,
+  type CadenceErrandView,
   type CadenceCreateRequest,
   type CadenceEditRequest,
   type CadenceView,
   type ChoreDocument,
   type ChoreView,
   type EditBaseline,
+  ErrandState as WireErrandState,
   openLookup,
   type RefusalMap,
   RunMode,
@@ -21,14 +23,13 @@ import {
   type CadenceAttention,
   type CadenceAttentionReason,
   type CadenceDraft,
+  type CadenceErrand,
   type Chore,
   type ChoreDraft,
   type ChoreMode,
-  type Vocabulary,
-  vocabularyText,
+  type ErrandState,
 } from './cadence.domain';
-
-const unlisted = (raw: string) => ({ unlisted: raw });
+import { unlisted, type Vocabulary, vocabularyText } from './vocabulary.domain';
 
 const anchorOf = openLookup<WireCadenceAnchor, Vocabulary<CadenceAnchor>>(
   {
@@ -54,6 +55,16 @@ const reasonOf = openLookup<AttentionReason, Vocabulary<CadenceAttentionReason>>
     [AttentionReason.SCOPE_UNLINKED]: 'scope_unlinked',
     [AttentionReason.NO_SCOPES]: 'no_scopes',
     [AttentionReason.NO_CHORES]: 'no_chores',
+  },
+  unlisted,
+);
+
+const errandStateOf = openLookup<WireErrandState, Vocabulary<ErrandState>>(
+  {
+    [WireErrandState.DUE]: 'due',
+    [WireErrandState.RUNNING]: 'running',
+    [WireErrandState.WAITING]: 'waiting',
+    [WireErrandState.STOPPED]: 'stopped',
   },
   unlisted,
 );
@@ -95,6 +106,18 @@ export function fromCadenceView(wire: CadenceView): Cadence {
     nextMoments: [...wire.next_moments],
     retired: wire.retired,
     createdAt: wire.created_at,
+  };
+}
+
+/** A served errand as the domain holds it. */
+export function fromCadenceErrandView(wire: CadenceErrandView): CadenceErrand {
+  return {
+    chore: wire.chore,
+    scope: wire.scope,
+    state: errandStateOf(wire.state),
+    attention: wire.attention.map(attentionOf),
+    lastRun: wire.last_run === null ? null : { chunkId: wire.last_run.chunk_id, scheduledAt: wire.last_run.scheduled_at },
+    dueAt: wire.due_at,
   };
 }
 

@@ -1,17 +1,18 @@
-import type {
-  AsyncStateQuery,
-  GardenProposalCountsView,
-  GardenSweepsView,
-  GraphNodeView,
-  GraphSummaryView,
-  GraphView,
-  RunRowView,
-  TrendView,
-} from 'fleet';
+import type { AsyncStateQuery } from 'fleet';
 import { describe, expect, it } from 'vitest';
+import type { Graph, GraphNode, GraphSummary } from '../../graphs/graph.domain';
 import { fixtureInstant } from 'fleet/testing';
 
 import { gardenRoutine, gardenRoutineKeeper } from '../core/routine.builders';
+import {
+  gardenMeasurementReading,
+  gardenProposalCountsRow,
+  gardenScopeLastSwept,
+  gardenTrendPeriod,
+} from '../core/routine-read.builders';
+import type { RoutineProposalCounts, RoutineSweeps, RoutineTrend } from '../core/routine-read.domain';
+import { gardenDeliveredSet, gardenRunRow } from '../core/run.builders';
+import type { RunRow } from '../core/run.domain';
 import type { Routine } from '../core/routine.domain';
 import {
   keptByVms,
@@ -45,105 +46,71 @@ const ROUTINE: Routine = gardenRoutine({
 
 const OTHER_ROUTINE: Routine = { ...ROUTINE, id: 'rtn_2', slug: 'weekly', name: 'Weekly sweep' };
 
-const EFFECTIVE_GRAPH: GraphSummaryView = {
-  graph_id: 'gr_1',
+const EFFECTIVE_GRAPH: GraphSummary = {
+  graphId: 'gr_1',
   name: 'garden-routine',
-  entry_node_id: 'nd_1',
-  created_at: '2026-01-01T00:00:00Z',
+  createdAt: '2026-01-01T00:00:00Z',
   effective: true,
   lifecycle: 'effective',
   retired: false,
 };
 
-const SUPERSEDED_GRAPH: GraphSummaryView = { ...EFFECTIVE_GRAPH, graph_id: 'gr_0', effective: false, lifecycle: 'superseded' };
+const SUPERSEDED_GRAPH: GraphSummary = { ...EFFECTIVE_GRAPH, graphId: 'gr_0', effective: false, lifecycle: 'superseded' };
 
-function node(fields: Pick<GraphNodeView, 'node_id' | 'name'> & Partial<GraphNodeView>): GraphNodeView {
+function node(fields: Pick<GraphNode, 'nodeId' | 'name'> & Partial<GraphNode>): GraphNode {
   return {
     executor: 'runner',
     session: 'fresh',
-    judged_by: 'worker',
+    judgedBy: 'worker',
     prompt: null,
     action: null,
-    action_args: {},
+    actionArgs: {},
     checks: [],
-    checks_cwd: null,
-    checks_timeout: null,
     choices: [],
-    judgement_prompt: null,
+    judgementPrompt: null,
     produces: [],
-    retries_exhausted: null,
-    retries_max: null,
-    session_source: null,
+    retriesExhausted: null,
+    retriesMax: null,
+    sessionSource: null,
     ...fields,
   };
 }
 
-const GRAPH: GraphView = {
-  graph_id: 'gr_1',
+const GRAPH: Graph = {
+  graphId: 'gr_1',
   name: 'garden-routine',
-  entry_node_id: 'nd_1',
-  enabled: true,
+  entryNodeId: 'nd_1',
   nodes: [
-    node({ node_id: 'nd_1', name: 'survey', prompt: 'Survey the repo.' }),
-    node({ node_id: 'nd_2', name: 'report' }),
+    node({ nodeId: 'nd_1', name: 'survey', prompt: 'Survey the repo.' }),
+    node({ nodeId: 'nd_2', name: 'report' }),
   ],
   edges: [],
-  artifacts: [],
-  follow_latest: null,
   retired: false,
-  definition_yaml: '',
   sessions: [],
-  warnings: [],
 };
 
-const SWEEPS: GardenSweepsView = {
-  routine_name: 'nightly',
-  since: '2026-01-01T00:00:00Z',
-  until: '2026-01-29T00:00:00Z',
-  last_swept: [
-    {
-      scope_slug: 'blizzard',
-      finding_set_id: 'fins_1',
-      produced_at: '2026-01-10T00:00:00Z',
+const SWEEPS: RoutineSweeps = {
+  lastSwept: [
+    gardenScopeLastSwept({
+      scopeSlug: 'blizzard',
+      findingSetId: 'fins_1',
+      producedAt: '2026-01-10T00:00:00Z',
       revisions: { hub: 'def456', blizzard: 'abc123' },
-    },
-    { scope_slug: 'never-swept', finding_set_id: null, produced_at: null, revisions: {} },
+    }),
+    gardenScopeLastSwept({ scopeSlug: 'never-swept' }),
   ],
-  measurements: [{ scope_slug: 'blizzard', produced_at: '2026-01-10T00:00:00Z', measurement: '3 findings' }],
+  measurements: [gardenMeasurementReading({ scopeSlug: 'blizzard', producedAt: '2026-01-10T00:00:00Z', measurement: '3 findings' })],
 };
 
-const TREND: TrendView = {
-  routine_name: 'nightly',
-  since: '2026-01-01T00:00:00Z',
-  until: '2026-01-29T00:00:00Z',
-  period_days: 7,
+const TREND: RoutineTrend = {
   periods: [
-    { period_start: '2026-01-01T00:00:00Z', period_end: '2026-01-08T00:00:00Z', created: 2, exits: {}, outflow: 1, withdrawn: 0, reopened: 3 },
-    { period_start: '2026-01-08T00:00:00Z', period_end: '2026-01-15T00:00:00Z', created: 4, exits: {}, outflow: 2, withdrawn: 1, reopened: 0 },
+    gardenTrendPeriod({ created: 2, outflow: 1, withdrawn: 0, reopened: 3 }),
+    gardenTrendPeriod({ created: 4, outflow: 2, withdrawn: 1, reopened: 0 }),
   ],
-  age: { boundary: '2026-01-01T00:00:00Z', recent: 2, older: 0, unattributed: 0 },
 };
 
-const PROPOSAL_COUNTS: GardenProposalCountsView = {
-  since: '2026-01-01T00:00:00Z',
-  until: '2026-01-29T00:00:00Z',
-  routine: 'nightly',
-  origin: null,
-  rows: [
-    {
-      origin: 'routine-run',
-      routine_name: 'nightly',
-      class: 'stale-docstring',
-      open: 2,
-      passed: 1,
-      accepted_with_item: 3,
-      accepted_without_item: 0,
-      created: 6,
-      project_id: null,
-      project_name: null,
-      project_slug: null,
-    },
-  ],
+const PROPOSAL_COUNTS: RoutineProposalCounts = {
+  rows: [gardenProposalCountsRow({ open: 2, passed: 1, acceptedWithItem: 3, acceptedWithoutItem: 0, created: 6 })],
 };
 
 function query(state: { pending?: boolean; error?: boolean }): AsyncStateQuery {
@@ -299,6 +266,11 @@ describe('proposalCountsRows', () => {
       },
     ]);
   });
+
+  it('renders an origin this build does not know raw', () => {
+    const rows = proposalCountsRows({ rows: [gardenProposalCountsRow({ origin: { unlisted: 'imported' } })] });
+    expect(rows[0].origin).toBe('imported');
+  });
 });
 
 describe('trendTotals', () => {
@@ -425,17 +397,15 @@ describe('modelEffortLabel', () => {
   });
 });
 
-function runRow(chunk_id: string, routine_name: string, minted_at: string, added: number[]): RunRowView {
-  return {
-    chunk_id,
-    routine_name,
-    minted_at,
-    scope_slug: 'hub-api',
+function runRow(chunkId: string, routineSlug: string, mintedAt: string, added: number[]): RunRow {
+  return gardenRunRow({
+    chunkId,
+    routineSlug,
+    mintedAt,
+    scopeSlug: 'hub-api',
     mode: 'delta',
-    outcome: 'done',
-    escalation: null,
-    delivered: added.map((added_count, i) => ({ finding_set_id: `fs_${i}`, added_count, gone_count: 0 })),
-  } as RunRowView;
+    delivered: added.map((addedCount) => gardenDeliveredSet({ addedCount })),
+  });
 }
 
 describe('routineRecentRuns', () => {

@@ -1,4 +1,8 @@
-import { type GardenProposalView, type RoutineView } from 'fleet';
+import { fixtureInstant } from 'fleet/testing';
+
+import type { Proposal } from '../core/proposal.domain';
+import { gardenProposal, gardenProposalClosure } from '../core/proposal.builders';
+import { gardenRoutine } from '../core/routine.builders';
 
 import {
   ALL_CLASSES,
@@ -16,45 +20,31 @@ import {
   type ProposalFilters,
 } from './gardening-proposals-page.model';
 
-function proposal(overrides: Partial<GardenProposalView> = {}): GardenProposalView {
-  return {
-    proposal_id: 'gp_1',
-    origin: 'routine-run',
-    routine_name: 'comments',
-    class: 'stale-docstring',
+const CREATED_AT = fixtureInstant(-24 * 3600);
+
+function proposal(overrides: Partial<Proposal> = {}): Proposal {
+  return gardenProposal({
+    id: 'gp_1',
+    routineSlug: 'comments',
+    proposalClass: 'stale-docstring',
     title: 'Fix the docstring',
     body: 'b',
-    created_at: '2026-01-01T00:00:00Z',
-    findings: [],
-    closure: null,
-    created_by: null,
-    project_id: null,
-    project_name: null,
-    project_slug: null,
+    createdAt: CREATED_AT,
     ...overrides,
-  };
+  });
 }
 
-const PASSED = {
-  closure: 'passed',
-  closed_by: 'op',
-  closed_at: '2026-01-02T00:00:00Z',
-  reason: null,
-  item_outcome: null,
-  source: null,
-  ref: null,
-} as const;
+const PASSED = gardenProposalClosure({ closedBy: 'op', reason: null });
 
 const NO_FILTERS: ProposalFilters = { waitingOnly: false, cls: null, routine: null, closing: new Set() };
 
 describe('isGardenProposalWaiting', () => {
   it('is waiting when the proposal carries no closure', () => {
-    expect(isGardenProposalWaiting({ closure: null } as never)).toBe(true);
-    expect(isGardenProposalWaiting({} as never)).toBe(true);
+    expect(isGardenProposalWaiting(proposal({ closure: null }))).toBe(true);
   });
 
   it('is not waiting once a closure is recorded', () => {
-    expect(isGardenProposalWaiting({ closure: { closure: 'passed' } } as never)).toBe(false);
+    expect(isGardenProposalWaiting(proposal({ closure: PASSED }))).toBe(false);
   });
 });
 
@@ -78,9 +68,9 @@ describe('pendingClosureIds', () => {
 describe('proposalClassChips', () => {
   it('leads with All, then each distinct class alphabetized and prefixed', () => {
     const chips = proposalClassChips([
-      proposal({ class: 'zeta' }),
-      proposal({ class: 'all' }),
-      proposal({ class: 'zeta' }),
+      proposal({ proposalClass: 'zeta' }),
+      proposal({ proposalClass: 'all' }),
+      proposal({ proposalClass: 'zeta' }),
     ]);
     expect(chips).toEqual([
       { value: ALL_CLASSES, label: 'All classes', testid: 'gardening-proposal-class-all' },
@@ -107,10 +97,10 @@ describe('classChipValue', () => {
 describe('proposalRoutineChips', () => {
   it('leads with All, then each distinct named routine alphabetized, skipping routine-less proposals', () => {
     const chips = proposalRoutineChips([
-      proposal({ routine_name: 'comments' }),
-      proposal({ routine_name: null, origin: 'operator', created_by: 'alice' }),
-      proposal({ routine_name: 'architecture' }),
-      proposal({ routine_name: 'comments' }),
+      proposal({ routineSlug: 'comments' }),
+      proposal({ routineSlug: null, origin: 'operator', createdBy: 'alice' }),
+      proposal({ routineSlug: 'architecture' }),
+      proposal({ routineSlug: 'comments' }),
     ], []);
     expect(chips).toEqual([
       { value: ALL_ROUTINES, label: 'All routines', testid: 'gardening-proposal-routine-all' },
@@ -121,8 +111,8 @@ describe('proposalRoutineChips', () => {
 
   it('keys each chip by slug and labels it with the display name, alphabetized by the label', () => {
     const chips = proposalRoutineChips(
-      [proposal({ routine_name: 'arch' }), proposal({ routine_name: 'cmt' })],
-      [{ slug: 'arch', name: 'Zoning review' } as RoutineView, { slug: 'cmt', name: 'Comment sweep' } as RoutineView],
+      [proposal({ routineSlug: 'arch' }), proposal({ routineSlug: 'cmt' })],
+      [gardenRoutine({ slug: 'arch', name: 'Zoning review' }), gardenRoutine({ slug: 'cmt', name: 'Comment sweep' })],
     );
     expect(chips.slice(1)).toEqual([
       { value: 'cmt', label: 'Comment sweep', testid: 'gardening-proposal-routine-item-cmt' },
@@ -139,12 +129,12 @@ describe('waitingChipValue', () => {
 });
 
 describe('filterProposals', () => {
-  const waiting = proposal({ proposal_id: 'gp_1' });
-  const closing = proposal({ proposal_id: 'gp_2' });
-  const passed = proposal({ proposal_id: 'gp_3', closure: PASSED });
-  const otherClass = proposal({ proposal_id: 'gp_4', class: 'dead-code', routine_name: 'architecture' });
+  const waiting = proposal({ id: 'gp_1' });
+  const closing = proposal({ id: 'gp_2' });
+  const passed = proposal({ id: 'gp_3', closure: PASSED });
+  const otherClass = proposal({ id: 'gp_4', proposalClass: 'dead-code', routineSlug: 'architecture' });
   const docket = [waiting, closing, passed, otherClass];
-  const ids = (ps: readonly GardenProposalView[]) => ps.map((p) => p.proposal_id);
+  const ids = (ps: readonly Proposal[]) => ps.map((p) => p.id);
 
   it('keeps everything with no filter, closed and closing alike', () => {
     expect(ids(filterProposals(docket, { ...NO_FILTERS, closing: new Set(['gp_2']) }))).toEqual([
@@ -173,20 +163,20 @@ describe('filterProposals', () => {
 
 describe('proposalListRows', () => {
   it('maps each proposal, reading waiting off its closure', () => {
-    expect(proposalListRows([proposal(), proposal({ proposal_id: 'gp_3', closure: PASSED })])).toEqual([
+    expect(proposalListRows([proposal(), proposal({ id: 'gp_3', closure: PASSED })])).toEqual([
       {
         proposalId: 'gp_1',
         title: 'Fix the docstring',
         proposalClass: 'stale-docstring',
         waiting: true,
-        createdAt: '2026-01-01T00:00:00Z',
+        createdAt: CREATED_AT,
       },
       {
         proposalId: 'gp_3',
         title: 'Fix the docstring',
         proposalClass: 'stale-docstring',
         waiting: false,
-        createdAt: '2026-01-01T00:00:00Z',
+        createdAt: CREATED_AT,
       },
     ]);
   });

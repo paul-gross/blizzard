@@ -3,7 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import type { RoutineRunResponse } from 'fleet';
 import {
   gardenScopeView,
   type RequestClientStub,
@@ -34,8 +33,11 @@ const BASELINES = [
   }),
 ];
 
+/** The hub's answer to a run. */
+type RunAnswer = ReturnType<typeof routineRunResponse>;
+
 /** What a run against `web` answers with, minting `chunkId`. */
-function runResponse(chunkId: string): RoutineRunResponse {
+function runResponse(chunkId: string): RunAnswer {
   return routineRunResponse({ chunk_id: chunkId, scope_slug: 'web', created_at: '2026-03-01T00:00:00Z' });
 }
 
@@ -311,8 +313,8 @@ describe('GardeningRunDialog', () => {
 
   it('keeps a submitting run mounted through Escape, a backdrop click, and a disabled Cancel', async () => {
     // The run POST hangs until resolved below, so the mutation stays genuinely pending.
-    let resolveRun!: (response: RoutineRunResponse) => void;
-    const pendingRun = new Promise<RoutineRunResponse>((resolve) => {
+    let resolveRun!: (response: RunAnswer) => void;
+    const pendingRun = new Promise<RunAnswer>((resolve) => {
       resolveRun = resolve;
     });
     const mounted = await mount({ 'POST /api/routines/{routine_id}/run': () => pendingRun });

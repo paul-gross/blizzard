@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { EMPTY_CADENCE_DRAFT, vocabularyText } from './cadence.domain';
+import { EMPTY_CADENCE_DRAFT } from './cadence.domain';
+import { vocabularyText } from './vocabulary.domain';
 
 describe('vocabularyText', () => {
   it('reads a known value as itself and an unlisted one raw', () => {

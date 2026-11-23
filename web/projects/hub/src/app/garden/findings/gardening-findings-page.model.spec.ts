@@ -1,32 +1,21 @@
-import { type FindingView, type RoutineView } from 'fleet';
+import { fixtureInstant } from 'fleet/testing';
 
+import type { Finding } from '../core/finding.domain';
+import { gardenFinding } from '../core/finding.builders';
+import { gardenRoutine } from '../core/routine.builders';
 import { findingListRows } from './gardening-findings-page.model';
 
-function finding(overrides: Partial<FindingView> = {}): FindingView {
-  return {
-    finding_id: 'fnd_1',
-    class: 'stale-docstring',
+const LAST_SEEN = fixtureInstant(-3600);
+
+function finding(overrides: Partial<Finding> = {}): Finding {
+  return gardenFinding({
     locus: 'a.py:1',
     summary: 'summary a',
-    state: 'live',
-    live: true,
-    routine_name: 'nightly',
-    scope_slug: 'blizzard',
-    observed_count: 1,
-    last_seen_at: '2026-01-05T00:00:00Z',
-    exit: null,
-    first_observed_at: null,
-    introduced: null,
-    introduced_at: null,
-    note: null,
-    project_id: null,
-    project_name: null,
-    project_slug: null,
-    raised_by_chunk_id: null,
-    severity: null,
-    source: 'routine',
+    routineSlug: 'nightly',
+    observedCount: 1,
+    lastSeenAt: LAST_SEEN,
     ...overrides,
-  };
+  });
 }
 
 describe('findingListRows', () => {
@@ -39,7 +28,7 @@ describe('findingListRows', () => {
         summary: 'summary a',
         state: 'live',
         exit: null,
-        lastSeenAt: '2026-01-05T00:00:00Z',
+        lastSeenAt: LAST_SEEN,
         routineName: 'nightly',
         scopeSlug: 'blizzard',
         source: 'routine',
@@ -59,19 +48,19 @@ describe('findingListRows', () => {
   });
 
   it("names a finding's routine by its display name, matched on the slug the finding carries", () => {
-    const routines = [{ slug: 'nightly', name: 'Nightly sweep' } as RoutineView];
+    const routines = [gardenRoutine({ slug: 'nightly', name: 'Nightly sweep' })];
     expect(findingListRows([finding()], null, null, routines)[0].routineName).toBe('Nightly sweep');
     expect(findingListRows([finding()], null, null, undefined)[0].routineName).toBe('nightly');
   });
 
   it('reads a routine-less finding as a null routine name', () => {
-    const [row] = findingListRows([finding({ routine_name: null })], null, null, []);
+    const [row] = findingListRows([finding({ routineSlug: null })], null, null, []);
     expect(row.routineName).toBeNull();
   });
 
   it('carries exit, source, severity and raising chunk verbatim', () => {
     const [row] = findingListRows(
-      [finding({ exit: 'outflow', source: 'review', severity: 'should-fix', raised_by_chunk_id: 'ch_3' })],
+      [finding({ exit: 'outflow', source: 'review', severity: 'should-fix', raisedByChunkId: 'ch_3' })],
       'nightly',
       'blizzard',
       [],

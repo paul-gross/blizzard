@@ -7,6 +7,9 @@ import {
   gardenRoutineView, type RequestClientStub, settle, stubError, stubHubClient,
 } from 'fleet/testing';
 
+import type { Project } from '../../core/project.domain';
+import { gardenProposal, gardenProposalClosure } from '../core/proposal.builders';
+import { gardenRoutine } from '../core/routine.builders';
 import { GardeningDoorway } from './gardening-doorway';
 import { doorwayCards } from './gardening-doorway.model';
 
@@ -32,7 +35,14 @@ function routes(): Routes {
 
 describe('doorwayCards', () => {
   it('sorts projects and counts only pending proposals in their own project', () => {
-    const cards = doorwayCards(projects, [], routines, proposals);
+    const domainProjects: Project[] = [
+      { project_id: 'w', slug: 'winter', name: 'Winter', description: '', color: '#888888', revision: 1, created_at: '2026-01-01T00:00:00Z' },
+      { project_id: 'b', slug: 'blizzard', name: 'Blizzard', description: '', color: '#888888', revision: 1, created_at: '2026-01-01T00:00:00Z' },
+    ];
+    const cards = doorwayCards(domainProjects, [], [gardenRoutine({ slug: 'weekly', projectId: 'b' })], [
+      gardenProposal({ projectId: 'b', id: 'gp_1' }),
+      gardenProposal({ projectId: 'b', id: 'gp_2', closure: gardenProposalClosure({ kind: 'accepted' }) }),
+    ]);
     expect(cards.map(({ slug, counts, href }) => ({ slug, counts, href }))).toEqual([
       { slug: 'blizzard', counts: '1 routine · 1 pending proposal', href: '/p/blizzard/gardening/proposals' },
       { slug: 'winter', counts: '0 pending proposals', href: '/p/winter/gardening/proposals' },

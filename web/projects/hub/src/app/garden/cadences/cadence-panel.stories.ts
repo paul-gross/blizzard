@@ -1,8 +1,13 @@
 import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite';
-import { gardenCadenceErrandView, gardenErrandRunView } from 'fleet/testing';
 import { fn } from 'storybook/test';
 
-import { gardenCadence, gardenCadenceAttention, gardenChore } from '../core/cadence.builders';
+import {
+  gardenCadence,
+  gardenCadenceAttention,
+  gardenCadenceErrand,
+  gardenChore,
+  gardenErrandRun,
+} from '../core/cadence.builders';
 
 import { FleetCadencePanel } from './cadence-panel';
 import { CadencePanelChoreStoryHost, CadencePanelEditingStoryHost } from './cadence-panel.story-host';
@@ -26,10 +31,10 @@ const CADENCE = gardenCadence({
 });
 
 const ERRANDS = [
-  gardenCadenceErrandView({ scope: 'blizzard', last_run: gardenErrandRunView() }),
-  gardenCadenceErrandView({ scope: 'blizzard-mock', state: 'running', due_at: null, last_run: gardenErrandRunView({ status: 'running', finished_at: null }) }),
-  gardenCadenceErrandView({ chore: 'samples', scope: 'web', state: 'due' }),
-  gardenCadenceErrandView({ chore: 'samples', scope: 'gone', state: 'stopped', due_at: null, attention: [{ chore: 'samples', scope: 'gone', reason: 'scope_unknown' }] }),
+  gardenCadenceErrand({ scope: 'blizzard', lastRun: gardenErrandRun() }),
+  gardenCadenceErrand({ scope: 'blizzard-mock', state: 'running', dueAt: null, lastRun: gardenErrandRun() }),
+  gardenCadenceErrand({ chore: 'samples', scope: 'web', state: 'due' }),
+  gardenCadenceErrand({ chore: 'samples', scope: 'gone', state: 'stopped', dueAt: null, attention: [{ chore: 'samples', scope: 'gone', reason: 'scope_unknown' }] }),
 ];
 
 const VM = cadencePanelVm(CADENCE, null, ERRANDS);
@@ -73,7 +78,7 @@ export const ErrandsLoading: Story = { args: { vm: cadencePanelVm(CADENCE, null,
 export const ErrandsError: Story = { args: { vm: cadencePanelVm(CADENCE, null, undefined, { isPending: () => false, isError: () => true }) } };
 export const ErrandsEmpty: Story = { args: { vm: cadencePanelVm(CADENCE, null, []) } };
 export const Retired: Story = {
-  args: { vm: cadencePanelVm({ ...CADENCE, retired: true, nextMoments: [], attention: [] }, null, ERRANDS.map((e) => ({ ...e, state: 'stopped' as const, due_at: null }))) },
+  args: { vm: cadencePanelVm({ ...CADENCE, retired: true, nextMoments: [], attention: [] }, null, ERRANDS.map((e) => ({ ...e, state: 'stopped' as const, dueAt: null }))) },
 };
 export const NoChores: Story = { args: { vm: cadencePanelVm({ ...CADENCE, chores: [], attention: [gardenCadenceAttention({ chore: null, scope: null, reason: 'no_chores' })] }, null, []) } };
 export const Refused: Story = { args: { actionError: 'the cadence changed since it was read — reload it and try again' } };

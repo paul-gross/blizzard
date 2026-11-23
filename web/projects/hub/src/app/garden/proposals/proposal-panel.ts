@@ -1,13 +1,15 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitMarkdown, KitPanel, KitProseBlock, KitSectionHead, type Tone, FleetWhen } from 'fleet';
+import { compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitMarkdown, KitPanel, KitProseBlock, KitSectionHead, type Tone, FleetWhen } from 'fleet';
 import type { FindingTriageVerb } from '../core/finding-triage-verb.domain';
+import type { FindingExit, FindingState } from '../core/finding.domain';
 import { findingStateTone, isFindingExited } from '../core/finding-state';
+import { type Vocabulary, vocabularyText } from '../core/vocabulary.domain';
 import { AppLink } from 'fleet/shell';
 
 /** A linked hub work item, legible for display — `label`/`webUrl` come straight off
- * `WorkItemView` rather than being guessed; `webUrl` is `null` once the chunk is
+ * the work item rather than being guessed; `webUrl` is `null` once the chunk is
  * terminal, so the caller renders `label` alone instead of a dead
  * link. */
 export interface ProposalWorkItemVm {
@@ -26,9 +28,9 @@ export interface ProposalEvidenceRowVm {
   readonly findingId: string;
   readonly locus: string;
   readonly summary: string;
-  readonly state: hubApi.FindingState;
-  /** `FindingView.exit` — non-null once the finding has exited. */
-  readonly exit: hubApi.FindingExit | null;
+  readonly state: Vocabulary<FindingState>;
+  /** Non-null once the finding has exited. */
+  readonly exit: Vocabulary<FindingExit> | null;
   readonly workItem: ProposalWorkItemVm | null;
   /** Whether an exit verb is in flight for this finding — disables the row's triage
    * buttons so it cannot be triaged again before the first request settles. */
@@ -65,9 +67,9 @@ export const PROPOSAL_EVIDENCE_ACTIONS: readonly { readonly verb: ProposalEviden
  * record it minted nothing, never an empty space where the item would
  * be. */
 export type ProposalClosureVm =
-  | { readonly kind: Extract<hubApi.GardenProposalClosureKind, 'passed'>; readonly closedBy: string; readonly closedAt: string; readonly reason: string | null }
+  | { readonly kind: 'passed'; readonly closedBy: string; readonly closedAt: string; readonly reason: string | null }
   | {
-      readonly kind: Extract<hubApi.GardenProposalClosureKind, 'accepted'>;
+      readonly kind: 'accepted';
       readonly closedBy: string;
       readonly closedAt: string;
       readonly reason: string | null;
@@ -80,8 +82,8 @@ export type ProposalClosureVm =
  * raised it; `operator` names the authoring identity, plus the routine when one was
  * named, since an operator proposal may cite none at all. */
 export type ProposalOriginVm =
-  | { readonly kind: Extract<hubApi.GardenProposalOrigin, 'routine-run'>; readonly routineName: string }
-  | { readonly kind: Extract<hubApi.GardenProposalOrigin, 'operator'>; readonly createdBy: string; readonly routineName: string | null }
+  | { readonly kind: 'routine-run'; readonly routineName: string }
+  | { readonly kind: 'operator'; readonly createdBy: string; readonly routineName: string | null }
   /** An origin the client does not declare, shown raw. */
   | { readonly kind: 'unlisted'; readonly raw: string };
 
@@ -141,6 +143,7 @@ export class FleetProposalPanel {
   readonly evidenceTriage = output<ProposalEvidenceTriage>();
 
   protected readonly compactRef = compactRef;
+  protected readonly text = vocabularyText;
   protected readonly actions = PROPOSAL_EVIDENCE_ACTIONS;
 
   /** The case header's origin fragment — the routine name for a `routine-run`
@@ -157,7 +160,7 @@ export class FleetProposalPanel {
     }
   }
 
-  /** Whether the row has already exited, classified off the wire `exit`. */
+  /** Whether the row has already exited, classified off its `exit`. */
   protected readonly isExited = isFindingExited;
 
   /** The shared finding-state palette (`finding-state.ts`), so an evidence row and

@@ -1,13 +1,12 @@
+import { gardenFindingFact } from '../core/finding.builders';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-function fact(fields: Pick<FindingFactView, 'kind' | 'recorded_at'> & Partial<FindingFactView>): FindingFactView {
-  return { actor: null, note: null, proposal_id: null, superseded_by: null, ...fields };
-}
+const fact = gardenFindingFact;
 
 import { FleetFindingPanel, type FindingPanelTriageVerb, type FindingPanelVm } from './finding-panel';
-import type { FindingFactView, KitAsyncStateValue } from 'fleet';
+import type { KitAsyncStateValue } from 'fleet';
 
 const LIVE_VM: FindingPanelVm = {
   findingId: 'fin_01M1KANH0RZEABSD44RCEH6G9B',
@@ -22,7 +21,7 @@ const LIVE_VM: FindingPanelVm = {
   lastSeenAt: '2026-01-05T00:00:00Z',
   summary: 'docstring narrates a removed parameter',
   note: null,
-  facts: [fact({ kind: 'add', recorded_at: '2026-01-01T00:00:00Z' })],
+  facts: [fact({ kind: 'add', recordedAt: '2026-01-01T00:00:00Z' })],
   workItem: null,
   source: 'routine',
   severity: null,
@@ -223,8 +222,8 @@ describe('FleetFindingPanel', () => {
       vm: {
         ...LIVE_VM,
         facts: [
-          fact({ kind: 'add', recorded_at: '2026-01-01T00:00:00Z' }),
-          fact({ kind: 'observed', recorded_at: '2026-01-03T00:00:00Z' }),
+          fact({ kind: 'add', recordedAt: '2026-01-01T00:00:00Z' }),
+          fact({ kind: 'observed', recordedAt: '2026-01-03T00:00:00Z' }),
         ],
       },
     });

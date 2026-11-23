@@ -24,7 +24,9 @@ import {
   hubRoutinesKey,
 } from '../../core/query-keys';
 import type { Routine } from './routine.domain';
+import type { RoutineProposalCounts, RoutineSweeps, RoutineTrend } from './routine-read.domain';
 import { fromRoutineView as toRoutine } from './routine.translate';
+import { fromGardenProposalCountsView, fromGardenSweepsView, fromTrendView } from './routine-read.translate';
 
 async function fetchRoutines(lens: string | null): Promise<RoutineView[]> {
   const { data, error } =
@@ -39,26 +41,6 @@ async function fetchRoutines(lens: string | null): Promise<RoutineView[]> {
   return data ?? [];
 }
 
-/**
- * The routine list — every routine, newest first, including a retired one marked as such. Under a project lens it is
- * that project's routines (`GET /api/projects/{project}/routines`); on All it is the tenant's (`GET /api/routines`),
- * which only the gardening doorway reads, grouping them by project: every consumer of this one query renders a routine's
- * full history regardless of its lifecycle state. Routines change rarely and carry no
- * SSE event of their own, `injectHubGraphsQuery`'s own standing.
- *
- * The wire projection, kept for the readers that have not moved onto {@link Routine}
- * (`decision:ui-toolkit/incremental-replacement`); no new caller takes it — see {@link injectHubRoutinesDomainQuery}.
- */
-export function injectHubRoutinesQuery() {
-  return injectQuery(routinesQueryOptions());
-}
-
-/** The routine list as {@link ScopeRoutine}s — the same read and cache entry as {@link injectHubRoutinesQuery}. */
-export function injectHubScopeRoutinesDomainQuery() {
-  const read = routinesQueryOptions();
-  return injectQuery(() => ({ ...read(), select: (wire: RoutineView[]): readonly ScopeRoutine[] => wire.map(toScopeRoutine) }));
-}
-
 function routinesQueryOptions() {
   const project = injectProjectFilter();
   return () => {
@@ -70,23 +52,27 @@ function routinesQueryOptions() {
   };
 }
 
-/** The routine list as {@link Routine}s — {@link injectHubRoutinesQuery}'s read, cache, and invalidations, selected
- * through the translator. */
-export function injectHubRoutinesDomainQuery() {
-  const project = injectProjectFilter();
-  return injectQuery(() => {
-    const lens = project();
-    return {
-      queryKey: lensedKey(hubRoutinesKey, lens),
-      queryFn: () => fetchRoutines(lens),
-      select: (wire: RoutineView[]): readonly Routine[] => wire.map(toRoutine),
-    };
-  });
+/**
+ * The routine list as {@link Routine}s — every routine, newest first, including a retired one marked as such. Under a
+ * project lens it is that project's routines (`GET /api/projects/{project}/routines`); on All it is the tenant's (`GET
+ * /api/routines`), which only the gardening doorway reads, grouping them by project: every consumer of this one query
+ * renders a routine's full history regardless of its lifecycle state. Routines change rarely and carry no SSE event of
+ * their own, `injectHubGraphsQuery`'s own standing.
+ */
+export function injectHubRoutinesQuery() {
+  const read = routinesQueryOptions();
+  return injectQuery(() => ({ ...read(), select: (wire: RoutineView[]): readonly Routine[] => wire.map(toRoutine) }));
+}
+
+/** The routine list as {@link ScopeRoutine}s — the same read and cache entry as {@link injectHubRoutinesQuery}. */
+export function injectHubRoutinesAsScopeRoutinesQuery() {
+  const read = routinesQueryOptions();
+  return injectQuery(() => ({ ...read(), select: (wire: RoutineView[]): readonly ScopeRoutine[] => wire.map(toScopeRoutine) }));
 }
 
 /**
  * Hub `GET /api/routines/trend` read — one routine's finding inflow against outflow
- * over `[since, until)`. Every argument is an accessor so the caller can recompute the
+ * over `[since, until)`, as a {@link RoutineTrend}. Every argument is an accessor so the caller can recompute the
  * window without re-wiring the query (`injectHubFleetSpendQuery`'s own shape). A routine's slug is unique only inside
  * its project, so under a lens the read names it (`?project=`); disabled while `routineSlug()` is `null` — the
  * panel's own "nothing selected" rest state.
@@ -120,13 +106,14 @@ export function injectHubRoutineTrendQuery(
         if (error) throw error;
         return data as TrendView;
       },
+      select: (wire: TrendView): RoutineTrend => fromTrendView(wire),
     };
   });
 }
 
 /**
  * Hub `GET /api/routines/{routine_id}/sweeps` read — one routine's per-scope
- * last-swept table (unwindowed) and its measurement series over `[since, until)`.
+ * last-swept table (unwindowed) and its measurement series over `[since, until)`, as {@link RoutineSweeps}.
  * Disabled while `routineId()` is `null`, the same rest state
  * {@link injectHubRoutineTrendQuery} carries.
  */
@@ -145,13 +132,14 @@ export function injectHubRoutineSweepsQuery(routineId: () => string | null, sinc
         if (error) throw error;
         return data as GardenSweepsView;
       },
+      select: (wire: GardenSweepsView): RoutineSweeps => fromGardenSweepsView(wire),
     };
   });
 }
 
 /**
  * Hub `GET /api/routines/proposal-counts` read — one routine's
- * garden-proposal counts, per class, over `[since, until)`. Every window argument is
+ * garden-proposal counts, per class, over `[since, until)`, as {@link RoutineProposalCounts}. Every window argument is
  * an accessor, `injectHubRoutineTrendQuery`'s own shape, and like it the read names the lensed project; disabled while `routineSlug()` is `null`, the same "nothing selected" rest state.
  */
 export function injectHubRoutineProposalCountsQuery(
@@ -174,6 +162,7 @@ export function injectHubRoutineProposalCountsQuery(
         if (error) throw error;
         return data as GardenProposalCountsView;
       },
+      select: (wire: GardenProposalCountsView): RoutineProposalCounts => fromGardenProposalCountsView(wire),
     };
   });
 }

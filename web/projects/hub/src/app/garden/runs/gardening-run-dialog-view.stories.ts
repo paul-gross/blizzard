@@ -1,5 +1,8 @@
 import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite';
-import type { RoutineBaselineView, ScopeView, Urgency } from 'fleet';
+import type { Urgency } from 'fleet';
+
+import { gardenRoutineBaseline } from '../core/run.builders';
+import { gardenScope } from '../core/scope.builders';
 
 import { RunDialogStoryHost } from './gardening-run-dialog-view.story-host';
 
@@ -17,10 +20,7 @@ const host = (attrs = ''): Story => ({
     template: `<app-story-run-dialog [scopes]="scopes" [urgencies]="urgencies" [draft]="draft" ${attrs} />`,
   }),
   args: {
-    scopes: [
-      { slug: 'web', description: 'Web' } as ScopeView,
-      { slug: 'hub', description: 'Hub' } as ScopeView,
-    ],
+    scopes: [gardenScope({ slug: 'web', description: 'Web' }), gardenScope({ slug: 'hub', description: 'Hub' })],
     urgencies: [
       { id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as Urgency,
       { id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as Urgency,
@@ -29,12 +29,12 @@ const host = (attrs = ''): Story => ({
   },
 });
 
-const BASELINE = {
-  scope_slug: 'web',
-  finding_set_id: 'fins_02STORY',
-  recorded_at: '2026-02-01T00:00:00Z',
-  repos: [{ repo: 'blizzard', revision: 'abc123d', landed_since: 3 }],
-} as RoutineBaselineView;
+const BASELINE = gardenRoutineBaseline({
+  scopeSlug: 'web',
+  findingSetId: 'fins_02STORY',
+  recordedAt: '2026-02-01T00:00:00Z',
+  repos: [{ repo: 'blizzard', revision: 'abc123d', landedSince: 3 }],
+});
 
 export const Default: Story = host();
 export const Loading: Story = host('state="loading"');

@@ -1,20 +1,21 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import { type GraphLifecycle, type GraphSummaryView, compactRef, KitBadge, KitChip, KitSelectList, KitSelectRow, type Tone, FleetWhen } from 'fleet';
+import { compactRef, KitBadge, KitChip, KitSelectList, KitSelectRow, type Tone, FleetWhen } from 'fleet';
 
-import { graphLifecycleTone } from '../core/lifecycle-tone';
+import { graphLifecycleTone } from './graph-lifecycle-tone';
+import { type GraphSummary, graphVocabularyText } from './graph.domain';
 
-/** One graph name's lineage, grouped client-side from the flat `GraphSummaryView[]`
- * the hub serves in `created_at DESC` order. */
+/** One graph name's lineage, grouped client-side from the flat `GraphSummary[]`
+ * the hub serves in `createdAt DESC` order. */
 interface GraphGroup {
   readonly name: string;
   /** The lineage, newest-first (the order the list already arrives in). */
-  readonly versions: readonly GraphSummaryView[];
+  readonly versions: readonly GraphSummary[];
   /** The one version in the group with `effective: true`. */
-  readonly effective: GraphSummaryView;
+  readonly effective: GraphSummary;
 }
 
-/** Marks a header row's option value apart from a version's `graph_id`. */
+/** Marks a header row's option value apart from a version's `graphId`. */
 const GROUP_PREFIX = 'group:';
 
 /** One group's operator-set expansion state, stamped with the selection that was
@@ -30,14 +31,14 @@ interface ExpansionOverride {
  * primary object; a name is a lineage of immutable versions). Each group shows its
  * version count and the effective version's summary; expanding a group selects that
  * effective version (the detail opens on the first click) and reveals the
- * full lineage newest-first, each row carrying its `graph_id`, `created_at`, and an
+ * full lineage newest-first, each row carrying its `graphId`, `createdAt`, and an
  * **effective** / **superseded** / **retired** badge. Any version, effective, superseded, or
  * retired, is selectable and opens identically (`selectGraph`); retiring/re-enabling
  * itself is driven from the detail view (`graph-detail.ts`), not this list.
  *
  * One `fleetKitSelectList` holds both levels: a group's header row is an option
  * valued `group:<name>` (opening it runs {@link toggle}), and each lineage row
- * underneath is a stepped-down option valued by its `graph_id`. The header is never
+ * underneath is a stepped-down option valued by its `graphId`. The header is never
  * the selected option; it keeps the selected chrome through `.ge-group-open` while
  * its effective version is the one open. Every row is two lines — a headline and a
  * meta line with a right-aligned trailing element.
@@ -62,12 +63,12 @@ interface ExpansionOverride {
 })
 export class GraphExplorerList {
   /** The resolved graph summaries to group and render. */
-  readonly graphs = input.required<readonly GraphSummaryView[]>();
+  readonly graphs = input.required<readonly GraphSummary[]>();
 
   /** The currently open detail's graph id, or `null` — highlights its row. */
   readonly selectedGraphId = input<string | null>(null);
 
-  /** Emitted with the `graph_id` of a clicked row, effective or superseded alike — or
+  /** Emitted with the `graphId` of a clicked row, effective or superseded alike — or
    * of a group's effective version when its header expands the group. */
   readonly selectGraph = output<string>();
 
@@ -78,10 +79,10 @@ export class GraphExplorerList {
    * {@link showRetired} is on, otherwise every non-retired one plus the current
    * selection, so a deep link into a retired version never lands on a list that
    * does not contain it. */
-  private readonly visibleGraphs = computed<readonly GraphSummaryView[]>(() => {
+  private readonly visibleGraphs = computed<readonly GraphSummary[]>(() => {
     if (this.showRetired()) return this.graphs();
     const selected = this.selectedGraphId();
-    return this.graphs().filter((g) => !g.retired || g.graph_id === selected);
+    return this.graphs().filter((g) => !g.retired || g.graphId === selected);
   });
 
   /** How many versions the filter is currently holding back — the chip's own count,
@@ -100,10 +101,10 @@ export class GraphExplorerList {
   private readonly expansionOverrides = signal<ReadonlyMap<string, ExpansionOverride>>(new Map());
 
   /** Every graph grouped by name; each group's lineage preserves the hub's
-   * `created_at DESC` order (never re-derived client-side — the `effective`
+   * `createdAt DESC` order (never re-derived client-side — the `effective`
    * flag and the ordering are both trusted from the server). */
   protected readonly groups = computed<readonly GraphGroup[]>(() => {
-    const byName = new Map<string, GraphSummaryView[]>();
+    const byName = new Map<string, GraphSummary[]>();
     for (const summary of this.visibleGraphs()) {
       const versions = byName.get(summary.name);
       if (versions) versions.push(summary);
@@ -141,7 +142,7 @@ export class GraphExplorerList {
     const willExpand = !this.isExpanded(group);
     const override: ExpansionOverride = { expanded: willExpand, selectionAtToggle: this.selectedGraphId() };
     this.expansionOverrides.update((prev) => new Map(prev).set(group.name, override));
-    if (willExpand) this.selectGraph.emit(group.effective.graph_id);
+    if (willExpand) this.selectGraph.emit(group.effective.graphId);
   }
 
   /** A group is expanded because the operator toggled it open, or — absent a live
@@ -158,7 +159,7 @@ export class GraphExplorerList {
    * collapse survives the selection it deliberately left in place. */
   protected isExpanded(group: GraphGroup): boolean {
     const selected = this.selectedGraphId();
-    const holdsSelection = selected !== null && group.versions.some((v) => v.graph_id === selected);
+    const holdsSelection = selected !== null && group.versions.some((v) => v.graphId === selected);
     const override = this.expansionOverrides().get(group.name);
     if (override !== undefined && !(holdsSelection && selected !== override.selectionAtToggle)) {
       return override.expanded;
@@ -179,14 +180,14 @@ export class GraphExplorerList {
     return compactRef(graphId);
   }
 
-  /** The version's wire `lifecycle`. */
-  protected lifecycle(version: GraphSummaryView): GraphLifecycle {
-    return version.lifecycle;
+  /** The version's `lifecycle` as text — one this build does not know reads raw. */
+  protected lifecycle(version: GraphSummary): string {
+    return graphVocabularyText(version.lifecycle);
   }
 
   /** {@link graphLifecycleTone}'s lookup, bound to a version rather than a bare lifecycle so
    * the template calls one method per row. */
-  protected badgeTone(version: GraphSummaryView): Tone {
-    return graphLifecycleTone(this.lifecycle(version));
+  protected badgeTone(version: GraphSummary): Tone {
+    return graphLifecycleTone(version.lifecycle);
   }
 }

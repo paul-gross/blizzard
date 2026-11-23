@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { type FindingFactView, KitAsyncState, injectNowSignal } from 'fleet';
+import { KitAsyncState, injectNowSignal } from 'fleet';
+
+import type { FindingFact } from '../core/finding.domain';
 import { deriveFactTimelineRows, type FindingFactRow } from './finding-fact-timeline-rows';
 
 /**
@@ -22,7 +24,7 @@ import { deriveFactTimelineRows, type FindingFactRow } from './finding-fact-time
   styleUrl: './finding-fact-timeline.css',
 })
 export class FleetFindingFactTimeline {
-  readonly facts = input.required<readonly FindingFactView[]>();
+  readonly facts = input.required<readonly FindingFact[]>();
 
   protected readonly rows = computed<readonly FindingFactRow[]>(() => deriveFactTimelineRows(this.facts(), new Date(this.now())));
 

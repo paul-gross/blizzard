@@ -54,7 +54,7 @@ describe('injectHubGardenProposalsQuery', () => {
     const fixture = TestBed.createComponent(TestGardenProposalsQueryHost);
     await settle(fixture);
 
-    expect(fixture.componentInstance.query.data()?.map((p) => p.proposal_id)).toEqual(['gp_1', 'gp_2']);
+    expect(fixture.componentInstance.query.data()?.map((p) => p.id)).toEqual(['gp_1', 'gp_2']);
     expect(stub.forRoute('/api/garden-proposals', 'GET')).toHaveLength(2);
   });
 });

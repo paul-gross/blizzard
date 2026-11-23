@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter, type ParamMap } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { FLEET_CLOCK, type GraphSummaryView, type MeResponse, type RoutineView, type UrgencyView } from 'fleet';
+import { FLEET_CLOCK } from 'fleet';
 import {
   OPERATOR_ME_RESPONSE,
   gardenGraphSummaryView,
@@ -31,7 +31,7 @@ import { GardeningRoutineDetail } from './gardening-routine-detail';
  * `graph:edit` — the default for tests unconcerned with the panel's gated
  * retire/enable controls (`gardening-scope-detail.spec.ts`'s own
  * `VIEWER_ME_RESPONSE`). */
-const VIEWER_ME_RESPONSE: MeResponse = {
+const VIEWER_ME_RESPONSE: typeof OPERATOR_ME_RESPONSE = {
   ...OPERATOR_ME_RESPONSE,
   permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'graph:edit'),
 };
@@ -95,9 +95,9 @@ describe('GardeningRoutineDetail', () => {
 
   async function render(
     opts: {
-      routines?: RoutineView[];
-      graphs?: GraphSummaryView[];
-      me?: MeResponse;
+      routines?: ReturnType<typeof gardenRoutineView>[];
+      graphs?: ReturnType<typeof gardenGraphSummaryView>[];
+      me?: typeof OPERATOR_ME_RESPONSE;
       routes?: HubRoutes;
       params?: Record<string, string>;
     } = {},
@@ -579,7 +579,7 @@ describe('GardeningRoutineDetail', () => {
   });
 
   it('edits the default urgency, sending only that field', async () => {
-    const normal: UrgencyView = {
+    const normal = {
       urgency_id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false,
       color: '#888888', emoji: null, icon: null, place: 0, revision: 1,
       open_chunks: 0, created_at: '2026-01-01T00:00:00Z', created_by: 'operator',

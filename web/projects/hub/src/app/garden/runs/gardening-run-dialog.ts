@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 import { apply, form } from '@angular/forms/signals';
 
-import { asyncStateOf, createRefusalState, type UrgencyReference, type RoutineBaselineView, type RoutineRunResponse, type ScopeView, submitForm } from 'fleet';
+import { asyncStateOf, createRefusalState, type UrgencyReference, submitForm } from 'fleet';
 import { injectHubRoutineBaselinesQuery } from './routine-baselines.query';
 import { injectHubRoutineScopesQuery } from '../core/routines.query';
 import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
 import { injectHubScopesQuery } from '../core/scopes.query';
-import { EMPTY_RUN_DRAFT, type RunDraft } from '../core/run.domain';
+import { EMPTY_RUN_DRAFT, type RoutineBaseline, type RunDraft, type RunResponse } from '../core/run.domain';
+import type { Scope } from '../core/scope.domain';
 import { runRules } from './run.form';
 import { injectRunService } from './run.service';
 
@@ -56,7 +57,7 @@ export class GardeningRunDialog {
 
   /** The routine's related, non-retired scopes — a retired scope stays related
    * but is offered to no run. */
-  private readonly liveScopes = computed<readonly ScopeView[]>(() =>
+  private readonly liveScopes = computed<readonly Scope[]>(() =>
     liveRelatedScopes(this.scopesQuery.data() ?? [], this.relatedSlugs()),
   );
 
@@ -65,7 +66,7 @@ export class GardeningRunDialog {
 
   /** Previously-swept scopes first, in newest-swept-first order; every other
    * live, related scope after, in the order `GET /api/scopes` served them. */
-  protected readonly orderedScopes = computed<readonly ScopeView[]>(() =>
+  protected readonly orderedScopes = computed<readonly Scope[]>(() =>
     orderScopesBySwept(this.liveScopes(), this.baselinesQuery.data() ?? [], this.sweptSlugs()),
   );
 
@@ -77,7 +78,7 @@ export class GardeningRunDialog {
   private readonly runService = injectRunService();
   protected readonly submitting = this.runService.pending;
 
-  protected readonly confirmedRun = signal<RoutineRunResponse | null>(null);
+  protected readonly confirmedRun = signal<RunResponse | null>(null);
 
   private readonly draft = signal<RunDraft>(EMPTY_RUN_DRAFT);
   private readonly refusal = createRefusalState<RunDraft>();
@@ -91,7 +92,7 @@ export class GardeningRunDialog {
   });
 
   /** The delta baseline for the chosen scope, or `undefined` for a never-swept pair or no choice yet. */
-  protected readonly baseline = computed<RoutineBaselineView | undefined>(() =>
+  protected readonly baseline = computed<RoutineBaseline | undefined>(() =>
     baselineForScope(this.baselinesQuery.data() ?? [], this.draft().scope),
   );
 

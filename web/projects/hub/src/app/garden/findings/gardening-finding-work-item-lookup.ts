@@ -2,7 +2,7 @@ import { computed } from '@angular/core';
 import { injectHubGardenProposalsQuery } from '../proposals/garden-proposals.query';
 import { injectHubWorkItemsQuery, type WorkItemPointer } from '../core/work-item.query';
 import { type ProposalWorkItemVm } from '../proposals/proposal-panel';
-import { type WorkItemView } from 'fleet';
+import type { WorkItem } from '../core/work-item.domain';
 
 /** A finding id's own resolved work item, or `null` while no accepted-and-minted
  * proposal names it. */
@@ -25,9 +25,9 @@ export function injectFindingWorkItemLookup(): FindingWorkItemLookup {
     const map = new Map<string, WorkItemPointer>();
     for (const proposal of proposalsQuery.data() ?? []) {
       const closure = proposal.closure;
-      if (closure?.closure !== 'accepted' || closure.item_outcome !== 'minted') continue;
+      if (closure?.kind !== 'accepted' || closure.itemOutcome !== 'minted') continue;
       const pointer: WorkItemPointer = { source: closure.source!, ref: closure.ref! };
-      for (const findingId of proposal.findings) map.set(findingId, pointer);
+      for (const findingId of proposal.findingIds) map.set(findingId, pointer);
     }
     return map;
   });
@@ -42,18 +42,18 @@ export function injectFindingWorkItemLookup(): FindingWorkItemLookup {
 
   const workItemsQuery = injectHubWorkItemsQuery(() => workItemPointers());
 
-  const workItemsByPointerKey = computed<ReadonlyMap<string, WorkItemView>>(
+  const workItemsByPointerKey = computed<ReadonlyMap<string, WorkItem>>(
     () => new Map((workItemsQuery.data() ?? []).map((item) => [`${item.source}:${item.ref}`, item])),
   );
 
   /** `label` falls back to the bare pointer, `gardening-proposals-page.ts`'s own
-   * `workItemVm` fallback, since `WorkItemView.label` is itself nullable. */
+   * `workItemVm` fallback, since a work item's `label` is itself nullable. */
   function workItemFor(findingId: string): ProposalWorkItemVm | null {
     const pointer = findingWorkItemPointers().get(findingId);
     if (pointer === undefined) return null;
     const item = workItemsByPointerKey().get(`${pointer.source}:${pointer.ref}`);
     if (item === undefined) return null;
-    return { label: item.label ?? `${pointer.source}:${pointer.ref}`, webUrl: item.web_url ?? null };
+    return { label: item.label ?? `${pointer.source}:${pointer.ref}`, webUrl: item.webUrl };
   }
 
   return { workItemFor };

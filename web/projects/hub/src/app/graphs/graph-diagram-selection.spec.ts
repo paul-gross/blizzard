@@ -1,4 +1,4 @@
-import type { GraphView, GraphNodeView } from 'fleet';
+import type { Graph, GraphNode } from './graph.domain';
 import {
   endpointNodeIds,
   incidentEdgeIds,
@@ -8,35 +8,29 @@ import {
 } from './graph-diagram-selection';
 import type { LaidOutGraph } from './graph-layout';
 
-const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'definition_yaml' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
-  definition_yaml: '',
-  artifacts: [],
+const GRAPH_DEFAULTS: Pick<Graph, 'edges' | 'retired' | 'sessions'> = {
   edges: [],
-  follow_latest: null,
   retired: false,
   sessions: [],
-  warnings: [],
 };
 
-const NODE_DEFAULTS: Pick<GraphNodeView, 'action' | 'action_args' | 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+const NODE_DEFAULTS: Pick<GraphNode, 'action' | 'actionArgs' | 'checks' | 'choices' | 'judgementPrompt' | 'produces' | 'prompt' | 'retriesExhausted' | 'retriesMax' | 'sessionSource'> = {
   action: null,
-  action_args: {},
+  actionArgs: {},
   checks: [],
-  checks_cwd: null,
-  checks_timeout: null,
   choices: [],
-  judgement_prompt: null,
+  judgementPrompt: null,
   produces: [],
   prompt: null,
-  retries_exhausted: null,
-  retries_max: null,
-  session_source: null,
+  retriesExhausted: null,
+  retriesMax: null,
+  sessionSource: null,
 };
 
-const EDGE_DEFAULTS: Pick<GraphView['edges'][number], 'prompt_addendum' | 'target_graph' | 'target_kind'> = {
-  prompt_addendum: null,
-  target_graph: null,
-  target_kind: 'node',
+const EDGE_DEFAULTS: Pick<Graph['edges'][number], 'promptAddendum' | 'targetGraph' | 'targetKind'> = {
+  promptAddendum: null,
+  targetGraph: null,
+  targetKind: 'node',
 };
 
 /** A minimal three-node layout: `n_a` has only outgoing edges, `n_b` has both an
@@ -61,49 +55,47 @@ const LAID_OUT: LaidOutGraph = {
   migrations: [],
 };
 
-const GRAPH: GraphView = {
+const GRAPH: Graph = {
   ...GRAPH_DEFAULTS,
-  graph_id: 'gr_test',
+  graphId: 'gr_test',
   name: 'test',
-  enabled: true,
-  entry_node_id: 'n_a',
+  entryNodeId: 'n_a',
   nodes: [
     {
       ...NODE_DEFAULTS,
-      node_id: 'n_a',
+      nodeId: 'n_a',
       name: 'a',
       executor: 'runner',
       session: 'fresh',
-      judged_by: 'worker',
-      choices: [{ requires_checks: false, choice_id: 'c_pass', name: 'pass', description: 'moves on' }],
+      judgedBy: 'worker',
+      choices: [{ choiceId: 'c_pass', name: 'pass', description: 'moves on' }],
     },
     {
       ...NODE_DEFAULTS,
-      node_id: 'n_b',
+      nodeId: 'n_b',
       name: 'b',
       executor: 'runner',
       session: 'fresh',
-      judged_by: 'worker',
+      judgedBy: 'worker',
       choices: [
-        { requires_checks: false, choice_id: 'c_pass2', name: 'pass', description: '' },
-        { requires_checks: false, choice_id: 'c_fail', name: 'fail', description: '' },
+        { choiceId: 'c_pass2', name: 'pass', description: '' },
+        { choiceId: 'c_fail', name: 'fail', description: '' },
       ],
     },
     {
       ...NODE_DEFAULTS,
-      node_id: 'n_c',
+      nodeId: 'n_c',
       name: 'c',
       executor: 'hub',
       session: 'fresh',
-      judged_by: 'worker',
-      choices: [{ requires_checks: false, choice_id: 'c_done', name: 'landed', description: '' }],
+      judgedBy: 'worker',
+      choices: [{ choiceId: 'c_done', name: 'landed', description: '' }],
     },
   ],
   edges: [
-    { ...EDGE_DEFAULTS, from_node_id: 'n_a', choice_id: 'c_pass', to_node_name: 'b', prompt_addendum: 'Focus on the happy path.' },
-    { ...EDGE_DEFAULTS, from_node_id: 'n_b', choice_id: 'c_pass2', to_node_name: 'c', prompt_addendum: null },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_a', choiceId: 'c_pass', toNodeName: 'b', promptAddendum: 'Focus on the happy path.' },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_b', choiceId: 'c_pass2', toNodeName: 'c', promptAddendum: null },
   ],
-  warnings: [],
 };
 
 describe('selectionKey', () => {

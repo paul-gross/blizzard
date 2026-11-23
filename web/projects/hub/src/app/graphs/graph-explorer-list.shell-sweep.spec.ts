@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { page } from 'vitest/browser';
 
-import type { GraphSummaryView } from 'fleet';
+import { graphSummary } from './graph.builders';
 import { GraphExplorerList } from './graph-explorer-list';
 
 /**
@@ -24,28 +24,28 @@ import { GraphExplorerList } from './graph-explorer-list';
 /** One lineage whose name is long enough to compete with the row's trailing short id —
  * the case a row that merely renders short content would never exercise. */
 const GRAPHS = [
-  {
-    graph_id: 'gr_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+  graphSummary({
+    graphId: 'gr_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
     name: 'a-deliberately-long-graph-name-that-wants-the-whole-row',
-    version: 3,
-    lifecycle: 'active',
-    created_at: '2026-08-09T00:00:00.000Z',
-  },
-  {
-    graph_id: 'gr_01KXKVVF1J3D6H6VYZ3XYN3YJ8',
+    effective: false,
+    lifecycle: { kind: 'unknown', raw: 'active' },
+    createdAt: '2026-08-09T00:00:00.000Z',
+  }),
+  graphSummary({
+    graphId: 'gr_01KXKVVF1J3D6H6VYZ3XYN3YJ8',
     name: 'a-deliberately-long-graph-name-that-wants-the-whole-row',
-    version: 2,
+    effective: false,
     lifecycle: 'retired',
-    created_at: '2026-08-08T00:00:00.000Z',
-  },
-  {
-    graph_id: 'gr_01KXKVVF1J3D6H6VYZ3XYN3YJ7',
+    createdAt: '2026-08-08T00:00:00.000Z',
+  }),
+  graphSummary({
+    graphId: 'gr_01KXKVVF1J3D6H6VYZ3XYN3YJ7',
     name: 'default',
-    version: 1,
-    lifecycle: 'active',
-    created_at: '2026-08-07T00:00:00.000Z',
-  },
-] as unknown as GraphSummaryView[];
+    effective: false,
+    lifecycle: { kind: 'unknown', raw: 'active' },
+    createdAt: '2026-08-07T00:00:00.000Z',
+  }),
+];
 
 const WIDTHS = [520, 390, 320];
 

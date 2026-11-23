@@ -1,11 +1,12 @@
-import { type GardenProposalView, type KitChipOption, type RoutineView } from 'fleet';
+import { type KitChipOption } from 'fleet';
+import type { Proposal } from '../core/proposal.domain';
+import type { Routine } from '../core/routine.domain';
 import { routineDisplayName } from '../core/routine-display-name';
 import { type GardenProposalAcceptVars, type GardenProposalPassVars } from './garden-proposal.mutations';
 import { type ProposalListRowVm } from './proposal-list';
 
-/** A proposal is still waiting on a person exactly when it carries no closure
- * (`GardenProposalView.closure`). */
-export function isGardenProposalWaiting(proposal: GardenProposalView): boolean {
+/** A proposal is still waiting on a person exactly when it carries no closure. */
+export function isGardenProposalWaiting(proposal: Proposal): boolean {
   return proposal.closure == null;
 }
 
@@ -50,8 +51,8 @@ export function pendingClosureIds(
 
 /** Every class present in the fetched data, alphabetized, each with an "All
  * classes" chip ahead of them — never a hardcoded vocabulary. */
-export function proposalClassChips(proposals: readonly GardenProposalView[]): readonly KitChipOption[] {
-  const classes = Array.from(new Set(proposals.map((p) => p.class))).sort((a, b) => a.localeCompare(b));
+export function proposalClassChips(proposals: readonly Proposal[]): readonly KitChipOption[] {
+  const classes = Array.from(new Set(proposals.map((p) => p.proposalClass))).sort((a, b) => a.localeCompare(b));
   return [
     { value: ALL_CLASSES, label: 'All classes', testid: 'gardening-proposal-class-all' },
     ...classes.map((c) => ({
@@ -72,10 +73,10 @@ export function classChipValue(cls: string | null): string {
  * {@link proposalClassChips}. A routine-less operator-authored proposal
  * contributes no chip of its own: `null` names no routine to filter by. */
 export function proposalRoutineChips(
-  proposals: readonly GardenProposalView[],
-  routines: readonly RoutineView[] | undefined,
+  proposals: readonly Proposal[],
+  routines: readonly Routine[] | undefined,
 ): readonly KitChipOption[] {
-  const slugs = proposals.map((p) => p.routine_name).filter((slug) => slug !== null);
+  const slugs = proposals.map((p) => p.routineSlug).filter((slug) => slug !== null);
   const chips = Array.from(new Set(slugs))
     .map((slug) => ({ slug, label: routineDisplayName(slug, routines) }))
     .sort((a, b) => a.label.localeCompare(b.label));
@@ -102,26 +103,26 @@ export function waitingChipValue(waitingOnly: boolean): string {
  * matters in this branch: under `all` the proposal stays visible regardless of its
  * closure, pending or not. */
 export function filterProposals(
-  proposals: readonly GardenProposalView[],
+  proposals: readonly Proposal[],
   filters: ProposalFilters,
-): readonly GardenProposalView[] {
+): readonly Proposal[] {
   const { waitingOnly, cls, routine, closing } = filters;
   return proposals.filter(
     (p) =>
-      (!waitingOnly || (isGardenProposalWaiting(p) && !closing.has(p.proposal_id))) &&
-      (cls === null || p.class === cls) &&
-      (routine === null || p.routine_name === routine),
+      (!waitingOnly || (isGardenProposalWaiting(p) && !closing.has(p.id))) &&
+      (cls === null || p.proposalClass === cls) &&
+      (routine === null || p.routineSlug === routine),
   );
 }
 
 /** One docket row per proposal. */
-export function proposalListRows(proposals: readonly GardenProposalView[]): readonly ProposalListRowVm[] {
+export function proposalListRows(proposals: readonly Proposal[]): readonly ProposalListRowVm[] {
   return proposals.map((p) => ({
-    proposalId: p.proposal_id,
+    proposalId: p.id,
     title: p.title,
-    proposalClass: p.class,
+    proposalClass: p.proposalClass,
     waiting: isGardenProposalWaiting(p),
-    createdAt: p.created_at,
+    createdAt: p.createdAt,
   }));
 }
 

@@ -5,7 +5,9 @@ import {
   stubHubClient,
 } from 'fleet/testing';
 
-import { projectDomainsQueryOptions, projectsQueryOptions, readProject, readProjects } from './projects.query';
+import { QueryClient } from '@tanstack/angular-query-experimental';
+
+import { ensureProjectDomains, projectDomainsQueryOptions, projectsQueryOptions, readProject, readProjects } from './projects.query';
 
 const BLIZZARD = projectView({ created_at: '2026-10-01T00:00:00Z' });
 
@@ -29,6 +31,16 @@ describe('the projects reads', () => {
     expect(domain.queryFn).toBe(wire.queryFn);
     expect(domain.select([BLIZZARD])).toEqual([BLIZZARD]);
     expect(domain.select([BLIZZARD])[0]).not.toBe(BLIZZARD);
+  });
+
+  it('ensures the cached read and hands it back as domain projects', async () => {
+    stub = stubHubClient({
+      'GET /api/projects': () => ({ projects: [BLIZZARD] }),
+    });
+
+    const projects = await ensureProjectDomains(new QueryClient());
+    expect(projects).toEqual([BLIZZARD]);
+    expect(projects[0]).not.toBe(BLIZZARD);
   });
 
   it('reads one project by the segment a URL names, and answers none for a project the tenant does not hold', async () => {

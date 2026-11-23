@@ -115,7 +115,7 @@
                         [attr.data-testid]="'gardening-proposal-finding-state-' + row.findingId"
                         [tone]="stateTone(row)"
                         variant="text"
-                        >{{ row.state }}</fleet-kit-badge
+                        >{{ text(row.state) }}</fleet-kit-badge
                       >
                       <!-- Offered on any row that has not exited, gated off `state`; pinned by
                            `proposal-panel.spec.ts`'s "still offers every verb on a

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, u
 import { form } from '@angular/forms/signals';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { FLEET_CLOCK, asyncState, type EditBaseline, errorMessage, injectPendingMutationVariables, isPendingFor, type GraphSummaryView, type KitAsyncStateValue, submitForm } from 'fleet';
+import { FLEET_CLOCK, asyncState, type EditBaseline, errorMessage, injectPendingMutationVariables, isPendingFor, type KitAsyncStateValue, submitForm } from 'fleet';
 import { defaultRoutineWindow } from '../core/routine-window';
 import { FleetRoutinePanel, type RoutineEditField, type LastSweptRowVm, type MeasurementReadingVm, type RelatedScopeVm, type RoutinePanelVm, type StrategyStepVm } from './routine-panel';
 import {
@@ -22,8 +22,9 @@ import {
 } from './gardening-routine-detail.model';
 import { FleetRoutineProposalCounts, type ProposalCountsRowVm } from './routine-proposal-counts';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
+import type { GraphSummary } from '../../graphs/graph.domain';
 import { injectHubGraphQuery, injectHubGraphsQuery } from '../../graphs/graphs.query';
-import { injectHubRoutineProposalCountsQuery, injectHubRoutineScopesQuery, injectHubRoutineSweepsQuery, injectHubRoutineTrendQuery, injectHubRoutinesDomainQuery } from '../core/routines.query';
+import { injectHubRoutineProposalCountsQuery, injectHubRoutineScopesQuery, injectHubRoutineSweepsQuery, injectHubRoutineTrendQuery, injectHubRoutinesQuery } from '../core/routines.query';
 import { EMPTY_ROUTINE_EDIT_DRAFT, type Routine, type RoutineEditDraft } from '../core/routine.domain';
 import { toEditBaseline } from '../core/routine.translate';
 import { routineEditRules } from './routine.form';
@@ -34,7 +35,7 @@ import { map } from 'rxjs';
 
 import { isRoutineBlocked } from './gardening-effective-graph';
 import { injectLensedProject } from '../../core/lensed-project';
-import { injectHubRunsQuery } from '../runs/garden-runs.query';
+import { injectHubRunRowsQuery } from '../runs/garden-runs.query';
 import { GardeningRunDialog } from '../runs/gardening-run-dialog';
 import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
 
@@ -71,7 +72,7 @@ export class GardeningRoutineDetail {
   protected readonly urgenciesQuery = injectDomainUrgenciesQuery();
   private readonly route = inject(ActivatedRoute);
 
-  private readonly routinesQuery = injectHubRoutinesDomainQuery();
+  private readonly routinesQuery = injectHubRoutinesQuery();
   private readonly graphsQuery = injectHubGraphsQuery();
   private readonly meQuery = injectMeQuery();
   private readonly routineLifecycleMutation = injectRoutineLifecycleMutation();
@@ -95,8 +96,8 @@ export class GardeningRoutineDetail {
   protected readonly projectName = computed(() => this.project()?.name ?? null);
 
   /** The project's runs in the reporting window — the selected routine's recent runs and its Runs count. */
-  private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
-  private readonly graphs = computed<readonly GraphSummaryView[]>(() => this.graphsQuery.data() ?? []);
+  private readonly runsQuery = injectHubRunRowsQuery(() => this.window.since);
+  private readonly graphs = computed<readonly GraphSummary[]>(() => this.graphsQuery.data() ?? []);
 
   /** The `routineSlug` route param, or `null` on the bare child route. Routines are
    * keyed by their immutable `slug`, not id. */
@@ -109,7 +110,7 @@ export class GardeningRoutineDetail {
     routineBySlug(this.routineSlugParam(), this.routines()),
   );
 
-  private readonly effectiveGraph = computed<GraphSummaryView | null>(() =>
+  private readonly effectiveGraph = computed<GraphSummary | null>(() =>
     routineEffectiveGraph(this.selectedRoutine(), this.graphs(), this.graphsQuery.isPending()),
   );
 
@@ -130,7 +131,7 @@ export class GardeningRoutineDetail {
     routineOverrideRetired(this.selectedRoutine(), this.pendingRoutineLifecycle()),
   );
 
-  private readonly graphQuery = injectHubGraphQuery(() => this.effectiveGraph()?.graph_id ?? null);
+  private readonly graphQuery = injectHubGraphQuery(() => this.effectiveGraph()?.graphId ?? null);
   private readonly trendQuery = injectHubRoutineTrendQuery(
     () => this.selectedRoutine()?.slug ?? null,
     () => this.window.since,

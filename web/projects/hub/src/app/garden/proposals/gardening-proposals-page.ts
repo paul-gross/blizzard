@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
 import { acceptGardenProposalMutationKey, passGardenProposalMutationKey } from '../../core/mutation-keys';
-import { asyncState, injectPendingMutationVariables, KitMasterDetail, KitChips, KitSelect, type GardenProposalView, type KitAsyncStateValue, type KitChipOption, ViewportService } from 'fleet';
+import { asyncState, injectPendingMutationVariables, KitMasterDetail, KitChips, KitSelect, type KitAsyncStateValue, type KitChipOption, ViewportService } from 'fleet';
 import { FleetProposalList, type ProposalListRowVm } from './proposal-list';
 import { type GardenProposalAcceptVars, type GardenProposalPassVars } from './garden-proposal.mutations';
 import { injectHubGardenProposalsQuery } from './garden-proposals.query';
 import { injectHubRoutinesQuery } from '../core/routines.query';
+import type { Proposal } from '../core/proposal.domain';
 import {
   ALL_CLASSES,
   ALL_ROUTINES,
@@ -65,7 +66,7 @@ export class GardeningProposalsPage {
 
   protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
 
-  private readonly proposals = computed<readonly GardenProposalView[]>(() => this.proposalsQuery.data() ?? []);
+  private readonly proposals = computed<readonly Proposal[]>(() => this.proposalsQuery.data() ?? []);
 
   /** The `proposalId` the active detail child names (`route-state.ts`). */
   protected readonly proposalId = injectChildRouteParam('proposalId');
@@ -135,7 +136,7 @@ export class GardeningProposalsPage {
 
   /** The filtered set every other view model derives from; a proposal with a
    * pending Pass/Accept drops out of the waiting set (`bzh:frontend-pending-override`). */
-  private readonly filteredProposals = computed<readonly GardenProposalView[]>(() =>
+  private readonly filteredProposals = computed<readonly Proposal[]>(() =>
     filterProposals(this.proposals(), {
       waitingOnly: this.waitingOnly(),
       cls: this.classFilter(),
@@ -186,7 +187,7 @@ export class GardeningProposalsPage {
     const target = proposalSelectionTarget(
       !this.proposalsQuery.isPending() && !this.proposalsQuery.isError(),
       this.proposalId(),
-      this.filteredProposals().map((p) => p.proposal_id),
+      this.filteredProposals().map((p) => p.id),
       this.mobile(),
     );
     if (target === null) return;

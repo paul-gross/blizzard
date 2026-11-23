@@ -8,6 +8,8 @@ import {
 import { DRAIN_LIMIT, drainPages } from '../../core/paginated-read';
 import { injectProjectFilter } from '../../core/project-filter';
 import { lensedKey, hubGardenProposalsKey } from '../../core/query-keys';
+import type { Proposal } from '../core/proposal.domain';
+import { fromGardenProposalView } from '../core/proposal.translate';
 
 /**
  * The docket read — every garden proposal, open and closed alike: the lensed project's
@@ -40,6 +42,7 @@ export function injectHubGardenProposalsQuery(options: { readonly tenantWide?: b
                 }),
           (page) => page.proposals,
         ),
+      select: (wire: GardenProposalView[]): readonly Proposal[] => wire.map(fromGardenProposalView),
     };
   });
 }

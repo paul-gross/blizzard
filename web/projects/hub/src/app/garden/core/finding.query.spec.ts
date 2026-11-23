@@ -84,7 +84,7 @@ describe('injectHubFindingsQuery', () => {
     await settle(fixture);
 
     const data = fixture.componentInstance.query.data();
-    expect(data?.map((f) => f.finding_id).sort()).toEqual(['fin_1', 'fin_2']);
+    expect(data?.map((f) => f.id).sort()).toEqual(['fin_1', 'fin_2']);
     expect(stub.forRoute('/api/findings/fin_1', 'GET')).toHaveLength(1);
     expect(stub.forRoute('/api/findings/fin_2', 'GET')).toHaveLength(1);
   });
@@ -103,7 +103,7 @@ describe('injectHubFindingsQuery', () => {
     await settle(fixture);
 
     const data = fixture.componentInstance.query.data();
-    expect(data?.map((f) => f.finding_id)).toEqual(['fin_1']);
+    expect(data?.map((f) => f.id)).toEqual(['fin_1']);
     expect(fixture.componentInstance.query.isError()).toBe(false);
   });
 
@@ -215,7 +215,7 @@ describe('injectHubFindingsBucketQuery', () => {
     fixture.componentInstance.scope.set('blizzard');
     await settle(fixture);
 
-    expect(fixture.componentInstance.query.data()?.pages.flatMap((p) => p.findings ?? []).map((f) => f.finding_id)).toEqual(['fin_1']);
+    expect(fixture.componentInstance.query.data()?.pages.flatMap((p) => p.findings).map((f) => f.id)).toEqual(['fin_1']);
     expect(stub.urls).toHaveLength(1);
     const url = new URL(stub.urls[0]);
     expect(url.pathname).toBe('/api/findings');

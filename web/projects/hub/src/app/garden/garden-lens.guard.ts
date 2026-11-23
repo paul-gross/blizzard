@@ -2,10 +2,9 @@ import { inject } from '@angular/core';
 import { type CanActivateFn, RedirectCommand, Router } from '@angular/router';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
-import type { ProjectView } from 'fleet';
-
 import { ProjectLens, lensSegmentOf, lensedUrl, unlensedUrl } from '../core/project-lens';
-import { projectsQueryOptions } from '../core/projects.query';
+import type { Project } from '../core/project.domain';
+import { ensureProjectDomains } from '../core/projects.query';
 import { GARDENING_DOORWAY_URL, GARDENING_LANDING_TAB } from './core/garden-project';
 import { isRecordTab, readRecordProject } from './core/garden-record.query';
 
@@ -20,11 +19,11 @@ export function gardenPathOf(url: string): { readonly tab: string | null; readon
 }
 
 /** The tenant's projects, once the shell has entered its tenant; a failed read counts as none. */
-async function tenantProjects(): Promise<readonly ProjectView[]> {
+async function tenantProjects(): Promise<readonly Project[]> {
   const lens = inject(ProjectLens);
   const queryClient = inject(QueryClient);
   await lens.whenReady();
-  return queryClient.ensureQueryData(projectsQueryOptions()).catch((): readonly ProjectView[] => []);
+  return ensureProjectDomains(queryClient).catch((): readonly Project[] => []);
 }
 
 function redirectTo(router: Router, url: string): RedirectCommand {

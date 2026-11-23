@@ -25,7 +25,7 @@ export function fromRoutineView(wire: RoutineView): ScopeRoutine {
 }
 
 /** A run as the sweep of its scope. */
-export function fromRunRowView(wire: RunRowView): ScopeSweep {
+export function toScopeSweep(wire: RunRowView): ScopeSweep {
   return { scopeSlug: wire.scope_slug, mintedAt: wire.minted_at };
 }
 

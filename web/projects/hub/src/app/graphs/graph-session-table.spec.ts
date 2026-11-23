@@ -1,18 +1,18 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { GraphSessionView } from 'fleet';
+import type { GraphSession } from './graph.domain';
 import { GraphSessionTable } from './graph-session-table';
 
-const SESSION_DEFAULTS: Pick<GraphSessionView, 'compaction_window' | 'effort' | 'harnesses' | 'model' | 'rotate'> = {
-  compaction_window: null,
+const SESSION_DEFAULTS: Pick<GraphSession, 'compactionWindow' | 'effort' | 'harnesses' | 'model' | 'rotate'> = {
+  compactionWindow: null,
   effort: null,
   harnesses: [],
   model: [],
   rotate: null,
 };
 
-const SESSIONS: readonly GraphSessionView[] = [
+const SESSIONS: readonly GraphSession[] = [
   {
     ...SESSION_DEFAULTS,
     name: 'planning',
@@ -24,8 +24,8 @@ const SESSIONS: readonly GraphSessionView[] = [
     model: ['blizzard:basic', 'gpt-5.3-codex'],
     harnesses: ['claude_code', 'opencode'],
     effort: 'medium',
-    compaction_window: '100000',
-    rotate: { max_transcript_bytes: null, max_context_tokens: 120000, max_invocations: 30 },
+    compactionWindow: '100000',
+    rotate: { maxTranscriptBytes: null, maxContextTokens: 120000, maxInvocations: 30 },
   },
   {
     ...SESSION_DEFAULTS,
@@ -56,7 +56,7 @@ describe('GraphSessionTable', () => {
     expect(code.textContent).toContain('claude code, opencode');
     expect(code.textContent).toContain('medium');
     expect(code.textContent).toContain('100000');
-    // Only the two thresholds the declaration actually set, and `max_invocations`
+    // Only the two thresholds the declaration actually set, and `maxInvocations`
     // labelled as invocations rather than node-steps.
     expect(code.textContent).toContain('120000 ctx tokens');
     expect(code.textContent).toContain('30 invocations');

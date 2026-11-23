@@ -23,7 +23,7 @@
       <fleet-kit-select-row
         [value]="groupValue(group)"
         [label]="group.name"
-        [class.ge-group-open]="group.effective.graph_id === selectedGraphId()"
+        [class.ge-group-open]="group.effective.graphId === selectedGraphId()"
         [testid]="'graph-explorer-group-toggle'"
       >
         <div class="ge-group-body">
@@ -31,30 +31,30 @@
           <div class="ge-group-line">
             <span class="ge-group-left">
               <span class="ge-count" data-testid="graph-explorer-group-count">({{ group.versions.length }})</span>
-              <fleet-when [iso]="group.effective.created_at" />
+              <fleet-when [iso]="group.effective.createdAt" />
             </span>
             <span
               class="ge-group-ref"
               data-testid="graph-explorer-group-effective"
-              [title]="group.effective.graph_id"
-              >{{ shortId(group.effective.graph_id) }}</span
+              [title]="group.effective.graphId"
+              >{{ shortId(group.effective.graphId) }}</span
             >
           </div>
         </div>
       </fleet-kit-select-row>
       @if (isExpanded(group)) {
         <div class="lineage" role="none" data-testid="graph-explorer-lineage">
-          @for (version of group.versions; track version.graph_id) {
-            <div class="row-item" role="none" [attr.data-graph-id]="version.graph_id">
+          @for (version of group.versions; track version.graphId) {
+            <div class="row-item" role="none" [attr.data-graph-id]="version.graphId">
               <fleet-kit-select-row
-                [value]="version.graph_id"
-                [label]="version.graph_id"
+                [value]="version.graphId"
+                [label]="version.graphId"
                 [testid]="'graph-explorer-row'"
               >
                 <div class="ge-row-body">
                   <div class="ge-row-line">
-                    <span class="ge-gid" data-testid="graph-explorer-graph-id" [title]="version.graph_id">{{
-                      shortId(version.graph_id)
+                    <span class="ge-gid" data-testid="graph-explorer-graph-id" [title]="version.graphId">{{
+                      shortId(version.graphId)
                     }}</span>
                     <fleet-kit-badge
                       class="ge-badge"
@@ -65,7 +65,7 @@
                     >
                   </div>
                   <div class="ge-row-line ge-row-meta">
-                    <fleet-when data-testid="graph-explorer-created-at" [iso]="version.created_at" />
+                    <fleet-when data-testid="graph-explorer-created-at" [iso]="version.createdAt" />
                   </div>
                 </div>
               </fleet-kit-select-row>

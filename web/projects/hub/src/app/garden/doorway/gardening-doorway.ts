@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { KitAsyncState, asyncStateOf } from 'fleet';
 
 import { ProjectLens } from '../../core/project-lens';
-import { injectProjectsQuery } from '../../core/projects.query';
+import { injectProjectDomainsQuery } from '../../core/projects.query';
 import { injectHubCadencesQuery } from '../core/cadences.query';
 import { GARDENING_DOORWAY_URL, GARDENING_LANDING_TAB } from '../core/garden-project';
 import { injectHubRoutinesQuery } from '../core/routines.query';
@@ -21,7 +21,7 @@ import { doorwayCards } from './gardening-doorway.model';
 })
 export class GardeningDoorway {
   private readonly lens = inject(ProjectLens);
-  private readonly projectsQuery = injectProjectsQuery();
+  private readonly projectsQuery = injectProjectDomainsQuery();
   private readonly cadencesQuery = injectHubCadencesQuery();
   private readonly routinesQuery = injectHubRoutinesQuery();
   private readonly proposalsQuery = injectHubGardenProposalsQuery();

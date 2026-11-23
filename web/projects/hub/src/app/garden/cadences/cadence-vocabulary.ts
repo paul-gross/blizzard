@@ -1,4 +1,6 @@
-import { AttentionReason, ErrandState, openLookup, RunMode, type Tone } from 'fleet';
+import { openLookup, type Tone } from 'fleet';
+
+import type { CadenceAttentionReason, ChoreMode, ErrandState } from '../core/cadence.domain';
 
 /** An errand state's label and badge tone. */
 export interface ErrandStateLook {
@@ -12,39 +14,31 @@ export interface ErrandStateLook {
  */
 export const errandStateLook = openLookup<ErrandState, ErrandStateLook>(
   {
-    [ErrandState.DUE]: { label: 'due', tone: 'spawning' },
-    [ErrandState.RUNNING]: { label: 'running', tone: 'running' },
-    [ErrandState.WAITING]: { label: 'waiting', tone: 'waiting' },
-    [ErrandState.STOPPED]: { label: 'stopped', tone: 'stale' },
+    due: { label: 'due', tone: 'spawning' },
+    running: { label: 'running', tone: 'running' },
+    waiting: { label: 'waiting', tone: 'waiting' },
+    stopped: { label: 'stopped', tone: 'stale' },
   },
   (raw) => ({ label: raw, tone: 'idle' }),
 );
 
 /** The errand states in the order a cadence's counts read them. */
-export const ERRAND_STATES: readonly ErrandState[] = [
-  ErrandState.DUE,
-  ErrandState.RUNNING,
-  ErrandState.WAITING,
-  ErrandState.STOPPED,
-];
+export const ERRAND_STATES: readonly ErrandState[] = ['due', 'running', 'waiting', 'stopped'];
 
 /** Why attention stops an errand, as a person reads it. A reason this build does not know renders raw. */
-export const attentionReasonLabel = openLookup<AttentionReason, string>(
+export const attentionReasonLabel = openLookup<CadenceAttentionReason, string>(
   {
-    [AttentionReason.ROUTINE_UNKNOWN]: 'its routine does not exist',
-    [AttentionReason.ROUTINE_RETIRED]: 'its routine is retired',
-    [AttentionReason.GRAPH_UNRESOLVED]: "its routine's graph does not resolve",
-    [AttentionReason.SCOPE_UNKNOWN]: 'the scope does not exist',
-    [AttentionReason.SCOPE_RETIRED]: 'the scope is retired',
-    [AttentionReason.SCOPE_UNLINKED]: 'the scope is not linked to the routine',
-    [AttentionReason.NO_SCOPES]: 'no scope to run over',
-    [AttentionReason.NO_CHORES]: 'the cadence keeps no chore',
+    routine_unknown: 'its routine does not exist',
+    routine_retired: 'its routine is retired',
+    graph_unresolved: "its routine's graph does not resolve",
+    scope_unknown: 'the scope does not exist',
+    scope_retired: 'the scope is retired',
+    scope_unlinked: 'the scope is not linked to the routine',
+    no_scopes: 'no scope to run over',
+    no_chores: 'the cadence keeps no chore',
   },
   (raw) => raw,
 );
 
 /** A chore's run mode, as a person reads it. A mode this build does not know renders raw. */
-export const choreModeLabel = openLookup<RunMode, string>(
-  { [RunMode.FULL]: 'full', [RunMode.DELTA]: 'delta' },
-  (raw) => raw,
-);
+export const choreModeLabel = openLookup<ChoreMode, string>({ full: 'full', delta: 'delta' }, (raw) => raw);

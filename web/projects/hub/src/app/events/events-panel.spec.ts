@@ -3,7 +3,6 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import type { EventView } from 'fleet';
 import { eventView, settle, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { EventsPanel } from './events-panel';
 
@@ -38,7 +37,7 @@ async function openSelect(fixture: ComponentFixture<unknown>, testid: string) {
 describe('EventsPanel', () => {
   let stub: RequestClientStub;
 
-  const render = async (events: EventView[] = EVENTS, url = '/events') => {
+  const render = async (events: ReturnType<typeof eventView>[] = EVENTS, url = '/events') => {
     stub = stubHubClient({ 'GET /api/events': () => ({ events }) });
     await TestBed.configureTestingModule({
       imports: [EventsPanel],
