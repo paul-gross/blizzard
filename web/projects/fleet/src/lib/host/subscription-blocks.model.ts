@@ -1,4 +1,3 @@
-import { SampleMissReason } from '../api/hub';
 import type { SubscriptionPace } from './subscription-pace.model';
 
 /** One rate-limit window of a subscription: the figures `KitPaceBar` draws as blocks. */
@@ -25,7 +24,7 @@ export interface SubscriptionLine {
 }
 
 /** Whether a subscription's newest reading is a lapsed credential. */
-export const isLapsed = (pace: SubscriptionPace): boolean => pace.condition === SampleMissReason.CREDENTIAL_LAPSED;
+export const isLapsed = (pace: SubscriptionPace): boolean => pace.condition === 'credential_lapsed';
 
 /** A subscription's pace rows folded to its line of blocks. */
 export function subscriptionLine(pace: SubscriptionPace): SubscriptionLine {

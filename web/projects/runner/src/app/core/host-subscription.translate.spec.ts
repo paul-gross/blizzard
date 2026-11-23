@@ -19,8 +19,8 @@ describe('runnerSubscription', () => {
   it('preserves unrecognized vocabulary at the wire boundary and defaults missing collections', () => {
     const row = { slug: 's', name: 'S', provider: 'p', condition: 'new_condition', miss_reason: 'new_miss',
       renewal_result: 'deferred', renewal_failure_reason: 'new_failure' } as unknown as runnerApi.HostSubscriptionView;
-    expect(runnerSubscription(row)).toMatchObject({ condition: 'new_condition', miss_reason: 'new_miss',
-      renewal_result: 'deferred', renewal_failure_reason: 'new_failure', windows: [], spenders: [], sampled_at: null,
+    expect(runnerSubscription(row)).toMatchObject({ condition: { kind: 'unknown', raw: 'new_condition' }, miss_reason: { kind: 'unknown', raw: 'new_miss' },
+      renewal_result: { kind: 'unknown', raw: 'deferred' }, renewal_failure_reason: { kind: 'unknown', raw: 'new_failure' }, windows: [], spenders: [], sampled_at: null,
       windows_sampled_at: null, ok: null, renewal_attempted_at: null });
   });
 });

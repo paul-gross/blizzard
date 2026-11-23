@@ -85,7 +85,7 @@ describe('activityRows', () => {
     const rows = activityRows(
       [
         event(1, 0, { type: HubEventType.QUESTION_ASKED, data: { chunk_id: 'ch_1' } }),
-        event(2, 0, { type: 'some-new-type' }),
+        event(2, 0, { type: { kind: 'unknown', raw: 'some-new-type' } }),
       ],
       NO_HOSTS,
     );

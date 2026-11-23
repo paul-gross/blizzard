@@ -24,6 +24,6 @@ describe('hostFact', () => {
   it('preserves unknown connection and sample labels', () => {
     const wire = { host_id: 'h', host_name: 'H', online: false, connection: 'reconnecting', enrolled: true,
       added_at: 't', retired: false, subscription_usage: [{ slug: 's', name: 'S', condition: 'new_condition', miss_reason: 'new_miss' }] } as unknown as HostRegistryView;
-    expect(hostFact(wire)).toMatchObject({ connection: 'reconnecting', subscription_usage: [{ condition: 'new_condition', miss_reason: 'new_miss', windows: [], runners: [], sampled_at: null }] });
+    expect(hostFact(wire)).toMatchObject({ connection: { kind: 'unknown', raw: 'reconnecting' }, subscription_usage: [{ condition: { kind: 'unknown', raw: 'new_condition' }, miss_reason: { kind: 'unknown', raw: 'new_miss' }, windows: [], runners: [], sampled_at: null }] });
   });
 });

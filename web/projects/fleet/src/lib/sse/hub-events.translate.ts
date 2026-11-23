@@ -1,8 +1,8 @@
-import { HubEventKind, type HubEventData } from './hub-events.domain';
-import { type HubEventType } from '../api/hub';
+import { HubEventKind, type HubEventData, type HubEventType } from './hub-events.domain';
+import { type HubEventType as WireHubEventType } from '../api/hub';
 import { openLookup } from '../core/open-lookup';
 
-const kinds = openLookup<HubEventType, HubEventKind | null>({
+const kinds = openLookup<WireHubEventType, HubEventKind | null>({
   'chunk-changed': HubEventKind.CHUNK_CHANGED,
   'question-asked': HubEventKind.QUESTION_ASKED,
   'question-answered': HubEventKind.QUESTION_ANSWERED,
@@ -16,14 +16,17 @@ const kinds = openLookup<HubEventType, HubEventKind | null>({
 }, () => null);
 /** Every known wire name is subscribed; the table is exhaustive over the generated boundary. */
 export const HUB_EVENT_TYPES: readonly string[] = kinds.keys;
+export function translateHubEventType(type: string): HubEventType {
+  return kinds(type) ?? { kind: 'unknown', raw: type };
+}
 const fields = ['key', 'chunk_id', 'runner_id', 'runner_name', 'host_id', 'host_name', 'question_id', 'decision_id',
   'flow_id', 'submission_id', 'project_id', 'graph_id', 'status', 'prev_status', 'node', 'prev_node', 'cause', 'kind',
   'by', 'reason', 'severity', 'outcome'] as const;
 
 /** Translate once at ingress; unknown frames retain their vocabulary and payload for diagnostics. */
-export function translateHubEvent(type: string, raw: unknown): { type: string; data: HubEventData } | null {
-  const kind = kinds(type);
-  if (kind === null) return { type, data: { raw } };
+export function translateHubEvent(type: string, raw: unknown): { type: HubEventType; data: HubEventData } | null {
+  const kind = translateHubEventType(type);
+  if (typeof kind !== 'string') return { type: kind, data: { raw } };
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const source = raw as Record<string, unknown>;
   const data: Record<string, string | boolean | null> = {};

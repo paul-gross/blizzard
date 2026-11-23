@@ -1,7 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { type ActivityView, listActivityApiActivityGet } from 'fleet';
-import { type ActivityFact } from 'fleet/shell';
+import { HubEventKind, openLookup, type ActivityFact, type HubEventType } from 'fleet/shell';
 import { hubActivityKey, lensedKey } from '../../core/query-keys';
 import { injectProjectFilter } from '../../core/project-filter';
 
@@ -12,10 +12,17 @@ import { injectProjectFilter } from '../../core/project-filter';
  */
 export const ACTIVITY_LIMIT = 200;
 
+const activityTypes = openLookup<ActivityView['type'], HubEventType>({
+  'chunk-changed': HubEventKind.CHUNK_CHANGED,
+  'runner-changed': HubEventKind.RUNNER_CHANGED,
+  'event-logged': HubEventKind.EVENT_LOGGED,
+}, (raw) => ({ kind: 'unknown', raw }));
+
 /** Translate the durable read at the boundary into the same facts the live feed uses. */
 export function translateActivityRow(row: ActivityView): ActivityFact {
   const { at, type, key, ...data } = row;
-  return { at: Date.parse(at), type, key, data: { ...data, key } };
+  const eventType = activityTypes(type);
+  return { at: Date.parse(at), type: eventType, key, data: { ...data, key, ...(typeof eventType === 'string' ? {} : { raw: row }) } };
 }
 
 /**

@@ -6,7 +6,7 @@ import {
   type KitAsyncStateValue,
   runnerDisplayName,
 } from 'fleet';
-import { HubEventKind, type ActivityFact } from 'fleet/shell';
+import { HubEventKind, hubEventTypeName, type ActivityFact } from 'fleet/shell';
 import { type ActivityRow } from './activity-view';
 import { summarizeChunkChange } from './chunk-change-summary';
 import { type LoggedEvent } from '../../core/live/hub-live-updates';
@@ -75,7 +75,7 @@ function summarize(event: LoggedEvent, hostNames: ReadonlyMap<string, string>): 
         message: `${chunk || (event.data.runner_id ? runnerDisplayName(event.data.runner_id, event.data.runner_name, hostNames.get(event.data.runner_id)) : '—')} · ${event.data.severity ?? '—'} ${event.data.kind ?? '—'}`,
       };
     default:
-      return { message: event.type };
+      return { message: hubEventTypeName(event.type) };
   }
 }
 
@@ -127,7 +127,7 @@ export function activityRows(merged: readonly LoggedEvent[], hostNames: Readonly
   return merged
     .map((event) => ({
       seq: event.seq,
-      type: event.type,
+      type: hubEventTypeName(event.type),
       time: formatClockTime(event.at),
       ...summarize(event, hostNames),
     }))

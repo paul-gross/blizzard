@@ -24,3 +24,4 @@ export { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from './lib/core/polling/polling
 
 export * as runnerApi from './lib/api/runner';
 export { client as runnerClient } from './lib/api/runner/client.gen';
+export { sampleMiss, renewalResult, renewalFailure } from './lib/core/host.translate';

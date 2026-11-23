@@ -6,14 +6,15 @@ export interface UsageWindow {
   readonly window_seconds: number;
 }
 
-/** Open vocabularies preserve labels introduced by a newer host or hub. */
+/** Unrecognized labels retain their original spelling. */
+export interface UnknownHostValue { readonly kind: 'unknown'; readonly raw: string }
 export type KnownSampleMiss = 'credential_lapsed' | 'credential_unreadable' | 'endpoint_unreachable' | 'response_unparseable';
-export type SampleMiss = KnownSampleMiss | (string & {});
+export type SampleMiss = KnownSampleMiss | UnknownHostValue;
 
-export type RenewalResult = 'renewed' | 'failed' | 'unrecorded' | (string & {});
+export type RenewalResult = 'renewed' | 'failed' | 'unrecorded' | UnknownHostValue;
 export type KnownRenewalFailure = 'renewer_unavailable' | 'timed_out' | 'vendor_refused' | 'protocol_error';
-export type RenewalFailure = KnownRenewalFailure | (string & {});
-export type HostConnection = 'never_connected' | 'online' | 'offline' | (string & {});
+export type RenewalFailure = KnownRenewalFailure | UnknownHostValue;
+export type HostConnection = 'never_connected' | 'online' | 'offline' | UnknownHostValue;
 
 /** Runner-host subscription facts, independent of its transport. */
 export interface RunnerSubscription {

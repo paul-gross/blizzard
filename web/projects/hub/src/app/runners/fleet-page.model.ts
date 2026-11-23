@@ -32,7 +32,7 @@ export function fleetList(groups: HostGroups<RunnerRow>): FleetList {
       id: card.hostId,
       name: card.hostName,
       online: card.online,
-      connection: card.connection,
+      connection: typeof card.connection === 'string' ? card.connection : card.connection.raw,
       light: hostLight(card.online, card.connection),
       agents: declaredAgents(rows),
       ref: compactRef(card.hostId),

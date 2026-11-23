@@ -103,7 +103,7 @@ export function sampledAgoLabel(sampledAt: string | null, now: number): string {
 export function conditionLabel(ok: boolean | null, missReason: SampleMiss | null): string {
   if (ok === null) return 'never sampled';
   if (ok) return 'ok';
-  return `miss: ${missReason === null ? 'unknown' : MISS_REASON_TEXT(missReason)}`;
+  return `miss: ${missReason === null ? 'unknown' : typeof missReason === 'string' ? MISS_REASON_TEXT(missReason) : missReason.raw}`;
 }
 
 /** The newest credential renewal in operator words, aged against `now` — `null` when the
@@ -120,11 +120,11 @@ export function renewalLabel(
     case 'renewed':
       return `renewed ${ago}`;
     case 'failed':
-      return `failed (${failureReason === null ? 'unknown cause' : RENEWAL_FAILURE_TEXT(failureReason)}) ${ago}`;
+      return `failed (${failureReason === null ? 'unknown cause' : typeof failureReason === 'string' ? RENEWAL_FAILURE_TEXT(failureReason) : failureReason.raw}) ${ago}`;
     case 'unrecorded':
       return `attempted ${ago}, outcome not recorded`;
     default:
-      return `${result} ${ago}`;
+      return `${result.raw} ${ago}`;
   }
 }
 
@@ -150,7 +150,7 @@ export function runnerSubscriptionPaces(
       name: sub.name,
       provider: sub.provider,
       paceBars: toPaceBars(now, sub.windows ?? []),
-      condition: lapsed || (condition !== null && !MISS_REASON_TEXT.has(condition)) ? condition : null,
+      condition: lapsed || (condition !== null && typeof condition !== 'string') ? condition : null,
       sampledAt: windowsSampledAt,
       refreshedLabel: delta === null ? null : formatRefreshedAgo(delta),
       refreshedTag: delta === null ? null : formatSeenTag(windowsSampledAt, now),

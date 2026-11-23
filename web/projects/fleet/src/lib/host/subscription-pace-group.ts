@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { SampleMissReason } from '../api/hub';
 import { KitPaceBar } from '../kit/kit-pace-bar';
 import { toneColor } from '../kit/kit-badge';
 import { freshnessTone, LAPSED_TONE, sampleTone, type SubscriptionPace } from './subscription-pace.model';
@@ -31,7 +30,9 @@ import { freshnessTone, LAPSED_TONE, sampleTone, type SubscriptionPace } from '.
   styleUrl: './subscription-pace-group.css',
 })
 export class SubscriptionPaceGroup {
-  protected readonly SampleMissReason = SampleMissReason;
+  protected missLabel(reason: SubscriptionPace['missReason']): string {
+    return reason === null ? '' : typeof reason === 'string' ? reason : reason.raw;
+  }
 
   /** The lapsed notice's colour — the one tone the blocks line reads too. */
   protected readonly lapsedColor = toneColor(LAPSED_TONE);

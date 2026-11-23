@@ -168,7 +168,7 @@ describe('conditionLabel', () => {
   });
 
   it('reads a miss reason this build does not know raw', () => {
-    expect(conditionLabel(false, 'quota_exceeded')).toBe('miss: quota_exceeded');
+    expect(conditionLabel(false, { kind: 'unknown', raw: 'quota_exceeded' })).toBe('miss: quota_exceeded');
   });
 });
 
@@ -196,8 +196,8 @@ describe('renewalLabel', () => {
   });
 
   it('reads a result or failure reason this build does not know raw', () => {
-    expect(renewalLabel('deferred', null, ATTEMPTED, NOW)).toBe('deferred -34s ago');
-    expect(renewalLabel('failed', 'revoked', ATTEMPTED, NOW)).toBe('failed (revoked) -34s ago');
+    expect(renewalLabel({ kind: 'unknown', raw: 'deferred' }, null, ATTEMPTED, NOW)).toBe('deferred -34s ago');
+    expect(renewalLabel('failed', { kind: 'unknown', raw: 'revoked' }, ATTEMPTED, NOW)).toBe('failed (revoked) -34s ago');
   });
 });
 
@@ -281,13 +281,13 @@ describe('runnerSubscriptionPaces', () => {
     const [raw, unknown] = runnerSubscriptionPaces(
       [
         { ...UNREPORTED, slug: 'a', name: 'A', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed' },
-        { ...UNREPORTED, slug: 'b', name: 'B', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed', condition: 'mystery' },
+        { ...UNREPORTED, slug: 'b', name: 'B', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed', condition: { kind: 'unknown', raw: 'mystery' } },
       ],
       NOW,
       runnerName,
     );
     expect(raw.condition).toBeNull();
-    expect(unknown.condition).toBe('mystery');
+    expect(unknown.condition).toEqual({ kind: 'unknown', raw: 'mystery' });
   });
 });
 

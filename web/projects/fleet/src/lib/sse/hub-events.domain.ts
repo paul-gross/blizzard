@@ -6,6 +6,13 @@ export const HubEventKind = {
 } as const;
 export type HubEventKind = typeof HubEventKind[keyof typeof HubEventKind];
 
+/** Known event kinds are distinct from an unforeseen wire name. */
+export type HubEventType = HubEventKind | { readonly kind: 'unknown'; readonly raw: string };
+
+export function hubEventTypeName(type: HubEventType): string {
+  return typeof type === 'string' ? type : type.raw;
+}
+
 /** Facts used by live invalidation and Activity, with open string vocabularies. */
 export interface HubEventData {
   /** Original payload of an unfamiliar frame, retained for diagnostics. */
@@ -37,7 +44,7 @@ export interface HubEventData {
 
 /** A durable activity row and a live frame share this payload contract. */
 export interface ActivityFact {
-  readonly type: string;
+  readonly type: HubEventType;
   readonly data: HubEventData;
   readonly key?: string;
   readonly at: number;

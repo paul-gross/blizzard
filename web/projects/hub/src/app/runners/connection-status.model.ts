@@ -1,6 +1,7 @@
 import { type BeaconBlink, type BeaconTone, RunnerConnection, type Tone } from 'fleet';
 
 import { decliningLabels, localPauseHint, type RunnerRow } from './runner-rows.model';
+import type { HostFact } from 'fleet/shell';
 
 /** A status light: a hollow mark for one never connected, else a lit beacon. */
 export type ConnectionLight = { readonly kind: 'never' } | { readonly kind: 'lit'; readonly tone: BeaconTone; readonly blink: BeaconBlink };
@@ -17,7 +18,7 @@ export interface StateBadge {
  * The one status-light ladder: a hollow mark when never connected, blinking red when offline — the
  * worst news outranks a pause — steady amber while paused, else steady green. A host carries no pause.
  */
-function light(online: boolean, connection: string, paused: boolean): ConnectionLight {
+function light(online: boolean, connection: string | HostFact['connection'], paused: boolean): ConnectionLight {
   if (connection === RunnerConnection.NEVER_CONNECTED) return { kind: 'never' };
   if (!online) return { kind: 'lit', tone: 'red', blink: 'step' };
   if (paused) return { kind: 'lit', tone: 'amber', blink: 'hold' };
@@ -30,12 +31,13 @@ export function runnerLight(row: Pick<RunnerRow, 'online' | 'connection' | 'hub_
 }
 
 /** A host's status light — the runner ladder with no pause. */
-export function hostLight(online: boolean, connection: string): ConnectionLight {
+export function hostLight(online: boolean, connection: HostFact['connection']): ConnectionLight {
   return light(online, connection, false);
 }
 
 /** A host's or runner's connection as a detail title bar states it, in its tone. */
-export function connectionState(online: boolean, connection: string): { readonly label: string; readonly tone: Tone } {
+export function connectionState(online: boolean, connection: string | HostFact['connection']): { readonly label: string; readonly tone: Tone } {
+  if (typeof connection !== 'string') return { label: connection.raw, tone: 'idle' };
   if (connection !== RunnerConnection.ONLINE && connection !== RunnerConnection.OFFLINE && connection !== RunnerConnection.NEVER_CONNECTED) {
     return { label: connection, tone: 'idle' };
   }
