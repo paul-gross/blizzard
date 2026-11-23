@@ -75,6 +75,11 @@ class HubProcess:
         """The process scope's guarded resolver."""
         return self.owner.resolver
 
+    @property
+    def credentials(self):
+        """The hub-scoped credential reads: which tenant a runner or host token, or id, belongs to."""
+        return self.resolver.get(HubScopedReads).credentials
+
     def close(self) -> None:
         """Close every tenant scope, then the process scope, attempting the second when the first fails."""
         try:

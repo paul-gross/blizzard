@@ -190,10 +190,10 @@ def test_shared_refusals_match_each_host_operation(
     )
 
     def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
-        principal = HostAuth.of(request, services).demand()
+        principal = HostAuth.of(request).demand()
         close_tenant(hub.engine, principal.tenant_id)
         services.tenants.open_tenants.refresh()
-        return resolve_tenant(request, services)
+        return resolve_tenant(request)
 
     hub.app.dependency_overrides[resolve_tenant] = close_before_resolution
     response = client.request(method, url, headers=bearer(live_host.json()["token"]), json={})

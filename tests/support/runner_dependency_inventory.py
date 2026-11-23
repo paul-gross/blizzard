@@ -46,7 +46,7 @@ POST /api/fleet/queue/peek
 """,
     ),
     (
-        RUNNER - {"blizzard.hub.api.deps.tenant_services"},
+        RUNNER - {"blizzard.hub.api.deps.tenant_services", HUB},
         """
 GET /api/fleet/system-artifacts
 GET /api/fleet/system-artifacts/{name}

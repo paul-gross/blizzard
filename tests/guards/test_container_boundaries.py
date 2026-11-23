@@ -252,3 +252,19 @@ def test_the_narrowing_gate_fails_a_planted_bag_import_parameter_and_attribute(t
         "hub/api/planted.py:3: names Services",
         "hub/api/planted.py:3: names TenantServices",
     ]
+
+
+def test_the_narrowing_gate_fails_a_planted_hub_bag(tmp_path: Path) -> None:
+    planted = tmp_path / "hub" / "api" / "planted.py"
+    planted.parent.mkdir(parents=True)
+    planted.write_text(
+        "from blizzard.hub.api.hub_level import Hub, hub_services\n"
+        "from blizzard.hub import composition\n"
+        "def route(request: object, hub: Hub) -> composition.HubServices: ...\n"
+    )
+    assert narrowing_violations(tmp_path, [Path("hub/api/planted.py")]) == [
+        "hub/api/planted.py:1: names Hub",
+        "hub/api/planted.py:1: names hub_services",
+        "hub/api/planted.py:3: names Hub",
+        "hub/api/planted.py:3: names HubServices",
+    ]

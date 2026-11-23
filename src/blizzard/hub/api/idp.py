@@ -24,6 +24,7 @@ from blizzard.foundation.roles import dto
 from blizzard.hub.api import problems
 from blizzard.hub.api.auth import (
     HostSigningIn,
+    MachineCredentials,
     RunnerSigningIn,
     host_signing_in,
     reject_runner_principal,
@@ -221,7 +222,8 @@ def authorize(
         # One undifferentiated 400 for an unknown client and an unregistered redirect URI, so a caller cannot
         # fingerprint client ids by probing.
         # A runner id and a host id are both hub-minted, so the client alone settles which it names.
-        resolved = runner_signing_in(services, client) or host_signing_in(services, client)
+        machine = MachineCredentials.of(request)
+        resolved = runner_signing_in(machine, client) or host_signing_in(machine, client)
         if resolved is None:
             return _unknown_client(request)
         federation_client = _federation_client(resolved)
@@ -230,7 +232,7 @@ def authorize(
         except UnknownFederationClient:
             return _unknown_client(request)
 
-    identity = resolve_identity(request, services)
+    identity = resolve_identity(request)
     if identity is None:
         providers = services.oauth_providers.list()
         if not providers:

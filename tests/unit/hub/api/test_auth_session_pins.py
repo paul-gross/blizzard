@@ -9,28 +9,35 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Permission
 from blizzard.hub.api.auth import RunnerPrincipal
 from blizzard.hub.api.auth_session import refuse_closed_tenant, require
+from blizzard.hub.api.resolution import process_request
+from blizzard.hub.app import create_app
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.config import HubConfig
 from blizzard.hub.tenancy import TenantId, UnknownTenant
 from blizzard.wire.auth import AUTHENTICATION_UNRESOLVED
 from blizzard.wire.tenant import TENANT_NOT_FOUND
+from tests.support.flag_guard import flags_for
 
 
 def test_require_reports_the_store_unwired_with_no_store_wired() -> None:
-    """A ``require()``-gated route serves a tenant, and a store-free app has none to resolve: under
+    """A ``require()``-gated route serves a tenant, and a store-free hub process has none to resolve: under
     the default ``auth.mode = "none"`` the gate answers 503, never the implicit operator unscoped."""
-    app = FastAPI()
-    app.state.config = HubConfig(root=Path("."), db_url="sqlite://")  # `auth.mode` defaults to "none"
-    app.state.services = None  # store-free, exactly as the export/unit app is built
+    config = HubConfig(root=Path("."), db_url="sqlite://")  # `auth.mode` defaults to "none"
+    app = create_app(config, flags=flags_for("hub"))  # store-free, exactly as the export/unit app is built
 
-    @app.get("/_pin_probe")
     def _probe(identity: ResolvedIdentity = Depends(require(Permission.FLEET_VIEW))) -> dict[str, str]:
         return {"username": identity.username}
+
+    # Ahead of the app's catch-all static mount, which a route added afterwards would otherwise sit behind.
+    app.router.routes.insert(
+        0, APIRoute("/_pin_probe", _probe, methods=["GET"], dependencies=[Depends(process_request)])
+    )
 
     with TestClient(app) as client:
         resp = client.get("/_pin_probe")

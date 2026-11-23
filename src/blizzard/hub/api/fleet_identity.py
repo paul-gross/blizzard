@@ -31,7 +31,7 @@ def get_runner_identity(request: Request, services: Hub) -> RunnerIdentityView |
     ``retired``, the last two naming the runner the token was issued to. Registers nothing and
     records no liveness."""
     try:
-        identified = _identified(RunnerAuth.of(request, services))
+        identified = _identified(RunnerAuth.of(request))
     except RunnerTokenRefused as exc:
         return problem_response(runner_identity_problem(exc, instance=request.url.path))
     return RunnerIdentityView(

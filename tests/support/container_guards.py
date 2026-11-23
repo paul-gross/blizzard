@@ -64,10 +64,12 @@ NARROWED_MODULES: tuple[Path, ...] = tuple(
         "settings.py",
         "hosts.py",
         "fleet_host.py",
+        "auth_session.py",
+        "auth.py",
     )
 )
 #: The legacy bags a narrowed module may not name.
-_LEGACY_BAGS = frozenset({"Services", "TenantServices"})
+_LEGACY_BAGS = frozenset({"Services", "TenantServices", "Hub", "HubServices", "hub_services"})
 
 
 def graph_builds(registry: RecordingRegistry, lifetimes: ProcessLifetimes, values: ScopeValues) -> list[str]:

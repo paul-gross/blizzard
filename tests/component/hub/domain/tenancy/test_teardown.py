@@ -174,7 +174,7 @@ def _closing_after_resolution(hub: HubHarness, tenant: TenantId, rows: dict[str,
     assert hub.app is not None
 
     def resolving_then_closing(request: Request, services: Hub) -> AdmittedTenant:
-        resolved = resolve_tenant(request, services)
+        resolved = resolve_tenant(request)
         services.tenant_teardown.close(tenant, by="usr_closer")
         rows["closed"] = _rows_of(hub, tenant)
         return resolved
@@ -230,7 +230,7 @@ def _deleting_after_resolution(hub: HubHarness, tenant: TenantId, states: list[T
     assert hub.app is not None
 
     def resolving_then_deleting(request: Request, services: Hub) -> AdmittedTenant:
-        resolved = resolve_tenant(request, services)
+        resolved = resolve_tenant(request)
         states.append(services.tenant_teardown.delete(tenant, by="usr_deleter").state)
         return resolved
 

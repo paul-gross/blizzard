@@ -35,7 +35,7 @@ def me(request: Request) -> MeResponse | JSONResponse:
     A header naming a tenant the caller cannot enter resolves no tenant — never a 404 here."""
     mode = request.app.state.config.auth.mode
     services = None if mode == AUTH_MODE_NONE else hub_services(request)
-    identity = resolve_identity(request, services)
+    identity = resolve_identity(request)
     if identity is None:
         return problem_response(
             authentication_required_problem(instance=request.url.path, detail="not authenticated"),

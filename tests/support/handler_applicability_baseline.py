@@ -99,9 +99,11 @@ DIRECT_ENDPOINTS = {
     ("GET", "/api/fleet/chunks/{chunk_id}/envelope"): ("get_envelope", PROBLEM_EXCEPTION),
     ("POST", "/api/fleet/chunks/{chunk_id}/completions"): ("submit_completion", PROBLEM_EXCEPTION),
 }
+#: The operations whose only route on the hub-level services was the tenant resolution, which now takes none.
+NO_HUB_SERVICES = {("GET", "/api/fleet/system-artifacts"), ("GET", "/api/fleet/system-artifacts/{name}")}
 DIRECT_DISPATCH: dict[tuple[str, str], dict[str, set[str]]] = {
     operation: {
-        HTTP_HANDLER: {HUB_SERVICES}
+        HTTP_HANDLER: (set() if operation in NO_HUB_SERVICES else {HUB_SERVICES})
         | ({TENANT} if operation != ("GET", "/api/fleet/identity") else set())
         | (
             {f"blizzard.hub.api.fleet.{DIRECT_ENDPOINTS[operation][0]} raises {DIRECT_ENDPOINTS[operation][1]}"}

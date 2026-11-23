@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 from starlette.types import Receive, Scope, Send
 
+from blizzard.foundation.registry.interface import ServiceAbsent
 from blizzard.hub.api.auth import RunnerAuth
 from blizzard.hub.api.auth_session import TENANT_HEADER_COMPONENT, TENANT_HEADER_PARAMETER, resolve_identity
 from blizzard.hub.config import AUTH_MODE_NONE
@@ -19,14 +20,16 @@ _TRACE_HEADERS = frozenset({b"traceparent", b"tracestate", b"baggage"})
 
 def resolves_to_principal(request: Request) -> bool:
     """Under ``auth.mode = none`` only a runner bearer is verified, so only it resolves."""
-    services = request.app.state.services
-    if services is None:
+    if getattr(request.app.state, "hub_process", None) is None:
         return False
-    if RunnerAuth.of(request, services).principal is not None:
-        return True
-    if request.app.state.config.auth.mode == AUTH_MODE_NONE:
+    try:
+        if RunnerAuth.of(request).principal is not None:
+            return True
+        if request.app.state.config.auth.mode == AUTH_MODE_NONE:
+            return False
+        return resolve_identity(request) is not None
+    except ServiceAbsent:
         return False
-    return resolve_identity(request, services) is not None
 
 
 class TraceGatedFastAPI(FastAPI):

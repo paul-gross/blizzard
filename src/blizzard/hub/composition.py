@@ -476,11 +476,6 @@ class HubServices:
     #: The hub-scoped reads a runner's credential resolves its tenant through — held only by the
     #: runner-auth edge (``bzh:hub-scoped-reads-confined``).
     hub_scoped_reads: HubScopedReads
-    #: The read registry of the tenant a runner credential resolved to; raises ``UnknownTenant`` or
-    #: ``TenantClosed`` for a tenant there are no stores to open for.
-    tenant_registry: Callable[[TenantId], IReadRunnerRegistry]
-    #: The read host registry of the tenant a host credential resolved to; raises as ``tenant_registry`` does.
-    tenant_hosts: Callable[[TenantId], IReadHostRegistry]
     #: The one thread every tenant's hub action passes run on.
     action_loop: ActionLoop
     #: What every tenant's services wake the flow driver through, once ``build_flow_driver`` binds it.
@@ -1893,8 +1888,6 @@ def build_services(
         ),
         process=core.process,
         hub_scoped_reads=core.hub_scoped_reads,
-        tenant_registry=lambda tenant: core.open(scope_of(tenant)).registry,
-        tenant_hosts=lambda tenant: core.open(scope_of(tenant)).hosts,
         action_loop=action_loop,
         hub_event_log=hub_event_log,
         event_brokers=brokers,

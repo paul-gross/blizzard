@@ -24,7 +24,7 @@ def test_closure_after_resolution_refuses_the_write(tmp_path: Path, operation: s
     resolved: list[str] = []
 
     def close_after_resolution(request: Request, services: Hub) -> AdmittedTenant:
-        tenant = resolve_tenant(request, services)
+        tenant = resolve_tenant(request)
         resolved.append(tenant.scope.tenant)
         close_tenant(hub.engine, tenant.scope.tenant)
         return tenant

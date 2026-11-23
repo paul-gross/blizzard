@@ -17,10 +17,12 @@ from sqlalchemy import Engine, event
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.api.auth import runner_signing_in
-from blizzard.hub.composition import HubCore, HubServices
+from blizzard.hub.api.auth import MachineCredentials, runner_signing_in
+from blizzard.hub.composition import HubCore
 from blizzard.hub.domain.runners.host import HostAddition, HostTokenRotation
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerAddition, TokenRotation
+from blizzard.hub.process_root import HubProcess
+from blizzard.hub.scopes.tenants import TenantContainers
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.hub_scoped_credentials import TenantHost, TenantRunner
 from blizzard.hub.store.tenant_guard import (
@@ -62,11 +64,18 @@ def _two_tenants(tmp_path: Path) -> tuple[HubCore, Engine, TenantId]:
     return core, engine, first
 
 
-def _services(core: HubCore) -> HubServices:
-    def tenant_registry(tenant: TenantId) -> IReadRunnerRegistry:
-        return core.open(StoreScope(tenant)).registry
+def _machine(core: HubCore) -> MachineCredentials:
+    """The credential seams over ``core``: its credential reads, and tenant containers that open each tenant as ``core``
+    does."""
 
-    return cast(HubServices, SimpleNamespace(hub_scoped_reads=core.hub_scoped_reads, tenant_registry=tenant_registry))
+    def resolve(scope: StoreScope, dependency_type: type) -> object:
+        opened = core.open(scope)
+        return opened.registry if dependency_type is IReadRunnerRegistry else opened.hosts
+
+    process = SimpleNamespace(
+        credentials=core.hub_scoped_reads.credentials, tenants=cast(TenantContainers, SimpleNamespace(resolve=resolve))
+    )
+    return MachineCredentials(cast(HubProcess, process))
 
 
 def test_a_runner_token_resolves_to_its_own_tenants_runner(tmp_path: Path) -> None:
@@ -136,17 +145,17 @@ def test_a_runner_id_resolves_to_the_tenant_holding_it(tmp_path: Path) -> None:
 
 def test_a_sign_in_reads_the_runner_in_its_own_tenant_and_none_in_a_closed_one(tmp_path: Path) -> None:
     core, engine, _ = _two_tenants(tmp_path)
-    services = _services(core)
+    machine = _machine(core)
 
-    signing_in = runner_signing_in(services, "rn_b")
+    signing_in = runner_signing_in(machine, "rn_b")
     assert signing_in is not None and signing_in.tenant == _SECOND
     assert (signing_in.registration.runner_id, signing_in.registration.name) == ("rn_b", "bravo")
 
     # Closing a tenant evicts its cached stores; a cached tenant is answered from memory.
     close_tenant(engine, _SECOND)
     core.tenants.evict(_SECOND)
-    assert runner_signing_in(services, "rn_b") is None
-    assert runner_signing_in(services, "rn_a") is not None
+    assert runner_signing_in(machine, "rn_b") is None
+    assert runner_signing_in(machine, "rn_a") is not None
 
 
 @pytest.mark.usefixtures("guarded")
