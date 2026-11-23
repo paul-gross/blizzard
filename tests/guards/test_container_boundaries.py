@@ -123,6 +123,29 @@ def test_the_wiring_gate_catches_planted_cross_area_and_adapter_imports(tmp_path
     ]
 
 
+def test_the_wiring_gate_catches_a_domain_wiring_reaching_outside_the_domain(tmp_path: Path) -> None:
+    root = _plant(
+        tmp_path,
+        {
+            "hub/domain/chunks/wiring.py": (
+                "from blizzard.foundation.registry.interface import Registry\n"
+                "from blizzard.hub.events.broker import EventBroker\n"
+                "from blizzard.hub.work_sources.source import IWorkSourceRegistry\n"
+                "from blizzard.hub.domain.chunks.service import Service\n"
+                "from blizzard.hub.tenancy import STORE_UNAVAILABLE\n"
+            ),
+            "hub/events/wiring.py": (
+                "from blizzard.foundation.registry.interface import Registry\n"
+                "from blizzard.hub.events.broker import EventBroker\n"
+            ),
+        },
+    )
+    assert wiring_boundary_violations(root) == [
+        "hub/domain/chunks/wiring.py: imports blizzard.hub.events.broker from outside the domain",
+        "hub/domain/chunks/wiring.py: imports blizzard.hub.work_sources.source from outside the domain",
+    ]
+
+
 def test_the_wiring_gate_admits_an_adapter_wiring_its_own_internal_and_a_process_root(tmp_path: Path) -> None:
     root = _plant(
         tmp_path,

@@ -69,7 +69,7 @@ from blizzard.hub.domain.work_items.editing import (
     WorkItemHeldByLiveChunk,
 )
 from blizzard.hub.domain.work_items.model import WorkItemEdit, WorkItemFieldBlank, WorkItemNotEditable, WorkItemText
-from blizzard.hub.graphs import PACKAGED, packaged_default_yaml
+from blizzard.hub.graphs import PackagedDefaultGraph
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
 from blizzard.hub.work_sources.registry import label_from_binding
 from blizzard.hub.work_sources.source import AuthorView, IWorkSource, IWorkSourceRegistry, resolve_author_view
@@ -474,6 +474,7 @@ def create_work_item(
     urgencies: FromDishka[UrgencyReading],
     projects: FromDishka[IReadProjectRepository],
     default_graph: FromDishka[DefaultGraphService],
+    packaged: FromDishka[PackagedDefaultGraph],
     frames: Frames,
     runners: Runners,
     users: Users,
@@ -493,7 +494,7 @@ def create_work_item(
     urgency = stated_urgency(request.urgency, urgencies)
     project_id = project if project is not None else project_of_call(projects).project_id
     try:
-        graph = default_graph.ensure_default(PACKAGED.default.doc, definition_yaml=packaged_default_yaml())
+        graph = default_graph.ensure_default(packaged.doc, definition_yaml=packaged.yaml)
     except DefaultGraphRetired as exc:
         raise ProblemHTTPException(partial(problems_admin.default_graph_retired_problem, str(exc))) from exc
     try:

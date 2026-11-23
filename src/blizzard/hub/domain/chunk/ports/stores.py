@@ -6,6 +6,7 @@ calls."""
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository, IWriteChunkDecisionsRepository
@@ -30,7 +31,60 @@ from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository, IWr
 from blizzard.hub.domain.chunk.ports.usage import IReadChunkUsageRepository, IWriteChunkUsageRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, IWriteChunkWorkRefsRepository
 
-__all__ = ["ChunkReadStores", "ChunkStores"]
+__all__ = ["ChunkReadStores", "ChunkStores", "IChunkStoreBundle"]
+
+
+class IChunkStoreBundle(Protocol):
+    """The tenant's chunk-seam adapters as the chunk area registers its ports over them: each concept's write seam,
+    read-only here so the root hands :class:`ChunkStores` in under this port."""
+
+    @property
+    def facts(self) -> IReadChunkFactsRepository: ...
+
+    @property
+    def record(self) -> IWriteChunkRecordRepository: ...
+
+    @property
+    def lifecycle(self) -> IWriteChunkLifecycleRepository: ...
+
+    @property
+    def work_refs(self) -> IWriteChunkWorkRefsRepository: ...
+
+    @property
+    def queue(self) -> IWriteChunkQueueRepository: ...
+
+    @property
+    def route(self) -> IWriteChunkRouteRepository: ...
+
+    @property
+    def movement(self) -> IWriteChunkMovementRepository: ...
+
+    @property
+    def artifacts(self) -> IWriteChunkArtifactsRepository: ...
+
+    @property
+    def questions(self) -> IWriteChunkQuestionsRepository: ...
+
+    @property
+    def decisions(self) -> IWriteChunkDecisionsRepository: ...
+
+    @property
+    def escalations(self) -> IWriteChunkEscalationsRepository: ...
+
+    @property
+    def events(self) -> IWriteChunkEventsRepository: ...
+
+    @property
+    def usage(self) -> IWriteChunkUsageRepository: ...
+
+    @property
+    def delivery(self) -> IWriteChunkDeliveryRepository: ...
+
+    @property
+    def hub_exec(self) -> IWriteChunkHubExecRepository: ...
+
+    @property
+    def dependencies(self) -> IWriteChunkDependenciesRepository: ...
 
 
 @dataclass(frozen=True)

@@ -28,7 +28,7 @@ from blizzard.foundation.flags import (
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
-from blizzard.foundation.registry.interface import Lifetime, port
+from blizzard.foundation.registry.interface import Lifetime, Ref, port
 from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import Resolver
 from blizzard.foundation.roles import collaborator
@@ -836,12 +836,11 @@ def flow_line_factory_leaf(
     return FlowLineFactory(facts=facts, record=record, graphs=graphs)
 
 
-def register_legacy(registry: LegacyRegistry) -> store_wiring.StoreRefs:
+def register_legacy(registry: LegacyRegistry, *, flows: Ref[FlowStore]) -> None:
     """Declare the store's adapters and the legacy bridge's leaves, each built as the legacy builder built it: the
     process services a request's admission reads before its tenant is known, and the transitional ports and leaves of
     the areas not yet adopted — scope, routine and cadence reads, invitation writes, flow reads and the flow-line
-    builder, and garden proposal resolution. Hands back the tenant adapters' ``Ref``s, which the root aliases the
-    adopted areas' ports onto."""
+    builder, and garden proposal resolution. The flow reads alias the flow store the root hands in."""
     registry.leaf(open_tenants_leaf, lifetime=Lifetime.PROCESS)
     registry.leaf(action_loop_leaf, lifetime=Lifetime.PROCESS)
     step_wake = registry.leaf(step_wake_leaf, lifetime=Lifetime.PROCESS)
@@ -862,11 +861,10 @@ def register_legacy(registry: LegacyRegistry) -> store_wiring.StoreRefs:
     # The reads a chunk-changed frame is enriched from.
     registry.alias(port(IWriteInvitationRepository), tenant.of(InvitationStore))
     # The flow reads a chunk's flow places are rendered from, until the flow execution area adopts them.
-    registry.alias(port(IReadFlows), tenant.of(FlowStore))
-    registry.alias(port(IReadFlowViews), tenant.of(FlowStore))
+    registry.alias(port(IReadFlows), flows)
+    registry.alias(port(IReadFlowViews), flows)
     registry.leaf(garden_proposal_resolution_leaf, lifetime=Lifetime.TENANT)
     registry.leaf(flow_line_factory_leaf, lifetime=Lifetime.TENANT)
-    return tenant
 
 
 #: The transitional tenant ports and leaves :func:`register_legacy` declares, for the store-free graph.

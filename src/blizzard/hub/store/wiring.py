@@ -113,7 +113,6 @@ class StoreRefs:
 #: The tenant services a legacy-bridge alias targets, registered apart so their ``Ref`` is handed back.
 _TENANT_ALIASED: tuple[type[Any], ...] = (
     HubTransactions,
-    WorkItemStore,
     ScopeStore,
     RoutineStore,
     RoutineScopeStore,
@@ -138,7 +137,7 @@ _CONFIG_SERVICES: tuple[type[Any], ...] = (
 )
 
 #: The tenant keys registered as factories rather than services.
-_TENANT_FACTORY_KEYS: tuple[type[Any], ...] = (ScopedConnections, ChunkStores, FlowStore)
+_TENANT_FACTORY_KEYS: tuple[type[Any], ...] = (ScopedConnections,)
 
 
 def scoped_connections(connections: HubStoreConnections, scope: StoreScope) -> ScopedConnections:
@@ -147,14 +146,10 @@ def scoped_connections(connections: HubStoreConnections, scope: StoreScope) -> S
 
 
 def register_tenant(registry: Registry) -> StoreRefs:
-    """Declare every tenant adapter but the configured records' once per tenant, handing back the ``Ref`` of each
-    adapter the legacy bridge's or an adopted area's ports alias, the tenant's flow store among them."""
+    """Declare every tenant adapter but the configured records' and the chunk operations' once per tenant, handing
+    back the ``Ref`` of each adapter the legacy bridge's ports alias."""
     registry.factory(scoped_connections, lifetime=Lifetime.TENANT)
-    registry.factory(build_chunk_stores, lifetime=Lifetime.TENANT)
-    flows = registry.factory(tenant_flows, lifetime=Lifetime.TENANT)
-    aliased = StoreRefs(
-        {FlowStore: flows, **{each: registry.service(each, lifetime=Lifetime.TENANT) for each in _TENANT_ALIASED}}
-    )
+    aliased = StoreRefs({each: registry.service(each, lifetime=Lifetime.TENANT) for each in _TENANT_ALIASED})
     for each in _TENANT_SERVICES:
         registry.service(each, lifetime=Lifetime.TENANT)
     return aliased
@@ -163,6 +158,32 @@ def register_tenant(registry: Registry) -> StoreRefs:
 def register_tenant_absent(registry: Registry) -> None:
     """Declare every tenant adapter absent, for the store-free graph."""
     for missing in (*_TENANT_FACTORY_KEYS, *_TENANT_SERVICES, *_TENANT_ALIASED):
+        registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
+
+
+@adapter_model
+@dataclass(frozen=True)
+class ChunkOperationsRefs:
+    """The ``Ref`` of each adapter the chunk operations' areas alias their ports onto."""
+
+    chunks: Ref[ChunkStores]
+    work_items: Ref[WorkItemStore]
+    flows: Ref[FlowStore]
+
+
+def register_chunk_operations(registry: Registry) -> ChunkOperationsRefs:
+    """Declare the tenant's chunk-store bundle, hub work-item store and flow store once per tenant, handing back the
+    ``Ref`` of each, which the chunk, operations and work-items areas' ports alias."""
+    return ChunkOperationsRefs(
+        chunks=registry.factory(build_chunk_stores, lifetime=Lifetime.TENANT),
+        work_items=registry.service(WorkItemStore, lifetime=Lifetime.TENANT),
+        flows=registry.factory(tenant_flows, lifetime=Lifetime.TENANT),
+    )
+
+
+def register_chunk_operations_absent(registry: Registry) -> None:
+    """Declare the chunk operations' adapters absent, for the store-free graph."""
+    for missing in (ChunkStores, WorkItemStore, FlowStore):
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
 
 

@@ -1,7 +1,7 @@
 """Chunk-dependency routes — declare and release a dependency edge between two chunks,
 the operator's own control-plane surface. Release addresses the standing
 edge by its ordered pair, never a minted edge id — deliberately no GET or listing route
-here, which stays #457's to add."""
+here."""
 
 from __future__ import annotations
 

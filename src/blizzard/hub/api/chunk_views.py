@@ -790,7 +790,7 @@ class ChunkHistoryView:
         ]
 
     def restarts(self) -> list[RestartView]:
-        """The chunk's operator restarts oldest-first (#370, #371).
+        """The chunk's operator restarts oldest-first.
 
         Each end resolves against its own graph the way :meth:`migrations` does, so a move that
         crossed one degrades neither side to a raw id; unset, ``from_graph`` is ``graph_id``."""

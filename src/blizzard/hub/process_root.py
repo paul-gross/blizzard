@@ -55,9 +55,7 @@ from blizzard.hub.settings import wiring as settings_wiring
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store import wiring as store
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
-from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import TenantId, UnknownTenant
@@ -108,7 +106,9 @@ def register_hub(
     forge.register_process(registry)
     if store_backed:
         delivery.register(registry)
-        _register_chunk_operations(registry, register_legacy(registry))
+        chunk_operations = store.register_chunk_operations(registry)
+        register_legacy(registry, flows=chunk_operations.flows)
+        _register_chunk_operations(registry, chunk_operations)
         auth.register(registry)
         secrets.register(registry)
         findings.register(registry, store.register_findings(registry))
@@ -126,6 +126,7 @@ def register_hub(
         api.register(registry)
     else:
         register_legacy_absent(registry)
+        store.register_chunk_operations_absent(registry)
         chunk_area.register_absent(registry)
         operations_area.register_absent(registry)
         work_items_area.register_absent(registry)
@@ -159,12 +160,12 @@ def register_hub(
         settings_wiring.register_absent(registry)
 
 
-def _register_chunk_operations(registry: LegacyRegistry, tenant: store.StoreRefs) -> None:
-    """The chunk, chunk operations and work-items areas, over the tenant's flow and work-item stores."""
-    items = tenant.of(WorkItemStore)
-    chunk_area.register(registry, submissions=tenant.of(FlowStore), work_items=items)
-    operations_area.register(registry, withdrawals=items)
-    work_items_area.register(registry, items=items)
+def _register_chunk_operations(registry: LegacyRegistry, refs: store.ChunkOperationsRefs) -> None:
+    """The chunk, chunk operations and work-items areas, over the tenant's chunk-store bundle and flow and work-item
+    stores."""
+    chunk_area.register(registry, stores=refs.chunks, submissions=refs.flows, work_items=refs.work_items)
+    operations_area.register(registry, withdrawals=refs.work_items)
+    work_items_area.register(registry, items=refs.work_items)
 
 
 def _register_projects(registry: LegacyRegistry) -> None:

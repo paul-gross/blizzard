@@ -379,7 +379,8 @@ def get_work_items(
     return chunks_api.chunk_work_items(chunk_id, records, work_refs, sources, clock, runners)
 
 
-# The fleet-side half of the issue-#55 alias; rationale: :mod:`blizzard.hub.api.chunks`.
+# The fleet-side `/pm-items` path, a deprecated alias onto the work-items handler; the rationale is
+# :mod:`blizzard.hub.api.chunks`'s.
 router.add_api_route(
     "/chunks/{chunk_id}/pm-items",
     get_work_items,

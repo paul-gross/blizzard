@@ -182,11 +182,17 @@ def child_open_violations(root: Path, *, exempt: tuple[tuple[str, ...], ...] = (
     return problems
 
 
+#: What a domain area's wiring may import beyond the domain itself: the foundation and the tenancy vocabulary.
+_DOMAIN_WIRING_REACH = ("blizzard.hub.domain.", "blizzard.foundation.", "blizzard.hub.tenancy")
+
+
 def wiring_boundary_violations(source_root: Path, *, roots: frozenset[Path] = PROCESS_ROOTS) -> list[str]:
-    """Wiring modules (those importing the registry interface) that reach another area's wiring or an adapter.
+    """Wiring modules (those importing the registry interface) that reach another area's wiring or an adapter, and
+    domain wiring modules that reach outside the domain.
 
     An adapter package's own wiring module may import that package's ``internal/``; the process ``roots`` compose
-    adapters and areas, and are exempt."""
+    adapters and areas, and are exempt. A domain area's wiring names only domain types, the foundation, and the
+    tenancy vocabulary: what lives outside the domain is the root's to hand in, or its owner's to register."""
     problems: list[str] = []
     for path in sorted(source_root.rglob("*.py")):
         relative = path.relative_to(source_root)
@@ -210,6 +216,12 @@ def wiring_boundary_violations(source_root: Path, *, roots: frozenset[Path] = PR
                     problems.append(f"{relative}: imports the adapter {adapter}")
             elif _is_wiring(name) and name.rpartition(".")[0] != own_area:
                 problems.append(f"{relative}: imports another area's wiring {name}")
+            elif (
+                relative.parts[:2] == ("hub", "domain")
+                and not name.startswith(_DOMAIN_WIRING_REACH)
+                and name.rpartition(".")[0] not in imports
+            ):
+                problems.append(f"{relative}: imports {name} from outside the domain")
     return problems
 
 

@@ -100,7 +100,7 @@ from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.urgency.model import UrgencyRetired, UrgencyUnknown
 from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.events.broker import EventBroker
-from blizzard.hub.graphs import PackagedGraphs, packaged_default_yaml
+from blizzard.hub.graphs import PackagedDefaultGraph
 from blizzard.hub.work_sources.registry import SelectedWorkSources
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from blizzard.wire.chunk import (
@@ -222,7 +222,7 @@ def ingest_chunk(
     sources: FromDishka[IWorkSourceRegistry],
     ingest: FromDishka[IngestService],
     default_graph: FromDishka[DefaultGraphService],
-    graphs: FromDishka[PackagedGraphs],
+    packaged: FromDishka[PackagedDefaultGraph],
     frames: Frames,
     events: Events,
 ) -> object:
@@ -257,7 +257,7 @@ def ingest_chunk(
     except IngestItemProjectMismatch as exc:
         raise ProblemHTTPException(partial(problems_chunks.ingest_item_project_mismatch_problem, str(exc))) from exc
     try:
-        graph = default_graph.ensure_default(graphs.default.doc, definition_yaml=packaged_default_yaml())
+        graph = default_graph.ensure_default(packaged.doc, definition_yaml=packaged.yaml)
     except DefaultGraphRetired as exc:
         raise ProblemHTTPException(partial(problems_chunks.default_graph_retired_problem, str(exc))) from exc
     try:
@@ -703,7 +703,7 @@ def restart_chunk(
     events: Events,
     views: Views,
 ) -> ChunkSummary:
-    """Force a chunk onto a node now, on a freshly minted session (#370, #371).
+    """Force a chunk onto a node now, on a freshly minted session.
 
     At a bumped epoch, so the running attempt is fenced out and the holding runner re-enters;
     ``node`` omitted means its current node, or the entry of the graph it lands on when it never
