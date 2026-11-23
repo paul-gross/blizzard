@@ -235,6 +235,10 @@ def test_a_renewal_blocked_on_its_driver_never_delays_a_concurrent_tick(tmp_path
         assert time.monotonic() - stop_started < 2
     finally:
         release.set()
+        # driver.stop() abandons a thread still blocked in the vendor call; wait for it to finish so the
+        # store connection it holds is closed before the open-file scan runs.
+        driver.thread.join(10)
+        assert not driver.thread.is_alive()
 
 
 def test_a_renewal_outcome_refuses_unrecorded_at_construction() -> None:
