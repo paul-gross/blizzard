@@ -9,6 +9,8 @@ from typing import Any
 
 import pytest
 
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from tests.support.scaffolding import HubHarness, build_hub, count_queries, default_project
 
 
@@ -19,7 +21,7 @@ def hub(tmp_path: Path) -> HubHarness:
 
 def _graph(hub: HubHarness) -> str:
     return hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     ).name
 
 

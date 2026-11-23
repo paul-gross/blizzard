@@ -19,6 +19,8 @@ from blizzard.hub.domain.chunk.ports.work_sources import IWorkAnnotator, WorkAnn
 from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
 from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
 from blizzard.hub.domain.observability.forge_status import AnnotationReconciler, TenantAnnotation
+from blizzard.hub.domain.operations.queue import GroupService
+from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.tenancy import StoreScope, TenantId
@@ -63,7 +65,7 @@ def test_live_work_refs_excludes_a_terminal_chunk(tmp_path: Path) -> None:
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
-    hub.services.stop.stop(chunk, by="test")
+    hub.default_adapter(StopService).stop(chunk, by="test")
 
     refs = hub.services.chunks.work_refs.live_work_refs()
 
@@ -75,7 +77,7 @@ def test_live_work_refs_excludes_a_grouped_chunk_but_carries_its_ref_via_the_sur
     survivor_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=False)
     merged_id = ingest(hub, [{"source": "default", "ref": "2"}], promote=False)
 
-    hub.services.group.group(survivor_id, [merged_id])
+    hub.default_adapter(GroupService).group(survivor_id, [merged_id])
     refs = hub.services.chunks.work_refs.live_work_refs()
 
     assert refs[WorkRef(source="default", ref="1")] is ChunkStatus.NOT_READY
@@ -159,7 +161,7 @@ def test_sweep_clears_a_stopped_chunk(tmp_path: Path) -> None:
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
-    hub.services.stop.stop(chunk, by="test")
+    hub.default_adapter(StopService).stop(chunk, by="test")
     annotator = FakeAnnotator(initial={WorkRef(source="default", ref="1"): {WorkStatusMarker.INGESTED}})
     reconciler = _reconciler(hub, WorkSourceRegistry({}, {"default": annotator}))
 
@@ -676,7 +678,7 @@ def test_the_work_refs_signature_moves_on_every_input_and_answers_in_one_stateme
     promoted = work_refs.live_work_refs_signature()
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
-    hub.services.stop.stop(chunk, by="test")
+    hub.default_adapter(StopService).stop(chunk, by="test")
     stopped = work_refs.live_work_refs_signature()
 
     assert len({empty, minted, promoted, stopped}) == 4

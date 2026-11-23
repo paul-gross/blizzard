@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import select
 
 from blizzard.hub.domain.operations import restart as restart_module
+from blizzard.hub.domain.operations.restart import RestartService
 from blizzard.hub.store.schema import chunk_restarts
 from tests.support.scaffolding import build_hub, hub_scoped, ingest
 
@@ -29,7 +30,7 @@ def test_restart_rolls_back_movement_when_gate_arrival_fails(tmp_path: Path, mon
 
     monkeypatch.setattr(restart_module, "open_graph_gate_on_arrival", fail)
     with pytest.raises(RuntimeError, match="gate failed"):
-        hub.services.restart.restart(chunk, graph, node_name=None, by="operator")
+        hub.default_adapter(RestartService).restart(chunk, graph, node_name=None, by="operator")
 
     assert hub.services.chunks.facts.load_facts(chunk_id) == before
     with hub.engine.connect() as conn:

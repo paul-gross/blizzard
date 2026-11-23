@@ -14,6 +14,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.tokens import TokenHash
+from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerRegistration, TokenRotation
 from tests.support.scaffolding import HubHarness, build_hub, emitted_events, pointer_token
@@ -164,7 +165,7 @@ def test_a_stale_release_pass_leaves_a_rescued_runner_its_reclaimed_route(
         _claim(hub, chunk_id, _bearer(tokens[0]))
 
     # The retire's fact and revocation have committed; the rescue reclaims the chunk before the release pass reaches it.
-    _once(monkeypatch, hub.services.detach, "release_held", rescue_and_reclaim)
+    _once(monkeypatch, hub.default_adapter(DetachService), "release_held", rescue_and_reclaim)
     since = _last_event_id(hub)
 
     refused = _retire(hub)
@@ -187,7 +188,7 @@ def test_a_reinstate_after_a_retire_stopped_before_its_release_pass_releases_the
     def crash() -> None:
         raise _Crash
 
-    _once(monkeypatch, hub.services.detach, "release_held", crash)
+    _once(monkeypatch, hub.default_adapter(DetachService), "release_held", crash)
     with pytest.raises(_Crash):
         _retire(hub)
     monkeypatch.undo()
@@ -270,7 +271,7 @@ def test_a_reinstate_refused_after_its_release_pass_still_announces_the_release(
     def crash() -> None:
         raise _Crash
 
-    _once(monkeypatch, hub.services.detach, "release_held", crash)
+    _once(monkeypatch, hub.default_adapter(DetachService), "release_held", crash)
     with pytest.raises(_Crash):
         _retire(hub)
     monkeypatch.undo()
@@ -280,7 +281,7 @@ def test_a_reinstate_refused_after_its_release_pass_still_announces_the_release(
         _ok(_retire(hub, by="later"))
 
     # The reinstate's release of the leftover route commits; a reinstate and a re-retire land before its own fact.
-    _once_after(monkeypatch, hub.services.detach, "release_held", reinstate_and_retire_again)
+    _once_after(monkeypatch, hub.default_adapter(DetachService), "release_held", reinstate_and_retire_again)
     since = _last_event_id(hub)
 
     refused = _reinstate(hub)

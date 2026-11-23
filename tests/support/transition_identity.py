@@ -20,9 +20,8 @@ from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_driver import StepWake
 from blizzard.hub.documents.codec import IConfigCodec
-from blizzard.hub.domain.chunk.dependencies import DependencyService
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.ingest import IngestService, IWorkItemProjectRead
+from blizzard.hub.domain.chunk.ingest import IWorkItemProjectRead
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository, IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository, IWriteChunkDeliveryRepository
@@ -47,8 +46,6 @@ from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository, IWr
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.chunk.ports.usage import IReadChunkUsageRepository, IWriteChunkUsageRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, IWriteChunkWorkRefsRepository
-from blizzard.hub.domain.execution.decisions import RequeueService
-from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository, IWriteFindingRepository
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
@@ -60,15 +57,7 @@ from blizzard.hub.domain.graph.model import (
     IWriteGraphRepository,
 )
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
-from blizzard.hub.domain.operations.complete import CompleteService
-from blizzard.hub.domain.operations.delete import DeleteService, IHubItemWithdrawals
-from blizzard.hub.domain.operations.demote import DemoteService
-from blizzard.hub.domain.operations.edit import EditService
-from blizzard.hub.domain.operations.pause import PauseService
-from blizzard.hub.domain.operations.promote import PromoteService
-from blizzard.hub.domain.operations.queue import GroupService, QueueService
-from blizzard.hub.domain.operations.restart import RestartService
-from blizzard.hub.domain.operations.stop import StopService
+from blizzard.hub.domain.operations.delete import IHubItemWithdrawals
 from blizzard.hub.domain.projects.bulk_resolve import IBulkProjectLookup
 from blizzard.hub.domain.projects.links import IReadProjectLinks, IWriteProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, IWriteProjectRepository
@@ -250,22 +239,7 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantServices.events", services.events, EventBroker),
         ("TenantServices.registry", services.registry, IReadRunnerRegistry),
         ("TenantServices.hosts", services.hosts, IReadHostRegistry),
-        ("TenantServices.detach", services.detach, DetachService),
-        ("TenantServices.requeue", services.requeue, RequeueService),
-        ("TenantStores.delete", stores.delete, DeleteService),
         ("TenantStores.work_item_edits", stores.work_item_edits, WorkItemEditService),
-        ("TenantServices.ingest", services.ingest, IngestService),
-        ("TenantServices.promote", services.promote, PromoteService),
-        ("TenantServices.demote", services.demote, DemoteService),
-        ("TenantServices.restart", services.restart, RestartService),
-        ("TenantServices.pause", services.pause, PauseService),
-        ("TenantServices.stop", services.stop, StopService),
-        ("TenantServices.complete", services.complete, CompleteService),
-        ("TenantServices.edit", services.edit, EditService),
-        ("TenantServices.dependencies", services.dependencies, DependencyService),
-        ("TenantServices.delete", services.delete, DeleteService),
-        ("TenantServices.queue", services.queue, QueueService),
-        ("TenantServices.group", services.group, GroupService),
         ("TenantServices.event_log", services.event_log, EventLogService),
     )
     problems = [

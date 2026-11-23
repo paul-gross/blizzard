@@ -14,6 +14,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
@@ -382,7 +383,7 @@ def test_a_forced_retire_records_the_fact_before_its_first_release(
     hub = build_hub(tmp_path)
     _register(hub)
     _held_chunk(hub)
-    detach = hub.services.detach
+    detach = hub.default_adapter(DetachService)
     release_held = detach.release_held
     retired_at_release: list[bool] = []
 

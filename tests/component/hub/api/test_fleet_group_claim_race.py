@@ -15,6 +15,7 @@ from typing import cast
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
+from blizzard.hub.domain.operations.queue import GroupService
 from tests.support.scaffolding import build_hub, ingest
 
 
@@ -46,7 +47,7 @@ def test_a_claim_blocks_while_a_group_holds_the_row_lock_mid_fold(tmp_path: Path
     group_result: dict[str, object] = {}
 
     def _group() -> None:
-        group_result["result"] = hub.services.group.group(survivor_id, [target_id])
+        group_result["result"] = hub.default_adapter(GroupService).group(survivor_id, [target_id])
 
     group_thread = threading.Thread(target=_group)
     group_thread.start()

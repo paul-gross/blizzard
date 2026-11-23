@@ -12,6 +12,8 @@ from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.forges import ForgeSlug
 from blizzard.hub.domain.config.repositories import RepositoryFields
 from blizzard.hub.domain.config.work_sources import WorkSourceFields
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from tests.support.scaffolding import HubHarness, build_hub
 
 _FIXTURES = Path(__file__).resolve().parents[3] / "fixtures" / "config_export_v2"
@@ -23,7 +25,7 @@ _CAPTURE = os.environ.get("BLIZZARD_CAPTURE_GOLDEN") == "1"
 
 def _graph(hub: HubHarness) -> str:
     return hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     ).name
 
 

@@ -25,6 +25,9 @@ from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.operations.queue import GroupService
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.hub.store import schema as s
 from tests.support.scaffolding import (
     HubHarness,
@@ -46,7 +49,7 @@ _UNTIL = datetime(2026, 8, 1, tzinfo=UTC)
 
 def _default_graph(hub: HubHarness) -> Graph:
     return hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
 
 
@@ -516,7 +519,7 @@ def test_a_chunk_that_absorbed_another_runs_work_ref_still_reads_its_own_identit
     survivor_id = _run(hub, survivor_routine)
     merged_id = _run(hub, merged_routine)
 
-    hub.services.group.group(survivor_id, [merged_id])
+    hub.default_adapter(GroupService).group(survivor_id, [merged_id])
 
     survivor_chunk = hub.services.chunks.record.get(survivor_id)
     assert survivor_chunk is not None

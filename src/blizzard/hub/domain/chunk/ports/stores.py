@@ -1,7 +1,7 @@
-"""The chunk-store bundles — composition-and-test handles for a
-collaborator spanning several chunk seams. No ``src/`` domain collaborator takes either
-bundle: every service names its seams explicitly, so no chunk service can hold write access
-to a concept it never calls."""
+"""The chunk-store bundles. :class:`ChunkStores` is the tenant's one set of chunk-seam adapters, which each chunk
+port resolves a field of; :class:`ChunkReadStores` is its read-typed view. No ``src/`` domain collaborator takes either
+bundle: every service names its seams explicitly, so no chunk service can hold write access to a concept it never
+calls."""
 
 from __future__ import annotations
 
@@ -35,7 +35,8 @@ __all__ = ["ChunkReadStores", "ChunkStores"]
 
 @dataclass(frozen=True)
 class ChunkStores:
-    """The wired chunk-seam collaborators, built by :func:`~blizzard.hub.composition.build_hub_services`."""
+    """The tenant's one set of chunk-seam adapters, built by the store wiring; the chunk area registers each field
+    under its concept's ports, so a port and its field are one instance."""
 
     facts: IReadChunkFactsRepository
     record: IWriteChunkRecordRepository
@@ -57,9 +58,9 @@ class ChunkStores:
 
 @dataclass(frozen=True)
 class ChunkReadStores:
-    """The controller-facing chunk-seam bundle — every field typed to its
-    concept's read Protocol only, so ``bzh:controller-read-only`` is enforced at type-check
-    time."""
+    """The read-typed view of the tenant's chunk stores that the legacy tenant services still carry for the readers
+    not yet narrowed to the chunk read ports — every field typed to its concept's read Protocol only, so
+    ``bzh:controller-read-only`` is enforced at type-check time, and each the instance its read port resolves to."""
 
     facts: IReadChunkFactsRepository
     record: IReadChunkRecordRepository

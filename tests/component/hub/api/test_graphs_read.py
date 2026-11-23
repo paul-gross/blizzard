@@ -9,6 +9,8 @@ from pathlib import Path
 import yaml
 
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from tests.support.scaffolding import HubHarness, build_hub, count_queries
 
 _GRAPH_A = """
@@ -256,7 +258,7 @@ def test_posting_the_served_body_back_unchanged_mints_the_same_graph_again(tmp_p
 def test_the_default_graphs_body_round_trips_with_its_prompts_inlined(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     graph = hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     first = hub.client.get(f"/api/graphs/{graph.graph_id}").json()
 
@@ -266,7 +268,7 @@ def test_the_default_graphs_body_round_trips_with_its_prompts_inlined(tmp_path: 
     second = resp.json()
     assert second["name"] == first["name"]
     assert [(n["name"], n["prompt"]) for n in second["nodes"]] == [(n["name"], n["prompt"]) for n in first["nodes"]]
-    assert {n.name: n.prompt for n in hub.services.default_graph_doc.nodes} == {
+    assert {n.name: n.prompt for n in PACKAGED_GRAPHS.default.doc.nodes} == {
         n["name"]: n["prompt"] for n in second["nodes"]
     }
 

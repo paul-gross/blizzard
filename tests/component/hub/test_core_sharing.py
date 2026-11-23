@@ -15,6 +15,7 @@ from blizzard.hub.domain.execution.claim import ClaimService
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
+from blizzard.hub.domain.operations.delete import DeleteService
 from blizzard.hub.domain.urgency.ports import IReadUrgencyRepository, IWriteUrgencyRepository
 from blizzard.hub.domain.urgency.services import TenantDefault, UrgencyLifecycle, UrgencyReading
 from blizzard.hub.store.errors import HubStoreError
@@ -39,7 +40,7 @@ def test_services_share_the_cores_stores(tmp_path: Path) -> None:
     assert services.findings is exits.repo
     assert services.garden_proposals is services.garden_proposal_authoring.proposals
     assert services.garden_proposal_closures is services.garden_proposal_authoring.closures
-    assert services.delete is services.garden_proposal_closure.items.delete
+    assert hub.default_adapter(DeleteService) is services.garden_proposal_closure.items.delete
     assert services.registry is hub.default_adapter(ClaimService).registry
     assert services.registry is hub.default_adapter(FleetService).registry
 
@@ -94,7 +95,7 @@ def test_transaction_binding_is_shared_only_within_one_tenant(tmp_path: Path) ->
     first = core.open(StoreScope(default_tenant(hub.engine)))
     second = core.open(StoreScope(add_tenant(hub.engine, "other")))
 
-    assert first.delete._transactions is first.transactions  # pyright: ignore[reportPrivateUsage]  # the shared binding is wiring, observable only on the private seam
+    assert first.tenant.get(DeleteService)._transactions is first.transactions  # pyright: ignore[reportPrivateUsage]  # the shared binding is wiring, observable only on the private seam
     assert second.transactions is not first.transactions
 
 

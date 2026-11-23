@@ -17,6 +17,8 @@ from blizzard.hub.api import openapi_problems, problem_declarations
 from blizzard.hub.api.problem_declarations_garden import GARDEN_DECLARATIONS
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.scopes import ScopeSlug, ScopeSlugError
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -71,7 +73,7 @@ def _refused(
 
 def _routine(hub: HubHarness, slug: str = "nightly") -> str:
     graph = hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     routine = hub.services.routine_authoring.create(
         project=project_record(hub, default_project(hub.engine)),

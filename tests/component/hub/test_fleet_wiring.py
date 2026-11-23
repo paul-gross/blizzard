@@ -62,7 +62,6 @@ def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
         ],
         "detach": [
             scope.get(DetachService),
-            services.detach,
             fleet._detach,  # pyright: ignore[reportPrivateUsage]
         ],
         "fleet": [

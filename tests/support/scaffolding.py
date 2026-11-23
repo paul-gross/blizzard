@@ -152,6 +152,7 @@ from blizzard.hub.domain.observability.transcripts import (
     transcript_chunk_lock,
     transcript_lane_lock,
 )
+from blizzard.hub.domain.operations.promote import PromoteService
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
 from blizzard.hub.domain.projects.model import Project, ProjectId
@@ -2621,7 +2622,7 @@ def make_ready(hub: HubHarness, chunk_id: str) -> None:
     finds it ``ready``. Bypasses the HTTP route: no operator session and no SSE frame."""
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None, f"unknown chunk {chunk_id}"
-    hub.services.promote.promote(chunk)
+    hub.default_adapter(PromoteService).promote(chunk)
 
 
 def claim_route(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1") -> RouteClaimReply:

@@ -68,9 +68,7 @@ from blizzard.hub.domain.cadence.services import (
     CadenceReading,
 )
 from blizzard.hub.domain.cadence.sweep import CadenceSweep, TenantCadence
-from blizzard.hub.domain.chunk.dependencies import DependencyService
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.ingest import IngestService
 from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
@@ -87,8 +85,6 @@ from blizzard.hub.domain.delivery.lines import FlowLineFactory
 from blizzard.hub.domain.delivery.ports.flows import IReadFlows, IReadFlowViews
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.execution.apply import IHubStepWake
-from blizzard.hub.domain.execution.decisions import RequeueService
-from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.garden.delivery.materialize import GardenDelivery
 from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
 from blizzard.hub.domain.garden.delivery.stage_check import GardenStageCheck
@@ -127,7 +123,7 @@ from blizzard.hub.domain.garden.runs.sweeps import GardenSweepsService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
 from blizzard.hub.domain.graph.authoring import DefaultGraphService, GraphMintService
-from blizzard.hub.domain.graph.model import GraphDoc, IReadGraphBodies, IReadGraphRepository, IReadNodeExecutors
+from blizzard.hub.domain.graph.model import IReadGraphBodies, IReadGraphRepository, IReadNodeExecutors
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.observability.analytics.derivation import (
     EventDerivationReconciler,
@@ -161,15 +157,6 @@ from blizzard.hub.domain.observability.transcripts import (
     TranscriptCaps,
     TranscriptIngestService,
 )
-from blizzard.hub.domain.operations.complete import CompleteService
-from blizzard.hub.domain.operations.delete import DeleteService
-from blizzard.hub.domain.operations.demote import DemoteService
-from blizzard.hub.domain.operations.edit import EditService
-from blizzard.hub.domain.operations.pause import PauseService
-from blizzard.hub.domain.operations.promote import PromoteService
-from blizzard.hub.domain.operations.queue import GroupService, QueueService
-from blizzard.hub.domain.operations.restart import RestartService
-from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
@@ -285,20 +272,6 @@ class TenantServices:
     graph_bodies: IReadGraphBodies
     #: Where each node name runs across the tenant's non-retired graphs — what a runner's gates are flagged against.
     node_executors: IReadNodeExecutors
-    ingest: IngestService
-    promote: PromoteService
-    demote: DemoteService
-    requeue: RequeueService
-    restart: RestartService
-    detach: DetachService
-    pause: PauseService
-    stop: StopService
-    complete: CompleteService
-    edit: EditService
-    #: Declare/release a dependency edge between two chunks.
-    dependencies: DependencyService
-    #: The unacquired-chunk delete/withdraw service.
-    delete: DeleteService
     #: The transcript lane's ingest policy — the write side; ``transcripts``
     #: above is the same store's read Protocol.
     transcript_ingest: TranscriptIngestService
@@ -306,8 +279,6 @@ class TenantServices:
     default_graph: DefaultGraphService
     #: The YAML binding of the config codec a graph definition is decoded and stored through.
     graph_yaml: IConfigCodec
-    queue: QueueService
-    group: GroupService
     #: The fleet registry's read Protocol — the same store instance as the fleet service's writes.
     registry: IReadRunnerRegistry
     #: The host registry's read Protocol — the same store instance as the host services' writes.
@@ -320,8 +291,6 @@ class TenantServices:
     #: The one event-log recorder every hub-side authoring site shares.
     event_log: EventLogService
     clock: IClock
-    default_graph_doc: GraphDoc
-    default_graph_yaml: str
     work_sources: IWorkSourceRegistry
     #: Each repository's forge roles, built from its records.
     forges: ForgeRegistry
@@ -533,7 +502,6 @@ class TenantStores:
     hosts: HostRegistryStore
     work_item_store: WorkItemStore
     chunk_stores: ChunkStores
-    delete: DeleteService
     finding_store: FindingStore
     garden_proposal_store: GardenProposalStore
     garden_proposal_closure_store: GardenProposalClosureStore
@@ -585,7 +553,6 @@ def build_tenant_stores(tenant: Resolver, *, clock: IClock) -> TenantStores:
         hosts=tenant.get(HostRegistryStore),
         work_item_store=tenant.get(WorkItemStore),
         chunk_stores=tenant.get(ChunkStores),
-        delete=tenant.get(DeleteService),
         finding_store=tenant.get(FindingStore),
         garden_proposal_store=tenant.get(GardenProposalStore),
         garden_proposal_closure_store=tenant.get(GardenProposalClosureStore),
@@ -870,10 +837,11 @@ def flow_line_factory_leaf(
 
 
 def register_legacy(registry: LegacyRegistry) -> store_wiring.StoreRefs:
-    """Declare the legacy bridge's leaves, each built as the legacy builder built it, over the store's adapters: the
-    process services a request's admission reads before its tenant is known, and the transitional ports the adapters
-    answer to until their areas adopt them. Hands back the tenant adapters' ``Ref``s, which the root aliases the adopted
-    areas' ports onto."""
+    """Declare the store's adapters and the legacy bridge's leaves, each built as the legacy builder built it: the
+    process services a request's admission reads before its tenant is known, and the transitional ports and leaves of
+    the areas not yet adopted — scope, routine and cadence reads, invitation writes, flow reads and the flow-line
+    builder, and garden proposal resolution. Hands back the tenant adapters' ``Ref``s, which the root aliases the
+    adopted areas' ports onto."""
     registry.leaf(open_tenants_leaf, lifetime=Lifetime.PROCESS)
     registry.leaf(action_loop_leaf, lifetime=Lifetime.PROCESS)
     step_wake = registry.leaf(step_wake_leaf, lifetime=Lifetime.PROCESS)
@@ -1072,7 +1040,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     analytics_event_queries = tenant.get(AnalyticsEventQueryStore)
     operational_analytics = tenant.get(AnalyticsOperationalStore)
     event_log = tenant.get(EventLogService)
-    detach = tenant.get(DetachService)
     # One id-keyed retired-runner refusal, shared by every runner-contact operation.
     retired = tenant.get(RetiredRunnerGuard)
     graph_mint = tenant.get(GraphMintService)
@@ -1206,18 +1173,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         graphs=graph_store,
         graph_bodies=graph_store,
         node_executors=graph_store,
-        ingest=tenant.get(IngestService),
-        promote=tenant.get(PromoteService),
-        demote=tenant.get(DemoteService),
-        requeue=tenant.get(RequeueService),
-        restart=tenant.get(RestartService),
-        detach=detach,
-        pause=tenant.get(PauseService),
-        stop=tenant.get(StopService),
-        complete=tenant.get(CompleteService),
-        edit=tenant.get(EditService),
-        dependencies=tenant.get(DependencyService),
-        delete=stores.delete,
         transcript_ingest=TranscriptIngestService(
             store=transcript_store,
             transactions=stores.transactions,
@@ -1228,8 +1183,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         graph_mint=graph_mint,
         default_graph=default_graph,
         graph_yaml=graph_yaml,
-        queue=tenant.get(QueueService),
-        group=tenant.get(GroupService),
         registry=registry_store,
         hosts=host_store,
         hub_step_wake=parts.step_wake,
@@ -1237,8 +1190,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         chunk_frames=tenant.get(ChunkFrameLoader),
         event_log=event_log,
         clock=clock,
-        default_graph_doc=default_graph_file.doc,
-        default_graph_yaml=default_graph_yaml,
         work_sources=work_sources,
         users=tenant.get(IReadUserRepository),
         transcripts=transcript_store,

@@ -11,6 +11,8 @@ import pytest
 
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -133,7 +135,7 @@ def test_accepting_with_the_default_graph_retired_is_503_and_closes_nothing(tmp_
     hub = build_hub(tmp_path)
     _seed(hub)
     graph = hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     hub.resolve(default_tenant(hub.engine), GraphLifecycleService).retire(graph, by="operator")
 
@@ -143,5 +145,5 @@ def test_accepting_with_the_default_graph_retired_is_503_and_closes_nothing(tmp_
     assert resp.headers["content-type"].startswith("application/problem+json")
     assert resp.json()["type"] == "urn:blizzard:problem:default-graph-retired"
     assert resp.json()["title"] == "Default graph retired"
-    assert hub.services.default_graph_doc.name in resp.json()["detail"]
+    assert PACKAGED_GRAPHS.default.doc.name in resp.json()["detail"]
     assert hub.client.get("/api/garden-proposals/gprop_1").json()["closure"] is None

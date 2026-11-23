@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from blizzard.hub.api.auth import RunnerAuth
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
 from blizzard.hub.api.hub_level import Hub
-from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
+from blizzard.hub.domain.chunk.dependencies import DependencyService, PrerequisiteScope
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.wire.auth import (
@@ -92,7 +92,7 @@ def test_claim_problem_variants_are_aggregated(tmp_path: Path, monkeypatch: pyte
     prerequisite = ingest(hub, [{"source": "default", "ref": "prerequisite"}])
     record = hub.services.chunks.record.get(dependent)
     assert record is not None
-    hub.services.dependencies.declare(record, PrerequisiteScope(prerequisite), by="user:alice")
+    hub.default_adapter(DependencyService).declare(record, PrerequisiteScope(prerequisite), by="user:alice")
     observe(claim("r1", dependent), 409, RouteClaimDependencyProblem)
     observe(claim("r1", "ch_missing"), 404, ChunkNotFoundProblem)
     observe(claim("missing", dependent), 403, ClaimRunnerUnregisteredProblem)

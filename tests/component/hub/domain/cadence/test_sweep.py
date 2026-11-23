@@ -27,6 +27,8 @@ from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.runs.run import RoutineRetiredError
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.domain.projects.model import Project, ProjectId
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.hub.store import schema as s
 from blizzard.hub.tenancy import TenantId
 from tests.support.config_inputs import FLAG_REGISTRY
@@ -47,9 +49,7 @@ def _project(hub: HubHarness, services: TenantServices, tenant: TenantId) -> Pro
 
 
 def _routine(services: TenantServices, project: Project, slug: str, *linked: str) -> Routine:
-    graph = services.default_graph.ensure_default(
-        services.default_graph_doc, definition_yaml=services.default_graph_yaml
-    )
+    graph = services.default_graph.ensure_default(PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml())
     routine = services.routine_authoring.create(
         project=project, ctx=_CTX, slug=slug, graph_name=graph.name, default_scope_slug=ScopeSlug.parse(slug)
     )

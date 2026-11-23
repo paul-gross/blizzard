@@ -20,6 +20,8 @@ from blizzard.hub.domain.cadence.services import CadenceAttention
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.domain.urgency.model import UrgencyId
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from tests.support.scaffolding import (
@@ -68,7 +70,7 @@ def _retired(hub: HubHarness, slug: str) -> str:
 
 def _routine(hub: HubHarness, slug: str = "nightly", *, default_urgency: str | None = None) -> str:
     graph = hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     routine = hub.services.routine_authoring.create(
         project=project_record(hub, default_project(hub.engine)),
@@ -82,9 +84,7 @@ def _routine(hub: HubHarness, slug: str = "nightly", *, default_urgency: str | N
 
 
 def _proposal(hub: HubHarness) -> None:
-    hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
-    )
+    hub.services.default_graph.ensure_default(PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml())
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         "gprop_1",
         project_id=default_project(hub.engine),
@@ -134,9 +134,7 @@ def test_a_hub_item_create_writes_the_default(hub: HubHarness) -> None:
 
 
 def test_a_garden_proposal_accept_writes_the_default(hub: HubHarness) -> None:
-    hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
-    )
+    hub.services.default_graph.ensure_default(PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml())
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         "gprop_1",
         project_id=default_project(hub.engine),

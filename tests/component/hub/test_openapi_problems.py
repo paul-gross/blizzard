@@ -14,7 +14,8 @@ from blizzard.cli.config_inputs import packaged_flag_registry
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.app import create_app_for_export
-from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
+from blizzard.hub.domain.chunk.dependencies import DependencyService, PrerequisiteScope
+from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.runners.host import HostTokenRotation
@@ -338,7 +339,7 @@ def test_claim_runtime_variants_match_registered_responses(tmp_path: Path) -> No
     prerequisite = ingest(hub, [{"source": "default", "ref": "prerequisite"}])
     record = hub.services.chunks.record.get(dependent)
     assert record is not None
-    hub.services.dependencies.declare(record, PrerequisiteScope(prerequisite), by="user:alice")
+    hub.default_adapter(DependencyService).declare(record, PrerequisiteScope(prerequisite), by="user:alice")
     observe(claim("r1", dependent), 409, RouteClaimDependencyProblem)
 
     models = {observation.model for observation in observations if observation.status == 409}
@@ -812,7 +813,7 @@ def test_host_runner_retirement_lifecycle_races_match_openapi(
     registry = cast(IWriteRunnerRegistry, hub.services.registry)
     fleet = hub.default_adapter(FleetService)
     if interrupted:
-        release = hub.services.detach.release_held
+        release = hub.default_adapter(DetachService).release_held
 
         def reinstate_before_release(*args: Any, **kwargs: Any) -> Any:
             registration = registry.get_runner("r1")
@@ -822,7 +823,7 @@ def test_host_runner_retirement_lifecycle_races_match_openapi(
             )
             return release(*args, **kwargs)
 
-        monkeypatch.setattr(hub.services.detach, "release_held", reinstate_before_release)
+        monkeypatch.setattr(hub.default_adapter(DetachService), "release_held", reinstate_before_release)
         model = RunnerRetireInterruptedProblem
     else:
         holdings = fleet.holdings

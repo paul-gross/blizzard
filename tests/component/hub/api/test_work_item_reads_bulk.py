@@ -8,6 +8,8 @@ from typing import Any
 import pytest
 
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkRef
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
@@ -123,7 +125,7 @@ def test_hub_authored_refs_cost_a_bounded_number_of_statements(tmp_path: Path) -
     def seeded(root: Path, count: int) -> tuple[Any, list[str]]:
         hub = build_hub(root)
         graph = hub.services.default_graph.ensure_default(
-            hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+            PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
         )
         store = hub_store_connections(hub.engine)
         refs = ChunkWorkRefsStore(store, hub.clock, facts=ChunkFactsStore(store, hub.clock))
