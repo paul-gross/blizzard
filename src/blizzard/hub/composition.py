@@ -969,7 +969,6 @@ def register_legacy(registry: LegacyRegistry) -> None:
     registry.alias(port(IWriteRoutineRepository), tenant.of(RoutineStore))
     registry.alias(port(IWriteCadenceRepository), tenant.of(CadenceStore))
     # The reads a chunk-changed frame is enriched from.
-    registry.alias(port(IReadHostRegistry), tenant.of(HostRegistryStore))
     registry.alias(port(IWriteInvitationRepository), tenant.of(InvitationStore))
     for leaf in (
         chunk_facts_leaf,
@@ -995,7 +994,6 @@ _LEGACY_TENANT_KEYS: tuple[type[Any], ...] = (
     IReadCadenceRepository,
     IWriteRoutineRepository,
     IWriteCadenceRepository,
-    IReadHostRegistry,
     IWriteInvitationRepository,
     IReadChunkFactsRepository,
     IReadChunkRecordRepository,

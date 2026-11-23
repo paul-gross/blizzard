@@ -118,7 +118,6 @@ _TENANT_ALIASED: tuple[type[Any], ...] = (
     RoutineStore,
     RoutineScopeStore,
     CadenceStore,
-    HostRegistryStore,
     InvitationStore,
 )
 

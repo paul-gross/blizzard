@@ -50,6 +50,7 @@ from tests.support.scaffolding import (
     ingest,
     seed_runner,
 )
+from tests.support.store_free_process import store_free
 
 OPERATIONS = [
     ("GET", "/api/fleet/host"),
@@ -171,12 +172,8 @@ def test_shared_refusals_match_each_host_operation(
     store.rotate_token(HostTokenRotation(host_id, TokenHash("late").hex, hub.clock.now(), "racer"))
     observe(client.request(method, url, headers=bearer("late"), json={}), 403, HostRetiredProblem)
 
-    services = hub.app.state.services
-    hub.app.state.services = None
-    try:
+    with store_free(hub.app):
         response = client.request(method, url, headers=bearer(live_host.json()["token"]), json={})
-    finally:
-        hub.app.state.services = services
     assert response.status_code == 503, response.text
     observations.append(
         RefusalObservation(
