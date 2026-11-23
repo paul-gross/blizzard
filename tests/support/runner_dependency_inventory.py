@@ -102,7 +102,7 @@ POST /api/fleet/host/runners/{runner_id}/retire
 """,
     ),
     (
-        TENANT - {"blizzard.hub.api.deps.tenant_services"}
+        TENANT - {"blizzard.hub.api.deps.tenant_services", HUB}
         | {
             "blizzard.hub.api.auth.require_runner_principal_even_if_retired",
             "blizzard.hub.api.fleet.FleetRequest.of_even_if_retired",
