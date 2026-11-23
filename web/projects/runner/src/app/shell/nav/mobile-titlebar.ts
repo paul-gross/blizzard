@@ -3,7 +3,8 @@ import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu, KitErrorLine } from 'fleet';
 import { injectPanelDashboards } from '../../core/panel-reads';
 import { anyHubReachable } from '../../core/panel-reads.model';
-import { injectRunnerSessionQuery, signedInUsername } from '../../core/identity/auth.query';
+import { injectRunnerSessionQuery } from '../../core/identity/auth.query';
+import { signedInUsername } from '../../core/identity/session.domain';
 import { LocalIdentity } from '../../core/identity/app-identity';
 import { RunnerLogout } from '../../core/identity/runner-logout';
 

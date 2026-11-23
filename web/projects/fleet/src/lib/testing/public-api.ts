@@ -20,7 +20,7 @@ export {
   type CapturedRequest,
   type StubHttpError,
 } from './transport/stub-request-client';
-export { OPERATOR_ME_RESPONSE, flagsResponse, meResponse, meTenant, providerSummary } from './auth-fixtures.translate';
+export { OPERATOR_ME_RESPONSE, flagsResponse, meResponse, meTenant, providerSummary, runnerAuthSessionView } from './auth-fixtures.translate';
 export { chunkControlStub, type ChunkControlStub, type ChunkControlVerb } from './chunk-control-stub';
 export { FIXTURE_NOW, fixtureInstant } from './builders/clock';
 export { awaitingHuman, awaitingQuestion, answeredQuestion, awaitingDecision, recordingAwaitingHumanActions } from './builders/awaiting-human';

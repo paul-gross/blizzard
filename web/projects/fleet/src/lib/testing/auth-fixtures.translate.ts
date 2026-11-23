@@ -1,4 +1,5 @@
 import { type FlagsResponse, type MeResponse, type MeTenant, Permission, type ProviderSummary, Role } from '../api/hub';
+import type { RunnerAuthSessionView } from '../api/runner';
 
 /** The operator's permissions in its tenant. */
 const OPERATOR_PERMISSIONS: MeResponse['permissions'] = [
@@ -58,4 +59,9 @@ export function providerSummary(overrides: Partial<ProviderSummary> = {}): Provi
 /** A `GET /api/flags` answer — no flag set, none overridden — with `overrides` applied. */
 export function flagsResponse(overrides: Partial<FlagsResponse> = {}): FlagsResponse {
   return { flags: {}, overridden: [], ...overrides };
+}
+
+/** A runner `GET /api/auth/session` answer — an oauth-mode hub with `alice` signed in — with `overrides` applied. */
+export function runnerAuthSessionView(overrides: Partial<RunnerAuthSessionView> = {}): RunnerAuthSessionView {
+  return { auth_enabled: true, username: 'alice', ...overrides };
 }

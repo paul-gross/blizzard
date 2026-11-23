@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, ViewportMenu } from 'fleet';
-import { injectRunnerSessionQuery, signedInUsername } from '../../core/identity/auth.query';
+import { injectRunnerSessionQuery } from '../../core/identity/auth.query';
+import { signedInUsername } from '../../core/identity/session.domain';
 import { RunnerLogout } from '../../core/identity/runner-logout';
 
 /**

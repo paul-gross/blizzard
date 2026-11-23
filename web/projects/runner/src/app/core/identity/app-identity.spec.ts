@@ -1,8 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type runnerApi } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRunnerClient } from 'fleet/testing';
+import { type RequestClientStub, runnerAuthSessionView, settle, stubError, stubRunnerClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { RunnerLogout } from './runner-logout';
@@ -10,7 +9,7 @@ import { LocalIdentity } from './app-identity';
 
 /** Render `LocalIdentity` with `GET /api/auth/session` answered by `session` and
  * `POST /api/auth/logout` a 204 no-op. */
-async function render(session: runnerApi.RunnerAuthSessionView) {
+async function render(session: ReturnType<typeof runnerAuthSessionView>) {
   const stub = stubRunnerClient({
     'GET /api/auth/session': () => session,
     'POST /api/auth/logout': () => undefined,

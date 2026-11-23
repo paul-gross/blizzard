@@ -1,7 +1,6 @@
 import { Injectable, signal } from '@angular/core';
-import type { runnerApi } from 'fleet/runner-shell';
-
-import { readRunnerSession, runnerLogoutInFlight } from './auth.query';
+import { readRunnerSessionDomain, runnerLogoutInFlight, sessionOfResponse } from './auth.query';
+import { lacksSession, resolvesUser } from './session.domain';
 
 /** `sessionStorage` key marking that a bounce was already attempted this cycle. It
  * survives the navigation, so a no-session `401` classified while it is set sets
@@ -68,8 +67,7 @@ export class SessionRecovery {
    * reacts, it never transforms what a caller sees. */
   async handle(response: Response, request: Request): Promise<Response> {
     if (isSessionRead(request) && response.ok) {
-      const body = (await response.clone().json()) as runnerApi.RunnerAuthSessionView;
-      if (body.auth_enabled && body.username) {
+      if (resolvesUser(await sessionOfResponse(response))) {
         clearMark();
         this.attemptFailed.set(false);
       }
@@ -92,10 +90,9 @@ export class SessionRecovery {
 
     this.inFlight = true;
     try {
-      const { data } = await readRunnerSession();
-      if (data === undefined) return 'read-failed';
-      const noSession = data.auth_enabled && !data.username;
-      if (!noSession) return 'not-applicable';
+      const session = await readRunnerSessionDomain();
+      if (session === undefined) return 'read-failed';
+      if (!lacksSession(session)) return 'not-applicable';
 
       if (markSet()) {
         this.attemptFailed.set(true);
