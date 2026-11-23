@@ -915,26 +915,26 @@ def event_log_leaf(chunks: ChunkStores, events: EventBroker) -> EventLogService:
 
 
 def chunk_facts_leaf(chunks: ChunkStores) -> IReadChunkFactsRepository:
-    """The tenant's chunk-facts reads, projected from its chunk stores — a legacy leaf the chunk operations
-    area owns until it adopts it."""
+    """The tenant's chunk-facts reads, projected from its chunk stores — a legacy leaf the chunk operations area owns
+    until it adopts it."""
     return chunks.facts
 
 
 def chunk_record_leaf(chunks: ChunkStores) -> IReadChunkRecordRepository:
-    """The tenant's chunk-record reads, projected from its chunk stores — a legacy leaf the chunk operations
-    area owns until it adopts it."""
+    """The tenant's chunk-record reads, projected from its chunk stores — a legacy leaf the chunk operations area owns
+    until it adopts it."""
     return chunks.record
 
 
 def chunk_route_leaf(chunks: ChunkStores) -> IReadChunkRouteRepository:
-    """The tenant's chunk-route reads, projected from its chunk stores — a legacy leaf the chunk operations
-    area owns until it adopts it."""
+    """The tenant's chunk-route reads, projected from its chunk stores — a legacy leaf the chunk operations area owns
+    until it adopts it."""
     return chunks.route
 
 
 def chunk_route_writes_leaf(chunks: ChunkStores) -> IWriteChunkRouteRepository:
-    """The tenant's chunk-route writes, projected from its chunk stores — a legacy leaf the chunk operations
-    area owns until it adopts it."""
+    """The tenant's chunk-route writes, projected from its chunk stores — a legacy leaf the chunk operations area owns
+    until it adopts it."""
     return chunks.route
 
 
