@@ -39,7 +39,6 @@ from blizzard import __version__
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.flags import FlagRegistry, Flags
-from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.logging import get_logger
@@ -78,7 +77,7 @@ from blizzard.hub.composition import (
     connections_for_engine,
     hub_core_over,
 )
-from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH, AuthConfig, HubConfig, LoginThrottleConfig
+from blizzard.hub.config import AUTH_MODE_NONE, AuthConfig, HubConfig, LoginThrottleConfig
 from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE
@@ -1934,14 +1933,18 @@ def build_hub(
         settings=settings,
         versions=HubVersionWindow(hub_version or __version__, version_window),
         overrides=lambda registry: replaced_adapters(
-            registry, probes=credential_probes, forges=forges, work_sources=tenant_work_sources
+            registry,
+            probes=credential_probes,
+            forges=forges,
+            work_sources=tenant_work_sources,
+            oauth_providers=OAuthProviderRegistry(oauth_providers) if oauth_providers is not None else None,
         ),
     )
     default_stores = core.open(default)
     hub_source = HubWorkSource(
         default_stores.work_item_store,
         default_stores.work_item_edits,
-        core.users,
+        core.process.resolver.get(IReadUserRepository),
         default_stores.garden_proposal_resolution,
     )
     built_sources[RESERVED_HUB_SOURCE_NAME] = hub_source
@@ -1953,12 +1956,6 @@ def build_hub(
         core,
         public_url=public_url,
         follow_latest_default=config.follow_latest,
-        oauth_registry=OAuthProviderRegistry(oauth_providers) if oauth_providers is not None else None,
-        # The IdP signing-key lifecycle — wired only under `oauth`, mirroring
-        # `src/blizzard/hub/app.py`'s own `build_hosted_app` gating exactly.
-        signing_keys_dir=(tmp_path / "auth" / "signing-keys") if auth_mode == AUTH_MODE_OAUTH else None,
-        trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
-        login_throttle=login_throttle,
         transcript_caps=transcript_caps,
         trace_exporter=trace_exporter,
         tracing_settings=tracing_settings,

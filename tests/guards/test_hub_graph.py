@@ -26,7 +26,8 @@ from blizzard.hub.api.auth_session import tenant_bound
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.app import create_app_for_export
-from blizzard.hub.composition import build_hub_settings, memberships_leaf
+from blizzard.hub.auth.internal.membership_repository import MembershipRepository
+from blizzard.hub.composition import build_hub_settings
 from blizzard.hub.config import HubConfig
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.delivery.action_registry import SHIPPED_ACTIONS, HubActions
@@ -101,6 +102,10 @@ def _second_open_tenants(reads: HubScopedReads) -> OpenTenants:
     return OpenTenants(reads.tenants.open_tenants)
 
 
+def _second_memberships(connections: HubStoreConnections) -> MembershipRepository:
+    return MembershipRepository(connections)
+
+
 @pytest.mark.parametrize(
     ("store_backed", "settings", "versions"),
     [(True, True, True), (True, False, True), (True, True, False), (False, False, False)],
@@ -134,7 +139,7 @@ def test_the_hub_graph_gate_fails_a_planted_second_owner_and_role_key() -> None:
 
 def test_the_hub_graph_gate_fails_a_planted_alias_onto_a_doubled_owner() -> None:
     registry = _hub(store_backed=True)
-    registry.leaf(memberships_leaf, lifetime=Lifetime.PROCESS)
+    registry.leaf(_second_memberships, lifetime=Lifetime.PROCESS)
     assert alias_identity_violations(registry) == [
         "alias IReadMembershipRepository targets MembershipRepository, which has 2 owners"
     ]

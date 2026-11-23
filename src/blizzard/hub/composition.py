@@ -13,7 +13,6 @@ import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 import httpx2
@@ -41,24 +40,15 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.api.version_window import HubVersionWindow
-from blizzard.hub.auth.auth_state import IWriteAuthStateRepository
-from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.hub_admins import HubAdministrators
 from blizzard.hub.auth.identities import IReadIdentityRepository
-from blizzard.hub.auth.identity_transaction import IIdentityTransactions
-from blizzard.hub.auth.internal.auth_facts_repository import AuthFactsRepository
-from blizzard.hub.auth.internal.auth_state_repository import AuthStateRepository
-from blizzard.hub.auth.internal.hub_admin_repository import HubAdminRepository
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
-from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
 from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.auth.internal.session_repository import SessionRepository
-from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
-from blizzard.hub.auth.invitations import InvitationService
+from blizzard.hub.auth.invitations import InvitationService, IWriteInvitationRepository
 from blizzard.hub.auth.memberships import IReadMembershipRepository, TenantMembers
-from blizzard.hub.auth.oauth.internal.factory import ProviderEntry
 from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
 from blizzard.hub.auth.service import AuthService
 from blizzard.hub.auth.sessions import IReadSessionRepository
@@ -66,7 +56,7 @@ from blizzard.hub.auth.sign_in import SignIn
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.throttle import LiveIpThrottle
 from blizzard.hub.auth.users import IReadUserRepository
-from blizzard.hub.config import HubConfig, LoginThrottleConfig, OAuthProviderConfig
+from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE, ActionPassDriver, PassBound
 from blizzard.hub.delivery.action_registry import HubActions, build_hub_actions
@@ -792,8 +782,6 @@ class HubCore:
     #: The factory the connections wrap a driver fault through, shared with every adapter that opens its own.
     store_errors: HubStoreErrorFactory
     hub_scoped_reads: HubScopedReads
-    auth_errors: RepoErrorFactory
-    users: UserRepository
     #: The hub's own event log, and the service recording an occurrence in it.
     hub_events: HubEventLogStore
     hub_event_log: HubEventLogService
@@ -887,29 +875,9 @@ def build_system_clock() -> IClock:
     return SystemClock()
 
 
-def repo_errors_leaf() -> RepoErrorFactory:
-    """The identity adapters' one error factory, a legacy leaf the hub identity area owns until it adopts it."""
-    return RepoErrorFactory(get_logger("blizzard.hub.auth"))
-
-
-def identity_transactions_leaf(connections: HubStoreConnections, errors: RepoErrorFactory) -> IdentityTransactions:
-    """The identity unit-of-work opener, a legacy leaf the hub identity area owns until it adopts it."""
-    return IdentityTransactions(connections, errors, connections.errors)
-
-
 def open_tenants_leaf(reads: HubScopedReads) -> OpenTenants:
     """The open tenants held in memory, a legacy leaf the hub identity area owns until it adopts them."""
     return OpenTenants(reads.tenants.open_tenants)
-
-
-def memberships_leaf(connections: HubStoreConnections) -> MembershipRepository:
-    """The membership repository, a legacy leaf the hub identity area owns until it adopts it."""
-    return MembershipRepository(connections)
-
-
-def users_leaf(connections: HubStoreConnections, errors: RepoErrorFactory) -> UserRepository:
-    """The user repository, a legacy leaf the hub identity area owns until it adopts it."""
-    return UserRepository(connections, errors)
 
 
 def action_loop_leaf() -> ActionLoop:
@@ -1010,13 +978,6 @@ def register_legacy(registry: LegacyRegistry) -> None:
     process services a request's admission reads before its tenant is known, and the transitional ports the adapters
     answer to until their areas adopt them."""
     registry.leaf(open_tenants_leaf, lifetime=Lifetime.PROCESS)
-    memberships = registry.leaf(memberships_leaf, lifetime=Lifetime.PROCESS)
-    registry.alias(port(IReadMembershipRepository), memberships)
-    registry.leaf(repo_errors_leaf, lifetime=Lifetime.PROCESS)
-    identity = registry.leaf(identity_transactions_leaf, lifetime=Lifetime.PROCESS)
-    registry.alias(port(IIdentityTransactions), identity)
-    users = registry.leaf(users_leaf, lifetime=Lifetime.PROCESS)
-    registry.alias(port(IReadUserRepository), users)
     registry.leaf(action_loop_leaf, lifetime=Lifetime.PROCESS)
     registry.leaf(step_wake_leaf, lifetime=Lifetime.PROCESS)
     hub_events = store_wiring.register_process(registry)
@@ -1032,6 +993,9 @@ def register_legacy(registry: LegacyRegistry) -> None:
     # The routine and cadence writes the urgency clearings are built over, until their areas adopt them.
     registry.alias(port(IWriteRoutineRepository), tenant.of(RoutineStore))
     registry.alias(port(IWriteCadenceRepository), tenant.of(CadenceStore))
+    # The reads a chunk-changed frame is enriched from.
+    registry.alias(port(IReadHostRegistry), tenant.of(HostRegistryStore))
+    registry.alias(port(IWriteInvitationRepository), tenant.of(InvitationStore))
     for leaf in (
         chunk_facts_leaf,
         chunk_record_leaf,
@@ -1056,6 +1020,8 @@ _LEGACY_TENANT_KEYS: tuple[type[Any], ...] = (
     IReadCadenceRepository,
     IWriteRoutineRepository,
     IWriteCadenceRepository,
+    IReadHostRegistry,
+    IWriteInvitationRepository,
     IReadChunkFactsRepository,
     IReadChunkRecordRepository,
     IReadChunkRouteRepository,
@@ -1072,13 +1038,6 @@ def register_legacy_absent(registry: LegacyRegistry) -> None:
     """Declare each of the legacy bridge's leaves and transitional ports absent, for the store-free graph."""
     for missing in (
         OpenTenants,
-        MembershipRepository,
-        IReadMembershipRepository,
-        RepoErrorFactory,
-        IdentityTransactions,
-        IIdentityTransactions,
-        UserRepository,
-        IReadUserRepository,
         ActionLoop,
         StepWake,
         IReadHubEventLog,
@@ -1100,12 +1059,14 @@ def build_hub_core(
     actions: HubActions,
     settings: HubSettingsGraph | None = None,
     versions: HubVersionWindow | None = None,
+    oauth_http_client: httpx2.Client | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> HubCore:
     """Build the :class:`HubCore` over the hub's process container, opened here over the borrowed inputs; the core's
     ``process`` closes it. A core built without the ``settings`` graph declares the settings ports absent, and one
-    without the ``versions`` window, serving no runner, declares the window absent."""
+    without the ``versions`` window, serving no runner, declares the window absent; a lent ``oauth_http_client`` is
+    borrowed, and the hub opens its own when none is lent."""
     from blizzard.hub.process_root import open_store_backed  # the root registers this module's leaves
 
     process = open_store_backed(
@@ -1119,6 +1080,7 @@ def build_hub_core(
         actions=actions,
         settings=settings,
         versions=versions,
+        oauth_http_client=oauth_http_client,
     )
     return hub_core_over(process, store_connections, clock=clock)
 
@@ -1128,7 +1090,6 @@ def hub_core_over(process: HubProcess, store_connections: HubStoreConnections, *
     store_errors = store_connections.errors
     resolver = process.resolver
     hub_scoped_reads = resolver.get(HubScopedReads)
-    auth_errors = resolver.get(RepoErrorFactory)
     hub_events = resolver.get(HubEventLogStore)
 
     def build(scope: StoreScope) -> TenantStores:
@@ -1140,8 +1101,6 @@ def hub_core_over(process: HubProcess, store_connections: HubStoreConnections, *
         store_connections=store_connections,
         store_errors=store_errors,
         hub_scoped_reads=hub_scoped_reads,
-        auth_errors=auth_errors,
-        users=resolver.get(UserRepository),
         hub_events=hub_events,
         hub_event_log=HubEventLogService(events=hub_events),
         tenants=TenantCache(build=build, confirm_open=hub_scoped_reads.tenants.confirm_open),
@@ -1170,7 +1129,6 @@ class TenantServiceParts:
     tenant, so no adapter or client is built twice."""
 
     clock: IClock
-    users: IReadUserRepository
     public_url: str | None
     follow_latest_default: bool
     transcript_caps: TranscriptCaps | None
@@ -1522,7 +1480,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         default_graph_doc=default_graph_file.doc,
         default_graph_yaml=default_graph_yaml,
         work_sources=work_sources,
-        users=parts.users,
+        users=tenant.get(IReadUserRepository),
         transcripts=transcript_store,
         event_derivation_service=event_derivation_service,
         analytics_events=analytics_event_queries,
@@ -1656,7 +1614,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             formats=garden_formats,
             clock=clock,
         ),
-        invitations=InvitationService(tenant=lambda: stores.scope.tenant, invitations=stores.invitations, clock=clock),
+        invitations=tenant.get(InvitationService),
     )
     sweeps = TenantSweeps(
         close_drain=CloseIntentDrainer(
@@ -1695,12 +1653,6 @@ def build_services(
     *,
     public_url: str | None = None,
     follow_latest_default: bool,
-    oauth_providers: Sequence[OAuthProviderConfig] = (),
-    oauth_http_client: httpx2.Client | None = None,
-    oauth_registry: IOAuthProviderRegistry | None = None,
-    signing_keys_dir: Path | None = None,
-    trusted_proxies: TrustedProxies | None = None,
-    login_throttle: LoginThrottleConfig | None = None,
     transcript_caps: TranscriptCaps | None = None,
     trace_exporter: ITraceExporter | None = None,
     tracing_settings: TracingSettings | None = None,
@@ -1729,7 +1681,6 @@ def build_services(
 
     parts = TenantServiceParts(
         clock=clock,
-        users=core.users,
         public_url=public_url,
         follow_latest_default=follow_latest_default,
         transcript_caps=transcript_caps,
@@ -1874,43 +1825,12 @@ def build_services(
         missing_path_key=egress_missing_path_key,
         exported_paths=egress_exported_source,
     )
-    # The identity spine — one error factory shared by the SQLAlchemy
-    # adapters, so the same instances back both the Write Protocols and the reads.
-    user_store = core.users
-    auth_errors = core.auth_errors
-    identity_store = IdentityRepository(store_connections, auth_errors)
-    session_store = SessionRepository(store_connections, auth_errors)
-    auth_state_store: IWriteAuthStateRepository = AuthStateRepository(store_connections, auth_errors)
-    superuser_bootstrap_store = SuperuserBootstrapRepository(store_connections)
-    # Built ahead of `auth` below, which takes it.
-    auth_facts_service = AuthFactsService(facts=AuthFactsRepository(store_connections), clock=clock)
-    memberships = core.process.resolver.get(MembershipRepository)
-    hub_admin_store = HubAdminRepository(store_connections)
-    identity_transactions = core.process.resolver.get(IdentityTransactions)
-    auth = AuthService(
-        users=user_store,
-        identities=identity_store,
-        sessions=session_store,
-        auth_state=auth_state_store,
-        clock=clock,
-        superuser_bootstrap=superuser_bootstrap_store,
-        auth_facts=auth_facts_service,
-        memberships=memberships,
-        hub_admins=hub_admin_store,
-        transactions=identity_transactions,
-        invitations=InvitationStore,
-    )
-    members = TenantMembers(
-        memberships=memberships,
-        hub_admins=hub_admin_store,
-        users=user_store,
-        transactions=identity_transactions,
-        auth_facts=auth_facts_service,
-        clock=clock,
-    )
-    hub_admins = HubAdministrators(
-        hub_admins=hub_admin_store, users=user_store, transactions=identity_transactions, clock=clock
-    )
+    # The identity area's services, each the process scope's one instance.
+    user_store = process.get(UserRepository)
+    identity_store = process.get(IdentityRepository)
+    session_store = process.get(SessionRepository)
+    memberships = process.get(MembershipRepository)
+    auth = process.get(AuthService)
 
     tenant_unit = core.process.resolver.get(ClosedTenantUnits)
     tenant_admin = TenantAdministration(
@@ -1940,12 +1860,6 @@ def build_services(
         events=hub_event_log,
         clock=clock,
     )
-    oauth_registry = oauth_registry or ProviderEntry.registry(oauth_providers, http_client=oauth_http_client)
-    signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
-    login_throttle = login_throttle or LoginThrottleConfig()
-    auth_throttle = LiveIpThrottle(clock=clock)
-    if not login_throttle.enabled:
-        get_logger("blizzard.hub").warning("sign-ins are unthrottled", key="auth.login_throttle.enabled")
     tenant_teardown_sweep = TenantTeardownSweep(teardown=tenant_teardown, teardowns=teardown_store)
     close_drain = CloseDrainSweep(
         corpus=core.hub_scoped_reads.corpus,
@@ -2006,14 +1920,14 @@ def build_services(
         users=user_store,
         memberships=memberships,
         auth=auth,
-        sign_in=SignIn(auth=auth, invitations=core.hub_scoped_reads.invitations),
-        members=members,
-        hub_admins=hub_admins,
-        oauth_providers=oauth_registry,
-        auth_throttle=auth_throttle,
-        auth_facts=auth_facts_service,
-        signing=signing,
-        trusted_proxies=trusted_proxies if trusted_proxies is not None else TrustedProxies(),
+        sign_in=process.get(SignIn),
+        members=process.get(TenantMembers),
+        hub_admins=process.get(HubAdministrators),
+        oauth_providers=process.get(IOAuthProviderRegistry),
+        auth_throttle=process.get(LiveIpThrottle),
+        auth_facts=process.get(AuthFactsService),
+        signing=process.get(SigningKeyService | None),
+        trusted_proxies=process.get(TrustedProxies),
         event_derivation=event_derivation,
         annotation=annotation,
         sweeps=SweepRoster(

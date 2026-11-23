@@ -17,6 +17,7 @@ from sqlalchemy import update
 from blizzard.foundation.clock import ControlledClock, FixedClock
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.capabilities import Capability
@@ -121,7 +122,7 @@ class _World:
             credentials=self.stores.credential_records,
             objects=live.objects,
             authorizations=ScopedAuthorizations(authorizations, ForgeScope.WORK_SOURCE),
-            users=core.users,
+            users=core.process.resolver.get(IReadUserRepository),
             work_item_store=self.stores.work_item_store,
             edits=self.stores.work_item_edits,
             resolution=self.stores.garden_proposal_resolution,

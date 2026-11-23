@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.composition import TenantStores
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace, TraceLanding
 from blizzard.hub.domain.chunk.model import WorkRef
@@ -99,7 +100,7 @@ def _registry_world(
         credentials=stores.credential_records,
         objects=live.objects,
         authorizations=ScopedAuthorizations(live.authorizations, ForgeScope.WORK_SOURCE),
-        users=core.users,
+        users=core.process.resolver.get(IReadUserRepository),
         work_item_store=stores.work_item_store,
         edits=stores.work_item_edits,
         resolution=stores.garden_proposal_resolution,
