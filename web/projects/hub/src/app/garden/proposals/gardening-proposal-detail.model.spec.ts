@@ -1,4 +1,10 @@
-import { type FindingView, type GardenProposalClosureView, type GardenProposalView, type RoutineView } from 'fleet';
+import { fixtureInstant } from 'fleet/testing';
+
+import type { Finding } from '../core/finding.domain';
+import { gardenFinding } from '../core/finding.builders';
+import type { Proposal, ProposalClosure } from '../core/proposal.domain';
+import { gardenProposal, gardenProposalClosure } from '../core/proposal.builders';
+import { gardenRoutine } from '../core/routine.builders';
 
 import {
   acceptedItemPointer,
@@ -11,63 +17,36 @@ import {
   proposalWorkItemVm,
 } from './gardening-proposal-detail.model';
 
-function proposal(overrides: Partial<GardenProposalView> = {}): GardenProposalView {
-  return {
-    proposal_id: 'gp_1',
-    origin: 'routine-run',
-    routine_name: 'nightly',
-    class: 'stale-docstring',
+const CREATED_AT = fixtureInstant(-24 * 3600);
+const CLOSED_AT = fixtureInstant(-3600);
+
+function proposal(overrides: Partial<Proposal> = {}): Proposal {
+  return gardenProposal({
+    id: 'gp_1',
+    routineSlug: 'nightly',
+    proposalClass: 'stale-docstring',
     title: 'Extract the shared helper',
     body: 'Three call sites duplicate this logic.',
-    created_at: '2026-01-01T00:00:00Z',
-    findings: [],
-    closure: null,
-    created_by: null,
-    project_id: null,
-    project_name: null,
-    project_slug: null,
+    createdAt: CREATED_AT,
     ...overrides,
-  };
+  });
 }
 
-function closure(overrides: Partial<GardenProposalClosureView> = {}): GardenProposalClosureView {
-  return {
-    closure: 'accepted',
-    closed_by: 'op',
-    closed_at: '2026-01-02T00:00:00Z',
+function closure(overrides: Partial<ProposalClosure> = {}): ProposalClosure {
+  return gardenProposalClosure({
+    kind: 'accepted',
+    closedBy: 'op',
+    closedAt: CLOSED_AT,
     reason: 'worth it',
-    item_outcome: 'minted',
+    itemOutcome: 'minted',
     source: 'blizzard',
     ref: 'ch_7',
     ...overrides,
-  };
+  });
 }
 
-function finding(id: string, overrides: Partial<FindingView> = {}): FindingView {
-  return {
-    finding_id: id,
-    class: 'stale-docstring',
-    locus: 'a.py:1',
-    summary: 'summary',
-    state: 'live',
-    live: true,
-    scope_slug: 'blizzard',
-    observed_count: 1,
-    last_seen_at: '2026-01-05T00:00:00Z',
-    exit: null,
-    first_observed_at: null,
-    introduced: null,
-    introduced_at: null,
-    note: null,
-    project_id: null,
-    project_name: null,
-    project_slug: null,
-    raised_by_chunk_id: null,
-    severity: null,
-    source: 'routine',
-    routine_name: null,
-    ...overrides,
-  };
+function finding(id: string, overrides: Partial<Finding> = {}): Finding {
+  return gardenFinding({ id, locus: 'a.py:1', summary: 'summary', observedCount: 1, ...overrides });
 }
 
 function query(pending: boolean, error = false) {
@@ -77,7 +56,7 @@ function query(pending: boolean, error = false) {
 const WORK_ITEM = { label: 'Extract the helper', webUrl: 'https://example.test/ch_7' };
 
 describe('proposalById', () => {
-  const docket = [proposal(), proposal({ proposal_id: 'gp_2' })];
+  const docket = [proposal(), proposal({ id: 'gp_2' })];
 
   it('reads null on the bare route', () => {
     expect(proposalById(docket, null)).toBeNull();
@@ -111,11 +90,11 @@ describe('acceptedItemPointer', () => {
   });
 
   it('reads null for a passed proposal', () => {
-    expect(acceptedItemPointer(closure({ closure: 'passed', item_outcome: null }))).toBeNull();
+    expect(acceptedItemPointer(closure({ kind: 'passed', itemOutcome: null }))).toBeNull();
   });
 
   it('reads null for an accepted proposal whose item was not minted', () => {
-    expect(acceptedItemPointer(closure({ item_outcome: 'declined' }))).toBeNull();
+    expect(acceptedItemPointer(closure({ itemOutcome: 'declined' }))).toBeNull();
   });
 
   it('names the minted item by source and ref', () => {
@@ -131,11 +110,11 @@ describe('proposalWorkItemVm', () => {
   });
 
   it('reads null while the read is in flight', () => {
-    expect(proposalWorkItemVm(pointer, true, { label: 'x', web_url: null })).toBeNull();
+    expect(proposalWorkItemVm(pointer, true, { label: 'x', webUrl: null })).toBeNull();
   });
 
   it('carries the resolved record', () => {
-    expect(proposalWorkItemVm(pointer, false, { label: 'Extract', web_url: 'https://example.test/ch_7' })).toEqual({
+    expect(proposalWorkItemVm(pointer, false, { label: 'Extract', webUrl: 'https://example.test/ch_7' })).toEqual({
       label: 'Extract',
       webUrl: 'https://example.test/ch_7',
     });
@@ -146,7 +125,7 @@ describe('proposalWorkItemVm', () => {
   });
 
   it('falls back to the bare pointer for a label-less record', () => {
-    expect(proposalWorkItemVm(pointer, false, { label: null, web_url: null })).toEqual({
+    expect(proposalWorkItemVm(pointer, false, { label: null, webUrl: null })).toEqual({
       label: 'blizzard:ch_7',
       webUrl: null,
     });
@@ -159,19 +138,19 @@ describe('proposalOriginVm', () => {
   });
 
   it("reads the routine's display name, looked up by the slug the proposal carries", () => {
-    const routines = [{ slug: 'nightly', name: 'Nightly sweep' } as RoutineView];
+    const routines = [gardenRoutine({ slug: 'nightly', name: 'Nightly sweep' })];
     expect(proposalOriginVm(proposal(), routines)).toEqual({ kind: 'routine-run', routineName: 'Nightly sweep' });
     expect(
-      proposalOriginVm(proposal({ origin: 'operator', created_by: 'alice', routine_name: 'nightly' }), routines),
+      proposalOriginVm(proposal({ origin: 'operator', createdBy: 'alice', routineSlug: 'nightly' }), routines),
     ).toEqual({ kind: 'operator', createdBy: 'alice', routineName: 'Nightly sweep' });
   });
 
   it('gives an origin the client does not declare the unlisted arm, raw', () => {
-    expect(proposalOriginVm(proposal({ origin: 'importer' as never }), [])).toEqual({ kind: 'unlisted', raw: 'importer' });
+    expect(proposalOriginVm(proposal({ origin: { unlisted: 'importer' } }), [])).toEqual({ kind: 'unlisted', raw: 'importer' });
   });
 
   it('names an operator and the routine it may cite', () => {
-    expect(proposalOriginVm(proposal({ origin: 'operator', created_by: 'alice', routine_name: null }), [])).toEqual({
+    expect(proposalOriginVm(proposal({ origin: 'operator', createdBy: 'alice', routineSlug: null }), [])).toEqual({
       kind: 'operator',
       createdBy: 'alice',
       routineName: null,
@@ -181,20 +160,20 @@ describe('proposalOriginVm', () => {
 
 describe('proposalClosureVm', () => {
   it('maps a passed closure without a work item', () => {
-    expect(proposalClosureVm(closure({ closure: 'passed', item_outcome: null }), WORK_ITEM)).toEqual({
+    expect(proposalClosureVm(closure({ kind: 'passed', itemOutcome: null }), WORK_ITEM)).toEqual({
       kind: 'passed',
       closedBy: 'op',
-      closedAt: '2026-01-02T00:00:00Z',
+      closedAt: CLOSED_AT,
       reason: 'worth it',
     });
   });
 
   it('gives a closure the client does not declare the unlisted arm, raw', () => {
-    expect(proposalClosureVm(closure({ closure: 'deferred' as never }), WORK_ITEM)).toEqual({
+    expect(proposalClosureVm(closure({ kind: { unlisted: 'deferred' } }), WORK_ITEM)).toEqual({
       kind: 'unlisted',
       raw: 'deferred',
       closedBy: 'op',
-      closedAt: '2026-01-02T00:00:00Z',
+      closedAt: CLOSED_AT,
       reason: 'worth it',
     });
   });
@@ -203,14 +182,14 @@ describe('proposalClosureVm', () => {
     expect(proposalClosureVm(closure(), WORK_ITEM)).toEqual({
       kind: 'accepted',
       closedBy: 'op',
-      closedAt: '2026-01-02T00:00:00Z',
+      closedAt: CLOSED_AT,
       reason: 'worth it',
       workItem: WORK_ITEM,
     });
   });
 
   it('drops the work item on an accepted-and-declined closure', () => {
-    expect(proposalClosureVm(closure({ item_outcome: 'declined' }), WORK_ITEM)).toMatchObject({
+    expect(proposalClosureVm(closure({ itemOutcome: 'declined' }), WORK_ITEM)).toMatchObject({
       kind: 'accepted',
       workItem: null,
     });
@@ -230,13 +209,13 @@ describe('proposalPanelVm', () => {
       title: 'Extract the shared helper',
       body: 'Three call sites duplicate this logic.',
       closure: null,
-      createdAt: '2026-01-01T00:00:00Z',
+      createdAt: CREATED_AT,
       hasFindings: false,
     });
   });
 
   it('maps the closure and flags cited findings', () => {
-    const vm = proposalPanelVm(proposal({ closure: closure(), findings: ['fnd_1'] }), WORK_ITEM, []);
+    const vm = proposalPanelVm(proposal({ closure: closure(), findingIds: ['fnd_1'] }), WORK_ITEM, []);
     expect(vm?.closure).toMatchObject({ kind: 'accepted', workItem: WORK_ITEM });
     expect(vm?.hasFindings).toBe(true);
   });

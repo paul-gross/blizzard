@@ -14,7 +14,7 @@
           <span class="fp-ref" [title]="panel.findingId">{{ compactRef(panel.findingId) }}</span>
           <span class="fp-sep" aria-hidden="true">·</span>
           <fleet-kit-badge class="fp-state" data-testid="fp-title-state" [tone]="stateTone()" variant="text">{{
-            panel.state
+            text(panel.state)
           }}</fleet-kit-badge>
         </h3>
         <p class="fp-locus">{{ panel.locus }}</p>
@@ -53,7 +53,7 @@
         <ng-template #severityValue>
           @if (panel.severity; as severity) {
             <fleet-kit-badge class="fp-severity" data-testid="fp-severity-badge" [tone]="severityTone()" variant="soft">{{
-              severity
+              text(severity)
             }}</fleet-kit-badge>
           }
         </ng-template>

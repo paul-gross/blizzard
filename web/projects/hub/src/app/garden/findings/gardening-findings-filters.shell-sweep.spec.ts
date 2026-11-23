@@ -2,7 +2,6 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type FindingView, type RoutineView, type ScopeView } from 'fleet';
 import {
   gardenFindingView,
   gardenRoutineView,
@@ -41,7 +40,7 @@ import { GardeningFindingsPage } from './gardening-findings-page';
  * Excluded from the default `ng test hub` run (`angular.json`'s `test.exclude`) —
  * run it via `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
  */
-const ROUTINES: RoutineView[] = [
+const ROUTINES = [
   gardenRoutineView({
     routine_id: 'rtn_1',
     name: 'nightly',
@@ -60,7 +59,7 @@ const ROUTINES: RoutineView[] = [
   }),
 ];
 
-const SCOPES: ScopeView[] = [
+const SCOPES = [
   gardenScopeView({ slug: 'blizzard', description: 'the hub, runner, CLI and board' }),
   gardenScopeView({ slug: 'web', description: 'the Angular workspace' }),
 ];
@@ -70,7 +69,7 @@ const SCOPES: ScopeView[] = [
  * `class` is deliberately a long, unbroken 40+ character run — proves `.fl-class`
  * shrinks-and-ellipsizes on its own line rather than pushing `.fl-ref` onto a
  * second line once `.fl-routine`/`.fl-scope` also render. */
-const FINDINGS: FindingView[] = [
+const FINDINGS = [
   gardenFindingView({
     finding_id: 'fnd_1',
     routine_name: 'nightly',
@@ -159,7 +158,7 @@ const MANY_CLASSES = Array.from({ length: 55 }, (_, i) => ({
   class: `a-fairly-long-finding-class-name-number-${i}`,
 }));
 
-async function render(findings: readonly FindingView[] = FINDINGS) {
+async function render(findings: readonly ReturnType<typeof gardenFindingView>[] = FINDINGS) {
   const stub = stubHubClient({
     'GET /api/me': () => OPERATOR_ME_RESPONSE,
     'GET /api/scopes': () => SCOPES,

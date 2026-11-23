@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
+import { gardenFindingFact } from '../core/finding.builders';
 import { FleetFindingPanel, type FindingPanelVm } from './finding-panel';
 
 /**
@@ -38,7 +39,7 @@ const VM: FindingPanelVm = {
   lastSeenAt: '2026-01-05T00:00:00Z',
   summary: SUMMARY,
   note: NOTE,
-  facts: [{ kind: 'add', recorded_at: '2026-01-01T00:00:00Z', actor: null, note: null, proposal_id: null, superseded_by: null }],
+  facts: [gardenFindingFact({ recordedAt: '2026-01-01T00:00:00Z' })],
   workItem: null,
   source: 'routine',
   severity: null,

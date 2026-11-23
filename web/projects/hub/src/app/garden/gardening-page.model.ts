@@ -1,11 +1,13 @@
-import { type GardenProposalView, type ProjectView } from 'fleet';
+import { type ProjectView } from 'fleet';
+
+import type { Proposal } from './core/proposal.domain';
 
 import { isGardenProposalWaiting, waitingLabel } from './proposals/gardening-proposals-page.model';
 
 export { waitingLabel };
 
 /** How many proposals are waiting on a person — the gardening strip's one urgent count. */
-export function waitingProposalCount(proposals: readonly GardenProposalView[]): number {
+export function waitingProposalCount(proposals: readonly Proposal[]): number {
   return proposals.filter(isGardenProposalWaiting).length;
 }
 
@@ -62,7 +64,7 @@ export function gardenSurfaceCounts(reads: {
   readonly routines: readonly unknown[] | undefined;
   readonly cadences: readonly unknown[] | undefined;
   readonly runs: readonly unknown[] | undefined;
-  readonly proposals: readonly GardenProposalView[] | undefined;
+  readonly proposals: readonly Proposal[] | undefined;
 }): Readonly<Record<GardenSurface, number | null>> {
   return {
     scopes: reads.scopes?.length ?? null,
@@ -89,7 +91,7 @@ export interface GardenProjectChoice {
 
 export function gardenProjectChoices(
   projects: readonly ProjectView[],
-  proposals: readonly GardenProposalView[] | undefined,
+  proposals: readonly Proposal[] | undefined,
 ): readonly GardenProjectChoice[] {
   return [
     ...[...projects]
@@ -100,7 +102,7 @@ export function gardenProjectChoices(
         waiting:
           proposals === undefined
             ? null
-            : waitingProposalCount(proposals.filter((proposal) => proposal.project_id === project.project_id)),
+            : waitingProposalCount(proposals.filter((proposal) => proposal.projectId === project.project_id)),
       })),
     { slug: null, label: 'All projects', waiting: null },
   ];

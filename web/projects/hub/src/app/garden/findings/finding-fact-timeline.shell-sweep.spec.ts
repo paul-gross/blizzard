@@ -1,12 +1,10 @@
-import type { FindingFactView } from 'fleet';
+import { gardenFindingFact } from '../core/finding.builders';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
-function fact(fields: Pick<FindingFactView, 'kind' | 'recorded_at'> & Partial<FindingFactView>): FindingFactView {
-  return { actor: null, note: null, proposal_id: null, superseded_by: null, ...fields };
-}
+const fact = gardenFindingFact;
 
 import { FleetFindingPanel, type FindingPanelVm } from './finding-panel';
 
@@ -51,10 +49,10 @@ const VM: FindingPanelVm = {
   summary: 'docstring narrates a removed parameter',
   note: null,
   facts: [
-    fact({ kind: 'add', recorded_at: '2026-01-01T00:00:00Z' }),
+    fact({ kind: 'add', recordedAt: '2026-01-01T00:00:00Z' }),
     fact({
       kind: 'wont-fix',
-      recorded_at: '2026-01-02T00:00:00Z',
+      recordedAt: '2026-01-02T00:00:00Z',
       actor: 'u_01ABCDEFGHJKMNPQRSTVWXYZ0123',
       note: LONG_UNBROKEN_NOTE,
     }),

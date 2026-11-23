@@ -2,11 +2,13 @@ import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { getWorkItemApiWorkSourcesSourceItemsRefGet, type WorkItemView } from 'fleet';
 import { hubWorkItemKey, hubWorkItemsKey } from '../../core/query-keys';
+import type { WorkItem } from './work-item.domain';
+import { fromWorkItemView } from './work-item.translate';
 
 /**
  * Hub `GET /api/work-sources/{source}/items/{ref}` read — an accepted proposal's
  * linked work item, resolved through its closure's `source`/`ref` pointer.
- * `web_url` is `null` once the chunk is terminal. Reactive over the selected
+ * Its `webUrl` is `null` once the chunk is terminal. Reactive over the selected
  * (source, ref) pair; disabled while either is null.
  */
 export function injectHubWorkItemQuery(source: () => string | null, ref: () => string | null) {
@@ -24,6 +26,7 @@ export function injectHubWorkItemQuery(source: () => string | null, ref: () => s
         if (error) throw error;
         return data!;
       },
+      select: fromWorkItemView,
     };
   });
 }
@@ -64,6 +67,7 @@ export function injectHubWorkItemsQuery(pointers: () => readonly WorkItemPointer
         );
         return results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
       },
+      select: (wire: WorkItemView[]): readonly WorkItem[] => wire.map(fromWorkItemView),
     };
   });
 }

@@ -1,9 +1,11 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, computed, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { type FindingFactView, compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitFactList, type KitFact, KitProseBlock, FleetWhen, type Tone } from 'fleet';
+import { compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitFactList, type KitFact, KitProseBlock, FleetWhen, type Tone } from 'fleet';
 import { FleetFindingFactTimeline } from './finding-fact-timeline';
+import type { FindingExit, FindingFact, FindingSeverity, FindingSource, FindingState } from '../core/finding.domain';
 import { findingSeverityTone, findingStateTone, isFindingExited } from '../core/finding-state';
+import { type Vocabulary, vocabularyText } from '../core/vocabulary.domain';
 import type { FindingTriageVerb } from '../core/finding-triage-verb.domain';
 import type { ProposalWorkItemVm } from '../proposals/proposal-panel';
 import { AppLink } from 'fleet/shell';
@@ -16,7 +18,7 @@ export type FindingPanelTriageVerb = Exclude<FindingTriageVerb, 'supersede'>;
 /** The selected finding's own panel view model (`hub finding get`'s own read) —
  * plain data, no query or wire type, `RoutinePanelVm`'s own shape.
  *
- * `introducedRev` is a **git revision**, not a timestamp — `FindingView.introduced`
+ * `introducedRev` is a **git revision**, not a timestamp — it
  * reads e.g. `"4ba7ef06d"` against the live hub, so it renders as plain text here,
  * never through `fleet-when` (the bug this panel's own row sibling,
  * `finding-list.ts`, is dropping from its row rather than carrying forward).
@@ -29,9 +31,9 @@ export interface FindingPanelVm {
   readonly findingId: string;
   readonly findingClass: string;
   readonly locus: string;
-  readonly state: hubApi.FindingState;
-  /** `FindingView.exit` — non-null once the finding has exited. */
-  readonly exit: hubApi.FindingExit | null;
+  readonly state: Vocabulary<FindingState>;
+  /** Non-null once the finding has exited. */
+  readonly exit: Vocabulary<FindingExit> | null;
   readonly observedCount: number;
   readonly introducedRev: string | null;
   readonly introducedAt: string | null;
@@ -41,13 +43,13 @@ export interface FindingPanelVm {
   readonly note: string | null;
   /** The finding's whole append-only fact chain, oldest-first — fed
    * straight to {@link FleetFindingFactTimeline}, which owns its own rendering. */
-  readonly facts: readonly FindingFactView[];
+  readonly facts: readonly FindingFact[];
   readonly workItem: ProposalWorkItemVm | null;
-  /** `FindingView.source` — `"routine"` or `"review"`. */
-  readonly source: hubApi.FindingSource;
-  /** `FindingView.severity` — set only when {@link source} is `"review"`. */
-  readonly severity: hubApi.FindingSeverity | null;
-  /** `FindingView.raised_by_chunk_id` — the chunk id whose review raised the
+  /** `"routine"` or `"review"`. */
+  readonly source: Vocabulary<FindingSource>;
+  /** Set only when {@link source} is `"review"`. */
+  readonly severity: Vocabulary<FindingSeverity> | null;
+  /** The chunk id whose review raised the
    * finding, set only when {@link source} is `"review"`. */
   readonly raisedByChunkId: string | null;
 }
@@ -87,6 +89,7 @@ export class FleetFindingPanel {
   readonly triage = output<FindingPanelTriageVerb>();
 
   protected readonly compactRef = compactRef;
+  protected readonly text = vocabularyText;
 
   /** The record as an aligned fact grid (`fleet-kit-fact-list`, the one owner of
    * this chrome) — a method, not a stored computed, since it depends on both the
@@ -103,7 +106,7 @@ export class FleetFindingPanel {
     raisedBy: TemplateRef<unknown>,
   ): readonly KitFact[] {
     const rows: KitFact[] = [
-      { label: 'state', value: panel.state, testid: 'fp-state' },
+      { label: 'state', value: vocabularyText(panel.state), testid: 'fp-state' },
       { label: 'observed', value: `x${panel.observedCount}`, testid: 'fp-observed' },
       { label: 'introduced', template: introduced, testid: 'fp-introduced' },
       { label: 'first observed', template: firstObserved, testid: 'fp-first-observed' },

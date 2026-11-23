@@ -7,6 +7,7 @@ import {
   gardenRoutineView, type RequestClientStub, settle, stubError, stubHubClient,
 } from 'fleet/testing';
 
+import { gardenProposal, gardenProposalClosure } from '../core/proposal.builders';
 import { GardeningDoorway } from './gardening-doorway';
 import { doorwayCards } from './gardening-doorway.model';
 
@@ -32,7 +33,10 @@ function routes(): Routes {
 
 describe('doorwayCards', () => {
   it('sorts projects and counts only pending proposals in their own project', () => {
-    const cards = doorwayCards(projects, [], routines, proposals);
+    const cards = doorwayCards(projects, [], routines, [
+      gardenProposal({ projectId: 'b', id: 'gp_1' }),
+      gardenProposal({ projectId: 'b', id: 'gp_2', closure: gardenProposalClosure({ kind: 'accepted' }) }),
+    ]);
     expect(cards.map(({ slug, counts, href }) => ({ slug, counts, href }))).toEqual([
       { slug: 'blizzard', counts: '1 routine · 1 pending proposal', href: '/p/blizzard/gardening/proposals' },
       { slug: 'winter', counts: '0 pending proposals', href: '/p/winter/gardening/proposals' },

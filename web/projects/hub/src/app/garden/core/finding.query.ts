@@ -1,4 +1,4 @@
-import { injectInfiniteQuery, injectQuery } from '@tanstack/angular-query-experimental';
+import { type InfiniteData, injectInfiniteQuery, injectQuery } from '@tanstack/angular-query-experimental';
 
 import {
   getFindingApiFindingsFindingIdGet,
@@ -13,6 +13,8 @@ import {
 } from 'fleet';
 import { hubFindingKey, hubFindingClassesKey, hubFindingsBucketKey, hubFindingsKey, lensedKey } from '../../core/query-keys';
 import { injectProjectFilter } from '../../core/project-filter';
+import type { Finding, FindingDetail, FindingPage } from './finding.domain';
+import { fromFindingDetailView, fromFindingView, fromFindingsPageView } from './finding.translate';
 
 const FINDINGS_PAGE = 50;
 
@@ -47,6 +49,7 @@ export function injectHubFindingsQuery(findingIds: () => readonly string[]) {
         );
         return results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
       },
+      select: (wire: FindingView[]): readonly Finding[] => wire.map(fromFindingView),
     };
   });
 }
@@ -63,11 +66,10 @@ export function injectHubFindingsQuery(findingIds: () => readonly string[]) {
  * Stays disabled while `findingId()` is null — the caller's own "nothing selected"
  * rest state is branched before this read is consulted, `bzh:frontend-empty-state-gated`.
  *
- * Resolves `FindingDetailView` — `GET /api/findings/{finding_id}`'s
- * actual response, a superset of `FindingView` that adds the finding's whole
- * append-only fact chain (`facts`, oldest-first). {@link injectHubFindingsQuery}'s
- * fan-out keeps reading plain `FindingView` off the list endpoint; only the
- * one-finding read carries the chain.
+ * Resolves a {@link FindingDetail} — `GET /api/findings/{finding_id}`'s actual
+ * response carries the finding's whole append-only fact chain (oldest-first).
+ * {@link injectHubFindingsQuery}'s fan-out resolves plain {@link Finding}s; only
+ * the one-finding read carries the chain.
  */
 export function injectHubFindingQuery(findingId: () => string | null) {
   return injectQuery(() => {
@@ -83,6 +85,7 @@ export function injectHubFindingQuery(findingId: () => string | null) {
         if (error) throw error;
         return data!;
       },
+      select: (wire: FindingDetailView): FindingDetail => fromFindingDetailView(wire),
     };
   });
 }
@@ -124,6 +127,10 @@ export function injectHubFindingsBucketQuery(routine: () => string | null, scope
         return data!;
       },
       getNextPageParam: (last: FindingsPageView) => last.next_cursor ?? undefined,
+      select: (wire: InfiniteData<FindingsPageView, string | undefined>): InfiniteData<FindingPage, string | undefined> => ({
+        pages: wire.pages.map(fromFindingsPageView),
+        pageParams: wire.pageParams,
+      }),
     };
   });
 }

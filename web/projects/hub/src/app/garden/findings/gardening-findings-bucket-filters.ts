@@ -1,9 +1,12 @@
 import { computed, type Signal } from '@angular/core';
 import { confirmGoneFindingsMutationKey, notAFindingFindingsMutationKey, reopenFindingsMutationKey, resolveFindingsMutationKey, supersedeFindingsMutationKey, wontFixFindingsMutationKey } from '../../core/mutation-keys';
 import { injectHubFindingClassesQuery, injectHubFindingsBucketQuery } from '../core/finding.query';
-import { injectHubRoutinesQuery } from '../core/routines.query';
-import { injectHubScopesQuery } from '../core/scopes.query';
-import { hubApi, injectPendingMutationVariables, type FindingView, type KitChipOption, type RoutineView, type ScopeView } from 'fleet';
+import { injectHubRoutinesDomainQuery } from '../core/routines.query';
+import { injectHubDomainScopesQuery } from '../core/scopes.query';
+import { injectPendingMutationVariables, type KitChipOption } from 'fleet';
+import { FINDING_STATES, type Finding, type FindingState } from '../core/finding.domain';
+import type { Routine } from '../core/routine.domain';
+import type { Scope } from '../core/scope.domain';
 import { type FindingExitVars } from '../core/finding.mutations';
 
 import { injectQueryFilters } from '../../core/route-state';
@@ -29,7 +32,7 @@ const SCOPE_VALUE_PREFIX = 'scope:';
 
 export interface FindingsBucketFilters {
   /** The loaded routines — what a finding's routine slug resolves against for its display name. */
-  readonly routines: Signal<readonly RoutineView[]>;
+  readonly routines: Signal<readonly Routine[]>;
   readonly selectedRoutine: Signal<string | null>;
   readonly selectedScope: Signal<string | null>;
   readonly routineChips: Signal<readonly KitChipOption[]>;
@@ -45,8 +48,8 @@ export interface FindingsBucketFilters {
   readonly stateFilter: Signal<string>;
   onStateChoose(value: string): void;
   readonly bucketQuery: ReturnType<typeof injectHubFindingsBucketQuery>;
-  readonly bucketRows: Signal<readonly FindingView[]>;
-  readonly filteredBucket: Signal<readonly FindingView[]>;
+  readonly bucketRows: Signal<readonly Finding[]>;
+  readonly filteredBucket: Signal<readonly Finding[]>;
 }
 
 /**
@@ -67,10 +70,10 @@ export interface FindingsBucketFilters {
  */
 export function injectFindingsBucketFilters(): FindingsBucketFilters {
   const url = injectQueryFilters();
-  const routinesQuery = injectHubRoutinesQuery();
-  const scopesQuery = injectHubScopesQuery();
-  const routines = computed<readonly RoutineView[]>(() => routinesQuery.data() ?? []);
-  const scopes = computed<readonly ScopeView[]>(() => scopesQuery.data() ?? []);
+  const routinesQuery = injectHubRoutinesDomainQuery();
+  const scopesQuery = injectHubDomainScopesQuery();
+  const routines = computed<readonly Routine[]>(() => routinesQuery.data() ?? []);
+  const scopes = computed<readonly Scope[]>(() => scopesQuery.data() ?? []);
 
   const selectedRoutine = computed<string | null>(() => url.read('routine'));
   const selectedScope = computed<string | null>(() => url.read('scope'));
@@ -119,10 +122,10 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
   }
 
   const classFilter = computed<string | null>(() => url.read('class'));
-  const stateFilter = computed<string>(() => url.read('state') ?? hubApi.FindingState.LIVE);
+  const stateFilter = computed<string>(() => url.read('state') ?? 'live');
   const bucketQuery = injectHubFindingsBucketQuery(selectedRoutine, selectedScope, classFilter, () => stateFilter() === ALL_STATES ? null : stateFilter());
   const classesQuery = injectHubFindingClassesQuery(selectedRoutine, selectedScope);
-  const bucketRows = computed<readonly FindingView[]>(() => bucketQuery.data()?.pages.flatMap((page) => page.findings ?? []) ?? []);
+  const bucketRows = computed<readonly Finding[]>(() => bucketQuery.data()?.pages.flatMap((page) => page.findings) ?? []);
 
   /** Every finding id any of the six human-driven triage verbs is currently pending
    * for (`bzh:frontend-pending-override`), paired with that verb's own known
@@ -134,7 +137,7 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
    * here — the triage dialog that actually fires them (through
    * `triage/finding-triage.service.ts`) is a sibling surface this list never mounts.
    *
-   * Each of these six verbs' resulting `FindingView.state` is fixed and known ahead
+   * Each of these six verbs' resulting finding state is fixed and known ahead
    * of the call settling (`reopened` resolves to `"live"`).
    * {@link filteredBucket} decides which of these are hideable against the active
    * {@link stateFilter}. */
@@ -148,14 +151,14 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
   /** Each pending list above paired with the fixed state its own verb resolves to;
    * pinned by `gardening-findings-page.spec.ts`'s "keeps the row visible on a
    * same-state re-dispatch — …". */
-  const pendingByResultingState = computed<readonly { readonly findingIds: readonly string[]; readonly resultingState: hubApi.FindingState }[]>(
+  const pendingByResultingState = computed<readonly { readonly findingIds: readonly string[]; readonly resultingState: FindingState }[]>(
     () => [
       { findingIds: resolvePending().flatMap((v) => v.findingIds), resultingState: 'resolved' },
       { findingIds: confirmGonePending().flatMap((v) => v.findingIds), resultingState: 'gone-confirmed' },
       { findingIds: wontFixPending().flatMap((v) => v.findingIds), resultingState: 'wont-fix' },
       { findingIds: notAFindingPending().flatMap((v) => v.findingIds), resultingState: 'not-a-finding' },
       { findingIds: supersedePending().flatMap((v) => v.findingIds), resultingState: 'superseded' },
-      { findingIds: reopenPending().flatMap((v) => v.findingIds), resultingState: hubApi.FindingState.LIVE },
+      { findingIds: reopenPending().flatMap((v) => v.findingIds), resultingState: 'live' },
     ],
   );
 
@@ -174,11 +177,11 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
     url.patch({ class: value === ALL_CLASSES ? null : value.slice(CLASS_VALUE_PREFIX.length) });
   }
 
-  /** The generated `FindingState` vocabulary is fixed, unlike `class`, so these
+  /** The finding state vocabulary is fixed, unlike `class`, so these
    * carry no value prefix and no collision guard. */
   const stateChips: readonly KitChipOption[] = [
     { value: ALL_STATES, label: 'All states', testid: 'gardening-finding-state-all' },
-    ...Object.values(hubApi.FindingState).map((s) => ({ value: s, label: s, testid: `gardening-finding-state-item-${s}` })),
+    ...FINDING_STATES.map((s) => ({ value: s, label: s, testid: `gardening-finding-state-item-${s}` })),
   ];
   function onStateChoose(value: string): void {
     url.patch({ state: value });
@@ -189,7 +192,7 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
    * reverts the dropped row the instant its mutation's `isPending()` clears. Pinned by
    * `gardening-findings-page.spec.ts`'s "keeps the row visible on a same-state
    * re-dispatch — …" and "does not drop the row under 'All states'…". */
-  const filteredBucket = computed<readonly FindingView[]>(() => {
+  const filteredBucket = computed<readonly Finding[]>(() => {
     const st = stateFilter();
     const hideable =
       st === ALL_STATES
@@ -199,7 +202,7 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
               .filter((entry) => entry.resultingState !== st)
               .flatMap((entry) => entry.findingIds),
           );
-    return bucketRows().filter((f) => !hideable.has(f.finding_id));
+    return bucketRows().filter((f) => !hideable.has(f.id));
   });
 
   return {

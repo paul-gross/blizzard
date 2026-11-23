@@ -1,4 +1,5 @@
-import { type RoutineView, type RunDeltaView } from 'fleet';
+import { type RunDeltaView } from 'fleet';
+import type { Routine } from '../core/routine.domain';
 import { routineDisplayName } from '../core/routine-display-name';
 import { type RunDeltaVm } from './run-delta';
 
@@ -19,7 +20,7 @@ function revisionsLabel(revisions: Record<string, string>): string {
 export function runDeltaVm(
   delta: RunDeltaView | undefined,
   mintedAtFor: (chunkId: string) => string | null,
-  routines: readonly RoutineView[] | undefined,
+  routines: readonly Routine[] | undefined,
 ): RunDeltaVm | null {
   if (delta === undefined) return null;
   return {

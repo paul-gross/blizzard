@@ -13,6 +13,6 @@ describe('findingStateTone', () => {
   });
 
   it('falls back to idle for a state this build does not know', () => {
-    expect(findingStateTone('some-future-state')).toBe('idle');
+    expect(findingStateTone({ unlisted: 'some-future-state' })).toBe('idle');
   });
 });

@@ -1,4 +1,5 @@
-import { type RoutineView, type RunDeltaView } from 'fleet';
+import { type RunDeltaView } from 'fleet';
+import { gardenRoutine } from '../core/routine.builders';
 import { runCadenceView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
@@ -36,7 +37,7 @@ describe('runDeltaVm', () => {
   });
 
   it("names the run's routine by its display name, looked up by the slug the delta carries", () => {
-    expect(runDeltaVm(delta(), noMintedAt, [{ slug: 'docs', name: 'Docs sweep' } as RoutineView])?.routineName).toBe(
+    expect(runDeltaVm(delta(), noMintedAt, [gardenRoutine({ slug: 'docs', name: 'Docs sweep' })])?.routineName).toBe(
       'Docs sweep',
     );
   });

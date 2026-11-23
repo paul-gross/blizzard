@@ -1,34 +1,35 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectList, KitSelectRow, FleetWhen, type Tone, toneColor } from 'fleet';
+import { compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectList, KitSelectRow, FleetWhen, type Tone, toneColor } from 'fleet';
+import type { FindingExit, FindingSeverity, FindingSource, FindingState } from './finding.domain';
 import { findingSeverityTone, findingStateTone, isFindingExited, isFindingGoneFlagged } from './finding-state';
+import { type Vocabulary, vocabularyText } from './vocabulary.domain';
 import { AppLink } from 'fleet/shell';
 
 /** One row of the findings triage bucket list, pared to what a 320px
- * master-column row shows. `findingClass` renames the wire's `class` so a
+ * master-column row shows. `findingClass` is the finding's class, named so a
  * template never confuses it with the DOM `class` attribute. */
 export interface FindingListRowVm {
   readonly findingId: string;
   readonly findingClass: string;
   readonly locus: string;
   readonly summary: string;
-  readonly state: hubApi.FindingState;
-  /** `FindingView.exit` — `outflow` or `withdrawn` once the finding has exited,
-   * `null` while it is still open. */
-  readonly exit: hubApi.FindingExit | null;
+  readonly state: Vocabulary<FindingState>;
+  /** `outflow` or `withdrawn` once the finding has exited, `null` while it is still open. */
+  readonly exit: Vocabulary<FindingExit> | null;
   readonly lastSeenAt: string | null;
   /** The finding's own routine/scope, rendered only when non-null. */
   readonly routineName: string | null;
   readonly scopeSlug: string | null;
-  /** `FindingView.source` — `"routine"` or `"review"`. A
+  /** `"routine"` or `"review"`. A
    * review-sourced finding carries no {@link routineName} (always `null` for one),
    * so the row shows {@link severity} and {@link raisedByChunkId} in its place
    * rather than leaving that slot silently empty. */
-  readonly source: hubApi.FindingSource;
-  /** `FindingView.severity` — set only when {@link source} is `"review"`. */
-  readonly severity: hubApi.FindingSeverity | null;
-  /** `FindingView.raised_by_chunk_id` — the chunk id whose review raised the
+  readonly source: Vocabulary<FindingSource>;
+  /** Set only when {@link source} is `"review"`. */
+  readonly severity: Vocabulary<FindingSeverity> | null;
+  /** The chunk id whose review raised the
    * finding, set only when {@link source} is `"review"`. */
   readonly raisedByChunkId: string | null;
 }
@@ -41,7 +42,7 @@ export interface FindingListRowVm {
  *
  * A row's `state` decides its tint, carried on the projected `.fl-body` div: open
  * renders untinted, a `gone`-flagged row renders tinted (`.fl-body--gone`), an
- * exited row (a non-null wire `exit`) renders dimmed (`.fl-body--exited`) but never
+ * exited row (a non-null `exit`) renders dimmed (`.fl-body--exited`) but never
  * leaves the DOM. The state also renders as a `fleet-kit-badge` on the last-seen
  * line, tinted by `finding-state.ts`.
  *
@@ -69,6 +70,7 @@ export class FleetFindingList {
   readonly findingPick = output<string>();
 
   protected readonly compactRef = compactRef;
+  protected readonly text = vocabularyText;
 
   protected isGone(row: FindingListRowVm): boolean {
     return isFindingGoneFlagged(row.state);

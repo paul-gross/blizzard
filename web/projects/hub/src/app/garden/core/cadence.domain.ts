@@ -1,17 +1,5 @@
 // bzh:frontend-domain-boundary — the cadence as the hub reads it and as its forms edit it; no wire, no Angular.
-
-/** A vocabulary value this build does not know, carried as the hub sent it so it renders, and resends, as itself. */
-export interface Unlisted {
-  readonly unlisted: string;
-}
-
-/** A vocabulary value as the domain holds it: one this build knows, or an {@link Unlisted} raw value. */
-export type Vocabulary<K extends string> = K | Unlisted;
-
-/** The value `v` names, as the hub spells it — a known value itself, an unlisted one raw. */
-export function vocabularyText<K extends string>(v: Vocabulary<K>): string {
-  return typeof v === 'string' ? v : v.unlisted;
-}
+import type { Vocabulary } from './vocabulary.domain';
 
 /** What a cadence's spacing counts from. */
 export type CadenceAnchor = 'scheduled' | 'started' | 'finished';

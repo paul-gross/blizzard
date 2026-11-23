@@ -3,7 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type FindingDetailView } from 'fleet';
 import {
   gardenFindingDetailView,
   gardenFindingFactView,
@@ -22,7 +21,8 @@ import { GardeningFindingDetail } from './gardening-finding-detail';
 
 type HubRoutes = Parameters<typeof stubHubClient>[0];
 
-function findingFixture(overrides: Pick<FindingDetailView, 'state'> & Partial<FindingDetailView>): FindingDetailView {
+/** A served finding — the stubbed transport's answer, overridden per case. */
+function findingFixture(overrides: NonNullable<Parameters<typeof gardenFindingDetailView>[0]> & { readonly state: string }) {
   return gardenFindingDetailView({
     routine_name: 'nightly',
     scope_slug: 'blizzard',

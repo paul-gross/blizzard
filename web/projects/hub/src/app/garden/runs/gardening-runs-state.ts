@@ -1,7 +1,7 @@
 import { computed, inject, Injectable, type Signal } from '@angular/core';
 import { FLEET_CLOCK, asyncState, type KitAsyncStateValue } from 'fleet';
 import { defaultRoutineWindow } from '../core/routine-window';
-import { injectHubRoutinesQuery } from '../core/routines.query';
+import { injectHubRoutinesDomainQuery } from '../core/routines.query';
 import { injectHubRunListQuery } from './garden-runs.query';
 import { mintedAtFor, runListRows } from './gardening-runs-state.model';
 import { type RunListRowVm } from './run-list';
@@ -27,7 +27,7 @@ export class GardeningRunsState {
   readonly runsQuery = injectHubRunListQuery(() => this.window.since);
 
   /** The routines a run row's slug resolves against for its display name. */
-  readonly routinesQuery = injectHubRoutinesQuery();
+  readonly routinesQuery = injectHubRoutinesDomainQuery();
 
   readonly listRows: Signal<readonly RunListRowVm[]> = computed(() =>
     runListRows(this.runsQuery.data() ?? [], this.routinesQuery.data()),

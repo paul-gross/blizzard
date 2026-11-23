@@ -1,13 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { injectPendingMutationVariables, compactRef, errorMessage, restingAsyncState, type FindingView, type GardenProposalView, type KitAsyncStateValue, KitErrorLine } from 'fleet';
+import { injectPendingMutationVariables, compactRef, errorMessage, restingAsyncState, type KitAsyncStateValue, KitErrorLine } from 'fleet';
+import type { Finding } from '../core/finding.domain';
+import type { Proposal } from '../core/proposal.domain';
 import { FleetProposalPanel, type ProposalEvidenceRowVm, type ProposalEvidenceTriage, type ProposalEvidenceVerb, type ProposalPanelVm, type ProposalWorkItemVm } from './proposal-panel';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectHubFindingsQuery } from '../core/finding.query';
 import { injectHubGardenProposalsQuery } from './garden-proposals.query';
 import { injectHubWorkItemQuery } from '../core/work-item.query';
-import { injectHubRoutinesQuery } from '../core/routines.query';
+import { injectHubRoutinesDomainQuery } from '../core/routines.query';
 import { injectConfirmGoneFindingsMutation, injectNotAFindingFindingsMutation, injectResolveFindingsMutation, injectWontFixFindingsMutation, type FindingExitVars } from '../core/finding.mutations';
 import { confirmGoneFindingsMutationKey, notAFindingFindingsMutationKey, resolveFindingsMutationKey, wontFixFindingsMutationKey } from '../../core/mutation-keys';
 import { map } from 'rxjs';
@@ -58,9 +60,9 @@ export class GardeningProposalDetail {
   private readonly route = inject(ActivatedRoute);
   private readonly proposalsQuery = injectHubGardenProposalsQuery();
   private readonly meQuery = injectMeQuery();
-  private readonly routinesQuery = injectHubRoutinesQuery();
+  private readonly routinesQuery = injectHubRoutinesDomainQuery();
 
-  private readonly proposals = computed<readonly GardenProposalView[]>(() => this.proposalsQuery.data() ?? []);
+  private readonly proposals = computed<readonly Proposal[]>(() => this.proposalsQuery.data() ?? []);
 
   /** The `proposalId` route param, or `null` on the bare child route. A proposal is
    * keyed by its own id (`gprop_…`, rendered compactly as `GP-…`). */
@@ -70,7 +72,7 @@ export class GardeningProposalDetail {
 
   /** The selected row's own full record — already carried by the one list read, so
    * this is a lookup, never a second fetch. */
-  private readonly selectedProposal = computed<GardenProposalView | null>(() =>
+  private readonly selectedProposal = computed<Proposal | null>(() =>
     proposalById(this.proposals(), this.proposalId()),
   );
 
@@ -80,7 +82,7 @@ export class GardeningProposalDetail {
     proposalPanelState(this.selectedProposal(), this.proposalsQuery),
   );
 
-  private readonly findingsQuery = injectHubFindingsQuery(() => this.selectedProposal()?.findings ?? []);
+  private readonly findingsQuery = injectHubFindingsQuery(() => this.selectedProposal()?.findingIds ?? []);
 
   /** The (source, ref) pair naming an accepted-and-minted proposal's linked work
    * item — `null` for a waiting, passed, or accepted-and-declined proposal, so the
@@ -104,7 +106,7 @@ export class GardeningProposalDetail {
     proposalPanelVm(this.selectedProposal(), this.workItemVm(), this.routinesQuery.data()),
   );
 
-  private readonly evidenceFindings = computed<readonly FindingView[]>(() => this.findingsQuery.data() ?? []);
+  private readonly evidenceFindings = computed<readonly Finding[]>(() => this.findingsQuery.data() ?? []);
 
   protected readonly evidenceRows = computed<readonly ProposalEvidenceRowVm[]>(() =>
     proposalEvidenceRows(this.evidenceFindings(), this.workItemVm(), this.pendingTriage()),
@@ -114,7 +116,7 @@ export class GardeningProposalDetail {
    * `isPending()` forever — so that case is `empty` before the helper is consulted. */
   protected readonly evidenceState = computed<KitAsyncStateValue>(() =>
     restingAsyncState(
-      (this.selectedProposal()?.findings.length ?? 0) === 0,
+      (this.selectedProposal()?.findingIds.length ?? 0) === 0,
       this.findingsQuery,
       this.evidenceFindings().length === 0,
     ),
@@ -191,7 +193,7 @@ export class GardeningProposalDetail {
     entry.mutate(
       {
         findingIds: [triage.findingId],
-        note: `Triaged as ${entry.label} from proposal ${compactRef(proposal.proposal_id)}'s evidence.`,
+        note: `Triaged as ${entry.label} from proposal ${compactRef(proposal.id)}'s evidence.`,
       },
       { onError: (error) => this.evidenceError.set(errorMessage(error, `${triage.verb} failed.`)) },
     );
@@ -200,11 +202,11 @@ export class GardeningProposalDetail {
   /** The proposal the Pass dialog is open against — `null` closes it. Only the
    * panel's own `pass` output ever sets it, so it can only ever name the
    * already-selected, still-waiting proposal. */
-  protected readonly passingProposal = signal<GardenProposalView | null>(null);
+  protected readonly passingProposal = signal<Proposal | null>(null);
 
   /** The proposal the Accept dialog is open against — `null` closes it, the same
    * shape as {@link passingProposal}. */
-  protected readonly acceptingProposal = signal<GardenProposalView | null>(null);
+  protected readonly acceptingProposal = signal<Proposal | null>(null);
 
   protected openPass(): void {
     this.passingProposal.set(this.selectedProposal());

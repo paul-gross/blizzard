@@ -1,4 +1,5 @@
-import type { LaneStatus, RoutineView, RunRowView } from 'fleet';
+import type { LaneStatus, RunRowView } from 'fleet';
+import { gardenRoutine } from '../core/routine.builders';
 import { describe, expect, it } from 'vitest';
 import { runCadenceView } from 'fleet/testing';
 
@@ -77,7 +78,7 @@ describe('runListRows', () => {
   });
 
   it("names each run's routine by its display name, looked up by the slug the run carries", () => {
-    const rows = runListRows([DELIVERED_RUN], [{ slug: 'nightly', name: 'Nightly sweep' } as RoutineView]);
+    const rows = runListRows([DELIVERED_RUN], [gardenRoutine({ slug: 'nightly', name: 'Nightly sweep' })]);
     expect(rows[0].routineName).toBe('Nightly sweep');
   });
 });

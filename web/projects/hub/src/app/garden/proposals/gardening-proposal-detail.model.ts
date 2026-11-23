@@ -2,14 +2,13 @@ import {
   asyncState,
   isPendingFor,
   type AsyncStateQuery,
-  type FindingView,
-  type GardenProposalClosureView,
-  type GardenProposalView,
   type KitAsyncStateValue,
-  type RoutineView,
-  type WorkItemView,
-  unlisted,
 } from 'fleet';
+import type { Finding } from '../core/finding.domain';
+import type { Proposal, ProposalClosure } from '../core/proposal.domain';
+import type { Routine } from '../core/routine.domain';
+import { vocabularyText } from '../core/vocabulary.domain';
+import type { WorkItem } from '../core/work-item.domain';
 import { type FindingExitVars } from '../core/finding.mutations';
 import { routineDisplayName } from '../core/routine-display-name';
 import {
@@ -30,17 +29,17 @@ export interface AcceptedItemPointer {
  * this is a lookup, never a second fetch. `null` on the bare route or an id the
  * docket does not hold. */
 export function proposalById(
-  proposals: readonly GardenProposalView[],
+  proposals: readonly Proposal[],
   id: string | null,
-): GardenProposalView | null {
-  return id === null ? null : (proposals.find((p) => p.proposal_id === id) ?? null);
+): Proposal | null {
+  return id === null ? null : (proposals.find((p) => p.id === id) ?? null);
 }
 
 /** Panel state branches on selection before ever consulting the list read's own
  * async state (`bzh:frontend-empty-state-gated`) — once something is selected its
  * record is already in hand, synchronously, from the list read. */
 export function proposalPanelState(
-  selected: GardenProposalView | null,
+  selected: Proposal | null,
   query: AsyncStateQuery,
 ): KitAsyncStateValue {
   return selected === null ? asyncState(query, true) : 'ready';
@@ -50,9 +49,9 @@ export function proposalPanelState(
  * waiting, passed, or accepted-and-declined proposal, so the work-item query stays
  * disabled for all three. */
 export function acceptedItemPointer(
-  closure: GardenProposalClosureView | null | undefined,
+  closure: ProposalClosure | null | undefined,
 ): AcceptedItemPointer | null {
-  if (closure?.closure !== 'accepted' || closure.item_outcome !== 'minted') return null;
+  if (closure?.kind !== 'accepted' || closure.itemOutcome !== 'minted') return null;
   return { source: closure.source!, ref: closure.ref! };
 }
 
@@ -60,87 +59,87 @@ export function acceptedItemPointer(
  * read is still in flight, so a loading window never shows a synthesized label
  * that could pass for resolved data; once settled, `label`/`webUrl` come off the
  * real record, or the bare pointer once the read has genuinely failed (the item
- * is gone), and `web_url` alone reads `null` once the chunk is merely terminal. */
+ * is gone), and `webUrl` alone reads `null` once the chunk is merely terminal. */
 export function proposalWorkItemVm(
   pointer: AcceptedItemPointer | null,
   isPending: boolean,
-  item: Pick<WorkItemView, 'label' | 'web_url'> | undefined,
+  item: Pick<WorkItem, 'label' | 'webUrl'> | undefined,
 ): ProposalWorkItemVm | null {
   if (pointer === null || isPending) return null;
-  return { label: item?.label ?? `${pointer.source}:${pointer.ref}`, webUrl: item?.web_url ?? null };
+  return { label: item?.label ?? `${pointer.source}:${pointer.ref}`, webUrl: item?.webUrl ?? null };
 }
 
 /** Who raised the proposal: an operator by name, or a routine run — the routine read by its display name. */
-export function proposalOriginVm(proposal: GardenProposalView, routines: readonly RoutineView[] | undefined): ProposalOriginVm {
-  const slug = proposal.routine_name;
+export function proposalOriginVm(proposal: Proposal, routines: readonly Routine[] | undefined): ProposalOriginVm {
+  const slug = proposal.routineSlug;
   switch (proposal.origin) {
     case 'operator':
       return {
         kind: 'operator',
-        createdBy: proposal.created_by!,
+        createdBy: proposal.createdBy!,
         routineName: slug === null ? null : routineDisplayName(slug, routines),
       };
     case 'routine-run':
       return { kind: 'routine-run', routineName: routineDisplayName(slug!, routines) };
     default:
-      return { kind: 'unlisted', raw: unlisted(proposal.origin) };
+      return { kind: 'unlisted', raw: vocabularyText(proposal.origin) };
   }
 }
 
 /** How the proposal closed; only an accepted-and-minted closure carries the work item. */
 export function proposalClosureVm(
-  closure: GardenProposalClosureView,
+  closure: ProposalClosure,
   workItem: ProposalWorkItemVm | null,
 ): ProposalClosureVm {
-  switch (closure.closure) {
+  switch (closure.kind) {
     case 'passed':
-      return { kind: 'passed', closedBy: closure.closed_by, closedAt: closure.closed_at, reason: closure.reason };
+      return { kind: 'passed', closedBy: closure.closedBy, closedAt: closure.closedAt, reason: closure.reason };
     case 'accepted':
       return {
         kind: 'accepted',
-        closedBy: closure.closed_by,
-        closedAt: closure.closed_at,
+        closedBy: closure.closedBy,
+        closedAt: closure.closedAt,
         reason: closure.reason,
-        workItem: closure.item_outcome === 'minted' ? workItem : null,
+        workItem: closure.itemOutcome === 'minted' ? workItem : null,
       };
     default:
-      return { kind: 'unlisted', raw: unlisted(closure.closure), closedBy: closure.closed_by, closedAt: closure.closed_at, reason: closure.reason };
+      return { kind: 'unlisted', raw: vocabularyText(closure.kind), closedBy: closure.closedBy, closedAt: closure.closedAt, reason: closure.reason };
   }
 }
 
 /** The panel's view model for the selected proposal, or `null` with nothing selected. */
 export function proposalPanelVm(
-  proposal: GardenProposalView | null,
+  proposal: Proposal | null,
   workItem: ProposalWorkItemVm | null,
-  routines: readonly RoutineView[] | undefined,
+  routines: readonly Routine[] | undefined,
 ): ProposalPanelVm | null {
   if (proposal === null) return null;
   return {
-    proposalId: proposal.proposal_id,
+    proposalId: proposal.id,
     origin: proposalOriginVm(proposal, routines),
-    proposalClass: proposal.class,
+    proposalClass: proposal.proposalClass,
     title: proposal.title,
     body: proposal.body,
     closure: proposal.closure ? proposalClosureVm(proposal.closure, workItem) : null,
-    createdAt: proposal.created_at,
-    hasFindings: proposal.findings.length > 0,
+    createdAt: proposal.createdAt,
+    hasFindings: proposal.findingIds.length > 0,
   };
 }
 
 /** One evidence row per live-read finding; a row whose finding id is among the
  * in-flight triage variables reads `pending` (`bzh:frontend-pending-override`). */
 export function proposalEvidenceRows(
-  findings: readonly FindingView[],
+  findings: readonly Finding[],
   workItem: ProposalWorkItemVm | null,
   pendingTriage: readonly FindingExitVars[],
 ): readonly ProposalEvidenceRowVm[] {
   return findings.map((f) => ({
-    findingId: f.finding_id,
+    findingId: f.id,
     locus: f.locus,
     summary: f.summary,
     state: f.state,
-    exit: f.exit ?? null,
+    exit: f.exit,
     workItem,
-    pending: isPendingFor(pendingTriage, (vars) => vars.findingIds.includes(f.finding_id)),
+    pending: isPendingFor(pendingTriage, (vars) => vars.findingIds.includes(f.id)),
   }));
 }

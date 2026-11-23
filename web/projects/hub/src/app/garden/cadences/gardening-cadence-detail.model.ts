@@ -1,6 +1,7 @@
 import { asyncState, type AsyncStateQuery, type CadenceErrandView, formatAbsolute } from 'fleet';
 
-import { type Cadence, type CadenceAttention, type Chore, type ChoreDraft, vocabularyText } from '../core/cadence.domain';
+import { type Cadence, type CadenceAttention, type Chore, type ChoreDraft } from '../core/cadence.domain';
+import { vocabularyText } from '../core/vocabulary.domain';
 import type { ChoresBaseline } from './chore.service';
 import type { CadenceLifecycleVars } from './cadence-lifecycle.mutations';
 import type { AttentionVm, CadencePanelVm, ChorePanelVm, ErrandRowVm } from './cadence-panel';

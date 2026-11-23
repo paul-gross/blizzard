@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, EnvironmentInjector, provideZoneles
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type GardenProposalView, type MeResponse, ViewportService } from 'fleet';
+import { ViewportService } from 'fleet';
 import { injectAcceptGardenProposalMutation, injectPassGardenProposalMutation } from './garden-proposal.mutations';
 import {
   gardenEvidenceFindingView,
@@ -22,7 +22,7 @@ import { GardeningProposalsPage } from './gardening-proposals-page';
 
 /** A read-only identity — every permission `OPERATOR_ME_RESPONSE` carries except
  * `chunk:control` — the default for tests unconcerned with the Pass/Accept gate. */
-const VIEWER_ME_RESPONSE: MeResponse = {
+const VIEWER_ME_RESPONSE: typeof OPERATOR_ME_RESPONSE = {
   ...OPERATOR_ME_RESPONSE,
   permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'chunk:control'),
 };
@@ -121,8 +121,8 @@ describe('GardeningProposalsPage', () => {
   afterEach(() => stub?.restore());
 
   async function render(
-    proposals: GardenProposalView[] = [WAITING_A, WAITING_B, PASSED],
-    me: MeResponse = VIEWER_ME_RESPONSE,
+    proposals: ReturnType<typeof gardenProposalView>[] = [WAITING_A, WAITING_B, PASSED],
+    me: typeof OPERATOR_ME_RESPONSE = VIEWER_ME_RESPONSE,
     url = '/gardening/proposals',
     mobile = false,
     extraRoutes: Parameters<typeof stubHubClient>[0] = {},

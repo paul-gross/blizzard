@@ -24,9 +24,8 @@ import {
   type Chore,
   type ChoreDraft,
   type ChoreMode,
-  type Vocabulary,
-  vocabularyText,
 } from './cadence.domain';
+import { type Vocabulary, vocabularyText } from './vocabulary.domain';
 
 const unlisted = (raw: string) => ({ unlisted: raw });
 

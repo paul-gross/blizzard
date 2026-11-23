@@ -2,7 +2,7 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type GardenProposalView, ViewportService } from 'fleet';
+import { ViewportService } from 'fleet';
 import {
   gardenEvidenceFindingView,
   gardenProposalsPageView,
@@ -49,7 +49,7 @@ const FINDING = gardenEvidenceFindingView({
 });
 
 /** Stub the docket's reads over `proposals`, citing {@link FINDING}. */
-function stubDocket(proposals: GardenProposalView[]) {
+function stubDocket(proposals: ReturnType<typeof gardenProposalView>[]) {
   return stubHubClient({
     'GET /api/me': () => OPERATOR_ME_RESPONSE,
     'GET /api/routines': () => [],

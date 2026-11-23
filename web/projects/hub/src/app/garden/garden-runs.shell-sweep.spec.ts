@@ -1,14 +1,10 @@
-import type { FindingFactView } from 'fleet';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { form } from '@angular/forms/signals';
 import { provideRouter } from '@angular/router';
 import { commands, page } from 'vitest/browser';
 
-function fact(fields: Pick<FindingFactView, 'kind' | 'recorded_at'> & Partial<FindingFactView>): FindingFactView {
-  return { actor: null, note: null, proposal_id: null, superseded_by: null, ...fields };
-}
-
+import { gardenFindingFact } from './core/finding.builders';
 import { FleetFindingPanel, type FindingPanelVm } from './findings/finding-panel';
 import { FleetProposalPanel } from './proposals/proposal-panel';
 import { FleetRoutineProposalCounts, type ProposalCountsRowVm } from './routines/routine-proposal-counts';
@@ -217,7 +213,7 @@ const PANEL_FINDING: FindingPanelVm = {
   lastSeenAt: '2026-01-10T00:00:00Z',
   summary: 'Module docstring narrates the change history rather than stating the contract.',
   note: null,
-  facts: [fact({ kind: 'add', recorded_at: '2026-01-02T00:00:00Z' })],
+  facts: [gardenFindingFact({ recordedAt: '2026-01-02T00:00:00Z' })],
   workItem: null,
   source: 'routine',
   severity: null,

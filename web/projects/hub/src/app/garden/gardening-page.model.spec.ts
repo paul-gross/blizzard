@@ -1,33 +1,9 @@
-import { type GardenProposalView } from 'fleet';
-
+import type { Proposal } from './core/proposal.domain';
+import { gardenProposal, gardenProposalClosure } from './core/proposal.builders';
 import { gardenProjectChoices, gardenSurfaceCounts, gardenSurfaceTabs, surfaceLabel, surfaceOf, waitingLabel, waitingProposalCount } from './gardening-page.model';
 
-function proposal(id: string, closed: boolean): GardenProposalView {
-  return {
-    proposal_id: id,
-    origin: 'routine-run',
-    routine_name: 'nightly',
-    class: 'stale-docstring',
-    title: 't',
-    body: 'b',
-    created_at: '2026-01-01T00:00:00Z',
-    findings: [],
-    created_by: null,
-    project_id: null,
-    project_name: null,
-    project_slug: null,
-    closure: closed
-      ? {
-          closure: 'passed',
-          closed_by: 'op',
-          closed_at: '2026-01-02T00:00:00Z',
-          reason: null,
-          item_outcome: null,
-          source: null,
-          ref: null,
-        }
-      : null,
-  };
+function proposal(id: string, closed: boolean): Proposal {
+  return gardenProposal({ id, closure: closed ? gardenProposalClosure({ closedBy: 'op', reason: null }) : null });
 }
 
 describe('waitingProposalCount', () => {
@@ -76,10 +52,10 @@ describe('gardenProjectChoices', () => {
 
   it('lists the projects by name with their proposals waiting, then All', () => {
     const proposals = [
-      { ...proposal('gp_1', false), project_id: 'p_w' },
-      { ...proposal('gp_2', true), project_id: 'p_w' },
-      { ...proposal('gp_3', false), project_id: 'p_b' },
-      { ...proposal('gp_4', false), project_id: 'p_b' },
+      { ...proposal('gp_1', false), projectId: 'p_w' },
+      { ...proposal('gp_2', true), projectId: 'p_w' },
+      { ...proposal('gp_3', false), projectId: 'p_b' },
+      { ...proposal('gp_4', false), projectId: 'p_b' },
     ];
     expect(gardenProjectChoices(projects, proposals)).toEqual([
       { slug: 'blizzard', label: 'blizzard', waiting: 2 },

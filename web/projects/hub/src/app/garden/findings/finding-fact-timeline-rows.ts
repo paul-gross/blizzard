@@ -1,4 +1,7 @@
-import { type FindingFactView, formatAbsolute, formatWhen, type hubApi, openLookup } from 'fleet';
+import { formatAbsolute, formatWhen, openLookup } from 'fleet';
+
+import type { FindingFact, FindingFactKind } from '../core/finding.domain';
+import { type Vocabulary, vocabularyText } from '../core/vocabulary.domain';
 
 /** One entry in a finding's fact chain, re-read for display — the
  * chain itself carries no id per entry, so {@link deriveFactTimelineRows} keys each
@@ -8,7 +11,7 @@ import { type FindingFactView, formatAbsolute, formatWhen, type hubApi, openLook
  * `HistoryRow` shape. */
 export interface FindingFactRow {
   readonly key: string;
-  readonly kind: hubApi.FindingFactKind;
+  readonly kind: Vocabulary<FindingFactKind>;
   readonly label: string;
   readonly note: string | null;
   readonly actor: string | null;
@@ -21,7 +24,7 @@ export interface FindingFactRow {
 /** A short human label per fact kind — `add`/`observed` never carry a note (a
  * routine sweep recording or re-confirming a finding), `gone` and the
  * human-driven exit/reopen verbs do. A kind this build does not know reads raw. */
-const FACT_KIND_LABELS = openLookup<hubApi.FindingFactKind, string>(
+const FACT_KIND_LABELS = openLookup<FindingFactKind, string>(
   {
     add: 'Added',
     observed: 'Observed',
@@ -39,20 +42,20 @@ const FACT_KIND_LABELS = openLookup<hubApi.FindingFactKind, string>(
 
 /**
  * A finding's whole fact chain, re-read as timeline rows — a pure map
- * over `facts` in the array's own order (already oldest-first off the wire; never
+ * over `facts` in the array's own order (already oldest-first as the hub serves it; never
  * re-sorted here). The single owner of this derivation (`canon:one-owner`,
  * `chunk-timeline-rows.ts`'s own precedent).
  */
-export function deriveFactTimelineRows(facts: readonly FindingFactView[], now: Date): readonly FindingFactRow[] {
+export function deriveFactTimelineRows(facts: readonly FindingFact[], now: Date): readonly FindingFactRow[] {
   return facts.map((fact, index) => ({
     key: `${index}`,
     kind: fact.kind,
-    label: FACT_KIND_LABELS(fact.kind),
-    note: fact.note ?? null,
-    actor: fact.actor ?? null,
-    when: formatWhen(fact.recorded_at, now),
-    whenTitle: formatAbsolute(fact.recorded_at),
-    proposalId: fact.proposal_id ?? null,
-    supersededBy: fact.superseded_by ?? null,
+    label: FACT_KIND_LABELS(vocabularyText(fact.kind)),
+    note: fact.note,
+    actor: fact.actor,
+    when: formatWhen(fact.recordedAt, now),
+    whenTitle: formatAbsolute(fact.recordedAt),
+    proposalId: fact.proposalId,
+    supersededBy: fact.supersededBy,
   }));
 }

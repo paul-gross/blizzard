@@ -1,4 +1,5 @@
-import type { LaneStatus, RoutineView, RunRowView } from 'fleet';
+import type { LaneStatus, RunRowView } from 'fleet';
+import type { Routine } from '../core/routine.domain';
 import { routineDisplayName } from '../core/routine-display-name';
 import type { RunListCountsVm, RunListRowVm } from './run-list';
 
@@ -21,7 +22,7 @@ export function summedCounts(
 /** The run list's rows, one per run in the read's order, each routine read by its display name. */
 export function runListRows(
   runs: readonly (RunRowView & { readonly laneStatus: LaneStatus })[],
-  routines: readonly RoutineView[] | undefined,
+  routines: readonly Routine[] | undefined,
 ): readonly RunListRowVm[] {
   return runs.map((row) => ({
     chunkId: row.chunk_id,
