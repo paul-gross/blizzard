@@ -9,14 +9,11 @@ import {
   hubClient,
   type EventSourceFactory,
   type FleetEventSource,
-  type MeResponse,
-  type ProviderSummary,
 } from 'fleet';
 import { provideAuthInterceptor } from '../core/auth/auth.interceptor';
 import { LAST_TENANT_KEY, TAB_TENANT_KEY, TenantContext } from '../core/auth/tenant-context';
 import { provideTenantInterceptor } from '../core/auth/tenant.interceptor';
-import type { MeTenant } from 'fleet/shell';
-import { OPERATOR_ME_RESPONSE, chunkCountsView, fleetSpendView, projectView, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, chunkCountsView, flagsResponse, meResponse, meTenant, providerSummary, fleetSpendView, projectView, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 import { vi } from 'vitest';
 import { FLEET_CLOCK } from 'fleet';
 
@@ -24,7 +21,7 @@ import { App } from './app';
 import { routes } from './app.routes';
 import { BoardPage } from '../board/board-page';
 import { startOfLocalDayIso, startOfPreviousLocalDayIso } from '../core/local-day';
-import { type FlagsResponse, APP_SCOPE, provideFlags } from 'fleet/shell';
+import { APP_SCOPE, provideFlags } from 'fleet/shell';
 import { ProjectLens, lensScope } from '../core/project-lens';
 import { hubFlagsRead } from '../core/flags.query';
 import { HubLiveUpdates } from '../core/live/hub-live-updates';
@@ -70,9 +67,9 @@ const IDLE_BOARD: Parameters<typeof stubHubClient>[0] = {
  * `me` defaults to the full-permission operator identity (`auth.mode = "none"`'s
  * shape); a spec that cares about auth overrides one or both. */
 function stubAuth(
-  me: MeResponse | null = OPERATOR_ME_RESPONSE,
-  providers: readonly ProviderSummary[] = [],
-  flags: FlagsResponse = { flags: {}, overridden: [] },
+  me: typeof OPERATOR_ME_RESPONSE | null = OPERATOR_ME_RESPONSE,
+  providers: readonly ReturnType<typeof providerSummary>[] = [],
+  flags = flagsResponse(),
 ): RequestClientStub {
   return stubHubClient({
     ...IDLE_BOARD,
@@ -120,10 +117,10 @@ function stubAuthCapturingSpendUrls(): RequestClientStub & { spendUrls: string[]
   };
 }
 
-const OIDC: readonly ProviderSummary[] = [{ name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' }];
+const OIDC = [providerSummary({ name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' })];
 
 /** A signed-in person holding no membership; specs add theirs through `tenants`. */
-const MEMBERLESS: MeResponse = {
+const MEMBERLESS = meResponse({
   user_id: 'usr_1',
   username: 'newcomer',
   display_name: 'Newcomer',
@@ -132,14 +129,14 @@ const MEMBERLESS: MeResponse = {
   tenants: [],
   hub_admin: false,
   assignable_roles: [],
-};
-const ACME_ADMIN: MeTenant = {
+});
+const ACME_ADMIN = meTenant({
   tenant_id: 'ten_a',
   name: 'Acme',
   role: 'admin',
   permissions: ['fleet:view', 'user:manage'],
-};
-const BETA_GUEST: MeTenant = { tenant_id: 'ten_b', name: 'Beta', role: 'guest', permissions: ['fleet:view'] };
+});
+const BETA_GUEST = meTenant({ tenant_id: 'ten_b', name: 'Beta', role: 'guest', permissions: ['fleet:view'] });
 
 @Component({ template: '<div data-testid="public-page">Public page</div>' })
 class DelayedPublicPage {}
@@ -731,7 +728,7 @@ describe('hub App', () => {
 
   describe('the Admin nav tab', () => {
     it('shows Admin for settings administrators without user management', async () => {
-      const permissions: MeResponse['permissions'] = ['fleet:view', 'settings:admin'];
+      const permissions: typeof OPERATOR_ME_RESPONSE.permissions = ['fleet:view', 'settings:admin'];
       authStub.restore();
       authStub = stubAuth({ ...OPERATOR_ME_RESPONSE, permissions, tenants: OPERATOR_ME_RESPONSE.tenants.map((t) => ({ ...t, permissions })) }, []);
       const fixture = TestBed.createComponent(App);
@@ -741,7 +738,7 @@ describe('hub App', () => {
     });
 
     it('hides Admin without either permission', async () => {
-      const permissions: MeResponse['permissions'] = ['fleet:view'];
+      const permissions: typeof OPERATOR_ME_RESPONSE.permissions = ['fleet:view'];
       authStub.restore();
       authStub = stubAuth({ ...OPERATOR_ME_RESPONSE, permissions, tenants: OPERATOR_ME_RESPONSE.tenants.map((t) => ({ ...t, permissions })) }, OIDC);
       const fixture = TestBed.createComponent(App);

@@ -5,7 +5,9 @@ import {
   output,
 } from '@angular/core';
 
-import { type MeResponse, KitButton, KitErrorLine } from 'fleet/shell';
+import { KitButton, KitErrorLine } from 'fleet/shell';
+
+import type { Session } from './session.domain';
 
 /**
  * The no-access screen — a signed-in person who holds no membership in any tenant sees this, and only this: no
@@ -22,7 +24,7 @@ import { type MeResponse, KitButton, KitErrorLine } from 'fleet/shell';
 })
 export class NoAccess {
   /** The resolved identity — never `null` while this renders (the app root shows it once `/api/me` resolved). */
-  readonly me = input<MeResponse | null>(null);
+  readonly me = input<Session | null>(null);
 
   /** Whether the logout is in flight; disables the button. */
   readonly logoutPending = input(false);

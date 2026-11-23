@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { MeResponse, MeTenant } from 'fleet/shell';
-
-import { resolveTenant } from '../core/auth/tenant-context';
+import { membership, session } from '../core/auth/session.builders';
+import { type Membership, resolveTenant } from '../core/auth/session.domain';
 
 import {
   authState,
@@ -14,12 +13,7 @@ import {
   shellView,
 } from './app.model';
 
-const ACME: MeTenant = {
-  tenant_id: 'ten_a',
-  name: 'Acme',
-  role: 'admin',
-  permissions: ['fleet:view'],
-};
+const ACME = membership({ tenant_id: 'ten_a', name: 'Acme', permissions: ['fleet:view'] });
 
 describe('shell loading route', () => {
   it('prefers the navigation in flight, then the completed route, then the initial address', () => {
@@ -65,18 +59,9 @@ describe('authState', () => {
 });
 
 describe('tenancyOf', () => {
-  const resolve = (tenants: readonly MeTenant[]) =>
+  const resolve = (tenants: readonly Membership[]) =>
     resolveTenant(tenants, null, null);
-  const me: MeResponse = {
-    user_id: 'u',
-    username: 'u',
-    display_name: 'u',
-    role: null,
-    permissions: [],
-    tenants: [ACME],
-    hub_admin: false,
-    assignable_roles: [],
-  };
+  const me = session({ permissions: [], tenants: [ACME], tenant_resolved: false });
 
   it('is null without an identity', () => {
     expect(tenancyOf(null, resolve)).toBeNull();

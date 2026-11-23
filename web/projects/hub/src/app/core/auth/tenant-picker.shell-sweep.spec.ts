@@ -1,8 +1,8 @@
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { MeTenant } from 'fleet/shell';
 import { page } from 'vitest/browser';
 
+import { membership } from './session.builders';
 import { TenantPicker } from './tenant-picker';
 
 /**
@@ -18,25 +18,10 @@ import { TenantPicker } from './tenant-picker';
   template: `<app-tenant-picker [tenants]="tenants" />`,
 })
 class TestTenantPicker {
-  readonly tenants: readonly MeTenant[] = [
-    {
-      tenant_id: 'ten_a',
-      name: 'Acme',
-      role: 'admin',
-      permissions: ['fleet:view'],
-    },
-    {
-      tenant_id: 'ten_globex',
-      name: 'Globex Interplanetary Freight',
-      role: 'guest',
-      permissions: ['fleet:view'],
-    },
-    {
-      tenant_id: 'ten_b',
-      name: 'B',
-      role: 'guest',
-      permissions: ['fleet:view'],
-    },
+  readonly tenants = [
+    membership({ tenant_id: 'ten_a', name: 'Acme' }),
+    membership({ tenant_id: 'ten_globex', name: 'Globex Interplanetary Freight' }),
+    membership({ tenant_id: 'ten_b', name: 'B' }),
   ];
 }
 

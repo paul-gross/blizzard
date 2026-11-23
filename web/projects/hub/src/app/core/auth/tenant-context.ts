@@ -7,7 +7,7 @@ import {
 } from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
-import { type MeResponse, type MeTenant } from 'fleet/shell';
+import { type Membership, type TenantResolution, resolveTenant } from './session.domain';
 import { hubMeKey } from '../query-keys';
 
 /** The request header that names the tenant a hub call acts in. */
@@ -18,52 +18,6 @@ export const TAB_TENANT_KEY = 'blizzard.tenant';
 
 /** The tenant this browser last chose — localStorage, so a reload or a new tab opens in it. */
 export const LAST_TENANT_KEY = 'blizzard.tenant.last';
-
-/** Which tenant the board acts in, settled from the caller's memberships:
- * `none` — no membership, so nothing to enter; `choose` — several, and neither this tab's tenant nor the browser's
- * last choice is still one of them; `selected` — the membership the board acts in. */
-export type TenantResolution =
-  | { readonly kind: 'none' }
-  | { readonly kind: 'choose'; readonly tenants: readonly MeTenant[] }
-  | {
-      readonly kind: 'selected';
-      readonly tenant: MeTenant;
-      readonly tenants: readonly MeTenant[];
-    };
-
-/** Settles the tenant from the caller's memberships: the only one when there is one; with several, `held` (the tab's
- * tenant) while it is still a membership, else `last` (the browser's last choice) while it is, else a choice. */
-export function resolveTenant(
-  tenants: readonly MeTenant[],
-  held: string | null,
-  last: string | null,
-): TenantResolution {
-  if (tenants.length === 0) return { kind: 'none' };
-  if (tenants.length === 1)
-    return { kind: 'selected', tenant: tenants[0], tenants };
-  const kept =
-    tenants.find((t) => t.tenant_id === held) ??
-    tenants.find((t) => t.tenant_id === last);
-  return kept === undefined
-    ? { kind: 'choose', tenants }
-    : { kind: 'selected', tenant: kept, tenants };
-}
-
-/** The identity as the board reads it, in the selected tenant. The hub answers `role` and `permissions` for the tenant
- * the request named, and every call names the selected one, so a resolved answer is already that membership's and
- * stands. A read made before the tenant was settled — no header among several memberships, or one naming a tenant the
- * caller has left — resolves none (`role` null); the selected membership's role and permissions stand in for it. */
-export function inSelectedTenant(
-  me: MeResponse,
-  resolution: TenantResolution,
-): MeResponse {
-  if (resolution.kind !== 'selected' || me.role !== null) return me;
-  return {
-    ...me,
-    role: resolution.tenant.role,
-    permissions: resolution.tenant.permissions,
-  };
-}
 
 /** Reloads the page — the seam a tenant switch re-enters the board through, replaced in tests. */
 export const PAGE_RELOAD = new InjectionToken<() => void>('hub.PAGE_RELOAD', {
@@ -95,13 +49,13 @@ export class TenantContext {
   readonly current: Signal<string | null> = this.held.asReadonly();
 
   /** Settles `tenants` against this tab's tenant and the browser's last choice — see {@link resolveTenant}. */
-  resolve(tenants: readonly MeTenant[]): TenantResolution {
+  resolve(tenants: readonly Membership[]): TenantResolution {
     return this.resolver()(tenants);
   }
 
   /** {@link resolve} with this tab's tenant and the last choice read now, so a reactive caller that builds it tracks
    * both — a query's `select` re-runs when the selection moves. */
-  resolver(): (tenants: readonly MeTenant[]) => TenantResolution {
+  resolver(): (tenants: readonly Membership[]) => TenantResolution {
     const held = this.held();
     const last = this.lastChoice();
     return (tenants) => resolveTenant(tenants, held, last);

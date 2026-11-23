@@ -1,4 +1,4 @@
-import { type MeResponse, Permission, Role } from '../api/hub';
+import { type FlagsResponse, type MeResponse, type MeTenant, Permission, type ProviderSummary, Role } from '../api/hub';
 
 /** The operator's permissions in its tenant. */
 const OPERATOR_PERMISSIONS: MeResponse['permissions'] = [
@@ -29,3 +29,33 @@ export const OPERATOR_ME_RESPONSE: MeResponse = {
   tenants: [{ tenant_id: 'ten_operator', name: 'operator', role: Role.ADMIN, permissions: OPERATOR_PERMISSIONS }],
   hub_admin: true,
 };
+
+/** A `GET /api/me` membership — an `admin` of tenant `ten_a`, `Acme` — with `overrides` applied. */
+export function meTenant(overrides: Partial<MeTenant> = {}): MeTenant {
+  return { tenant_id: 'ten_a', name: 'Acme', role: Role.ADMIN, permissions: [Permission.FLEET_VIEW], ...overrides };
+}
+
+/** A `GET /api/me` answer — a `contributor` holding no membership — with `overrides` applied. */
+export function meResponse(overrides: Partial<MeResponse> = {}): MeResponse {
+  return {
+    user_id: 'usr_1',
+    username: 'op',
+    display_name: 'Op',
+    role: Role.CONTRIBUTOR,
+    permissions: [Permission.FLEET_VIEW],
+    assignable_roles: [],
+    tenants: [],
+    hub_admin: false,
+    ...overrides,
+  };
+}
+
+/** One `GET /api/auth/providers` entry — GitHub — with `overrides` applied. */
+export function providerSummary(overrides: Partial<ProviderSummary> = {}): ProviderSummary {
+  return { name: 'github', display_name: 'GitHub', type: 'github', ...overrides };
+}
+
+/** A `GET /api/flags` answer — no flag set, none overridden — with `overrides` applied. */
+export function flagsResponse(overrides: Partial<FlagsResponse> = {}): FlagsResponse {
+  return { flags: {}, overridden: [], ...overrides };
+}

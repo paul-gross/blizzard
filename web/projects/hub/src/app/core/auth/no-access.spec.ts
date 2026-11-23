@@ -2,19 +2,16 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 
-import type { MeResponse } from 'fleet';
 import { NoAccess } from './no-access';
+import { session } from './session.builders';
 
-const MEMBERLESS: MeResponse = {
-  user_id: 'usr_1',
+const MEMBERLESS = session({
   username: 'newcomer',
   display_name: 'Newcomer',
-  role: null,
   permissions: [],
   tenants: [],
-  hub_admin: false,
-  assignable_roles: [],
-};
+  tenant_resolved: false,
+});
 
 describe('NoAccess', () => {
   beforeEach(async () => {

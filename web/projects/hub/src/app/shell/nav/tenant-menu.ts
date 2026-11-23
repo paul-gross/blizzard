@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { KitMenuItemRadio, KitMenuPanel } from 'fleet';
 
-import type { MeTenant } from 'fleet/shell';
+import type { Membership } from '../../core/auth/session.domain';
 
 /**
  * The tenant switcher's submenu — one radio item per membership, the tenant the board is in checked. Each item shows
@@ -18,7 +18,7 @@ import type { MeTenant } from 'fleet/shell';
 })
 export class TenantMenu {
   /** The memberships to choose between. */
-  readonly tenants = input.required<readonly MeTenant[]>();
+  readonly tenants = input.required<readonly Membership[]>();
 
   /** The id of the tenant the board is in, `null` for none. */
   readonly current = input<string | null>(null);

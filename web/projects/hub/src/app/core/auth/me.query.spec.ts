@@ -16,6 +16,7 @@ import {
   stubHubClient,
 } from 'fleet/testing';
 import { hasPermission, injectMeQuery } from './me.query';
+import { session } from './session.builders';
 
 @Component({
   selector: 'app-test-me-query-host',
@@ -59,11 +60,9 @@ describe('injectMeQuery', () => {
       user_id: 'usr_1',
       username: 'op',
       display_name: 'Op',
-      role: 'contributor',
       permissions: ['fleet:view'],
       tenants: [],
-      hub_admin: false,
-      assignable_roles: [],
+      tenant_resolved: true,
     });
   });
 
@@ -92,35 +91,7 @@ describe('hasPermission', () => {
   it('is false for null/undefined and true only when the permission is present', () => {
     expect(hasPermission(null, 'user:manage')).toBe(false);
     expect(hasPermission(undefined, 'user:manage')).toBe(false);
-    expect(
-      hasPermission(
-        {
-          user_id: 'u',
-          username: 'u',
-          display_name: 'u',
-          role: 'admin',
-          permissions: ['user:manage'],
-          tenants: [],
-          hub_admin: false,
-          assignable_roles: [],
-        },
-        'user:manage',
-      ),
-    ).toBe(true);
-    expect(
-      hasPermission(
-        {
-          user_id: 'u',
-          username: 'u',
-          display_name: 'u',
-          role: 'contributor',
-          permissions: ['fleet:view'],
-          tenants: [],
-          hub_admin: false,
-          assignable_roles: [],
-        },
-        'user:manage',
-      ),
-    ).toBe(false);
+    expect(hasPermission(session({ permissions: ['user:manage'] }), 'user:manage')).toBe(true);
+    expect(hasPermission(session({ permissions: ['fleet:view'] }), 'user:manage')).toBe(false);
   });
 });

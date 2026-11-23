@@ -1,16 +1,16 @@
 import { type Signal, computed, inject } from '@angular/core';
 
-import type { MeTenant } from 'fleet/shell';
 import { injectMeQuery } from '../../core/auth/me.query';
+import type { Membership } from '../../core/auth/session.domain';
 import { TenantContext } from '../../core/auth/tenant-context';
 
 /** What a shell menu needs to offer the tenant switcher: the caller's memberships, the one the board is in, and the
  * switch itself. */
 export interface TenantSwitch {
   /** Every membership `/api/me` names. */
-  readonly memberships: Signal<readonly MeTenant[]>;
+  readonly memberships: Signal<readonly Membership[]>;
   /** The membership the board acts in, `null` before the tenant is settled. */
-  readonly current: Signal<MeTenant | null>;
+  readonly current: Signal<Membership | null>;
   /** Whether there is anything to switch to — only a caller with several memberships is offered the switcher. */
   readonly switchable: Signal<boolean>;
   /** Re-enters the board in `tenantId`; choosing the tenant the board is already in does nothing. */
@@ -23,7 +23,7 @@ export interface TenantSwitch {
 export function injectTenantSwitch(): TenantSwitch {
   const me = injectMeQuery();
   const tenant = inject(TenantContext);
-  const memberships = computed<readonly MeTenant[]>(() => me.data()?.tenants ?? []);
+  const memberships = computed<readonly Membership[]>(() => me.data()?.tenants ?? []);
   const current = computed(() => memberships().find((m) => m.tenant_id === tenant.current()) ?? null);
   return {
     memberships,

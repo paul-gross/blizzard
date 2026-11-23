@@ -6,7 +6,7 @@ import {
   output,
 } from '@angular/core';
 
-import type { ProviderSummary } from 'fleet';
+import type { AuthProvider } from './provider.domain';
 
 /** The two provider marks the login page distinguishes — a GitHub-specific glyph for
  * `type = "github"`, and a generic SSO (key) glyph for every other configured type
@@ -34,7 +34,7 @@ function markFor(type: string): 'github' | 'sso' {
 })
 export class LoginButtons {
   /** The configured providers, `GET /api/auth/providers`. */
-  readonly providers = input<readonly ProviderSummary[]>([]);
+  readonly providers = input<readonly AuthProvider[]>([]);
 
   /** The last provider name used to sign in, or `null` if none remembered yet. */
   readonly lastUsed = input<string | null>(null);

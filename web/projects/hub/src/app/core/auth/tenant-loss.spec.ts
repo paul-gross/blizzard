@@ -10,10 +10,10 @@ import {
   EVENT_SOURCE_FACTORY,
   FLEET_CLOCK,
   chunkCountsApiChunkCountsGet,
-  type MeResponse,
 } from 'fleet';
-import type { MeTenant } from 'fleet/shell';
 import {
+  meResponse,
+  meTenant,
   type RequestClientStub,
   stubError,
   stubHubClient,
@@ -24,38 +24,25 @@ import {
   TAB_TENANT_KEY,
   TenantContext,
 } from './tenant-context';
+import { membership } from './session.builders';
+import type { Membership } from './session.domain';
 import { TENANT_CONFIRMED_MS } from './tenant-loss';
 import { provideTenantInterceptor } from './tenant.interceptor';
 
-const ACME: MeTenant = {
-  tenant_id: 'ten_a',
-  name: 'Acme',
-  role: 'admin',
-  permissions: ['fleet:view'],
-};
-const BETA: MeTenant = {
-  tenant_id: 'ten_b',
-  name: 'Beta',
-  role: 'guest',
-  permissions: ['fleet:view'],
-};
-const GLOBEX: MeTenant = {
-  tenant_id: 'ten_g',
-  name: 'Globex',
-  role: 'guest',
-  permissions: ['fleet:view'],
-};
+const ACME = membership({ tenant_id: 'ten_a', name: 'Acme' });
+const BETA = membership({ tenant_id: 'ten_b', name: 'Beta' });
+const GLOBEX = membership({ tenant_id: 'ten_g', name: 'Globex' });
 
-const me = (tenants: readonly MeTenant[]): MeResponse => ({
-  user_id: 'usr_1',
-  username: 'two',
-  display_name: 'Two',
-  role: null,
-  permissions: [],
-  tenants: [...tenants],
-  hub_admin: false,
-  assignable_roles: [],
-});
+const me = (tenants: readonly Membership[]) =>
+  meResponse({
+    username: 'two',
+    display_name: 'Two',
+    role: null,
+    permissions: [],
+    tenants: tenants.map((tenant) =>
+      meTenant({ tenant_id: tenant.tenant_id, name: tenant.name, permissions: [...tenant.permissions] }),
+    ),
+  });
 
 /** Lets every pending 404 report and `/api/me` read run to its end — a few macrotask turns. */
 async function drain(): Promise<void> {
@@ -64,13 +51,13 @@ async function drain(): Promise<void> {
 }
 
 describe('TenantLoss — a board that loses its tenant', () => {
-  let memberships: readonly MeTenant[];
+  let memberships: readonly Membership[];
   let stub: RequestClientStub;
   let reload: ReturnType<typeof vi.fn>;
   let nowMs: number;
 
   /** The resolution a fresh start of the page makes from what the stores remember now. */
-  const atStartup = (tenants: readonly MeTenant[]) =>
+  const atStartup = (tenants: readonly Membership[]) =>
     TestBed.runInInjectionContext(() => new TenantContext()).resolve(tenants);
 
   /** Opens the board in `tenant`, remembered by this tab and the browser, as a tab that settled on it does. */

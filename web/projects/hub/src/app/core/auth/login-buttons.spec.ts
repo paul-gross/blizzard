@@ -1,12 +1,12 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { ProviderSummary } from 'fleet';
 import { LoginButtons } from './login-buttons';
+import { authProvider } from './provider.builders';
 
-const PROVIDERS: readonly ProviderSummary[] = [
-  { name: 'github', display_name: 'GitHub', type: 'github' },
-  { name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' },
+const PROVIDERS = [
+  authProvider({ name: 'github', display_name: 'GitHub', type: 'github' }),
+  authProvider({ name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' }),
 ];
 
 describe('LoginButtons', () => {

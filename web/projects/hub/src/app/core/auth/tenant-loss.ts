@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 
 import { FLEET_CLOCK } from 'fleet/shell';
 
-import { readMe } from './me.query';
+import { readSession } from './me.query';
 import { TenantContext } from './tenant-context';
 
 /** How long `/api/me` naming the board's tenant settles that it is still there: a 404 inside the window is a missing
@@ -48,11 +48,9 @@ export class TenantLoss {
   private async check(tenant: string): Promise<void> {
     // Read past the query cache: the board must not re-resolve on these memberships before it has left the tenant.
     // No session is the sign-in flow's to handle, and a failed read (thrown) leaves the board as it is.
-    const me = await readMe();
+    const me = await readSession();
     if (me === null) return;
-    if (
-      (me.tenants ?? []).some((membership) => membership.tenant_id === tenant)
-    ) {
+    if (me.tenants.some((membership) => membership.tenant_id === tenant)) {
       this.confirmed = { tenant, at: this.clock() };
       return;
     }
