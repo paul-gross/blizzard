@@ -133,7 +133,6 @@ from blizzard.hub.composition import (
     build_flow_driver,
     build_hub_core,
     build_hub_flags,
-    build_process_core,
     build_services,
     build_system_clock,
     open_hub_store,
@@ -170,7 +169,8 @@ from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.sweeps.locks import SweepInProgress
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
 from blizzard.hub.layout import SIGNING_KEYS_PARTS, remove_retired_workdirs
-from blizzard.hub.process_root import open_store_free
+from blizzard.hub.open_tenants import OpenTenants
+from blizzard.hub.process_root import HubProcess, open_store_backed, open_store_free
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import rotate_keys
@@ -178,6 +178,12 @@ from blizzard.hub.settings.pass_config import bind_pass_config
 from blizzard.hub.settings.source import HubConfigSource
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreError
 from blizzard.hub.store.forge_check_reads import UnreadableStore, read_forge_addresses
+from blizzard.hub.store.internal.config_import_store import ConfigImportStore
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
+from blizzard.hub.store.internal.project_store import ProjectStore
+from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
+from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.wire.components import HUB_SCHEMA_COMPONENTS
 
@@ -427,18 +433,27 @@ def _log_unhandled_request_error(request: Request, exc: Exception) -> PlainTextR
     return PlainTextResponse("Internal Server Error", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+def _open_offline_root(connections: HubStoreConnections, config: HubConfig, environ: Mapping[str, str]) -> HubProcess:
+    """The hub root an offline verb owns: the system clock, tracing disabled and the environment's actions."""
+    return open_store_backed(
+        connections,
+        clock=build_system_clock(),
+        config=config,
+        platform_tracing=DisabledPlatformTracing(),
+        environ=environ,
+        actions=build_hub_actions(environ),
+    )
+
+
 def rotate_secret_keys(config: HubConfig, environ: Mapping[str, str]) -> RotationResult:
     """The offline ``rotate-key`` wiring: the store and key source opened directly, no app; every open
     tenant's secrets re-sealed."""
     engine, connections = open_hub_store(config.db_url)
     try:
-        core = build_process_core(connections, config, environ)
-        try:
-            tenants = core.every_open()
+        with contextlib.closing(_open_offline_root(connections, config, environ)) as root:
+            sealed = [secrets for _tenant, secrets in root.tenants.every_open(SecretStore)]
             keys = hub_key_provider(environ, data_dir=config.data_dir)
-            return rotate_keys([stores.secrets for stores in tenants], keys, secret_cipher)
-        finally:
-            core.process.close()
+            return rotate_keys(sealed, keys, secret_cipher)
     finally:
         engine.dispose()
 
@@ -453,24 +468,25 @@ def import_legacy_config(
     legacy = read_legacy_keys(config.config_path, environ, strict=config.strict)
     engine, connections = open_hub_store(config.db_url)
     try:
-        core = build_process_core(connections, config, environ)
-        with contextlib.closing(core.process):
-            target = _legacy_import_tenant(core.open_tenants(), named=tenant)
-            stores = core.open(StoreScope(target))
-            authoring = stores.tenant.get(ConfigAuthoring)
+        with contextlib.closing(_open_offline_root(connections, config, environ)) as root:
+            open_tenants = root.resolver.get(OpenTenants).every()
+            scope = StoreScope(_legacy_import_tenant(open_tenants, named=tenant))
+            tenants = root.tenants
+            authoring = tenants.resolve(scope, ConfigAuthoring)
+            imports = tenants.resolve(scope, ConfigImportStore)
             existing = ExistingConfig(
-                secrets=frozenset(secret.name for secret in stores.secrets.list_all()),
-                work_sources=tuple(stores.work_source_records.list_all(include_retired=True)),
-                repositories=tuple(stores.repository_records.list_all(include_retired=True)),
-                forges=tuple(stores.forge_records.list_all(include_retired=True)),
+                secrets=frozenset(secret.name for secret in tenants.resolve(scope, SecretStore).list_all()),
+                work_sources=tuple(tenants.resolve(scope, WorkSourceRecordStore).list_all(include_retired=True)),
+                repositories=tuple(tenants.resolve(scope, RepositoryRecordStore).list_all(include_retired=True)),
+                forges=tuple(tenants.resolve(scope, ForgeRecordStore).list_all(include_retired=True)),
             )
             return authoring.import_legacy(
                 legacy,
                 {name: environ[name] for name in legacy.variables},
-                stores.config_import.commit_coordinates(),
+                imports.commit_coordinates(),
                 existing,
-                recorded=stores.config_import.recorded(),
-                links=ImportLinks(stores.projects),
+                recorded=imports.recorded(),
+                links=ImportLinks(tenants.resolve(scope, ProjectStore)),
             )
     finally:
         engine.dispose()
