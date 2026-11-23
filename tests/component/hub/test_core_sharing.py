@@ -11,6 +11,7 @@ import pytest
 
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.domain.execution.claim import ClaimService
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
@@ -39,7 +40,7 @@ def test_services_share_the_cores_stores(tmp_path: Path) -> None:
     assert services.garden_proposals is services.garden_proposal_authoring.proposals
     assert services.garden_proposal_closures is services.garden_proposal_authoring.closures
     assert services.delete is services.garden_proposal_closure.items.delete
-    assert services.registry is services.claim.registry
+    assert services.registry is hub.default_adapter(ClaimService).registry
     assert services.registry is hub.default_adapter(FleetService).registry
 
 

@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE
-from blizzard.hub.domain.execution.claim import RekeyDeniedNotHolder, RekeyDeniedTerminal
+from blizzard.hub.domain.execution.claim import ClaimService, RekeyDeniedNotHolder, RekeyDeniedTerminal
 from tests.support.scaffolding import HubHarness, build_hub, pointer_token, report_lease, runner_token
 
 _POINTER = {"source": "default", "ref": "84"}
@@ -399,7 +399,7 @@ def test_rekey_lost_route_race_returns_typed_refusal(
     def refuse(*args: object) -> str:
         raise RekeyDeniedNotHolder(chunk_id=chunk_id, holder=holder)
 
-    monkeypatch.setattr(hub.services.claim, "rekey", refuse)
+    monkeypatch.setattr(hub.default_adapter(ClaimService), "rekey", refuse)
     path = f"/api/fleet/chunks/{chunk_id}/route-token"
     response = hub.client.post(path)
     expected_detail = (
@@ -424,7 +424,7 @@ def test_rekey_terminal_refusal_is_typed(tmp_path: Path, monkeypatch: pytest.Mon
     def refuse(*args: object) -> str:
         raise RekeyDeniedTerminal(chunk_id=chunk_id, status=ChunkStatus.DONE)
 
-    monkeypatch.setattr(hub.services.claim, "rekey", refuse)
+    monkeypatch.setattr(hub.default_adapter(ClaimService), "rekey", refuse)
     path = f"/api/fleet/chunks/{chunk_id}/route-token"
     response = hub.client.post(path)
     assert response.status_code == 409

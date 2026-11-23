@@ -21,6 +21,7 @@ from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_driver import StepWake
 from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.execution.decisions import RequeueService
 from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository, IWriteFindingRepository
@@ -192,6 +193,7 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantServices.registry", services.registry, IReadRunnerRegistry),
         ("TenantServices.hosts", services.hosts, IReadHostRegistry),
         ("TenantServices.detach", services.detach, DetachService),
+        ("TenantServices.requeue", services.requeue, RequeueService),
     )
     problems = [
         f"{name} is not its container instance" for name, field, key in retained if field is not tenant.get(key)

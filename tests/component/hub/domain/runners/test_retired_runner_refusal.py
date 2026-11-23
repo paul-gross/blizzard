@@ -12,7 +12,10 @@ import sqlalchemy as sa
 
 from blizzard.hub.api import transcripts as transcripts_api
 from blizzard.hub.domain.chunk.model import Chunk
-from blizzard.hub.domain.execution.facts import PushedFact
+from blizzard.hub.domain.execution.apply import ApplyService
+from blizzard.hub.domain.execution.claim import ClaimService
+from blizzard.hub.domain.execution.decisions import DecisionService
+from blizzard.hub.domain.execution.facts import FactIngestService, PushedFact
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.execution.submissions import Completion, GateSubmission
 from blizzard.hub.domain.graph.model import Graph
@@ -98,7 +101,9 @@ def test_claim_refuses_a_retired_runner_and_leaves_the_chunk_unrouted(tmp_path: 
     assert graph is not None
 
     with pytest.raises(RunnerRetired):
-        hub.services.claim.claim(chunk, graph, runner_id=_RUNNER, workspace_id="ws-a", environment_ids=["e1"])
+        hub.default_adapter(ClaimService).claim(
+            chunk, graph, runner_id=_RUNNER, workspace_id="ws-a", environment_ids=["e1"]
+        )
 
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["route"] is None
 
@@ -176,19 +181,19 @@ class _Routed:
 
 
 _GUARDED: dict[str, Callable[[_Routed], object]] = {
-    "fact ingest": lambda r: r.hub.services.facts.ingest(
+    "fact ingest": lambda r: r.hub.default_adapter(FactIngestService).ingest(
         _RUNNER, [PushedFact(seq=2, kind="lease.minted", payload={"chunk_id": r.chunk_id, "epoch": 2})]
     ),
     "transcript ingest": lambda r: r.hub.services.transcript_ingest.ingest(_RUNNER, [r.transcript_record()]),
-    "completion": lambda r: r.hub.services.apply.apply(
+    "completion": lambda r: r.hub.default_adapter(ApplyService).apply(
         r.chunk,
         r.graph,
         Completion(choice="pass", epoch=1, runner_id=_RUNNER, from_node_id=r.node_id),
     ),
-    "decision": lambda r: r.hub.services.decisions.submit(
+    "decision": lambda r: r.hub.default_adapter(DecisionService).submit(
         r.chunk, r.graph, GateSubmission(from_node_id=r.node_id, epoch=1, runner_id=_RUNNER)
     ),
-    "route-token rekey": lambda r: r.hub.services.claim.rekey(r.route),
+    "route-token rekey": lambda r: r.hub.default_adapter(ClaimService).rekey(r.route),
     "runner read": lambda r: r.hub.default_adapter(FleetService).own_liveness(_registration(r.hub)),
 }
 

@@ -54,6 +54,8 @@ from blizzard.hub.domain.chunk.ingest import (
     ingest_work_refs,
 )
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, FleetSummary, WorkRef
+from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.delivery.declarations import delivery_declarations_for
 from blizzard.hub.domain.execution.decisions import NotEscalated
 from blizzard.hub.domain.execution.detach import NotRouted
@@ -85,6 +87,7 @@ from blizzard.hub.domain.operations.restart import (
 from blizzard.hub.domain.operations.stop import ChunkNotStoppable
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.urgency.model import UrgencyRetired, UrgencyUnknown
+from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.work_sources.registry import SelectedWorkSources
 from blizzard.wire.chunk import (
     BlockedView,
@@ -125,15 +128,17 @@ router = APIRouter(
 class OpenDecision:
     """A chunk's graph gate."""
 
-    services: TenantServices
+    decisions: IReadChunkDecisionsRepository
+    records: IReadChunkRecordRepository
+    events: EventBroker
     chunk_id: str
 
     def publish(self) -> None:
         """Emit ``decision-opened`` if the chunk now carries a live, unresolved gate."""
-        decision = self.services.chunks.decisions.decision_for_chunk(self.chunk_id)
+        decision = self.decisions.decision_for_chunk(self.chunk_id)
         if decision is not None and decision.is_open:
-            chunk = self.services.chunks.record.get(self.chunk_id)
-            self.services.events.publish_decision_opened(
+            chunk = self.records.get(self.chunk_id)
+            self.events.publish_decision_opened(
                 self.chunk_id,
                 decision.decision_id,
                 key=f"decisions:{decision.decision_id}",

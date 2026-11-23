@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.api.ingest_broadcast import pushed_facts
+from blizzard.hub.domain.execution.facts import FactIngestService
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.wire.facts import RunnerFact, RunnerFactBatch
@@ -61,7 +62,7 @@ def test_a_push_of_escalations_applies_each_owes_no_close_and_reads_no_chunk_rec
     since = hub.events.latest_id()
     monkeypatch.setattr(ChunkRecordStore, "get", counted_get)
     monkeypatch.setattr(ChunkRecordStore, "get_many", counted_get_many)
-    result = hub.services.facts.ingest(_RUNNER, pushed_facts(batch))
+    result = hub.default_adapter(FactIngestService).ingest(_RUNNER, pushed_facts(batch))
     monkeypatch.undo()
 
     assert len(result.applied) == 3

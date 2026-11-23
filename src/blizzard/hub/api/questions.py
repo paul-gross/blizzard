@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, status
 
 from blizzard.auth_core import Permission
@@ -18,6 +19,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events, problems, problems_chunks
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
@@ -25,7 +27,10 @@ from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.chunk.model import NodeQuestion, QuestionClosed, QuestionState
-from blizzard.hub.domain.execution.questions import AskedQuestion
+from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.execution.questions import AskedQuestion, QuestionService
+from blizzard.hub.events.broker import EventBroker
 from blizzard.wire.question import AnswerRequest, AnswerResult, QuestionAsked, QuestionView
 
 router = APIRouter(
@@ -84,38 +89,49 @@ def asked_question(fact: QuestionAsked) -> AskedQuestion:
 @router.post(
     "/questions", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require(Permission.QUESTION_ANSWER))]
 )
-def ask_question(fact: QuestionAsked, services: Services) -> dict[str, str]:
+@inject_sync
+def ask_question(
+    fact: QuestionAsked,
+    questions: FromDishka[QuestionService],
+    records: FromDishka[IReadChunkRecordRepository],
+    frames: FromDishka[ChunkFrameLoader],
+    events: FromDishka[EventBroker],
+) -> dict[str, str]:
     """Land a ``question.asked`` row — the chunk parks ``waiting_on_human``; 409 when fenced out."""
-    chunk = services.chunks.record.get(fact.chunk_id)
+    chunk = records.get(fact.chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, fact.chunk_id))
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, fact.chunk_id)
-    refusal = services.questions.record_asked(asked_question(fact))
+    change = chunk_events.ChunkChanged.before(frames, fact.chunk_id)
+    refusal = questions.record_asked(asked_question(fact))
     if refusal is not None:
         raise ProblemHTTPException(partial(problems_chunks.question_write_fenced_problem, refusal.detail))
     key = f"questions:{fact.question_id}"
-    services.events.publish_question_asked(fact.chunk_id, fact.question_id, key=key, project_id=chunk.project_id)
+    events.publish_question_asked(fact.chunk_id, fact.question_id, key=key, project_id=chunk.project_id)
     change.publish(cause="question-asked", key=key)
     return {"question_id": fact.question_id}
 
 
 @router.post("/questions/{question_id}/answers", response_model=AnswerResult, status_code=status.HTTP_201_CREATED)
+@inject_sync
 def answer_question(
     question_id: str,
     request: AnswerRequest,
-    services: Services,
+    questions: FromDishka[QuestionService],
+    question_reads: FromDishka[IReadChunkQuestionsRepository],
+    frames: FromDishka[ChunkFrameLoader],
+    events: FromDishka[EventBroker],
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.QUESTION_ANSWER))],
 ) -> object:
     """Answer a question first-write-wins; 409 carries the winning answer.
 
     ``answered_by`` is taken from the authenticated session identity, never the request
     body's ``answered_by`` field — a spoofed value there is silently ignored."""
-    pre_answer = services.chunks.questions.get_question(question_id)
+    pre_answer = question_reads.get_question(question_id)
     if pre_answer is None:
         raise ProblemHTTPException(partial(problems.question_not_found_problem, question_id))
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, pre_answer.chunk_id)
+    change = chunk_events.ChunkChanged.before(frames, pre_answer.chunk_id)
     try:
-        outcome = services.questions.answer(pre_answer, answer=request.answer, answered_by=identity.username)
+        outcome = questions.answer(pre_answer, answer=request.answer, answered_by=identity.username)
     except QuestionClosed as exc:
         raise ProblemHTTPException(partial(problems_chunks.question_closed_problem, str(exc))) from exc
     if not outcome.won:
@@ -140,16 +156,16 @@ def answer_question(
     # The winning answer row alone flips the chunk out of waiting_on_human; the question's
     # own chunk_id never changes, so the pre-answer read already named it — no re-read.
     key = f"question_answers:{question_id}"
-    state = chunk_events.ChunkFrameState.load(services.chunk_frames, pre_answer.chunk_id)
-    services.events.publish_question_answered(
+    state = chunk_events.ChunkFrameState.load(frames, pre_answer.chunk_id)
+    events.publish_question_answered(
         pre_answer.chunk_id,
         question_id,
         key=key,
         project_id=state.chunk.project_id if state.chunk is not None else None,
     )
-    chunk_events.ChunkChanged.of(
-        services.chunk_frames, pre_answer.chunk_id, prev_status=change.prev_status
-    ).publish_from(state, cause="question-answered", key=key)
+    chunk_events.ChunkChanged.of(frames, pre_answer.chunk_id, prev_status=change.prev_status).publish_from(
+        state, cause="question-answered", key=key
+    )
     return result
 
 
