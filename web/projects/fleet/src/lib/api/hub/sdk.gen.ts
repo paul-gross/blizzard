@@ -751,7 +751,7 @@ export const requeueChunkApiChunksChunkIdRequeuesPost = <ThrowOnError extends bo
 /**
  * Restart Chunk
  *
- * Force a chunk onto a node now, on a freshly minted session (#370, #371).
+ * Force a chunk onto a node now, on a freshly minted session.
  *
  * At a bumped epoch, so the running attempt is fenced out and the holding runner re-enters;
  * ``node`` omitted means its current node, or the entry of the graph it lands on when it never
