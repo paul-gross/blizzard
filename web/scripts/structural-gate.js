@@ -1037,6 +1037,18 @@ const DOMAIN_BOUNDARY_STRICT_SCOPES = [
   'hub/src/app/core/project-lens-colors',
   'hub/src/app/board/fleet-spend/fleet-spend.domain',
   'hub/src/app/board/fleet-spend/fleet-spend.translate',
+  'runner/src/app/core/identity',
+  'runner/src/app/core/host-runner.domain',
+  'runner/src/app/core/host-runner.translate',
+  'runner/src/app/core/host-environment.domain',
+  'runner/src/app/core/host-environment.translate',
+  'runner/src/app/core/pause-state.domain',
+  'runner/src/app/core/pause-state.translate',
+  'runner/src/app/shell/nav',
+  'runner/src/app/shell/app',
+  'runner/src/app/shell/app-scope-navigation',
+  'runner/src/app/shell/app-session-recovery',
+  'runner/src/app/shell/legacy-runner-redirect',
 ];
 
 /** The `DOMAIN_BOUNDARY_EXEMPT` unit of `rel`, a `projects/`-relative posix path.
