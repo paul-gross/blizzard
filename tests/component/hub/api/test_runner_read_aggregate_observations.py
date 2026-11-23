@@ -37,6 +37,7 @@ from tests.support.scaffolding import (
     seed_scope,
     seed_work_item,
 )
+from tests.support.store_free_process import store_free
 
 
 @pytest.mark.parametrize(
@@ -108,10 +109,8 @@ def test_chunk_read_problem_variants_are_aggregated(
         assert missing_graph.json()["detail"] == "chunk's pinned graph is missing"
         observe(missing_graph, 500, PinnedGraphMissingProblem)
 
-    services = hub.app.state.services
-    hub.app.state.services = None
-    observe(client.get(url, headers=bearer(live)), 503, HubStoreUnavailableProblem)
-    hub.app.state.services = services
+    with store_free(hub.app):
+        observe(client.get(url, headers=bearer(live)), 503, HubStoreUnavailableProblem)
 
     def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
         principal = RunnerAuth.of(request).demand()

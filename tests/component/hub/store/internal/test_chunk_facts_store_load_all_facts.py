@@ -191,9 +191,7 @@ def test_fleet_pulse_view_calls_load_live_statuses_and_never_load_facts_or_list_
 
     counting_facts = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     counting_record = _CountingRecordStore(hub_store_connections(hub.engine), hub.clock)
-    services = replace(hub.services, chunks=replace(hub.services.chunks, facts=counting_facts, record=counting_record))
-
-    view = FleetPulse(services).view()
+    view = FleetPulse(counting_facts).view()
 
     assert counting_facts.load_live_statuses_calls == 1
     assert counting_facts.load_facts_calls == 0

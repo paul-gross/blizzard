@@ -12,20 +12,22 @@ from datetime import datetime
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkDeleteRefusal, ChunkStatus
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import chunk_events, problems, problems_chunks
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.api.chunk_edit import ChunkPatchBody
-from blizzard.hub.api.chunk_views import ChunkView, blocked_view, ingest_conflict_refusal
-from blizzard.hub.api.deps import Services
+from blizzard.hub.api.chunk_frames import ChunkFrameLoader
+from blizzard.hub.api.chunk_views import ChunkView, ChunkViewReads, blocked_view, ingest_conflict_refusal
 from blizzard.hub.api.flow_places import chunk_flow_places
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
@@ -35,7 +37,6 @@ from blizzard.hub.api.project_params import QueryProject, body_project, project_
 from blizzard.hub.api.urgencies import stated_urgency, urgency_refusal
 from blizzard.hub.api.work_item_reads import read_chunk_work_items
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.delivery.flow_changes import publish_flow_facts
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.dependencies import (
@@ -50,45 +51,58 @@ from blizzard.hub.domain.chunk.ingest import (
     IngestItemProjectMismatch,
     IngestProjectAmbiguous,
     IngestProjectUnknown,
+    IngestService,
     IngestSourceNotLinked,
     ingest_work_refs,
 )
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, FleetSummary, WorkRef
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
+from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository
+from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.delivery.declarations import delivery_declarations_for
-from blizzard.hub.domain.execution.decisions import NotEscalated
-from blizzard.hub.domain.execution.detach import NotRouted
-from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
-from blizzard.hub.domain.graph.model import TargetGraphRetired
+from blizzard.hub.domain.execution.decisions import NotEscalated, RequeueService
+from blizzard.hub.domain.execution.detach import DetachService, NotRouted
+from blizzard.hub.domain.graph.authoring import DefaultGraphRetired, DefaultGraphService
+from blizzard.hub.domain.graph.model import IReadGraphRepository, TargetGraphRetired
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
+from blizzard.hub.domain.operations.complete import CompleteService
 from blizzard.hub.domain.operations.delete import (
     ChunkHasDependents,
     ChunkNotDeletable,
+    DeleteService,
     delete_refusal,
     dependent_chunk_ids,
 )
-from blizzard.hub.domain.operations.demote import ChunkNotDemotable
+from blizzard.hub.domain.operations.demote import ChunkNotDemotable, DemoteService
 from blizzard.hub.domain.operations.edit import (
     ChunkAlreadyMoved,
     ChunkNotEditable,
+    EditService,
     ForcedNodeUnknown,
     MigrationTargetIsCurrentPin,
 )
-from blizzard.hub.domain.operations.pause import ChunkNotPausable
-from blizzard.hub.domain.operations.promote import ChunkNotPromotable
+from blizzard.hub.domain.operations.pause import ChunkNotPausable, PauseService
+from blizzard.hub.domain.operations.promote import ChunkNotPromotable, PromoteService
 from blizzard.hub.domain.operations.queue import ContradictoryPlacement, NotInList, Placement, SelfAnchoredMove
 from blizzard.hub.domain.operations.restart import (
     ChunkNotRestartable,
     RestartCurrentNodeUnknown,
     RestartGraphPinChanged,
     RestartNodeUnknown,
+    RestartService,
 )
-from blizzard.hub.domain.operations.stop import ChunkNotStoppable
-from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.operations.stop import ChunkNotStoppable, StopService
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.urgency.model import UrgencyRetired, UrgencyUnknown
+from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.events.broker import EventBroker
+from blizzard.hub.graphs import PackagedGraphs, packaged_default_yaml
 from blizzard.hub.work_sources.registry import SelectedWorkSources
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from blizzard.wire.chunk import (
     BlockedView,
     BoardDonePolicyView,
@@ -123,6 +137,11 @@ router = APIRouter(
     prefix="/api", tags=["chunks"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
 )
 
+Records = FromDishka[IReadChunkRecordRepository]
+Frames = FromDishka[ChunkFrameLoader]
+Events = FromDishka[EventBroker]
+Views = FromDishka[ChunkViewReads]
+
 
 @dataclass(frozen=True)
 class OpenDecision:
@@ -146,34 +165,39 @@ class OpenDecision:
             )
 
 
-def _ingest_project(services: TenantServices, pointers: list[WorkRef], named: ProjectId | None) -> ProjectId:
+def _ingest_project(
+    ingest: IngestService, projects: IReadProjectRepository, pointers: list[WorkRef], named: ProjectId | None
+) -> ProjectId:
     """The project an ingest of ``pointers`` mints into: ``named``, or the one its configured sources agree on,
     or the one its hub items record. When nothing it holds names one, the call acts in the tenant's only
     project, :class:`ProjectRequired` otherwise."""
     try:
-        return services.ingest.choose_project(pointers, named)
+        return ingest.choose_project(pointers, named)
     except IngestProjectUnknown:
-        return project_of_call(services.projects).project_id
+        return project_of_call(projects).project_id
 
 
 def ingest_project_refusal(
-    request: Request, services: TenantServices, exc: IngestProjectAmbiguous | IngestSourceNotLinked
+    request: Request,
+    projects: IReadProjectRepository,
+    sources: IWorkSourceRegistry,
+    exc: IngestProjectAmbiguous | IngestSourceNotLinked,
 ) -> JSONResponse:
     """An ingest's project refusal as its ``422`` body: ``source_not_linked`` naming the source and
     the project it is not linked to (``null`` when it is linked to none); otherwise
     ``project_required`` listing the candidates the tokens left open."""
     if isinstance(exc, IngestSourceNotLinked):
-        project = services.projects.get(exc.project) if exc.project is not None else None
+        project = projects.get(exc.project) if exc.project is not None else None
         body: BaseModel = SourceNotLinkedBody(
             message=str(exc),
             source=exc.source,
-            slug=services.work_sources.source_label(exc.source),
+            slug=sources.source_label(exc.source),
             project=project_ref(project) if project is not None else None,
         )
     else:
-        found = services.projects.get_many(list(exc.candidates))
-        projects = [found[project_id] for project_id in exc.candidates if project_id in found]
-        required = ProjectRequiredBody(message=str(exc), projects=[project_ref(project) for project in projects])
+        found = projects.get_many(list(exc.candidates))
+        candidates = [found[project_id] for project_id in exc.candidates if project_id in found]
+        required = ProjectRequiredBody(message=str(exc), projects=[project_ref(project) for project in candidates])
         declared = declared_problem_response(
             request, problems.project_choice_problem(required, instance=request.url.path)
         )
@@ -189,20 +213,32 @@ def ingest_project_refusal(
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require(Permission.CHUNK_INGEST))],
 )
-def ingest_chunk(request: ChunkIngestRequest, services: Services, http_request: Request) -> object:
+@inject_sync
+def ingest_chunk(
+    request: ChunkIngestRequest,
+    http_request: Request,
+    projects: FromDishka[IReadProjectRepository],
+    urgencies: FromDishka[UrgencyReading],
+    sources: FromDishka[IWorkSourceRegistry],
+    ingest: FromDishka[IngestService],
+    default_graph: FromDishka[DefaultGraphService],
+    graphs: FromDishka[PackagedGraphs],
+    frames: Frames,
+    events: Events,
+) -> object:
     """Ingest by source-native token into the project named, or the one the tokens' sources agree on. 422 on an
     unheld project, an unclaimed token, ``project_required``, ``source_not_linked``, a hub item of another project,
     or ``urgency_unknown``/``urgency_retired``; 409 on a pointer a live chunk holds; 503 when every default-named
     graph is retired (the operator's brake: re-enable one or mint a new one)."""
     # Resolution before minting, and before the live-holder check: an unresolvable
     # token should not consult the store, and the request rejects as a whole.
-    named = body_project(request.project, services.projects).project_id if request.project is not None else None
-    urgency = stated_urgency(request.urgency, services.urgency_reading)
+    named = body_project(request.project, projects).project_id if request.project is not None else None
+    urgency = stated_urgency(request.urgency, urgencies)
     pointers: list[WorkRef] = []
     for token in request.tokens:
-        pointer = services.work_sources.resolve(token)
+        pointer = sources.resolve(token)
         if pointer is None:
-            configured = ", ".join(sorted(services.work_sources.names())) or "none"
+            configured = ", ".join(sorted(sources.names())) or "none"
             raise ProblemHTTPException(
                 partial(
                     problems_chunks.ingest_token_unclaimed_problem,
@@ -213,37 +249,37 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services, http_request: 
     try:
         # The batch is refused before the default graph resolves, which may mint one.
         pointers = ingest_work_refs(pointers)
-        project = _ingest_project(services, pointers, named)
+        project = _ingest_project(ingest, projects, pointers, named)
     except EmptyIngest as exc:
         raise ProblemHTTPException(partial(problems_chunks.ingest_empty_problem, str(exc))) from exc
     except (IngestProjectAmbiguous, IngestSourceNotLinked) as exc:
-        return ingest_project_refusal(http_request, services, exc)
+        return ingest_project_refusal(http_request, projects, sources, exc)
     except IngestItemProjectMismatch as exc:
         raise ProblemHTTPException(partial(problems_chunks.ingest_item_project_mismatch_problem, str(exc))) from exc
     try:
-        graph = services.default_graph.ensure_default(
-            services.default_graph_doc, definition_yaml=services.default_graph_yaml
-        )
+        graph = default_graph.ensure_default(graphs.default.doc, definition_yaml=packaged_default_yaml())
     except DefaultGraphRetired as exc:
         raise ProblemHTTPException(partial(problems_chunks.default_graph_retired_problem, str(exc))) from exc
     try:
-        chunk_id = services.ingest.ingest(pointers, graph=graph, project=project, urgency=urgency)
+        chunk_id = ingest.ingest(pointers, graph=graph, project=project, urgency=urgency)
     except (UrgencyUnknown, UrgencyRetired) as exc:  # retired after the edge's check
         raise urgency_refusal(exc) from exc
     except IngestSourceNotLinked as exc:  # unlinked after the project was chosen
-        return ingest_project_refusal(http_request, services, exc)
+        return ingest_project_refusal(http_request, projects, sources, exc)
     except IngestConflict as exc:
-        raise ingest_conflict_refusal(services.work_sources, exc) from exc
-    chunk_events.ChunkChanged.of(services.chunk_frames, chunk_id, prev_status=None).publish(
-        cause="minted", key=f"chunks:{chunk_id}"
-    )
-    services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
-    return ChunkIngestResponse(chunk_id=chunk_id, **project_label_fields(project, services.projects.get(project)))
+        raise ingest_conflict_refusal(sources, exc) from exc
+    chunk_events.ChunkChanged.of(frames, chunk_id, prev_status=None).publish(cause="minted", key=f"chunks:{chunk_id}")
+    events.publish_queue_changed()  # mint adds the chunk to the backlog list
+    return ChunkIngestResponse(chunk_id=chunk_id, **project_label_fields(project, projects.get(project)))
 
 
 @router.get("/chunks", response_model=ChunksPageView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
+@inject_sync
 def list_chunks(
-    services: Services,
+    views: Views,
+    records: Records,
+    dependencies: FromDishka[IReadChunkDependenciesRepository],
+    clock: FromDishka[IClock],
     project: QueryProject,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
@@ -259,16 +295,16 @@ def list_chunks(
     # ``board_window`` drops ``done`` chunks finished before the window, bar the floor of newest ones; a page
     # can come back short. The floor is one extra statement returning at most ``BOARD_DONE_FLOOR`` ids, ranking
     # the scope's done chunks by a derived instant no index orders — a fleet-sized walk by design.
-    done_since = services.clock.now() - BOARD_DONE_WINDOW if board_window else None
-    done_floor = services.chunks.record.newest_done(limit=BOARD_DONE_FLOOR, project=project) if board_window else []
-    names = GraphNames(services.graphs)
+    done_since = clock.now() - BOARD_DONE_WINDOW if board_window else None
+    done_floor = records.newest_done(limit=BOARD_DONE_FLOOR, project=project) if board_window else []
+    names = GraphNames(views.graphs)
     try:
-        page = services.chunks.record.list_page(
+        page = records.list_page(
             cursor=cursor, limit=limit, done_since=done_since, done_kept=done_floor, project=project
         )
     except MalformedCursor as exc:
         raise ProblemHTTPException(partial(problems.malformed_cursor_problem, exc)) from exc
-    facts = services.chunks.facts.load_facts_for([c.chunk_id for c in page.chunks])
+    facts = views.facts.load_facts_for([c.chunk_id for c in page.chunks])
     if done_since is not None:
         # The store's exclusion leaves a same-instant movement tie in; the derivation settles it. A floor
         # member is exempt: it stays however old.
@@ -281,17 +317,16 @@ def list_chunks(
     else:
         page_chunks = page.chunks
     page_ids = [c.chunk_id for c in page_chunks]
-    routes = services.chunks.route.routes_for(page_ids)
+    routes = views.route.routes_for(page_ids)
     # The dependency edges join the facts at this call site, not inside a store
     # (``bzh:dependency-inversion``): the page dependents' standing edges, with their
     # prerequisites' statuses read by id when the prerequisite is off the page.
-    edges = services.chunks.dependencies.standing_edges_for_dependents(page_ids)
+    edges = dependencies.standing_edges_for_dependents(page_ids)
     statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
     off_page = sorted({e.prerequisite_chunk_id for e in edges if e.prerequisite_chunk_id not in statuses})
     if off_page:
         statuses.update(
-            (chunk_id, chunk_facts.status())
-            for chunk_id, chunk_facts in services.chunks.facts.status_facts_for(off_page).items()
+            (chunk_id, chunk_facts.status()) for chunk_id, chunk_facts in views.facts.status_facts_for(off_page).items()
         )
     markings = derive_blocked_prerequisites(edges, statuses)
     # One priming call resolves the page's own pinned graphs' name/entry-node/node-names
@@ -313,41 +348,41 @@ def list_chunks(
     )
     # Unlike the fleet-wide status/holder reads above, delivery belongs only to
     # rendered rows: one narrowed, batched read over this page's ids.
-    delivery_sources = services.chunks.artifacts.delivery_sources_for([chunk.chunk_id for chunk in page_chunks])
+    delivery_sources = views.artifacts.delivery_sources_for([chunk.chunk_id for chunk in page_chunks])
     declarations = delivery_declarations_for(
         page_chunks,
         delivery_sources,
-        project_links=services.project_links,
-        repository_records=services.repository_records,
-        forge_records=services.forge_records,
-        targets=services.chunk_targets,
+        project_links=views.project_links,
+        repository_records=views.repository_records,
+        forge_records=views.forge_records,
+        targets=views.chunk_targets,
     )
-    commit_links = services.commit_links.for_chunks(page_chunks)
+    commit_links = views.commit_links.for_chunks(page_chunks)
     # A pointer the page renders can be held live by a chunk outside it; the store narrows to live candidates.
-    live_holders = services.chunks.work_refs.live_holders(p for chunk in page_chunks for p in chunk.work_refs)
+    live_holders = views.work_refs.live_holders(p for chunk in page_chunks for p in chunk.work_refs)
     # The page's routed runners' registered names — one batched read, narrowed to the page.
-    runner_names = services.registry.names_for(
+    runner_names = views.registry.names_for(
         route.runner_id for chunk in page_chunks if (route := routes.get(chunk.chunk_id)) is not None
     )
     # The tenant's urgencies — one read of the set, joined to every row.
-    urgencies = services.urgency_reading.by_id()
+    urgencies = views.urgency_reading.by_id()
     # The page's projects — one batched read, narrowed to the page.
-    projects = services.projects.get_many(sorted({c.project_id for c in page_chunks if c.project_id is not None}))
+    projects = views.projects.get_many(sorted({c.project_id for c in page_chunks if c.project_id is not None}))
     # Config revisions are read once per distinct source on each request, never cached across requests.
     sources = SelectedWorkSources(
-        services.work_sources, (pointer.source for chunk in page_chunks for pointer in chunk.work_refs)
+        views.work_sources, (pointer.source for chunk in page_chunks for pointer in chunk.work_refs)
     )
     # A page chunk's flow place depends on the submissions ahead of it, whose chunks need not be on the page: the
     # read covers the whole line of every flow the page's chunks hold — bounded by the line, not the fleet.
-    flow_places = chunk_flow_places(services, page_ids)
+    flow_places = chunk_flow_places(views.lines, page_ids)
     # A bounce's withdrawal reads its visit's submission: one batched read over the page's bounced chunks.
-    submissions = services.flows.submissions_of_chunks(
+    submissions = views.flows.submissions_of_chunks(
         [chunk.chunk_id for chunk in page_chunks if (f := facts.get(chunk.chunk_id)) is not None and f.bounces]
     )
     return ChunksPageView(
         chunks=[
             ChunkView.injected(
-                services,
+                views,
                 chunk,
                 facts.get(chunk.chunk_id) or ChunkFacts(minted=True),
                 routes.get(chunk.chunk_id),
@@ -383,20 +418,19 @@ def list_chunks(
 
 
 @router.get("/chunk-counts", response_model=ChunkCountsView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
+@inject_sync
 def chunk_counts(
-    services: Services, project: QueryProject, done_since: Annotated[datetime | None, Query()] = None
+    facts: FromDishka[IReadChunkFactsRepository],
+    project: QueryProject,
+    done_since: Annotated[datetime | None, Query()] = None,
 ) -> ChunkCountsView:
     """The all-time fleet count per derived status — over exactly the chunks
     ``GET /api/chunks`` pages over, with no window applied; ``?project=`` counts that
     project's chunks alone. With ``done_since``, ``done_since`` answers how many of the ``done`` ones finished at or
     after that instant; the caller chooses the boundary."""
-    counts = services.chunks.facts.status_counts(project=project)
+    counts = facts.status_counts(project=project)
     return ChunkCountsView(
-        done_since=(
-            services.chunks.facts.done_since_count(as_utc(done_since), project=project)
-            if done_since is not None
-            else None
-        ),
+        done_since=(facts.done_since_count(as_utc(done_since), project=project) if done_since is not None else None),
         total=sum(counts.values()),
         terminal=sum(n for st, n in counts.items() if st in TERMINAL_STATUSES),
         **{st.value: n for st, n in counts.items()},
@@ -408,14 +442,18 @@ def _neighbor_view(neighbor: ChunkNeighbor) -> ChunkNeighborView:
 
 
 def _dependency_views_for_chunk(
-    services: TenantServices, chunk_id: str, *, facts: ChunkFacts
+    dependencies: IReadChunkDependenciesRepository,
+    chunk_facts: IReadChunkFactsRepository,
+    chunk_id: str,
+    *,
+    facts: ChunkFacts,
 ) -> tuple[BlockedView | None, ChunkNeighborhoodView, ChunkDeleteRefusal | None]:
     """``GET /api/chunks/{chunk_id}``'s blocked marking, neighborhood and delete refusal — all derived
     from the one standing-edges read and one statuses map, since a chunk's dependent edges are a subset of its own
     neighborhood edges and reading them separately would risk a release or completion landing between the two reads.
     ``facts`` is the caller's own already-loaded value for ``chunk_id``, so this need not reload them a second
     time."""
-    edges = services.chunks.dependencies.standing_edges_for(chunk_id)
+    edges = dependencies.standing_edges_for(chunk_id)
     refusal = delete_refusal(facts, dependent_chunk_ids(chunk_id, edges))
     if not edges:
         return None, ChunkNeighborhoodView(prerequisites=[], dependents=[]), refusal
@@ -423,7 +461,7 @@ def _dependency_views_for_chunk(
     neighbor_ids = {
         edge.prerequisite_chunk_id if edge.dependent_chunk_id == chunk_id else edge.dependent_chunk_id for edge in edges
     }
-    neighbor_facts_by_id = services.chunks.facts.load_facts_for(list(neighbor_ids))
+    neighbor_facts_by_id = chunk_facts.load_facts_for(list(neighbor_ids))
     statuses.update((neighbor_id, nf.status()) for neighbor_id, nf in neighbor_facts_by_id.items())
     dependent_edges = [e for e in edges if e.dependent_chunk_id == chunk_id]
     blocked = blocked_view(derive_blocked_prerequisites(dependent_edges, statuses).get(chunk_id))
@@ -442,7 +480,7 @@ def _dependency_views_for_chunk(
 class FleetPulse:
     """Every chunk's derived status folded to the four fleet-summary counts."""
 
-    services: TenantServices
+    facts: IReadChunkFactsRepository
 
     def view(self) -> FleetSummaryView:
         """Not a route of its own here. Derives each chunk's status the same way
@@ -450,7 +488,7 @@ class FleetPulse:
         is a fixed four numbers regardless of fleet size. Reads only the live fleet's
         statuses (``bzh:live-set-read``) with one bulk read rather than fanning
         ``load_facts`` out per chunk — a terminal chunk counts toward no bucket."""
-        summary = FleetSummary.of(self.services.chunks.facts.load_live_statuses().values())
+        summary = FleetSummary.of(self.facts.load_live_statuses().values())
         return FleetSummaryView(
             ready=summary.ready,
             running=summary.running,
@@ -509,9 +547,11 @@ class CloseDiagnostic(BaseModel):
     response_model=CloseDiagnostic,
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
+@inject_sync
 def close_diagnostic(
     chunk_id: str,
-    services: Services,
+    records: Records,
+    delivery: FromDishka[IReadChunkDeliveryRepository],
     intent_cursor: Annotated[int, Query(ge=0)] = 0,
     closure_cursor: Annotated[int, Query(ge=0)] = 0,
     attempt_cursor: Annotated[int, Query(ge=0)] = 0,
@@ -519,9 +559,8 @@ def close_diagnostic(
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> CloseDiagnostic:
     """Page close evidence independently in durable write order; never return failure details."""
-    if services.chunks.record.get(chunk_id) is None:
+    if records.get(chunk_id) is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    delivery = services.chunks.delivery
     intents = delivery.close_intents(chunk_id, after=intent_cursor, limit=limit + 1)
     closures = delivery.close_closures(chunk_id, after=closure_cursor, limit=limit + 1)
     selected_intent = attempt_intent_id if attempt_intent_id is not None else (intents[0].sequence if intents else None)
@@ -545,16 +584,18 @@ def close_diagnostic(
     response_model=LandingFactsPage,
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
+@inject_sync
 def landing_facts(
     chunk_id: str,
-    services: Services,
+    records: Records,
+    delivery: FromDishka[IReadChunkDeliveryRepository],
     cursor: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> LandingFactsPage:
     """Page durable repository landings in write order."""
-    if services.chunks.record.get(chunk_id) is None:
+    if records.get(chunk_id) is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    facts = services.chunks.delivery.landing_facts(chunk_id, after=cursor, limit=limit + 1)
+    facts = delivery.landing_facts(chunk_id, after=cursor, limit=limit + 1)
     page = facts[:limit]
     return LandingFactsPage(
         items=[
@@ -566,18 +607,31 @@ def landing_facts(
 
 
 @router.get("/chunks/{chunk_id}", response_model=ChunkDetail, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def get_chunk(chunk_id: str, services: Services) -> ChunkDetail:
+@inject_sync
+def get_chunk(
+    chunk_id: str, records: Records, dependencies: FromDishka[IReadChunkDependenciesRepository], views: Views
+) -> ChunkDetail:
     """One chunk aggregate in full — derived status, current node, route."""
-    chunk = services.chunks.record.get(chunk_id)
+    return chunk_detail(chunk_id, records, dependencies, views)
+
+
+def chunk_detail(
+    chunk_id: str,
+    records: IReadChunkRecordRepository,
+    dependencies: IReadChunkDependenciesRepository,
+    views: ChunkViewReads,
+) -> ChunkDetail:
+    """One chunk aggregate in full, as the operator and the fleet read it; 404 for an unknown chunk."""
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
-    blocked, neighborhood, refusal = _dependency_views_for_chunk(services, chunk_id, facts=facts)
+    facts = views.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
+    blocked, neighborhood, refusal = _dependency_views_for_chunk(dependencies, views.facts, chunk_id, facts=facts)
     # Primed with every graph id this chunk's history ever names.
-    names = GraphNames(services.graphs)
+    names = GraphNames(views.graphs)
     names.prime(_detail_graph_ids(chunk, facts))
     return ChunkView.of(
-        services, chunk, names=names, blocked=blocked, facts=facts, neighborhood=neighborhood, delete_refusal=refusal
+        views, chunk, names=names, blocked=blocked, facts=facts, neighborhood=neighborhood, delete_refusal=refusal
     ).detail()
 
 
@@ -604,29 +658,32 @@ def _detail_graph_ids(chunk: Chunk, facts: ChunkFacts) -> set[str]:
     response_model=ChunkSummary,
     status_code=status.HTTP_202_ACCEPTED,
 )
+@inject_sync
 def requeue_chunk(
     chunk_id: str,
-    services: Services,
+    records: Records,
+    requeues: FromDishka[RequeueService],
+    frames: Frames,
+    events: Events,
+    views: Views,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
     request: ChunkRequeueRequest | None = None,
 ) -> ChunkSummary:
     """Close an escalation by supersession: requeue at the current node, recording who requeued and the
     optional body's note."""
-    chunk = services.chunks.record.get(chunk_id)
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
+    change = chunk_events.ChunkChanged.before(frames, chunk_id)
     try:
-        requeue_id = services.requeue.requeue(
-            chunk, by=identity.username, note=request.note if request is not None else None
-        )
+        requeue_id = requeues.requeue(chunk, by=identity.username, note=request.note if request is not None else None)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except NotEscalated as exc:
         raise ProblemHTTPException(partial(problems_chunks.chunk_not_escalated_problem, str(exc))) from exc
     facts = change.publish(cause="requeued", key=f"requeues:{requeue_id}")
-    services.events.publish_queue_changed()  # requeue can re-admit the chunk to the queue
-    return ChunkView.of(services, chunk, facts=facts).summary()
+    events.publish_queue_changed()  # requeue can re-admit the chunk to the queue
+    return ChunkView.of(views, chunk, facts=facts).summary()
 
 
 @router.post(
@@ -635,22 +692,32 @@ def requeue_chunk(
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def restart_chunk(chunk_id: str, request: ChunkRestartRequest, services: Services) -> ChunkSummary:
+@inject_sync
+def restart_chunk(
+    chunk_id: str,
+    request: ChunkRestartRequest,
+    records: Records,
+    graphs: FromDishka[IReadGraphRepository],
+    restarts: FromDishka[RestartService],
+    frames: Frames,
+    events: Events,
+    views: Views,
+) -> ChunkSummary:
     """Force a chunk onto a node now, on a freshly minted session (#370, #371).
 
     At a bumped epoch, so the running attempt is fenced out and the holding runner re-enters;
     ``node`` omitted means its current node, or the entry of the graph it lands on when it never
     moved. 409 refuses a terminal chunk, an unmatched name, or its own pin; 404 an unknown target."""
-    chunk = services.chunks.record.get(chunk_id)
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    graph = services.graphs.get(chunk.graph_id)
+    graph = graphs.get(chunk.graph_id)
     if graph is None:
         raise ProblemHTTPException(problems.pinned_graph_missing_problem)
-    to_graph = graph_by_ref(services.graphs, request.to_graph) if request.to_graph is not None else None
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
+    to_graph = graph_by_ref(graphs, request.to_graph) if request.to_graph is not None else None
+    change = chunk_events.ChunkChanged.before(frames, chunk_id)
     try:
-        restarted = services.restart.restart(
+        restarted = restarts.restart(
             chunk, graph, node_name=request.node, by=request.by, to_graph=to_graph, note=request.note
         )
     except ChunkNotFound as exc:
@@ -668,10 +735,10 @@ def restart_chunk(chunk_id: str, request: ChunkRestartRequest, services: Service
     except MigrationTargetIsCurrentPin as exc:
         raise ProblemHTTPException(partial(problems_chunks.migration_target_is_current_pin_problem, str(exc))) from exc
     facts = change.publish(cause="restarted", key=f"chunk_restarts:{restarted.fact_id}")
-    publish_flow_facts(services.events, restarted.withdrawn)
-    services.events.publish_queue_changed()  # an unrouted chunk re-enters the queue at the target node
+    publish_flow_facts(events, restarted.withdrawn)
+    events.publish_queue_changed()  # an unrouted chunk re-enters the queue at the target node
     # Re-read: a cross-graph move re-pinned the chunk, and the row's node name resolves off that pin.
-    return ChunkView.of(services, services.chunks.record.get(chunk_id) or chunk, facts=facts).summary()
+    return ChunkView.of(views, records.get(chunk_id) or chunk, facts=facts).summary()
 
 
 @router.post(
@@ -680,19 +747,22 @@ def restart_chunk(chunk_id: str, request: ChunkRestartRequest, services: Service
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def detach_chunk(chunk_id: str, services: Services) -> ChunkSummary:
+@inject_sync
+def detach_chunk(
+    chunk_id: str, records: Records, detaches: FromDishka[DetachService], frames: Frames, events: Events, views: Views
+) -> ChunkSummary:
     """Forcibly release a chunk from its runner without touching any escalation."""
-    chunk = services.chunks.record.get(chunk_id)
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
+    change = chunk_events.ChunkChanged.before(frames, chunk_id)
     try:
-        released_id = services.detach.detach(chunk)
+        released_id = detaches.detach(chunk)
     except NotRouted as exc:
         raise ProblemHTTPException(partial(problems_chunks.chunk_not_routed_problem, str(exc))) from exc
     facts = change.publish(cause="detached", key=f"route_released:{released_id}")
-    services.events.publish_queue_changed()  # a detached chunk re-enters the ready queue
-    return ChunkView.of(services, chunk, facts=facts).summary()
+    events.publish_queue_changed()  # a detached chunk re-enters the ready queue
+    return ChunkView.of(views, chunk, facts=facts).summary()
 
 
 @router.post(
@@ -701,21 +771,43 @@ def detach_chunk(chunk_id: str, services: Services) -> ChunkSummary:
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def pause_chunk(chunk_id: str, request: ChunkPauseRequest, services: Services) -> ChunkSummary:
+@inject_sync
+def pause_chunk(
+    chunk_id: str,
+    request: ChunkPauseRequest,
+    records: Records,
+    pauses: FromDishka[PauseService],
+    frames: Frames,
+    events: Events,
+    views: Views,
+) -> ChunkSummary:
     """Set a chunk's operator pause brake — the claim is kept, unlike detach."""
-    chunk = services.chunks.record.get(chunk_id)
+    return paused(chunk_id, request.by, records, pauses, frames, events, views)
+
+
+def paused(
+    chunk_id: str,
+    by: str,
+    records: IReadChunkRecordRepository,
+    pauses: PauseService,
+    frames: ChunkFrameLoader,
+    events: EventBroker,
+    views: ChunkViewReads,
+) -> ChunkSummary:
+    """Pause ``chunk_id`` as ``by``, as the operator and the fleet pause it; 404 unknown, 409 unpausable."""
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
+    change = chunk_events.ChunkChanged.before(frames, chunk_id)
     try:
-        pause_fact_id = services.pause.pause(chunk, by=request.by)
+        pause_fact_id = pauses.pause(chunk, by=by)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except ChunkNotPausable as exc:
         raise ProblemHTTPException(partial(problems.chunk_not_pausable_problem, exc)) from exc
     facts = change.publish(cause="paused", key=f"chunk_pause_facts:{pause_fact_id}")
-    services.events.publish_queue_changed()  # a pause moves the chunk out of the ready queue
-    return ChunkView.of(services, chunk, facts=facts).summary()
+    events.publish_queue_changed()  # a pause moves the chunk out of the ready queue
+    return ChunkView.of(views, chunk, facts=facts).summary()
 
 
 @router.post(
@@ -724,16 +816,38 @@ def pause_chunk(chunk_id: str, request: ChunkPauseRequest, services: Services) -
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def resume_chunk(chunk_id: str, request: ChunkPauseRequest, services: Services) -> ChunkSummary:
+@inject_sync
+def resume_chunk(
+    chunk_id: str,
+    request: ChunkPauseRequest,
+    records: Records,
+    pauses: FromDishka[PauseService],
+    frames: Frames,
+    events: Events,
+    views: Views,
+) -> ChunkSummary:
     """Clear a chunk's operator pause brake — idempotent, never refused."""
-    chunk = services.chunks.record.get(chunk_id)
+    return resumed(chunk_id, request.by, records, pauses, frames, events, views)
+
+
+def resumed(
+    chunk_id: str,
+    by: str,
+    records: IReadChunkRecordRepository,
+    pauses: PauseService,
+    frames: ChunkFrameLoader,
+    events: EventBroker,
+    views: ChunkViewReads,
+) -> ChunkSummary:
+    """Resume ``chunk_id`` as ``by``, as the operator and the fleet resume it; 404 unknown."""
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
-    pause_fact_id = services.pause.resume(chunk, by=request.by)
+    change = chunk_events.ChunkChanged.before(frames, chunk_id)
+    pause_fact_id = pauses.resume(chunk, by=by)
     facts = change.publish(cause="resumed", key=f"chunk_pause_facts:{pause_fact_id}")
-    services.events.publish_queue_changed()  # a resume can re-admit the chunk to the queue
-    return ChunkView.of(services, chunk, facts=facts).summary()
+    events.publish_queue_changed()  # a resume can re-admit the chunk to the queue
+    return ChunkView.of(views, chunk, facts=facts).summary()
 
 
 @router.post(
@@ -742,26 +856,35 @@ def resume_chunk(chunk_id: str, request: ChunkPauseRequest, services: Services) 
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def stop_chunk(chunk_id: str, request: ChunkStopRequest, services: Services) -> ChunkSummary:
+@inject_sync
+def stop_chunk(
+    chunk_id: str,
+    request: ChunkStopRequest,
+    records: Records,
+    stops: FromDishka[StopService],
+    frames: Frames,
+    events: Events,
+    views: Views,
+) -> ChunkSummary:
     """Terminally abandon CHUNK — the operator's last-resort verb.
 
     Records the ``chunk_stopped`` fact so the chunk derives ``stopped`` and never
     re-derives ``ready``, releases any live route, and supersedes any open escalation. 409
     when the chunk is already ``done`` or ``stopped`` — stopping is not retroactive."""
-    chunk = services.chunks.record.get(chunk_id)
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
+    change = chunk_events.ChunkChanged.before(frames, chunk_id)
     try:
-        stopped = services.stop.stop(chunk, by=request.by)
+        stopped = stops.stop(chunk, by=request.by)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except ChunkNotStoppable as exc:
         raise ProblemHTTPException(partial(problems_chunks.chunk_not_stoppable_problem, str(exc))) from exc
     facts = change.publish(cause="stopped", key=f"chunk_stopped:{stopped.fact_id}")
-    publish_flow_facts(services.events, stopped.withdrawn)
-    services.events.publish_queue_changed()  # a stopped chunk is never offered for claim again
-    return ChunkView.of(services, chunk, facts=facts).summary()
+    publish_flow_facts(events, stopped.withdrawn)
+    events.publish_queue_changed()  # a stopped chunk is never offered for claim again
+    return ChunkView.of(views, chunk, facts=facts).summary()
 
 
 @router.post(
@@ -770,26 +893,35 @@ def stop_chunk(chunk_id: str, request: ChunkStopRequest, services: Services) -> 
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def complete_chunk(chunk_id: str, request: ChunkCompleteRequest, services: Services) -> ChunkSummary:
+@inject_sync
+def complete_chunk(
+    chunk_id: str,
+    request: ChunkCompleteRequest,
+    records: Records,
+    completions: FromDishka[CompleteService],
+    frames: Frames,
+    events: Events,
+    views: Views,
+) -> ChunkSummary:
     """Manually complete CHUNK, from any non-``done`` status, including ``stopped``.
     Records the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route,
     closes its flow submissions waiting their turn, and makes the chunk's work refs eligible for closure. Idempotent:
     completing an already-``done`` chunk is a harmless no-op. 404 only when the chunk is
     unknown."""
-    chunk = services.chunks.record.get(chunk_id)
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
+    change = chunk_events.ChunkChanged.before(frames, chunk_id)
     try:
-        completed = services.complete.complete(chunk, by=request.by)
+        completed = completions.complete(chunk, by=request.by)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     key = f"chunk_completed:{completed.fact_id}" if completed is not None else None
     facts = change.publish(cause="completed", key=key)
     if completed is not None:
-        publish_flow_facts(services.events, completed.withdrawn)
-    services.events.publish_queue_changed()  # a completed chunk is never offered for claim again
-    return ChunkView.of(services, chunk, facts=facts).summary()
+        publish_flow_facts(events, completed.withdrawn)
+    events.publish_queue_changed()  # a completed chunk is never offered for claim again
+    return ChunkView.of(views, chunk, facts=facts).summary()
 
 
 def _placement_of(request: ChunkPlacementRequest | None) -> Placement:
@@ -808,7 +940,16 @@ def _placement_of(request: ChunkPlacementRequest | None) -> Placement:
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def promote_chunk(chunk_id: str, services: Services, request: ChunkPlacementRequest | None = None) -> ChunkSummary:
+@inject_sync
+def promote_chunk(
+    chunk_id: str,
+    records: Records,
+    promotions: FromDishka[PromoteService],
+    frames: Frames,
+    events: Events,
+    views: Views,
+    request: ChunkPlacementRequest | None = None,
+) -> ChunkSummary:
     """Promote a not-ready chunk to ready so a runner may claim it.
 
     It lands at the ready queue's tail unless the optional body names an anchor or the top.
@@ -816,12 +957,12 @@ def promote_chunk(chunk_id: str, services: Services, request: ChunkPlacementRequ
     is unknown; 409 when a not-currently-promoted chunk is already ``done`` or ``stopped``, or the
     anchor is not in the ready queue; 422 for a self-anchor."""
     placement = _placement_of(request)
-    chunk = services.chunks.record.get(chunk_id)
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
+    change = chunk_events.ChunkChanged.before(frames, chunk_id)
     try:
-        promoted_id = services.promote.promote(chunk, placement=placement)
+        promoted_id = promotions.promote(chunk, placement=placement)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except ChunkNotPromotable as exc:
@@ -832,8 +973,8 @@ def promote_chunk(chunk_id: str, services: Services, request: ChunkPlacementRequ
         raise ProblemHTTPException(partial(problems_chunks.self_anchored_move_problem, str(exc))) from exc
     key = f"chunk_promoted:{promoted_id}" if promoted_id is not None else None
     facts = change.publish(cause="promoted", key=key)
-    services.events.publish_queue_changed()  # a promoted chunk enters the ready queue
-    return ChunkView.of(services, chunk, facts=facts).summary()
+    events.publish_queue_changed()  # a promoted chunk enters the ready queue
+    return ChunkView.of(views, chunk, facts=facts).summary()
 
 
 @router.post(
@@ -842,7 +983,16 @@ def promote_chunk(chunk_id: str, services: Services, request: ChunkPlacementRequ
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def demote_chunk(chunk_id: str, services: Services, request: ChunkPlacementRequest | None = None) -> ChunkSummary:
+@inject_sync
+def demote_chunk(
+    chunk_id: str,
+    records: Records,
+    demotions: FromDishka[DemoteService],
+    frames: Frames,
+    events: Events,
+    views: Views,
+    request: ChunkPlacementRequest | None = None,
+) -> ChunkSummary:
     """Demote a ready chunk back to not-ready, keeping its id, history, edges, pin, and defaults.
 
     It lands at the backlog's tail unless the optional body names an anchor or the top.
@@ -850,12 +1000,12 @@ def demote_chunk(chunk_id: str, services: Services, request: ChunkPlacementReque
     chunk is unknown; 409 naming the status when the chunk is claimed, delivering, gated on a human,
     or ended, or the anchor is not in the backlog; 422 for a self-anchor."""
     placement = _placement_of(request)
-    chunk = services.chunks.record.get(chunk_id)
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
+    change = chunk_events.ChunkChanged.before(frames, chunk_id)
     try:
-        demoted_id = services.demote.demote(chunk, placement=placement)
+        demoted_id = demotions.demote(chunk, placement=placement)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except ChunkNotDemotable as exc:
@@ -866,8 +1016,8 @@ def demote_chunk(chunk_id: str, services: Services, request: ChunkPlacementReque
         raise ProblemHTTPException(partial(problems_chunks.self_anchored_move_problem, str(exc))) from exc
     key = f"chunk_demoted:{demoted_id}" if demoted_id is not None else None
     facts = change.publish(cause="demoted", key=key)
-    services.events.publish_queue_changed()  # a demoted chunk leaves the ready queue
-    return ChunkView.of(services, chunk, facts=facts).summary()
+    events.publish_queue_changed()  # a demoted chunk leaves the ready queue
+    return ChunkView.of(views, chunk, facts=facts).summary()
 
 
 @router.patch(
@@ -876,16 +1026,28 @@ def demote_chunk(chunk_id: str, services: Services, request: ChunkPlacementReque
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def patch_chunk(chunk_id: str, request: ChunkPatchRequest, services: Services) -> ChunkPatchResponse:
+@inject_sync
+def patch_chunk(
+    chunk_id: str,
+    request: ChunkPatchRequest,
+    records: Records,
+    edits: FromDishka[EditService],
+    graphs: FromDishka[IReadGraphRepository],
+    urgencies: FromDishka[UrgencyReading],
+    projects: FromDishka[IReadProjectRepository],
+    frames: Frames,
+    events: Events,
+    views: Views,
+) -> ChunkPatchResponse:
     """Apply the body's fields in one all-or-nothing edit; an urgency change also publishes the queue's change.
     404 for an unknown chunk or an unresolvable graph, 422 for a blank value, ``urgency_unknown``/``urgency_retired``,
     or a ``null`` ``urgency``; 409 for a refused edit."""
-    chunk = services.chunks.record.get(chunk_id)
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
+    change = chunk_events.ChunkChanged.before(frames, chunk_id)
     try:
-        plan = ChunkPatchBody(request, services).apply(chunk)
+        plan = ChunkPatchBody(request, edits, graphs, urgencies).apply(chunk)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except ChunkNotEditable as exc:
@@ -899,12 +1061,12 @@ def patch_chunk(chunk_id: str, request: ChunkPatchRequest, services: Services) -
     except ForcedNodeUnknown as exc:
         raise ProblemHTTPException(partial(problems_chunks.node_not_on_graph_problem, str(exc))) from exc
 
-    updated = services.chunks.record.get(chunk_id)
+    updated = records.get(chunk_id)
     assert updated is not None, "the chunk existed a moment ago and this edit does not delete chunks"
     facts = change.publish(cause="edited")
     if plan.urgency_id is not None:
-        services.events.publish_queue_changed()  # the queue views carry urgency
-    view = ChunkView.of(services, updated, facts=facts)
+        events.publish_queue_changed()  # the queue views carry urgency
+    view = ChunkView.of(views, updated, facts=facts)
     return ChunkPatchResponse(
         chunk_id=chunk_id,
         graph_id=updated.graph_id,
@@ -914,7 +1076,7 @@ def patch_chunk(chunk_id: str, request: ChunkPatchRequest, services: Services) -
         intended_migration=view.intended_migration(),
         urgency=view.urgency(),
         **project_label_fields(
-            updated.project_id, services.projects.get(updated.project_id) if updated.project_id is not None else None
+            updated.project_id, projects.get(updated.project_id) if updated.project_id is not None else None
         ),
     )
 
@@ -925,18 +1087,26 @@ def patch_chunk(chunk_id: str, request: ChunkPatchRequest, services: Services) -
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def delete_chunk(chunk_id: str, request: ChunkDeleteRequest, services: Services) -> ChunkDeleteResponse:
+@inject_sync
+def delete_chunk(
+    chunk_id: str,
+    request: ChunkDeleteRequest,
+    records: Records,
+    deletes: FromDishka[DeleteService],
+    frames: Frames,
+    events: Events,
+) -> ChunkDeleteResponse:
     """Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds
     in the same write. 404 for an unknown chunk or one a race deletes
     between resolving it and this write; 409 for one held, terminal, or a standing
     prerequisite for another chunk, naming the dependents in that case.
     Irreversible: CHUNK is gone from every read the instant this returns."""
-    chunk = services.chunks.record.get(chunk_id)
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
+    change = chunk_events.ChunkChanged.before(frames, chunk_id)
     try:
-        deleted_id = services.delete.delete(chunk, by=request.by)
+        deleted_id = deletes.delete(chunk, by=request.by)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except ChunkNotDeletable as exc:
@@ -944,7 +1114,7 @@ def delete_chunk(chunk_id: str, request: ChunkDeleteRequest, services: Services)
     except ChunkHasDependents as exc:
         raise ProblemHTTPException(partial(problems_chunks.chunk_has_dependents_problem, str(exc))) from exc
     change.publish(cause="deleted", key=f"chunk_deleted:{deleted_id}", by=request.by, status=change.prev_status)
-    services.events.publish_queue_changed()  # a deleted chunk is never offered for claim again
+    events.publish_queue_changed()  # a deleted chunk is never offered for claim again
     return ChunkDeleteResponse(chunk_id=chunk_id)
 
 
@@ -953,11 +1123,39 @@ def delete_chunk(chunk_id: str, request: ChunkDeleteRequest, services: Services)
     response_model=WorkItemsView,
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
-def get_work_items(chunk_id: str, services: Services) -> WorkItemsView:
+@inject_sync
+def get_work_items(
+    chunk_id: str,
+    records: Records,
+    work_refs: FromDishka[IReadChunkWorkRefsRepository],
+    sources: FromDishka[IWorkSourceRegistry],
+    clock: FromDishka[IClock],
+    runners: FromDishka[IReadRunnerRegistry],
+) -> WorkItemsView:
     """Pass-through work items read, one entry per pointer, contents never stored. A
     per-pointer resolution or forge failure becomes that entry's own ``error`` instead of
     failing the whole read; a chunk with no pointers reads as an empty list, not a 404."""
-    entries = read_chunk_work_items([chunk_id], services, include_comments=True)
+    return chunk_work_items(chunk_id, records, work_refs, sources, clock, runners)
+
+
+def chunk_work_items(
+    chunk_id: str,
+    records: IReadChunkRecordRepository,
+    work_refs: IReadChunkWorkRefsRepository,
+    sources: IWorkSourceRegistry,
+    clock: IClock,
+    runners: IReadRunnerRegistry,
+) -> WorkItemsView:
+    """One chunk's work items with their comments, as the operator and the fleet read them; 404 unknown."""
+    entries = read_chunk_work_items(
+        [chunk_id],
+        records=records,
+        work_refs=work_refs,
+        sources=sources,
+        clock=clock,
+        runners=runners,
+        include_comments=True,
+    )
     if chunk_id not in entries:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     return WorkItemsView(items=entries[chunk_id])

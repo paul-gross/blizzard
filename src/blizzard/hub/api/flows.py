@@ -16,8 +16,9 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.api.deps import Services
-from blizzard.hub.api.flow_places import FlowLineRead, fact_view
+from blizzard.hub.api.flow_places import FlowLineRead, FlowLineReads, fact_view
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.delivery.flows import FlowOverview
 from blizzard.wire.flow import FlowListView, FlowRecordPage, FlowView
 
@@ -42,12 +43,25 @@ def _overview(flow_id: str, services: Services) -> FlowOverview:
 PathFlow = Annotated[FlowOverview, Depends(_overview)]
 
 
+def _line_reads(services: TenantServices) -> FlowLineReads:
+    """What a flow line is read from, out of the tenant's services."""
+    return FlowLineReads(
+        flows=services.flows,
+        flow_views=services.flow_views,
+        lines=services.flow_line_factory,
+        repositories=services.repository_records,
+        clock=services.clock,
+    )
+
+
 @router.get("/flows", response_model=FlowListView, dependencies=[_VIEW])
 def list_flows(services: Services, active: Annotated[bool, Query()] = False) -> FlowListView:
     """The tenant's flows in resource order, each with its open turn, its line, and the newest of its record. With
     ``active``, only those with an open submission or a fact in the last 48 hours."""
     overviews = services.flow_views.flow_overviews()
-    read = FlowLineRead.of(services, services.flow_views.open_submissions_on([o.flow.flow_id for o in overviews]))
+    read = FlowLineRead.of(
+        _line_reads(services), services.flow_views.open_submissions_on([o.flow.flow_id for o in overviews])
+    )
     since = read.now - BOARD_DONE_WINDOW
     return FlowListView(
         flows=[
@@ -62,7 +76,7 @@ def list_flows(services: Services, active: Annotated[bool, Query()] = False) -> 
 def get_flow(overview: PathFlow, services: Services) -> FlowView:
     """One flow with its open turn, its line, and the newest of its record: 200, or 404 for one the tenant does not
     hold."""
-    return FlowLineRead.around(services, [overview.flow.flow_id]).flow_view(overview)
+    return FlowLineRead.around(_line_reads(services), [overview.flow.flow_id]).flow_view(overview)
 
 
 @router.get("/flows/{flow_id}/record", response_model=FlowRecordPage, dependencies=[_VIEW])

@@ -73,6 +73,8 @@ from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ingest import IngestService
 from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import IReadConfigChanges
@@ -860,6 +862,13 @@ def garden_proposal_resolution_leaf(
     return GardenProposalDeliveryResolution(closures=closures, proposals=proposals, findings=findings, exits=exits)
 
 
+def flow_line_factory_leaf(
+    facts: IReadChunkFactsRepository, record: IReadChunkRecordRepository, graphs: GraphStore
+) -> FlowLineFactory:
+    """The tenant's flow-line builder, a legacy leaf the flow execution area owns until it adopts it."""
+    return FlowLineFactory(facts=facts, record=record, graphs=graphs)
+
+
 def register_legacy(registry: LegacyRegistry) -> store_wiring.StoreRefs:
     """Declare the legacy bridge's leaves, each built as the legacy builder built it, over the store's adapters: the
     process services a request's admission reads before its tenant is known, and the transitional ports the adapters
@@ -884,7 +893,11 @@ def register_legacy(registry: LegacyRegistry) -> store_wiring.StoreRefs:
     registry.alias(port(IWriteCadenceRepository), tenant.of(CadenceStore))
     # The reads a chunk-changed frame is enriched from.
     registry.alias(port(IWriteInvitationRepository), tenant.of(InvitationStore))
+    # The flow reads a chunk's flow places are rendered from, until the flow execution area adopts them.
+    registry.alias(port(IReadFlows), tenant.of(FlowStore))
+    registry.alias(port(IReadFlowViews), tenant.of(FlowStore))
     registry.leaf(garden_proposal_resolution_leaf, lifetime=Lifetime.TENANT)
+    registry.leaf(flow_line_factory_leaf, lifetime=Lifetime.TENANT)
     return tenant
 
 
@@ -899,6 +912,9 @@ _LEGACY_TENANT_KEYS: tuple[type[Any], ...] = (
     IWriteCadenceRepository,
     IWriteInvitationRepository,
     GardenProposalDeliveryResolution,
+    IReadFlows,
+    IReadFlowViews,
+    FlowLineFactory,
 )
 
 
@@ -1160,7 +1176,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         pass_config=parts.pass_config,
     )
     work_ref_label: WorkRefLabel = tenant.get(WorkRefLabel)
-    flow_line_factory = FlowLineFactory(facts=chunk_facts, record=chunk_record, graphs=graph_store)
+    flow_line_factory = tenant.get(FlowLineFactory)
     tenant_default = tenant.get(TenantDefault)
     cadence_attention = CadenceAttention(
         routines=routine_store, routine_scopes=routine_scope_store, scopes=scope_store, graphs=graph_store

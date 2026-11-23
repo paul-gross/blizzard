@@ -7,14 +7,14 @@ Framework validation and unhandled errors are recorded separately below.
 # Each branch's constructor is listed separately, even where branches share a status.
 DIRECT_PRODUCERS = {
     ("POST", "/api/fleet/chunks/{chunk_id}/pause"): {
-        "chunks.pause_chunk": {
+        "chunks.paused": {
             "ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))",
             "ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc))",
             "ProblemHTTPException(partial(problems.chunk_not_pausable_problem, exc))",
         },
     },
     ("POST", "/api/fleet/chunks/{chunk_id}/resume"): {
-        "chunks.resume_chunk": {
+        "chunks.resumed": {
             "ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))",
         },
     },

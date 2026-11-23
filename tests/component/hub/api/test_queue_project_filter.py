@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 
+from blizzard.hub.api.queue import QueueReads
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
@@ -28,9 +29,9 @@ from tests.support.scaffolding import (
     hub_store_connections,
     ingest,
     link_project,
+    resolve_default_tenant_with,
     seed_project,
     seed_runner,
-    serve_default_tenant,
 )
 
 #: A capability set that satisfies any chunk with no declared harness preference.
@@ -176,7 +177,9 @@ def test_a_dependency_on_another_projects_chunk_still_holds_back_its_dependent(t
 
 
 @pytest.mark.parametrize("policy", ["hold", "pass-over"])
-def test_matched_peek_reconstitutes_only_served_candidates(tmp_path: Path, policy: str) -> None:
+def test_matched_peek_reconstitutes_only_served_candidates(
+    tmp_path: Path, policy: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     hub, _ = _two_project_hub(tmp_path)
     _ingest(hub, "foreign-head", "beta")
     served_head = _ingest(hub, "served-head", "default")
@@ -196,7 +199,8 @@ def test_matched_peek_reconstitutes_only_served_candidates(tmp_path: Path, polic
             return super().movement_facts_for(chunk_ids)
 
     facts = CandidateFacts()
-    serve_default_tenant(hub, replace(hub.services, chunks=replace(hub.services.chunks, facts=facts)))
+    reads = hub.default_adapter(QueueReads)
+    resolve_default_tenant_with(hub, monkeypatch, {QueueReads: replace(reads, facts=facts)})
 
     def measured() -> tuple[list[tuple[str, int]], int]:
         with capture_statements(hub.engine) as statements:

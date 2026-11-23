@@ -9,18 +9,21 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Query
 
 from blizzard.auth_core import Permission
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
-from blizzard.hub.composition import TenantServices
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.work_sources.reads import ReadWorkItem, read_work_items
-from blizzard.hub.work_sources.source import AuthorView
+from blizzard.hub.work_sources.source import AuthorView, IWorkSourceRegistry
 from blizzard.wire.chunk import ChunkWorkItemsView, WorkItemEntry
 from blizzard.wire.work_source import WorkItemAuthorView
 
@@ -35,18 +38,25 @@ router = APIRouter(
 
 
 def read_chunk_work_items(
-    chunk_ids: Sequence[str], services: TenantServices, *, include_comments: bool
+    chunk_ids: Sequence[str],
+    *,
+    records: IReadChunkRecordRepository,
+    work_refs: IReadChunkWorkRefsRepository,
+    sources: IWorkSourceRegistry,
+    clock: IClock,
+    runners: IReadRunnerRegistry,
+    include_comments: bool,
 ) -> dict[str, list[WorkItemEntry]]:
     """Each resolved chunk's work-item entries, keyed by chunk id; an id that does not resolve is absent. One chunk
     read, one live-holder read, one read per source and one runner-name read serve the whole set."""
-    chunks = services.chunks.record.get_many(list(dict.fromkeys(chunk_ids)))
+    chunks = records.get_many(list(dict.fromkeys(chunk_ids)))
     if not chunks:
         return {}
     refs = {chunk_id: chunk.work_refs for chunk_id, chunk in chunks.items()}
-    holders = services.chunks.work_refs.live_holders([ref for chunk_refs in refs.values() for ref in chunk_refs])
-    read = read_work_items(refs, sources=services.work_sources, live_holders=holders, include_comments=include_comments)
-    fetched_at = iso_utc(services.clock.now())
-    runner_names = services.registry.names_for(
+    holders = work_refs.live_holders([ref for chunk_refs in refs.values() for ref in chunk_refs])
+    read = read_work_items(refs, sources=sources, live_holders=holders, include_comments=include_comments)
+    fetched_at = iso_utc(clock.now())
+    runner_names = runners.names_for(
         item.author.runner_id
         for items in read.values()
         for item in items
@@ -93,8 +103,13 @@ def _author_view(author: AuthorView, runner_names: Mapping[str, str]) -> WorkIte
     response_model=ChunkWorkItemsView,
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
+@inject_sync
 def get_bulk_work_items(
-    services: Services,
+    records: FromDishka[IReadChunkRecordRepository],
+    work_refs: FromDishka[IReadChunkWorkRefsRepository],
+    sources: FromDishka[IWorkSourceRegistry],
+    clock: FromDishka[IClock],
+    runners: FromDishka[IReadRunnerRegistry],
     chunk_id: Annotated[list[str], Query(max_length=MAX_BULK_CHUNK_IDS)],
     include_comments: bool = False,
 ) -> ChunkWorkItemsView:
@@ -103,4 +118,14 @@ def get_bulk_work_items(
     a 404; a per-pointer failure is that entry's own ``error``. Comments are empty unless ``include_comments``."""
     if not chunk_id:
         raise ProblemHTTPException(problems_runners.work_items_chunk_ids_required_problem)
-    return ChunkWorkItemsView(chunks=read_chunk_work_items(chunk_id, services, include_comments=include_comments))
+    return ChunkWorkItemsView(
+        chunks=read_chunk_work_items(
+            chunk_id,
+            records=records,
+            work_refs=work_refs,
+            sources=sources,
+            clock=clock,
+            runners=runners,
+            include_comments=include_comments,
+        )
+    )

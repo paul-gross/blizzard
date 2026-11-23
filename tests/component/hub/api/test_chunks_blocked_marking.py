@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import IClock
+from blizzard.hub.api.chunk_views import ChunkViewReads
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
@@ -25,7 +26,7 @@ from tests.support.scaffolding import (
     count_queries,
     hub_store_connections,
     ingest,
-    serve_default_tenant,
+    resolve_default_tenant_with,
 )
 
 _DEPENDENT = {"source": "default", "ref": "dependent"}
@@ -225,7 +226,9 @@ class _CountingFactsStore(ChunkFactsStore):
         return super().load_facts_for(chunk_ids, transaction=transaction)
 
 
-def test_detail_routes_blocked_derivation_never_reaches_load_all_facts(tmp_path: Path) -> None:
+def test_detail_routes_blocked_derivation_never_reaches_load_all_facts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """``GET /api/chunks/{id}``'s blocked-marking and
     neighborhood share one standing-edges read and one resulting statuses map,
     so its one prerequisite's facts are read through the same bulk `load_facts_for` call
@@ -238,7 +241,8 @@ def test_detail_routes_blocked_derivation_never_reaches_load_all_facts(tmp_path:
 
     counting = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
-    serve_default_tenant(hub, replace(hub.services, chunks=replace(hub.services.chunks, facts=counting)))
+    views = hub.default_adapter(ChunkViewReads)
+    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewReads: replace(views, facts=counting)})
 
     resp = hub.client.get(f"/api/chunks/{dependent_id}")
 

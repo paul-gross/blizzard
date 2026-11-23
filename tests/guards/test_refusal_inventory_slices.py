@@ -613,8 +613,8 @@ def _planted_calls_delegate() -> None:
     _planted_delegated()
 
 
-def _planted_known_helper(chunk_id: str, services: Any) -> Any:
-    return chunks_api.get_chunk(chunk_id, services)
+def _planted_known_helper(chunk_id: str, reads: Any) -> Any:
+    return chunks_api.chunk_detail(chunk_id, reads, reads, reads)
 
 
 def test_unlisted_direct_producer_cannot_borrow_another_operation() -> None:
@@ -634,4 +634,4 @@ def test_unlisted_direct_producer_cannot_borrow_another_operation() -> None:
     assert owner not in _direct_helper_calls(_planted_endpoint)
     known = {owner for owners in refusal_inventory_delegated.DIRECT_PRODUCERS.values() for owner in owners}
     covered = set(refusal_inventory_delegated.DIRECT_PRODUCERS[("GET", "/api/fleet/summary")])
-    assert _unlisted_known_helpers(_planted_known_helper, known, covered) == {"chunks.get_chunk"}
+    assert _unlisted_known_helpers(_planted_known_helper, known, covered) == {"chunks.chunk_detail"}

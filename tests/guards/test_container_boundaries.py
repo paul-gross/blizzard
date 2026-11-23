@@ -11,6 +11,7 @@ from blizzard.foundation.registry.internal.recording import RecordingRegistry
 from blizzard.foundation.registry.internal.translation import HOST_LIFETIMES, HUB_LIFETIMES
 from blizzard.foundation.registry.scopes import ScopeValues
 from tests.support.container_guards import (
+    NARROWED_MODULES,
     alias_identity_violations,
     child_open_violations,
     default_factory_violations,
@@ -252,6 +253,16 @@ def test_the_narrowing_gate_fails_a_planted_bag_import_parameter_and_attribute(t
         "hub/api/planted.py:3: names Services",
         "hub/api/planted.py:3: names TenantServices",
     ]
+
+
+def test_the_narrowing_gate_fails_a_bag_planted_in_a_rostered_chunk_operations_module(tmp_path: Path) -> None:
+    rostered = Path("hub/api/chunks.py")
+    assert rostered in NARROWED_MODULES
+    planted = tmp_path / rostered
+    planted.parent.mkdir(parents=True)
+    planted.write_text((_SRC / rostered).read_text() + "\ndef planted(services: Services) -> None: ...\n")
+    lines = len(planted.read_text().splitlines())
+    assert narrowing_violations(tmp_path, [rostered]) == [f"hub/api/chunks.py:{lines}: names Services"]
 
 
 def test_the_narrowing_gate_fails_a_planted_hub_bag(tmp_path: Path) -> None:

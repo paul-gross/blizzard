@@ -14,8 +14,9 @@ import pytest
 from sqlalchemy import select
 
 from blizzard.hub.api import chunk_dependencies as chunk_dependencies_module
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
+from blizzard.hub.domain.chunk.ports.lifecycle import IReadChunkLifecycleRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.store import schema as s
 from blizzard.wire.chunk import (
     DEPENDENCY_WOULD_CLOSE_CYCLE,
@@ -282,9 +283,11 @@ def test_declare_against_a_dependent_deleted_between_resolution_and_the_write_is
     before = _rows(hub)
     real_resolve_prerequisite = chunk_dependencies_module.resolve_prerequisite
 
-    def _delete_dependent_then_resolve(services: TenantServices, chunk_id: str) -> PrerequisiteScope:
+    def _delete_dependent_then_resolve(
+        records: IReadChunkRecordRepository, lifecycle: IReadChunkLifecycleRepository, chunk_id: str
+    ) -> PrerequisiteScope:
         assert hub.client.request("DELETE", f"/api/chunks/{dependent_id}", json={}).status_code == 202
-        return real_resolve_prerequisite(services, chunk_id)
+        return real_resolve_prerequisite(records, lifecycle, chunk_id)
 
     monkeypatch.setattr(chunk_dependencies_module, "resolve_prerequisite", _delete_dependent_then_resolve)
 

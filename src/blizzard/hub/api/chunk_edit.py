@@ -9,21 +9,22 @@ from blizzard.hub.api import problems_chunks
 from blizzard.hub.api.graph_names import graph_by_ref
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.urgencies import stated_urgency, urgency_refusal
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
-from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.operations.edit import (
     BlankEditValue,
     ChunkEdit,
     EditPlan,
+    EditService,
     filled,
     filled_entries,
 )
 from blizzard.hub.domain.urgency.chain import required_urgency_reference
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyRetired, UrgencyUnknown
+from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.wire.chunk import ChunkPatchRequest
 
 
@@ -36,7 +37,9 @@ class ChunkPatchBody:
     whether the edit it asks for is allowed."""
 
     request: ChunkPatchRequest
-    services: TenantServices
+    edits: EditService
+    graphs: IReadGraphRepository
+    urgencies: UrgencyReading
 
     def apply(self, chunk: Chunk) -> EditPlan:
         """The edit applied — the plan it wrote. 422 ``urgency_unknown`` or ``urgency_retired`` for an ``urgency``
@@ -55,7 +58,7 @@ class ChunkPatchBody:
         except BlankEditValue as exc:
             raise ProblemHTTPException(partial(problems_chunks.blank_edit_value_problem, str(exc))) from exc
         try:
-            return self.services.edit.edit(chunk, edit, graph_target=graph_target, migration_target=migration_target)
+            return self.edits.edit(chunk, edit, graph_target=graph_target, migration_target=migration_target)
         except InvalidHarnesses as exc:
             raise ProblemHTTPException(partial(problems_chunks.invalid_harnesses_problem, str(exc))) from exc
         except (UrgencyUnknown, UrgencyRetired) as exc:  # retired after the edge's check
@@ -68,7 +71,7 @@ class ChunkPatchBody:
             reference = required_urgency_reference(self.request.urgency)
         except ConfigFieldError as exc:
             raise urgency_refusal(exc) from exc
-        urgency = stated_urgency(reference, self.services.urgency_reading)
+        urgency = stated_urgency(reference, self.urgencies)
         assert urgency is not None, "a named reference resolves to an urgency or is refused"
         return urgency
 
@@ -76,7 +79,7 @@ class ChunkPatchBody:
         ref = self.request.graph_id
         if ref is None:
             return None
-        graph = self.services.graphs.get(ref)
+        graph = self.graphs.get(ref)
         if graph is None:
             raise ProblemHTTPException(partial(problems_chunks.graph_not_found_problem, f"unknown graph {ref}"))
         return graph
@@ -105,6 +108,6 @@ class ChunkPatchBody:
         patch = self.request.intended_migration
         if patch is None:
             return (None, None)
-        target = graph_by_ref(self.services.graphs, filled(patch.to_graph, "to_graph"))
+        target = graph_by_ref(self.graphs, filled(patch.to_graph, "to_graph"))
         node_name = filled(patch.node, "node") if patch.node is not None else None
         return (target, IntendedMigration.toward(target.graph_id, node_name))

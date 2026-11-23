@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.claim_denials import ClaimDenialReason
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.store.utc import as_utc
@@ -41,6 +42,7 @@ from blizzard.hub.api.analytics import (
 from blizzard.hub.api.auth import RunnerPrincipal, require_runner_principal, require_runner_principal_even_if_retired
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant, tenant_bound
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
+from blizzard.hub.api.chunk_views import ChunkViewReads
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.findings import finding_view
@@ -59,7 +61,10 @@ from blizzard.hub.domain.chunk.model import (
     ChunkFacts,
 )
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
+from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.delivery.flows import Flow, describe_standing
 from blizzard.hub.domain.execution.apply import ApplyService
@@ -90,11 +95,14 @@ from blizzard.hub.domain.observability.transcripts import (
     LeaseSegmentsNotOwned,
     refuse_foreign_lease_read,
 )
+from blizzard.hub.domain.operations.pause import PauseService
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.bindings import flag_bindings, offered_projects
+from blizzard.hub.domain.runners.host import IReadHostRegistry
 from blizzard.hub.domain.runners.registration import (
     DeclaredSubscription,
     DuplicateCapabilityHarness,
+    IReadRunnerRegistry,
     RunnerBinding,
     RunnerCapability,
     RunnerDeclining,
@@ -102,8 +110,10 @@ from blizzard.hub.domain.runners.registration import (
     RunnerRetired,
 )
 from blizzard.hub.domain.runners.version import RunnerVersionRefused
+from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import StoreScope
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from blizzard.wire.analytics import AnalyticsCountsResponse, AnalyticsSpendResponse
 from blizzard.wire.attachments import ArtifactCheckRequest, ArtifactCheckResponse
 from blizzard.wire.chunk import (
@@ -275,19 +285,23 @@ def _migration_targets(
 
 
 @router.get("/queue/peek", response_model=QueuePeekResponse)
-def peek_queue(services: Services, project: QueryProject) -> QueuePeekResponse:
+@inject_sync
+def peek_queue(reads: FromDishka[queue_api.QueueReads], project: QueryProject) -> QueuePeekResponse:
     """The runner's FILL read — the whole ready queue in claim order (urgency before rank): a filling runner needs every
     ready chunk in one read. Kept as-is for a previous-minor caller;
     ``POST /queue/peek`` below is the matched counterpart. ``?project=`` narrows it to that
     project's chunks at their whole-queue positions, never reranked."""
-    statuses = services.chunks.facts.load_live_statuses()
-    return queue_api.ReadyQueue.of(services, statuses, project=project).view
+    statuses = reads.facts.load_live_statuses()
+    return queue_api.ReadyQueue.of(reads, statuses, project=project).view
 
 
 @router.post("/queue/peek", response_model=QueuePeekResponse)
+@inject_sync
 def peek_matched_queue(
     request: QueuePeekRequest,
-    services: Services,
+    reads: FromDishka[queue_api.QueueReads],
+    registry: FromDishka[IReadRunnerRegistry],
+    hosts: FromDishka[IReadHostRegistry],
     principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
 ) -> QueuePeekResponse:
     """The matched fleet peek — at most one ready entry of a project the calling principal
@@ -296,15 +310,15 @@ def peek_matched_queue(
     the principal's stored declaration less what its host's report withholds (a binding whose workspace the host has
     not reported, or every binding under an unrostered subscription), narrowed to ``project`` or
     ``projects`` when sent; a runner serving nothing is offered nothing."""
-    registration = services.registry.get_runner(principal.runner_id)
+    registration = registry.get_runner(principal.runner_id)
     host = None
     if registration is not None and registration.host_id is not None:
-        host = services.hosts.get_host(registration.host_id)
+        host = hosts.get_host(registration.host_id)
     served: frozenset[str] = (
         frozenset() if registration is None else offered_projects(registration, host, projects=request.projects)
     )
-    statuses = services.chunks.facts.load_live_statuses()
-    return queue_api.MatchedPeek.of(services, statuses, request, served=served).view
+    statuses = reads.facts.load_live_statuses()
+    return queue_api.MatchedPeek.of(reads, statuses, request, served=served).view
 
 
 @router.get("/system-artifacts", response_model=list[SystemArtifactView])
@@ -332,9 +346,15 @@ def get_system_artifact_route(
 
 
 @router.get("/chunks/{chunk_id}", response_model=ChunkDetail)
-def get_chunk(chunk_id: str, services: Services) -> ChunkDetail:
+@inject_sync
+def get_chunk(
+    chunk_id: str,
+    records: FromDishka[IReadChunkRecordRepository],
+    dependencies: FromDishka[IReadChunkDependenciesRepository],
+    views: FromDishka[ChunkViewReads],
+) -> ChunkDetail:
     """The runner's chunk-status poll — the same aggregate as ``GET /api/chunks/{chunk_id}``."""
-    return chunks_api.get_chunk(chunk_id, services)
+    return chunks_api.chunk_detail(chunk_id, records, dependencies, views)
 
 
 @router.get("/chunk-statuses", response_model=list[ChunkStatusView])
@@ -345,10 +365,18 @@ def get_chunk_statuses(chunk_id: Annotated[list[str], Query()], services: Servic
 
 
 @router.get("/chunks/{chunk_id}/work-items", response_model=WorkItemsView)
-def get_work_items(chunk_id: str, services: Services) -> WorkItemsView:
+@inject_sync
+def get_work_items(
+    chunk_id: str,
+    records: FromDishka[IReadChunkRecordRepository],
+    work_refs: FromDishka[IReadChunkWorkRefsRepository],
+    sources: FromDishka[IWorkSourceRegistry],
+    clock: FromDishka[IClock],
+    runners: FromDishka[IReadRunnerRegistry],
+) -> WorkItemsView:
     """The chunk's work items, read with a runner's own bearer token — the same view as
     ``GET /api/chunks/{chunk_id}/work-items``."""
-    return chunks_api.get_work_items(chunk_id, services)
+    return chunks_api.chunk_work_items(chunk_id, records, work_refs, sources, clock, runners)
 
 
 # The fleet-side half of the issue-#55 alias; rationale: :mod:`blizzard.hub.api.chunks`.
@@ -368,24 +396,41 @@ router.add_api_route(
 
 
 @router.post("/chunks/{chunk_id}/pause", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
-def pause_chunk(chunk_id: str, services: Services) -> ChunkSummary:
+@inject_sync
+def pause_chunk(
+    chunk_id: str,
+    records: FromDishka[IReadChunkRecordRepository],
+    pauses: FromDishka[PauseService],
+    frames: FromDishka[ChunkFrameLoader],
+    events: FromDishka[EventBroker],
+    views: FromDishka[ChunkViewReads],
+) -> ChunkSummary:
     """Pause the chunk with a runner's own bearer token — the same transition as the
     operator route, ``by`` defaulting to ``operator``."""
-    return chunks_api.pause_chunk(chunk_id, ChunkPauseRequest(), services)
+    return chunks_api.paused(chunk_id, ChunkPauseRequest().by, records, pauses, frames, events, views)
 
 
 @router.post("/chunks/{chunk_id}/resume", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
-def resume_chunk(chunk_id: str, services: Services) -> ChunkSummary:
+@inject_sync
+def resume_chunk(
+    chunk_id: str,
+    records: FromDishka[IReadChunkRecordRepository],
+    pauses: FromDishka[PauseService],
+    frames: FromDishka[ChunkFrameLoader],
+    events: FromDishka[EventBroker],
+    views: FromDishka[ChunkViewReads],
+) -> ChunkSummary:
     """Resume the chunk with a runner's own bearer token. Takes no body, so the
     resume is always recorded as ``operator``."""
-    return chunks_api.resume_chunk(chunk_id, ChunkPauseRequest(), services)
+    return chunks_api.resumed(chunk_id, ChunkPauseRequest().by, records, pauses, frames, events, views)
 
 
 @router.get("/summary", response_model=FleetSummaryView)
-def fleet_summary(services: Services) -> FleetSummaryView:
+@inject_sync
+def fleet_summary(facts: FromDishka[IReadChunkFactsRepository]) -> FleetSummaryView:
     """The fleet-pulse counts, read with a runner's own bearer token. Fleet-router-only:
     this read has no anonymous counterpart."""
-    return chunks_api.FleetPulse(services).view()
+    return chunks_api.FleetPulse(facts).view()
 
 
 @router.get("/questions/{question_id}", response_model=QuestionView)
