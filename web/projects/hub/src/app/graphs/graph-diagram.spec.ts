@@ -1,46 +1,38 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { GraphView, GraphNodeView } from 'fleet';
+import type { Graph, GraphNode } from './graph.domain';
 import type { DiagramSelection } from './graph-diagram-selection';
 import { GRAPH_LAYOUT, GraphDiagram } from './graph-diagram';
 import type { LaidOutGraph, LayoutOutcome } from './graph-layout';
 import { GRAPH_TEXT_MEASURER } from './graph-text-measurer';
 
-const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'definition_yaml' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
-  definition_yaml: '',
-  artifacts: [],
+const GRAPH_DEFAULTS: Pick<Graph, 'edges' | 'retired' | 'sessions'> = {
   edges: [],
-  follow_latest: null,
   retired: false,
   sessions: [],
-  warnings: [],
 };
 
-const NODE_DEFAULTS: Pick<GraphNodeView, 'action' | 'action_args' | 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+const NODE_DEFAULTS: Pick<GraphNode, 'action' | 'actionArgs' | 'checks' | 'choices' | 'judgementPrompt' | 'produces' | 'prompt' | 'retriesExhausted' | 'retriesMax' | 'sessionSource'> = {
   action: null,
-  action_args: {},
+  actionArgs: {},
   checks: [],
-  checks_cwd: null,
-  checks_timeout: null,
   choices: [],
-  judgement_prompt: null,
+  judgementPrompt: null,
   produces: [],
   prompt: null,
-  retries_exhausted: null,
-  retries_max: null,
-  session_source: null,
+  retriesExhausted: null,
+  retriesMax: null,
+  sessionSource: null,
 };
 
-const GRAPH: GraphView = {
+const GRAPH: Graph = {
   ...GRAPH_DEFAULTS,
-  graph_id: 'gr_build_v2',
+  graphId: 'gr_build_v2',
   name: 'build',
-  enabled: true,
-  entry_node_id: 'n_build',
-  nodes: [{ ...NODE_DEFAULTS, node_id: 'n_build', name: 'build', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [] }],
+  entryNodeId: 'n_build',
+  nodes: [{ ...NODE_DEFAULTS, nodeId: 'n_build', name: 'build', executor: 'runner', session: 'fresh', judgedBy: 'worker', choices: [] }],
   edges: [],
-  warnings: [],
 };
 
 const LAID_OUT: LaidOutGraph = {
@@ -169,7 +161,7 @@ describe('GraphDiagram', () => {
     expect(edges).toHaveLength(2);
   });
 
-  it('renders no start indicator when the layout carries none (a degenerate entry_node_id)', () => {
+  it('renders no start indicator when the layout carries none (a degenerate entryNodeId)', () => {
     const fixture = mount({ ok: true, graph: { ...LAID_OUT, start: null } });
     const el = fixture.nativeElement as HTMLElement;
 

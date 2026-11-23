@@ -1,4 +1,5 @@
-import type { AsyncStateQuery, GraphSummaryView } from 'fleet';
+import type { AsyncStateQuery } from 'fleet';
+import type { GraphSummary } from '../../graphs/graph.domain';
 import { describe, expect, it } from 'vitest';
 
 import { gardenRoutine, gardenRoutineKeeper } from '../core/routine.builders';
@@ -15,11 +16,10 @@ const NIGHTLY: Routine = gardenRoutine({
 
 const ORPHAN: Routine = { ...NIGHTLY, id: 'rtn_2', slug: 'orphan', name: 'Orphan', graph: 'unminted', retired: true };
 
-const EFFECTIVE_GRAPH: GraphSummaryView = {
-  graph_id: 'gr_1',
+const EFFECTIVE_GRAPH: GraphSummary = {
+  graphId: 'gr_1',
   name: 'garden-routine',
-  entry_node_id: 'nd_1',
-  created_at: '2026-01-01T00:00:00Z',
+  createdAt: '2026-01-01T00:00:00Z',
   effective: true,
   lifecycle: 'effective',
   retired: false,

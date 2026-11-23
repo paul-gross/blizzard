@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type GraphSummaryView, KitAsyncState, type KitAsyncStateValue, KitPanel, asyncState } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitPanel, asyncState } from 'fleet';
 import { GraphExplorerList } from './graph-explorer-list';
 import { injectHubGraphsQuery } from './graphs.query';
+import type { GraphSummary } from './graph.domain';
 
 /**
  * The graph explorer's **container** — injects `injectHubGraphsQuery` and maps it to
@@ -26,13 +27,13 @@ export class GraphExplorer {
    * highlight its row. */
   readonly selectedGraphId = input<string | null>(null);
 
-  /** Emitted with the `graph_id` the list resolved a click to — an effective or
+  /** Emitted with the `graphId` the list resolved a click to — an effective or
    * superseded row, or a group's effective version when its header expands the
    * group. */
   readonly selectGraph = output<string>();
 
   /** The resolved graph summaries, or `[]` while pending/errored. */
-  protected readonly list = computed<readonly GraphSummaryView[]>(() => this.graphsQuery.data() ?? []);
+  protected readonly list = computed<readonly GraphSummary[]>(() => this.graphsQuery.data() ?? []);
 
   /** This container's async state. `isEmpty` reads the resolved list's own length:
    * every summary belongs to some group, so the list is empty exactly when the

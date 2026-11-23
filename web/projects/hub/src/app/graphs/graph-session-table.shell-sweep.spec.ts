@@ -2,11 +2,11 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { page } from 'vitest/browser';
 
-import type { GraphSessionView } from 'fleet';
+import type { GraphSession } from './graph.domain';
 import { GraphSessionTable } from './graph-session-table';
 
-const SESSION_DEFAULTS: Pick<GraphSessionView, 'compaction_window' | 'effort' | 'harnesses' | 'model' | 'rotate'> = {
-  compaction_window: null,
+const SESSION_DEFAULTS: Pick<GraphSession, 'compactionWindow' | 'effort' | 'harnesses' | 'model' | 'rotate'> = {
+  compactionWindow: null,
   effort: null,
   harnesses: [],
   model: [],
@@ -29,7 +29,7 @@ const SESSION_DEFAULTS: Pick<GraphSessionView, 'compaction_window' | 'effort' | 
  * Excluded from the default `ng test` run the same way every other `*.shell-sweep.spec.ts`
  * is — run it via `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
  */
-const SESSIONS: readonly GraphSessionView[] = [
+const SESSIONS: readonly GraphSession[] = [
   {
     ...SESSION_DEFAULTS,
     name: 'planning',
@@ -42,8 +42,8 @@ const SESSIONS: readonly GraphSessionView[] = [
     model: ['blizzard:basic', 'gpt-5.3-codex'],
     harnesses: ['claude_code', 'opencode'],
     effort: 'medium',
-    compaction_window: '100000',
-    rotate: { max_transcript_bytes: null, max_context_tokens: 120000, max_invocations: 30 },
+    compactionWindow: '100000',
+    rotate: { maxTranscriptBytes: null, maxContextTokens: 120000, maxInvocations: 30 },
   },
   {
     ...SESSION_DEFAULTS,

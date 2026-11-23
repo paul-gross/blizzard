@@ -1,45 +1,43 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { GraphNodeView } from 'fleet';
+import type { GraphNode } from './graph.domain';
 import { GraphNodeTable } from './graph-node-table';
 
-const NODE_DEFAULTS: Pick<GraphNodeView, 'action' | 'action_args' | 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+const NODE_DEFAULTS: Pick<GraphNode, 'action' | 'actionArgs' | 'checks' | 'choices' | 'judgementPrompt' | 'produces' | 'prompt' | 'retriesExhausted' | 'retriesMax' | 'sessionSource'> = {
   action: null,
-  action_args: {},
+  actionArgs: {},
   checks: [],
-  checks_cwd: null,
-  checks_timeout: null,
   choices: [],
-  judgement_prompt: null,
+  judgementPrompt: null,
   produces: [],
   prompt: null,
-  retries_exhausted: null,
-  retries_max: null,
-  session_source: null,
+  retriesExhausted: null,
+  retriesMax: null,
+  sessionSource: null,
 };
 
-const NODES: readonly GraphNodeView[] = [
+const NODES: readonly GraphNode[] = [
   {
     ...NODE_DEFAULTS,
-    node_id: 'n_build',
+    nodeId: 'n_build',
     name: 'build',
     executor: 'runner',
     session: 'fresh',
-    judged_by: 'worker',
+    judgedBy: 'worker',
     checks: ['lint', 'test'],
-    produces: [{ kind: 'asset', name: 'branch' }],
-    retries_max: 3,
-    retries_exhausted: 'escalate',
+    produces: ['branch'],
+    retriesMax: 3,
+    retriesExhausted: 'escalate',
     choices: [],
   },
   {
     ...NODE_DEFAULTS,
-    node_id: 'n_review',
+    nodeId: 'n_review',
     name: 'review',
     executor: 'runner',
     session: 'fresh',
-    judged_by: 'worker',
+    judgedBy: 'worker',
     choices: [],
   },
 ];
@@ -78,10 +76,10 @@ describe('GraphNodeTable', () => {
   it('renders the Session column in its authored form, targeted resumes included (issue #158)', async () => {
     const fixture = TestBed.createComponent(GraphNodeTable);
     fixture.componentRef.setInput('nodes', [
-      { ...NODES[0], node_id: 'n_targeted', session: 'resume', session_source: 'code' },
-      { ...NODES[0], node_id: 'n_bare', session: 'resume' },
-      { ...NODES[0], node_id: 'n_fresh', session: 'fresh' },
-    ] satisfies readonly GraphNodeView[]);
+      { ...NODES[0], nodeId: 'n_targeted', session: 'resume', sessionSource: 'code' },
+      { ...NODES[0], nodeId: 'n_bare', session: 'resume' },
+      { ...NODES[0], nodeId: 'n_fresh', session: 'fresh' },
+    ] satisfies readonly GraphNode[]);
     fixture.componentRef.setInput('entryNodeId', 'n_targeted');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;

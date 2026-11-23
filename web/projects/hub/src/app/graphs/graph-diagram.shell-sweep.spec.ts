@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { page } from 'vitest/browser';
 
-import type { GraphNodeView, GraphView } from 'fleet';
+import type { GraphNode, Graph } from './graph.domain';
 import { GraphDiagram } from './graph-diagram';
 
 /**
@@ -39,89 +39,82 @@ const META_LINE_HEIGHT = 15;
 // SVG and canvas text measurement agree to a fraction of a pixel, not bit for bit; real defects are whole pixels off.
 const SLACK = 1.5;
 
-const NODE_DEFAULTS: Omit<GraphNodeView, 'node_id' | 'name' | 'executor' | 'session' | 'judged_by'> = {
+const NODE_DEFAULTS: Omit<GraphNode, 'nodeId' | 'name' | 'executor' | 'session' | 'judgedBy'> = {
   action: null,
-  action_args: {},
+  actionArgs: {},
   checks: [],
-  checks_cwd: null,
-  checks_timeout: null,
   choices: [],
-  judgement_prompt: null,
+  judgementPrompt: null,
   produces: [],
   prompt: null,
-  retries_exhausted: null,
-  retries_max: null,
-  session_source: null,
+  retriesExhausted: null,
+  retriesMax: null,
+  sessionSource: null,
 };
 
-const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'definition_yaml' | 'follow_latest' | 'retired' | 'sessions' | 'warnings' | 'enabled'> = {
-  definition_yaml: '',
-  artifacts: [],
-  follow_latest: null,
+const GRAPH_DEFAULTS: Pick<Graph, 'retired' | 'sessions'> = {
   retired: false,
   sessions: [],
-  warnings: [],
-  enabled: true,
 };
 
-const EDGE_DEFAULTS = { prompt_addendum: null, target_graph: null, target_kind: 'node' } as const;
+const EDGE_DEFAULTS = { promptAddendum: null, targetGraph: null, targetKind: 'node' } as const;
 
 function choice(id: string, name: string) {
-  return { requires_checks: false, choice_id: id, name, description: '' };
+  return { choiceId: id, name, description: '' };
 }
 
-const DELIVERY: GraphView = {
+const DELIVERY: Graph = {
   ...GRAPH_DEFAULTS,
-  graph_id: 'gr_delivery',
+  graphId: 'gr_delivery',
   name: 'default-delivery',
-  entry_node_id: 'n_build',
+  entryNodeId: 'n_build',
   nodes: [
-    { ...NODE_DEFAULTS, node_id: 'n_build', name: 'build', executor: 'runner', session: 'fresh', judged_by: 'worker', retries_max: 1, choices: [choice('c_pass', 'pass'), choice('c_retry', 'retry')] },
+    { ...NODE_DEFAULTS, nodeId: 'n_build', name: 'build', executor: 'runner', session: 'fresh', judgedBy: 'worker', retriesMax: 1, choices: [choice('c_pass', 'pass'), choice('c_retry', 'retry')] },
     {
       ...NODE_DEFAULTS,
-      node_id: 'n_review',
+      nodeId: 'n_review',
       name: 'review',
       executor: 'runner',
       session: 'resume',
-      session_source: 'build',
-      judged_by: 'worker',
-      retries_max: 1,
+      sessionSource: 'build',
+      judgedBy: 'worker',
+      retriesMax: 1,
       produces: [
-        { kind: 'asset', name: 'review-findings' },
-        { kind: 'asset', name: 'review-summary' },
-        { kind: 'asset', name: 'review-transcript' },
+        'review-findings',
+        'review-summary',
+        'review-transcript',
       ],
       choices: [choice('c_pass2', 'pass'), choice('c_fail', 'fail')],
     },
-    { ...NODE_DEFAULTS, node_id: 'n_deliver', name: 'deliver', executor: 'hub', session: 'fresh', judged_by: 'worker', choices: [choice('c_landed', 'landed'), choice('c_conflict', 'conflict'), choice('c_failure', 'failure')] },
+    { ...NODE_DEFAULTS, nodeId: 'n_deliver', name: 'deliver', executor: 'hub', session: 'fresh', judgedBy: 'worker', choices: [choice('c_landed', 'landed'), choice('c_conflict', 'conflict'), choice('c_failure', 'failure')] },
   ],
   edges: [
-    { ...EDGE_DEFAULTS, from_node_id: 'n_build', choice_id: 'c_pass', to_node_name: 'review' },
-    { ...EDGE_DEFAULTS, from_node_id: 'n_build', choice_id: 'c_retry', to_node_name: 'build' },
-    { ...EDGE_DEFAULTS, from_node_id: 'n_review', choice_id: 'c_pass2', to_node_name: 'deliver' },
-    { ...EDGE_DEFAULTS, from_node_id: 'n_review', choice_id: 'c_fail', to_node_name: 'build' },
-    { ...EDGE_DEFAULTS, from_node_id: 'n_deliver', choice_id: 'c_landed', to_node_name: 'done', target_kind: 'done' },
-    { ...EDGE_DEFAULTS, from_node_id: 'n_deliver', choice_id: 'c_conflict', to_node_name: 'build' },
-    { ...EDGE_DEFAULTS, from_node_id: 'n_deliver', choice_id: 'c_failure', to_node_name: 'done', target_kind: 'done' },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_build', choiceId: 'c_pass', toNodeName: 'review' },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_build', choiceId: 'c_retry', toNodeName: 'build' },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_review', choiceId: 'c_pass2', toNodeName: 'deliver' },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_review', choiceId: 'c_fail', toNodeName: 'build' },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_deliver', choiceId: 'c_landed', toNodeName: 'done', targetKind: 'done' },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_deliver', choiceId: 'c_conflict', toNodeName: 'build' },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_deliver', choiceId: 'c_failure', toNodeName: 'done', targetKind: 'done' },
   ],
 };
 
 const LONG_RUNNER = 'a-deliberately-long-node-name-for-measurement';
 const LONG_HUB = 'another-long-node-name-for-the-badge';
 
-const NAME_BOUND: GraphView = {
+const NAME_BOUND: Graph = {
   ...GRAPH_DEFAULTS,
-  graph_id: 'gr_name_bound',
+  graphId: 'gr_name_bound',
   name: 'name-row-bound-measurement',
-  entry_node_id: 'n_long_runner',
+  entryNodeId: 'n_long_runner',
   nodes: [
-    { ...NODE_DEFAULTS, node_id: 'n_long_runner', name: LONG_RUNNER, executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [choice('c_pass', 'pass')] },
-    { ...NODE_DEFAULTS, node_id: 'n_long_hub', name: LONG_HUB, executor: 'hub', session: 'fresh', judged_by: 'worker', choices: [choice('c_landed', 'landed'), choice('c_failure', 'failure')] },
+    { ...NODE_DEFAULTS, nodeId: 'n_long_runner', name: LONG_RUNNER, executor: 'runner', session: 'fresh', judgedBy: 'worker', choices: [choice('c_pass', 'pass')] },
+    { ...NODE_DEFAULTS, nodeId: 'n_long_hub', name: LONG_HUB, executor: 'hub', session: 'fresh', judgedBy: 'worker', choices: [choice('c_landed', 'landed'), choice('c_failure', 'failure')] },
   ],
   edges: [
-    { ...EDGE_DEFAULTS, from_node_id: 'n_long_runner', choice_id: 'c_pass', to_node_name: LONG_HUB },
-    { ...EDGE_DEFAULTS, from_node_id: 'n_long_hub', choice_id: 'c_landed', to_node_name: 'done', target_kind: 'done' },
-    { ...EDGE_DEFAULTS, from_node_id: 'n_long_hub', choice_id: 'c_failure', to_node_name: 'done', target_kind: 'done' },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_long_runner', choiceId: 'c_pass', toNodeName: LONG_HUB },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_long_hub', choiceId: 'c_landed', toNodeName: 'done', targetKind: 'done' },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_long_hub', choiceId: 'c_failure', toNodeName: 'done', targetKind: 'done' },
   ],
 };
 
@@ -169,7 +162,7 @@ function measure(root: HTMLElement): { nodes: MeasuredNode[]; labels: { text: st
   return { nodes, labels };
 }
 
-async function mount(graph: GraphView): Promise<HTMLElement> {
+async function mount(graph: Graph): Promise<HTMLElement> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [GraphDiagram],

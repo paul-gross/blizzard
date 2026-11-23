@@ -1010,7 +1010,6 @@ const DOMAIN_BOUNDARY_EXEMPT = [
   'hub/src/app/garden/proposals',
   'hub/src/app/garden/routines',
   'hub/src/app/garden/runs',
-  'hub/src/app/graphs',
   'hub/src/app/runners',
   'runner/src/app/asks',
   'runner/src/app/board',

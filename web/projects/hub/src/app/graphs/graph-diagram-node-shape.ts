@@ -1,9 +1,8 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { hubApi } from 'fleet';
-
 import { META_FIRST_LINE_Y, META_LINE_HEIGHT } from './graph-box-sizing';
 import type { LaidOutNode } from './graph-layout';
+import { graphVocabularyText } from './graph.domain';
 
 /** The node box's corner radius — square on the left (the color stripe's edge),
  * rounded on the right, so the selection/hover outline traced over the same path
@@ -26,8 +25,8 @@ const CORNER_RADIUS = 9;
     '[attr.data-node-id]': 'node().id',
     '[attr.data-selected]': "selected() ? 'true' : null",
     '[attr.data-incident]': "incident() ? 'true' : null",
-    '[class.exec-hub]': "node().executor === Executor.HUB",
-    '[class.exec-runner]': "node().executor === Executor.RUNNER",
+    '[class.exec-hub]': "node().executor === 'hub'",
+    '[class.exec-runner]': "node().executor === 'runner'",
     '[class.selected]': 'selected()',
     '[class.incident]': 'incident()',
   },
@@ -39,7 +38,10 @@ export class GraphDiagramNodeShape {
   readonly selected = input(false);
   readonly incident = input(false);
 
-  protected readonly Executor = hubApi.Executor;
+  /** The executor badge's text — an executor this build does not know reads raw. */
+  protected executorLabel(): string {
+    return graphVocabularyText(this.node().executor).toUpperCase();
+  }
 
   /** Baseline y of the node's `index`-th wrapped meta line — the same step
    * `graph-layout.ts` grew the box height by, so the lines land inside it. */

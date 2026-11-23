@@ -1,66 +1,56 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { GraphView, GraphNodeView } from 'fleet';
+import type { Graph, GraphNode } from './graph.domain';
 import { GraphDiagramView } from './graph-diagram-view';
 
-const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'definition_yaml' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
-  definition_yaml: '',
-  artifacts: [],
+const GRAPH_DEFAULTS: Pick<Graph, 'edges' | 'retired' | 'sessions'> = {
   edges: [],
-  follow_latest: null,
   retired: false,
   sessions: [],
-  warnings: [],
 };
 
-const NODE_DEFAULTS: Pick<GraphNodeView, 'action' | 'action_args' | 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+const NODE_DEFAULTS: Pick<GraphNode, 'action' | 'actionArgs' | 'checks' | 'choices' | 'judgementPrompt' | 'produces' | 'prompt' | 'retriesExhausted' | 'retriesMax' | 'sessionSource'> = {
   action: null,
-  action_args: {},
+  actionArgs: {},
   checks: [],
-  checks_cwd: null,
-  checks_timeout: null,
   choices: [],
-  judgement_prompt: null,
+  judgementPrompt: null,
   produces: [],
   prompt: null,
-  retries_exhausted: null,
-  retries_max: null,
-  session_source: null,
+  retriesExhausted: null,
+  retriesMax: null,
+  sessionSource: null,
 };
 
-const EDGE_DEFAULTS: Pick<GraphView['edges'][number], 'prompt_addendum' | 'target_graph' | 'target_kind'> = {
-  prompt_addendum: null,
-  target_graph: null,
-  target_kind: 'node',
+const EDGE_DEFAULTS: Pick<Graph['edges'][number], 'promptAddendum' | 'targetGraph' | 'targetKind'> = {
+  promptAddendum: null,
+  targetGraph: null,
+  targetKind: 'node',
 };
 
-const GRAPH_A: GraphView = {
+const GRAPH_A: Graph = {
   ...GRAPH_DEFAULTS,
-  graph_id: 'gr_a',
+  graphId: 'gr_a',
   name: 'a',
-  enabled: true,
-  entry_node_id: 'n_build',
+  entryNodeId: 'n_build',
   nodes: [
-    { ...NODE_DEFAULTS, node_id: 'n_build', name: 'build', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [{ requires_checks: false, choice_id: 'c_pass', name: 'pass', description: '' }] },
-    { ...NODE_DEFAULTS, node_id: 'n_review', name: 'review', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [] },
+    { ...NODE_DEFAULTS, nodeId: 'n_build', name: 'build', executor: 'runner', session: 'fresh', judgedBy: 'worker', choices: [{ choiceId: 'c_pass', name: 'pass', description: '' }] },
+    { ...NODE_DEFAULTS, nodeId: 'n_review', name: 'review', executor: 'runner', session: 'fresh', judgedBy: 'worker', choices: [] },
   ],
-  edges: [{ ...EDGE_DEFAULTS, from_node_id: 'n_build', choice_id: 'c_pass', to_node_name: 'review' }],
-  warnings: [],
+  edges: [{ ...EDGE_DEFAULTS, fromNodeId: 'n_build', choiceId: 'c_pass', toNodeName: 'review' }],
 };
 
-const GRAPH_B: GraphView = {
+const GRAPH_B: Graph = {
   ...GRAPH_DEFAULTS,
-  graph_id: 'gr_b',
+  graphId: 'gr_b',
   name: 'b',
-  enabled: true,
-  entry_node_id: 'n_only',
-  nodes: [{ ...NODE_DEFAULTS, node_id: 'n_only', name: 'only', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [] }],
+  entryNodeId: 'n_only',
+  nodes: [{ ...NODE_DEFAULTS, nodeId: 'n_only', name: 'only', executor: 'runner', session: 'fresh', judgedBy: 'worker', choices: [] }],
   edges: [],
-  warnings: [],
 };
 
-function mount(graph: GraphView) {
+function mount(graph: Graph) {
   TestBed.configureTestingModule({
     imports: [GraphDiagramView],
     providers: [provideZonelessChangeDetection()],

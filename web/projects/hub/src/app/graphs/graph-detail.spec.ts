@@ -3,7 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import type { MeResponse } from 'fleet';
 import {
   graphEdgeView,
   graphNodeView,
@@ -38,11 +37,10 @@ const OTHER_GRAPH = graphView({ ...GRAPH, graph_id: 'gr_other', retired: false }
 describe('GraphDetail', () => {
   let stub: RequestClientStub;
 
-  async function mount(graphId: string, routes: Parameters<typeof stubHubClient>[0], me: MeResponse = OPERATOR_ME_RESPONSE) {
-    // Every mount resolves `/api/me` (the graph-edit gate reads it); the per-test
-    // `route` handles the graph reads. `me` defaults to the full-permission operator so
-    // the lifecycle controls render.
-    stub = stubHubClient({ 'GET /api/me': () => me, ...routes });
+  async function mount(graphId: string, routes: Parameters<typeof stubHubClient>[0]) {
+    // Every mount resolves `/api/me` (the graph-edit gate reads it) as the full-permission
+    // operator, so the lifecycle controls render; the per-test `route` handles the graph reads.
+    stub = stubHubClient({ 'GET /api/me': () => OPERATOR_ME_RESPONSE, ...routes });
     await TestBed.configureTestingModule({
       imports: [GraphDetail],
       providers: [

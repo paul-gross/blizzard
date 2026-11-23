@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { type GraphNodeView, KitBadge } from 'fleet';
-import { listOrDash, producesNames, retriesLabel, sessionLabel } from './graph-node';
+import { KitBadge } from 'fleet';
+import { listOrDash, retriesLabel, sessionLabel } from './graph-node';
+import { type GraphNode, graphVocabularyText } from './graph.domain';
 
 /**
  * The graph detail's node table (executor, session, judged-by, retries,
@@ -20,11 +21,11 @@ import { listOrDash, producesNames, retriesLabel, sessionLabel } from './graph-n
   styleUrl: './graph-node-table.css',
 })
 export class GraphNodeTable {
-  readonly nodes = input.required<readonly GraphNodeView[]>();
+  readonly nodes = input.required<readonly GraphNode[]>();
   readonly entryNodeId = input.required<string>();
 
   protected readonly retriesLabel = retriesLabel;
   protected readonly listOrDash = listOrDash;
-  protected readonly producesNames = producesNames;
+  protected readonly vocabularyText = graphVocabularyText;
   protected readonly sessionLabel = sessionLabel;
 }

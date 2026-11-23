@@ -2,14 +2,13 @@ import {
   type AsyncStateQuery,
   type GardenProposalCountsView,
   type GardenSweepsView,
-  type GraphSummaryView,
-  type GraphView,
   type KitAsyncStateValue,
   type RunRowView,
   type TrendView,
   restingAsyncState,
 } from 'fleet';
 import type { Routine } from '../core/routine.domain';
+import type { Graph, GraphSummary } from '../../graphs/graph.domain';
 import { effectiveGraphByName } from './gardening-effective-graph';
 import type { RoutineLifecycleVars } from './routine-lifecycle.mutations';
 import type {
@@ -34,9 +33,9 @@ export function routineBySlug(slug: string | null, routines: readonly Routine[])
  * graph read is still pending (see {@link effectiveGraphByName}). */
 export function routineEffectiveGraph(
   routine: Routine | null,
-  graphs: readonly GraphSummaryView[],
+  graphs: readonly GraphSummary[],
   graphsPending: boolean,
-): GraphSummaryView | null {
+): GraphSummary | null {
   if (routine === null) return null;
   return effectiveGraphByName(graphs, graphsPending, routine.graph);
 }
@@ -53,8 +52,8 @@ export function routineOverrideRetired(
 }
 
 /** The read-only strategy steps of the routine's effective graph, in node order. */
-export function strategySteps(graph: GraphView | undefined): readonly StrategyStepVm[] {
-  return (graph?.nodes ?? []).map((n) => ({ name: n.name, prompt: n.prompt ?? null }));
+export function strategySteps(graph: Graph | undefined): readonly StrategyStepVm[] {
+  return (graph?.nodes ?? []).map((n) => ({ name: n.name, prompt: n.prompt }));
 }
 
 /** The window's measurement readings, one per sweep that produced one. */

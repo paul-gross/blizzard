@@ -1,8 +1,9 @@
 import dagre from '@dagrejs/dagre';
 
-import { hubApi, type GraphNodeView, type GraphView, unlisted } from 'fleet';
+import { unlisted } from 'fleet';
 import { LABEL_HEIGHT, type TextMeasurer, labelBoxWidth, migrationBox, nodeBox } from './graph-box-sizing';
 import { type EdgeKind, type EdgeTarget, type ResolvedEdge, resolveEdges } from './graph-edge-target';
+import type { Graph, GraphNode } from './graph.domain';
 
 export { type TextMeasurer };
 // Re-exported so no consumer outside this module pair has to know the discriminated
@@ -12,7 +13,7 @@ export { type EdgeKind, type EdgeTarget };
 
 /**
  * The pure DAG-layout core for the graph diagram (`bzh:generated-client` — this
- * module introduces no API call; it only lays out a `GraphView` already fetched by
+ * module introduces no API call; it only lays out a `Graph` already fetched by
  * `graphs.query.ts`). Confines the `@dagrejs/dagre` dependency to one module and stays framework-light/DOM-free so it unit-tests without
  * a browser. Boxes size to text through the caller's {@link TextMeasurer}. A node
  * box has no fixed size: its width follows the wider of its name row and its
@@ -26,7 +27,7 @@ export { type EdgeKind, type EdgeTarget };
  *
  * A choice's `to:` also names a **third** kind of target beyond a node or the
  * `done` terminal: `graph:<name>`, a cross-graph migration (`bzh:migration-not-transition`,
- * an edge whose `target_kind` is `graph`) that re-pins the chunk to
+ * an edge whose `targetKind` is `graph`) that re-pins the chunk to
  * another graph entirely rather than transitioning it within this one. Each distinct
  * target graph name gets its own synthetic dagre sink, laid out alongside `done` —
  * {@link LaidOutGraph.migrations}.
@@ -39,18 +40,18 @@ const DONE_RADIUS = 24;
 /** The synthetic source dagre lays out above the entry node — sized
  * to match {@link DONE_RADIUS} so the START and DONE circles read as a pair. */
 const START_RADIUS = DONE_RADIUS;
-/** Dagre graph-lib id for the synthetic start node/edge — never a real `node_id`
+/** Dagre graph-lib id for the synthetic start node/edge — never a real `nodeId`
  * (those come from the domain as `n_<name>`), so it can't collide with one. */
 const START_TERMINAL = '__start__';
 const START_EDGE_NAME = 'start';
 /** Dagre graph-lib id for the shared `done` sink — the reserved terminal's own
- * name, never a real `node_id` (those come from the domain as `n_<name>`). */
-const DONE_SINK = hubApi.ChoiceTargetKind.DONE;
+ * name, never a real `nodeId` (those come from the domain as `n_<name>`). */
+const DONE_SINK = 'done';
 /** Dagre graph-lib id for a migration sink — `graph:<name>`, namespaced by the
- * target kind so it can't collide with a real `node_id`, {@link DONE_SINK}, or
+ * target kind so it can't collide with a real `nodeId`, {@link DONE_SINK}, or
  * {@link START_TERMINAL}. */
 function migrationSinkId(targetGraph: string): string {
-  return `${hubApi.ChoiceTargetKind.GRAPH}:${targetGraph}`;
+  return `${'graph'}:${targetGraph}`;
 }
 /** Horizontal margin reserved so a self-loop's side arc doesn't clip the viewBox. */
 const SELF_LOOP_MARGIN = 60;
@@ -58,7 +59,7 @@ const SELF_LOOP_MARGIN = 60;
 export interface LaidOutNode {
   readonly id: string;
   readonly name: string;
-  readonly executor: GraphNodeView['executor'];
+  readonly executor: GraphNode['executor'];
   /** The meta line, already wrapped to the box: one entry per rendered line, empty
    * when the node has no meta at all. */
   readonly metaLines: readonly string[];
@@ -131,7 +132,7 @@ export interface LaidOutGraph {
   readonly selfLoops: readonly LaidOutSelfLoop[];
   /** `null` when no edge in the graph targets the reserved terminal. */
   readonly done: LaidOutDone | null;
-  /** `null` only when `entry_node_id` names no node in `graph` — a degenerate graph
+  /** `null` only when `entryNodeId` names no node in `graph` — a degenerate graph
    * the component simply renders without a start indicator. */
   readonly start: LaidOutStart | null;
   /** One entry per distinct `graph:<name>` target among `graph.edges`, in first-seen
@@ -164,11 +165,11 @@ function curvedPath(points: readonly { x: number; y: number }[]): string {
 function dagreTargetId(target: EdgeTarget): string {
   const kind = target.kind;
   switch (kind) {
-    case hubApi.ChoiceTargetKind.NODE:
+    case 'node':
       return target.nodeId;
-    case hubApi.ChoiceTargetKind.DONE:
+    case 'done':
       return DONE_SINK;
-    case hubApi.ChoiceTargetKind.GRAPH:
+    case 'graph':
       return migrationSinkId(target.targetGraph);
     default:
       return unlisted(kind);
@@ -180,36 +181,36 @@ function dagreTargetId(target: EdgeTarget): string {
  * edge naming an unknown target, more than one self-loop on a node — a stated
  * ≤1-per-node limitation) or if dagre itself throws.
  */
-export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutcome {
+export function layoutGraph(graph: Graph, measure: TextMeasurer): LayoutOutcome {
   const nodes = graph.nodes ?? [];
   if (nodes.length === 0) return { ok: false };
 
-  const nameToId = new Map(nodes.map((n) => [n.name, n.node_id]));
+  const nameToId = new Map(nodes.map((n) => [n.name, n.nodeId]));
   const resolved = resolveEdges(graph, nameToId);
   if (resolved === null) return { ok: false };
 
   const selfLoopsByNode = new Map<string, ResolvedEdge>();
   for (const edge of resolved) {
-    if (edge.target.kind === hubApi.ChoiceTargetKind.NODE && edge.target.nodeId === edge.fromId) {
+    if (edge.target.kind === 'node' && edge.target.nodeId === edge.fromId) {
       if (selfLoopsByNode.has(edge.fromId)) return { ok: false }; // >1 self-loop per node: unsupported
       selfLoopsByNode.set(edge.fromId, edge);
     }
   }
 
-  const usesDone = resolved.some((e) => e.target.kind === hubApi.ChoiceTargetKind.DONE);
+  const usesDone = resolved.some((e) => e.target.kind === 'done');
   // First-seen order, one sink per distinct target graph name — mirrors the `done`
   // sink's "shared by every edge into it" shape, just keyed by name instead of a
   // single reserved terminal.
   const migrationNames: string[] = [];
   const seenMigrations = new Set<string>();
   for (const edge of resolved) {
-    if (edge.target.kind === hubApi.ChoiceTargetKind.GRAPH && !seenMigrations.has(edge.target.targetGraph)) {
+    if (edge.target.kind === 'graph' && !seenMigrations.has(edge.target.targetGraph)) {
       seenMigrations.add(edge.target.targetGraph);
       migrationNames.push(edge.target.targetGraph);
     }
   }
-  const hasEntry = nodes.some((n) => n.node_id === graph.entry_node_id);
-  const boxes = new Map(nodes.map((n) => [n.node_id, nodeBox(n, measure)]));
+  const hasEntry = nodes.some((n) => n.nodeId === graph.entryNodeId);
+  const boxes = new Map(nodes.map((n) => [n.nodeId, nodeBox(n, measure)]));
   const migrationBoxes = new Map(migrationNames.map((name) => [name, migrationBox(name, measure)]));
 
   try {
@@ -218,8 +219,8 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
     g.setDefaultEdgeLabel(() => ({}));
 
     for (const n of nodes) {
-      const box = boxes.get(n.node_id)!;
-      g.setNode(n.node_id, { width: box.width, height: box.height });
+      const box = boxes.get(n.nodeId)!;
+      g.setNode(n.nodeId, { width: box.width, height: box.height });
     }
     if (usesDone) g.setNode(DONE_SINK, { width: DONE_RADIUS * 2, height: DONE_RADIUS * 2 });
     for (const name of migrationNames) {
@@ -228,10 +229,10 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
     }
     if (hasEntry) {
       g.setNode(START_TERMINAL, { width: START_RADIUS * 2, height: START_RADIUS * 2 });
-      g.setEdge(START_TERMINAL, graph.entry_node_id, {}, START_EDGE_NAME);
+      g.setEdge(START_TERMINAL, graph.entryNodeId, {}, START_EDGE_NAME);
     }
 
-    const forwardEdges = resolved.filter((e) => !(e.target.kind === hubApi.ChoiceTargetKind.NODE && e.target.nodeId === e.fromId));
+    const forwardEdges = resolved.filter((e) => !(e.target.kind === 'node' && e.target.nodeId === e.fromId));
     for (const edge of forwardEdges) {
       const target = dagreTargetId(edge.target);
       const labelW = labelBoxWidth(edge.label, measure);
@@ -241,10 +242,10 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
     dagre.layout(g);
 
     const laidOutNodes: LaidOutNode[] = nodes.map((n) => {
-      const pos = g.node(n.node_id);
-      const box = boxes.get(n.node_id)!;
+      const pos = g.node(n.nodeId);
+      const box = boxes.get(n.nodeId)!;
       return {
-        id: n.node_id,
+        id: n.nodeId,
         name: n.name,
         executor: n.executor,
         metaLines: box.metaLines,
@@ -300,7 +301,7 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
     const start: LaidOutStart | null = hasEntry
       ? (() => {
           const sn = g.node(START_TERMINAL);
-          const e = g.edge(START_TERMINAL, graph.entry_node_id, START_EDGE_NAME);
+          const e = g.edge(START_TERMINAL, graph.entryNodeId, START_EDGE_NAME);
           return { x: sn.x, y: sn.y, r: START_RADIUS, path: curvedPath(e.points) };
         })()
       : null;

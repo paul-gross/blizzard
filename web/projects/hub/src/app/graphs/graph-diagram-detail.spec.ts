@@ -1,96 +1,88 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { GraphView, GraphNodeView } from 'fleet';
+import type { Graph, GraphNode } from './graph.domain';
 import { GraphDiagramDetail } from './graph-diagram-detail';
 import type { DiagramSelection } from './graph-diagram-selection';
 
-const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'definition_yaml' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
-  definition_yaml: '',
-  artifacts: [],
+const GRAPH_DEFAULTS: Pick<Graph, 'edges' | 'retired' | 'sessions'> = {
   edges: [],
-  follow_latest: null,
   retired: false,
   sessions: [],
-  warnings: [],
 };
 
-const NODE_DEFAULTS: Pick<GraphNodeView, 'action' | 'action_args' | 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+const NODE_DEFAULTS: Pick<GraphNode, 'action' | 'actionArgs' | 'checks' | 'choices' | 'judgementPrompt' | 'produces' | 'prompt' | 'retriesExhausted' | 'retriesMax' | 'sessionSource'> = {
   action: null,
-  action_args: {},
+  actionArgs: {},
   checks: [],
-  checks_cwd: null,
-  checks_timeout: null,
   choices: [],
-  judgement_prompt: null,
+  judgementPrompt: null,
   produces: [],
   prompt: null,
-  retries_exhausted: null,
-  retries_max: null,
-  session_source: null,
+  retriesExhausted: null,
+  retriesMax: null,
+  sessionSource: null,
 };
 
-const EDGE_DEFAULTS: Pick<GraphView['edges'][number], 'prompt_addendum' | 'target_graph' | 'target_kind'> = {
-  prompt_addendum: null,
-  target_graph: null,
-  target_kind: 'node',
+const EDGE_DEFAULTS: Pick<Graph['edges'][number], 'promptAddendum' | 'targetGraph' | 'targetKind'> = {
+  promptAddendum: null,
+  targetGraph: null,
+  targetKind: 'node',
 };
 
-const GRAPH: GraphView = {
+const GRAPH: Graph = {
   ...GRAPH_DEFAULTS,
-  graph_id: 'gr_test',
+  graphId: 'gr_test',
   name: 'test',
-  enabled: true,
-  entry_node_id: 'n_build',
+  entryNodeId: 'n_build',
   nodes: [
     {
       ...NODE_DEFAULTS,
-      node_id: 'n_plan',
+      nodeId: 'n_plan',
       name: 'plan',
       executor: 'runner',
       session: 'fresh',
-      judged_by: 'worker',
-      choices: [{ requires_checks: false, choice_id: 'c_advance', name: 'advance', description: '' }],
+      judgedBy: 'worker',
+      choices: [{ choiceId: 'c_advance', name: 'advance', description: '' }],
     },
     {
       ...NODE_DEFAULTS,
-      node_id: 'n_build',
+      nodeId: 'n_build',
       name: 'build',
       executor: 'runner',
       session: 'resume',
-      session_source: 'code',
-      judged_by: 'worker',
-      retries_max: 2,
-      retries_exhausted: 'fail',
+      sessionSource: 'code',
+      judgedBy: 'worker',
+      retriesMax: 2,
+      retriesExhausted: 'fail',
       checks: ['lint', 'test'],
-      produces: [{ kind: 'asset', name: 'plan' }, { kind: 'asset', name: 'retrospective' }],
+      produces: ['plan', 'retrospective'],
       prompt: 'Build the thing.\nDo it well.',
-      judgement_prompt: 'Did it pass?',
+      judgementPrompt: 'Did it pass?',
       choices: [
-        { requires_checks: false, choice_id: 'c_pass', name: 'pass', description: 'moves on to review' },
-        { requires_checks: false, choice_id: 'c_fail', name: 'fail', description: '' },
+        { choiceId: 'c_pass', name: 'pass', description: 'moves on to review' },
+        { choiceId: 'c_fail', name: 'fail', description: '' },
       ],
     },
     {
       ...NODE_DEFAULTS,
-      node_id: 'n_deliver',
+      nodeId: 'n_deliver',
       name: 'deliver',
       executor: 'hub',
       action: 'garden-deliver',
-      action_args: { delta: ['delta'], proposals: ['docket', 'more'] },
+      actionArgs: { delta: ['delta'], proposals: ['docket', 'more'] },
       session: 'fresh',
-      judged_by: 'worker',
-      choices: [{ requires_checks: false, choice_id: 'c_landed', name: 'landed', description: '' }],
+      judgedBy: 'worker',
+      choices: [{ choiceId: 'c_landed', name: 'landed', description: '' }],
     },
   ],
   edges: [
-    { ...EDGE_DEFAULTS, from_node_id: 'n_plan', choice_id: 'c_advance', to_node_name: 'build', prompt_addendum: 'Arriving fresh from plan.' },
-    { ...EDGE_DEFAULTS, from_node_id: 'n_build', choice_id: 'c_pass', to_node_name: 'deliver', prompt_addendum: 'Watch for flaky tests.' },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_plan', choiceId: 'c_advance', toNodeName: 'build', promptAddendum: 'Arriving fresh from plan.' },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_build', choiceId: 'c_pass', toNodeName: 'deliver', promptAddendum: 'Watch for flaky tests.' },
   ],
-  warnings: [],
 };
 
-function mount(graph: GraphView, selection: DiagramSelection | null) {
+function mount(graph: Graph, selection: DiagramSelection | null) {
   TestBed.configureTestingModule({
     imports: [GraphDiagramDetail],
     providers: [provideZonelessChangeDetection()],
@@ -142,7 +134,7 @@ describe('GraphDiagramDetail', () => {
     expect(el.querySelector('[data-testid="graph-diagram-detail-action-args"]')).toBeNull();
   });
 
-  it("renders a selected node's prompt and judgement_prompt text in full, through the kit prose block", () => {
+  it("renders a selected node's prompt and judgementPrompt text in full, through the kit prose block", () => {
     const fixture = mount(GRAPH, { kind: 'node', nodeId: 'n_build' });
     const el = fixture.nativeElement as HTMLElement;
     // `testid` marks the prose block's own outer element, which also carries its
@@ -152,7 +144,7 @@ describe('GraphDiagramDetail', () => {
     expect(el.querySelector('[data-testid="graph-diagram-detail-judgement-prompt"]')?.textContent).toContain('Did it pass?');
   });
 
-  it('omits the prompt/judgement_prompt blocks for a node with neither', () => {
+  it('omits the prompt/judgementPrompt blocks for a node with neither', () => {
     const fixture = mount(GRAPH, { kind: 'node', nodeId: 'n_deliver' });
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="graph-diagram-detail-prompt"]')).toBeNull();
@@ -178,11 +170,11 @@ describe('GraphDiagramDetail', () => {
   });
 
   it('lists every distinct inbound route when a node has more than one', () => {
-    const graph: GraphView = {
+    const graph: Graph = {
       ...GRAPH,
       edges: [
         ...GRAPH.edges!,
-        { ...EDGE_DEFAULTS, from_node_id: 'n_plan', choice_id: 'c_advance', to_node_name: 'build', prompt_addendum: 'A second route in.' },
+        { ...EDGE_DEFAULTS, fromNodeId: 'n_plan', choiceId: 'c_advance', toNodeName: 'build', promptAddendum: 'A second route in.' },
       ],
     };
     const fixture = mount(graph, { kind: 'node', nodeId: 'n_build' });

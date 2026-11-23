@@ -8,7 +8,7 @@
   @if (graph(); as g) {
     <app-graph-detail-header
       fleetKitPanelHeader
-      [graphId]="g.graph_id"
+      [graphId]="g.graphId"
       [retired]="!!g.retired"
       [canEdit]="canEdit()"
       [lifecyclePending]="lifecyclePending()"
@@ -30,7 +30,7 @@
 
       <app-graph-diagram-view [graph]="g" data-testid="graph-detail-diagram" />
 
-      <app-graph-node-table [nodes]="nodes()" [entryNodeId]="g.entry_node_id" />
+      <app-graph-node-table [nodes]="nodes()" [entryNodeId]="g.entryNodeId" />
 
       <app-graph-session-table [sessions]="sessions()" />
     </div>

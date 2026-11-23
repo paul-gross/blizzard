@@ -1,12 +1,12 @@
-import { hubApi, type GraphChoiceView, type GraphNodeView, type GraphView } from 'fleet';
 import type { EdgeKind, EdgeTarget } from './graph-edge-target';
 import type { LaidOutGraph } from './graph-layout';
+import type { Graph, GraphChoice, GraphNode } from './graph.domain';
 
 /**
  * What is selected in the diagram — structural, not DOM: a node by id, or an edge
  * carrying what only the layout knows about it (endpoints, `choiceId`, `edgeKind`),
  * so the detail pane can render "source → target" without re-deriving it from
- * `GraphView`. Pure and DOM-free (`graph-diagram.ts` is the only emitter,
+ * `Graph`. Pure and DOM-free (`graph-diagram.ts` is the only emitter,
  * `graph-diagram-detail.ts` the only consumer) so this module unit-tests without a
  * browser, matching `graph-layout.ts`'s seam.
  */
@@ -34,7 +34,7 @@ export function selectionKey(selection: DiagramSelection | null): string | null 
 export function incidentEdgeIds(laidOut: LaidOutGraph, nodeId: string): readonly string[] {
   const ids: string[] = [];
   for (const edge of laidOut.edges) {
-    if (edge.fromNodeId === nodeId || (edge.target.kind === hubApi.ChoiceTargetKind.NODE && edge.target.nodeId === nodeId)) ids.push(edge.id);
+    if (edge.fromNodeId === nodeId || (edge.target.kind === 'node' && edge.target.nodeId === nodeId)) ids.push(edge.id);
   }
   for (const loop of laidOut.selfLoops) {
     if (loop.nodeId === nodeId) ids.push(loop.id);
@@ -48,16 +48,16 @@ export function incidentEdgeIds(laidOut: LaidOutGraph, nodeId: string): readonly
 export function endpointNodeIds(selection: DiagramSelection | null): readonly string[] {
   if (selection === null || selection.kind !== 'edge') return [];
   const ids = [selection.fromNodeId];
-  if (selection.target.kind === hubApi.ChoiceTargetKind.NODE && selection.target.nodeId !== selection.fromNodeId) ids.push(selection.target.nodeId);
+  if (selection.target.kind === 'node' && selection.target.nodeId !== selection.fromNodeId) ids.push(selection.target.nodeId);
   return ids;
 }
 
-/** The selected node's full wire view, or `null` when nothing (or an edge) is
+/** The selected node's full record, or `null` when nothing (or an edge) is
  * selected, or the selected id names no node in `graph` (a stale selection after
  * the `graph` input changes out from under it). */
-export function resolveSelectedNode(graph: GraphView, selection: DiagramSelection | null): GraphNodeView | null {
+export function resolveSelectedNode(graph: Graph, selection: DiagramSelection | null): GraphNode | null {
   if (selection === null || selection.kind !== 'node') return null;
-  return (graph.nodes ?? []).find((n) => n.node_id === selection.nodeId) ?? null;
+  return (graph.nodes ?? []).find((n) => n.nodeId === selection.nodeId) ?? null;
 }
 
 /** A selected edge's choice, resolved against its source node — the pane's view of
@@ -73,19 +73,19 @@ export interface ResolvedChoiceSelection {
   readonly fromNodeId: string;
   readonly target: EdgeTarget;
   readonly edgeKind: EdgeKind;
-  /** `GraphEdgeView.prompt_addendum` for this edge, `null` when the edge carries
+  /** `GraphEdge.promptAddendum` for this edge, `null` when the edge carries
    * none or matches no entry in `graph.edges` (mirrors `graph-detail.ts`'s
-   * `resolvedEdges`, which keys the same way: `from_node_id` + `choice_id`). */
+   * `resolvedEdges`, which keys the same way: `fromNodeId` + `choiceId`). */
   readonly promptAddendum: string | null;
 }
 
 /** The selected edge's choice, or `null` when nothing (or a node) is selected. */
-export function resolveSelectedChoice(graph: GraphView, selection: DiagramSelection | null): ResolvedChoiceSelection | null {
+export function resolveSelectedChoice(graph: Graph, selection: DiagramSelection | null): ResolvedChoiceSelection | null {
   if (selection === null || selection.kind !== 'edge') return null;
-  const fromNode = (graph.nodes ?? []).find((n) => n.node_id === selection.fromNodeId);
-  const choice = fromNode?.choices?.find((c: GraphChoiceView) => c.choice_id === selection.choiceId);
+  const fromNode = (graph.nodes ?? []).find((n) => n.nodeId === selection.fromNodeId);
+  const choice = fromNode?.choices?.find((c: GraphChoice) => c.choiceId === selection.choiceId);
   const edge = (graph.edges ?? []).find(
-    (e) => e.from_node_id === selection.fromNodeId && e.choice_id === selection.choiceId,
+    (e) => e.fromNodeId === selection.fromNodeId && e.choiceId === selection.choiceId,
   );
   return {
     choiceId: selection.choiceId,
@@ -94,6 +94,6 @@ export function resolveSelectedChoice(graph: GraphView, selection: DiagramSelect
     fromNodeId: selection.fromNodeId,
     target: selection.target,
     edgeKind: selection.edgeKind,
-    promptAddendum: edge?.prompt_addendum ?? null,
+    promptAddendum: edge?.promptAddendum ?? null,
   };
 }

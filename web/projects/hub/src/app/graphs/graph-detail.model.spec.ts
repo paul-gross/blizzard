@@ -1,44 +1,37 @@
-import type { GraphNodeView, GraphView } from 'fleet';
+import type { GraphNode, Graph } from './graph.domain';
 import { describe, expect, it } from 'vitest';
 
 import { entryNodeName, graphOverrideRetired } from './graph-detail.model';
 
-const NODE_DEFAULTS: Pick<GraphNodeView, 'action' | 'action_args' | 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+const NODE_DEFAULTS: Pick<GraphNode, 'action' | 'actionArgs' | 'checks' | 'choices' | 'judgementPrompt' | 'produces' | 'prompt' | 'retriesExhausted' | 'retriesMax' | 'sessionSource'> = {
   action: null,
-  action_args: {},
+  actionArgs: {},
   checks: [],
-  checks_cwd: null,
-  checks_timeout: null,
   choices: [],
-  judgement_prompt: null,
+  judgementPrompt: null,
   produces: [],
   prompt: null,
-  retries_exhausted: null,
-  retries_max: null,
-  session_source: null,
+  retriesExhausted: null,
+  retriesMax: null,
+  sessionSource: null,
 };
 
-const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'definition_yaml' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
-  definition_yaml: '',
-  artifacts: [],
+const GRAPH_DEFAULTS: Pick<Graph, 'edges' | 'retired' | 'sessions'> = {
   edges: [],
-  follow_latest: null,
   retired: false,
   sessions: [],
-  warnings: [],
 };
 
-const NODES: readonly GraphNodeView[] = [
-  { ...NODE_DEFAULTS, node_id: 'nd_1', name: 'survey', executor: 'runner', session: 'fresh', judged_by: 'worker' },
-  { ...NODE_DEFAULTS, node_id: 'nd_2', name: 'report', executor: 'runner', session: 'fresh', judged_by: 'worker' },
+const NODES: readonly GraphNode[] = [
+  { ...NODE_DEFAULTS, nodeId: 'nd_1', name: 'survey', executor: 'runner', session: 'fresh', judgedBy: 'worker' },
+  { ...NODE_DEFAULTS, nodeId: 'nd_2', name: 'report', executor: 'runner', session: 'fresh', judgedBy: 'worker' },
 ];
 
-const GRAPH: GraphView = {
+const GRAPH: Graph = {
   ...GRAPH_DEFAULTS,
-  graph_id: 'gr_1',
+  graphId: 'gr_1',
   name: 'garden-routine',
-  entry_node_id: 'nd_2',
-  enabled: true,
+  entryNodeId: 'nd_2',
   nodes: [...NODES],
 };
 
@@ -64,6 +57,6 @@ describe('entryNodeName', () => {
   });
 
   it('falls back to the raw entry node id when no node carries it', () => {
-    expect(entryNodeName({ ...GRAPH, entry_node_id: 'nd_9' }, NODES)).toBe('nd_9');
+    expect(entryNodeName({ ...GRAPH, entryNodeId: 'nd_9' }, NODES)).toBe('nd_9');
   });
 });

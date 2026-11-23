@@ -2,13 +2,11 @@ import type {
   AsyncStateQuery,
   GardenProposalCountsView,
   GardenSweepsView,
-  GraphNodeView,
-  GraphSummaryView,
-  GraphView,
   RunRowView,
   TrendView,
 } from 'fleet';
 import { describe, expect, it } from 'vitest';
+import type { Graph, GraphNode, GraphSummary } from '../../graphs/graph.domain';
 import { fixtureInstant } from 'fleet/testing';
 
 import { gardenRoutine, gardenRoutineKeeper } from '../core/routine.builders';
@@ -45,55 +43,47 @@ const ROUTINE: Routine = gardenRoutine({
 
 const OTHER_ROUTINE: Routine = { ...ROUTINE, id: 'rtn_2', slug: 'weekly', name: 'Weekly sweep' };
 
-const EFFECTIVE_GRAPH: GraphSummaryView = {
-  graph_id: 'gr_1',
+const EFFECTIVE_GRAPH: GraphSummary = {
+  graphId: 'gr_1',
   name: 'garden-routine',
-  entry_node_id: 'nd_1',
-  created_at: '2026-01-01T00:00:00Z',
+  createdAt: '2026-01-01T00:00:00Z',
   effective: true,
   lifecycle: 'effective',
   retired: false,
 };
 
-const SUPERSEDED_GRAPH: GraphSummaryView = { ...EFFECTIVE_GRAPH, graph_id: 'gr_0', effective: false, lifecycle: 'superseded' };
+const SUPERSEDED_GRAPH: GraphSummary = { ...EFFECTIVE_GRAPH, graphId: 'gr_0', effective: false, lifecycle: 'superseded' };
 
-function node(fields: Pick<GraphNodeView, 'node_id' | 'name'> & Partial<GraphNodeView>): GraphNodeView {
+function node(fields: Pick<GraphNode, 'nodeId' | 'name'> & Partial<GraphNode>): GraphNode {
   return {
     executor: 'runner',
     session: 'fresh',
-    judged_by: 'worker',
+    judgedBy: 'worker',
     prompt: null,
     action: null,
-    action_args: {},
+    actionArgs: {},
     checks: [],
-    checks_cwd: null,
-    checks_timeout: null,
     choices: [],
-    judgement_prompt: null,
+    judgementPrompt: null,
     produces: [],
-    retries_exhausted: null,
-    retries_max: null,
-    session_source: null,
+    retriesExhausted: null,
+    retriesMax: null,
+    sessionSource: null,
     ...fields,
   };
 }
 
-const GRAPH: GraphView = {
-  graph_id: 'gr_1',
+const GRAPH: Graph = {
+  graphId: 'gr_1',
   name: 'garden-routine',
-  entry_node_id: 'nd_1',
-  enabled: true,
+  entryNodeId: 'nd_1',
   nodes: [
-    node({ node_id: 'nd_1', name: 'survey', prompt: 'Survey the repo.' }),
-    node({ node_id: 'nd_2', name: 'report' }),
+    node({ nodeId: 'nd_1', name: 'survey', prompt: 'Survey the repo.' }),
+    node({ nodeId: 'nd_2', name: 'report' }),
   ],
   edges: [],
-  artifacts: [],
-  follow_latest: null,
   retired: false,
-  definition_yaml: '',
   sessions: [],
-  warnings: [],
 };
 
 const SWEEPS: GardenSweepsView = {

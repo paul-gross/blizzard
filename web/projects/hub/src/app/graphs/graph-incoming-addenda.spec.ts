@@ -1,89 +1,81 @@
-import type { GraphView, GraphNodeView } from 'fleet';
+import type { Graph, GraphNode } from './graph.domain';
 import { incomingAddenda } from './graph-incoming-addenda';
 
-const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'definition_yaml' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
-  definition_yaml: '',
-  artifacts: [],
+const GRAPH_DEFAULTS: Pick<Graph, 'edges' | 'retired' | 'sessions'> = {
   edges: [],
-  follow_latest: null,
   retired: false,
   sessions: [],
-  warnings: [],
 };
 
-const NODE_DEFAULTS: Pick<GraphNodeView, 'action' | 'action_args' | 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+const NODE_DEFAULTS: Pick<GraphNode, 'action' | 'actionArgs' | 'checks' | 'choices' | 'judgementPrompt' | 'produces' | 'prompt' | 'retriesExhausted' | 'retriesMax' | 'sessionSource'> = {
   action: null,
-  action_args: {},
+  actionArgs: {},
   checks: [],
-  checks_cwd: null,
-  checks_timeout: null,
   choices: [],
-  judgement_prompt: null,
+  judgementPrompt: null,
   produces: [],
   prompt: null,
-  retries_exhausted: null,
-  retries_max: null,
-  session_source: null,
+  retriesExhausted: null,
+  retriesMax: null,
+  sessionSource: null,
 };
 
-const EDGE_DEFAULTS: Pick<GraphView['edges'][number], 'prompt_addendum' | 'target_graph' | 'target_kind'> = {
-  prompt_addendum: null,
-  target_graph: null,
-  target_kind: 'node',
+const EDGE_DEFAULTS: Pick<Graph['edges'][number], 'promptAddendum' | 'targetGraph' | 'targetKind'> = {
+  promptAddendum: null,
+  targetGraph: null,
+  targetKind: 'node',
 };
 
-const GRAPH: GraphView = {
+const GRAPH: Graph = {
   ...GRAPH_DEFAULTS,
-  graph_id: 'gr_test',
+  graphId: 'gr_test',
   name: 'test',
-  enabled: true,
-  entry_node_id: 'n_plan',
+  entryNodeId: 'n_plan',
   nodes: [
     {
       ...NODE_DEFAULTS,
-      node_id: 'n_plan',
+      nodeId: 'n_plan',
       name: 'plan',
       executor: 'runner',
       session: 'fresh',
-      judged_by: 'worker',
-      choices: [{ requires_checks: false, choice_id: 'c_advance', name: 'advance', description: '' }],
+      judgedBy: 'worker',
+      choices: [{ choiceId: 'c_advance', name: 'advance', description: '' }],
     },
     {
       ...NODE_DEFAULTS,
-      node_id: 'n_review',
+      nodeId: 'n_review',
       name: 'review',
       executor: 'runner',
       session: 'fresh',
-      judged_by: 'worker',
+      judgedBy: 'worker',
       choices: [
-        { requires_checks: false, choice_id: 'c_pass', name: 'pass', description: '' },
-        { requires_checks: false, choice_id: 'c_failed', name: 'review-failed', description: '' },
+        { choiceId: 'c_pass', name: 'pass', description: '' },
+        { choiceId: 'c_failed', name: 'review-failed', description: '' },
       ],
     },
     {
       ...NODE_DEFAULTS,
-      node_id: 'n_build',
+      nodeId: 'n_build',
       name: 'build',
       executor: 'runner',
       session: 'resume',
-      judged_by: 'worker',
+      judgedBy: 'worker',
       choices: [],
     },
   ],
   edges: [
-    { ...EDGE_DEFAULTS, from_node_id: 'n_plan', choice_id: 'c_advance', to_node_name: 'build', prompt_addendum: 'Arriving fresh from plan.' },
-    { ...EDGE_DEFAULTS, from_node_id: 'n_review', choice_id: 'c_failed', to_node_name: 'build', prompt_addendum: 'Fix the review findings.' },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_plan', choiceId: 'c_advance', toNodeName: 'build', promptAddendum: 'Arriving fresh from plan.' },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_review', choiceId: 'c_failed', toNodeName: 'build', promptAddendum: 'Fix the review findings.' },
     // No addendum: excluded even though it targets `build`.
-    { ...EDGE_DEFAULTS, from_node_id: 'n_review', choice_id: 'c_pass', to_node_name: 'deliver', prompt_addendum: 'Ship it.' },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_review', choiceId: 'c_pass', toNodeName: 'deliver', promptAddendum: 'Ship it.' },
     // Empty-string addendum: also excluded.
-    { ...EDGE_DEFAULTS, from_node_id: 'n_plan', choice_id: 'c_advance', to_node_name: 'review', prompt_addendum: '' },
+    { ...EDGE_DEFAULTS, fromNodeId: 'n_plan', choiceId: 'c_advance', toNodeName: 'review', promptAddendum: '' },
   ],
-  warnings: [],
 };
 
 describe('incomingAddenda', () => {
-  it('collects every inbound edge with a non-empty prompt_addendum, labelled by source node and choice', () => {
-    const build = GRAPH.nodes!.find((n) => n.node_id === 'n_build')!;
+  it('collects every inbound edge with a non-empty promptAddendum, labelled by source node and choice', () => {
+    const build = GRAPH.nodes!.find((n) => n.nodeId === 'n_build')!;
     expect(incomingAddenda(GRAPH, build)).toEqual([
       { fromNodeName: 'plan', choiceName: 'advance', promptAddendum: 'Arriving fresh from plan.' },
       { fromNodeName: 'review', choiceName: 'review-failed', promptAddendum: 'Fix the review findings.' },
@@ -91,29 +83,29 @@ describe('incomingAddenda', () => {
   });
 
   it('returns an empty list for a node with no inbound edges at all', () => {
-    const plan = GRAPH.nodes!.find((n) => n.node_id === 'n_plan')!;
+    const plan = GRAPH.nodes!.find((n) => n.nodeId === 'n_plan')!;
     expect(incomingAddenda(GRAPH, plan)).toEqual([]);
   });
 
-  it('excludes an inbound edge whose prompt_addendum is null, undefined, or empty', () => {
-    const review = GRAPH.nodes!.find((n) => n.node_id === 'n_review')!;
+  it('excludes an inbound edge whose promptAddendum is null, undefined, or empty', () => {
+    const review = GRAPH.nodes!.find((n) => n.nodeId === 'n_review')!;
     expect(incomingAddenda(GRAPH, review)).toEqual([]);
   });
 
-  it('falls back to the raw from_node_id and choice_id when they match nothing in the graph', () => {
-    const graph: GraphView = {
+  it('falls back to the raw fromNodeId and choiceId when they match nothing in the graph', () => {
+    const graph: Graph = {
       ...GRAPH,
-      edges: [{ ...EDGE_DEFAULTS, from_node_id: 'n_missing', choice_id: 'c_missing', to_node_name: 'build', prompt_addendum: 'Orphaned.' }],
+      edges: [{ ...EDGE_DEFAULTS, fromNodeId: 'n_missing', choiceId: 'c_missing', toNodeName: 'build', promptAddendum: 'Orphaned.' }],
     };
-    const build = graph.nodes!.find((n) => n.node_id === 'n_build')!;
+    const build = graph.nodes!.find((n) => n.nodeId === 'n_build')!;
     expect(incomingAddenda(graph, build)).toEqual([
       { fromNodeName: 'n_missing', choiceName: 'c_missing', promptAddendum: 'Orphaned.' },
     ]);
   });
 
   it('handles a graph with no edges at all', () => {
-    const graph: GraphView = { ...GRAPH, edges: [] };
-    const build = graph.nodes!.find((n) => n.node_id === 'n_build')!;
+    const graph: Graph = { ...GRAPH, edges: [] };
+    const build = graph.nodes!.find((n) => n.nodeId === 'n_build')!;
     expect(incomingAddenda(graph, build)).toEqual([]);
   });
 });

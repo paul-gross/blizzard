@@ -2,6 +2,8 @@ import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { getGraphApiGraphsGraphIdGet, listGraphsApiGraphsGet, type GraphSummaryView, type GraphView } from 'fleet';
 import { hubGraphKey, hubGraphsKey } from '../core/query-keys';
+import type { GraphSummary } from './graph.domain';
+import { fromGraphSummaryView, fromGraphView } from './graph.translate';
 
 /**
  * Hub `GET /api/graphs` read — every minted graph's summary row (name, `graph_id`,
@@ -9,7 +11,8 @@ import { hubGraphKey, hubGraphsKey } from '../core/query-keys';
  * TanStack Query and the generated hub client (bzh:generated-client). Graphs are
  * immutable and minted rarely — not in the SSE event vocabulary
  * (`HUB_EVENT_TYPES` in `sse/hub-events.ts`) — so a plain query with no
- * `refetchInterval` is correct; nothing live-invalidates this list.
+ * `refetchInterval` is correct; nothing live-invalidates this list. Served as
+ * {@link GraphSummary}s, in the hub's order.
  */
 export function injectHubGraphsQuery() {
   return injectQuery(() => ({
@@ -19,6 +22,7 @@ export function injectHubGraphsQuery() {
       if (error) throw error;
       return data ?? [];
     },
+    select: (wire: GraphSummaryView[]): readonly GraphSummary[] => wire.map(fromGraphSummaryView),
   }));
 }
 
@@ -48,7 +52,7 @@ export function shouldRetryGraphFetch(failureCount: number, error: Error): boole
  * A 404 (unknown graph id) is not retried — it's a terminal answer, not a
  * transient failure — so `graph-detail.ts`'s error state surfaces immediately
  * instead of after TanStack Query's default 3 retries (~7-10s of spinner on a bad
- * deep link before this fix).
+ * deep link). Served as a domain `Graph`.
  */
 export function injectHubGraphQuery(graphId: () => string | null) {
   return injectQuery(() => {
@@ -65,6 +69,7 @@ export function injectHubGraphQuery(graphId: () => string | null) {
         return data!;
       },
       retry: shouldRetryGraphFetch,
+      select: fromGraphView,
     };
   });
 }

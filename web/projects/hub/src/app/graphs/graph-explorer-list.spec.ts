@@ -2,15 +2,17 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import { GraphExplorerList } from './graph-explorer-list';
+import { graphSummary } from './graph.builders';
+import type { GraphSummary } from './graph.domain';
 
 const GRAPHS = [
-  { graph_id: 'gr_build_v2', name: 'build', created_at: '2026-07-18T00:00:00Z', effective: true, lifecycle: 'effective', entry_node_id: 'n1' },
-  { graph_id: 'gr_build_v1', name: 'build', created_at: '2026-07-01T00:00:00Z', effective: false, lifecycle: 'superseded', entry_node_id: 'n1' },
-  { graph_id: 'gr_review_v1', name: 'review', created_at: '2026-07-10T00:00:00Z', effective: true, lifecycle: 'effective', entry_node_id: 'n2' },
+  graphSummary({ graphId: 'gr_build_v2', name: 'build', createdAt: '2026-07-18T00:00:00Z', effective: true, lifecycle: 'effective' }),
+  graphSummary({ graphId: 'gr_build_v1', name: 'build', createdAt: '2026-07-01T00:00:00Z', effective: false, lifecycle: 'superseded' }),
+  graphSummary({ graphId: 'gr_review_v1', name: 'review', createdAt: '2026-07-10T00:00:00Z', effective: true, lifecycle: 'effective' }),
 ];
 
 describe('GraphExplorerList', () => {
-  async function mount(graphs: unknown[] = GRAPHS, selectedGraphId: string | null = null) {
+  async function mount(graphs: readonly GraphSummary[] = GRAPHS, selectedGraphId: string | null = null) {
     await TestBed.configureTestingModule({
       imports: [GraphExplorerList],
       providers: [provideZonelessChangeDetection()],
@@ -67,7 +69,7 @@ describe('GraphExplorerList', () => {
     expect(rows[1].querySelector('[data-testid="graph-explorer-graph-id"]')?.textContent?.trim()).toBe('G-d_v1');
     // The shared relative-date component, not a raw ISO string.
     expect(rows[0].querySelector('[data-testid="graph-explorer-created-at"]')?.textContent?.trim()).not.toBe(
-      GRAPHS[0].created_at,
+      GRAPHS[0].createdAt,
     );
     expect(rows[0].querySelector('fleet-when[data-testid="graph-explorer-created-at"]')).toBeTruthy();
 
@@ -219,7 +221,7 @@ describe('GraphExplorerList', () => {
   });
 
   it('shows a retired badge for a retired, non-effective version (issue #101)', async () => {
-    const graphs = [
+    const graphs: GraphSummary[] = [
       { ...GRAPHS[0], effective: false, lifecycle: 'superseded' },
       { ...GRAPHS[1], effective: true, retired: false, lifecycle: 'effective' },
       GRAPHS[2],
@@ -246,7 +248,7 @@ describe('GraphExplorerList', () => {
   });
 
   it('filters retired versions out of a lineage by default, and brings them back with the filter', async () => {
-    const graphs = [
+    const graphs: GraphSummary[] = [
       { ...GRAPHS[0], effective: false, retired: true, lifecycle: 'retired' },
       { ...GRAPHS[1], effective: true, lifecycle: 'effective' },
       GRAPHS[2],

@@ -10,7 +10,7 @@
   text-anchor="end"
   data-testid="graph-diagram-node-badge"
 >
-  {{ node().executor.toUpperCase() }}
+  {{ executorLabel() }}
 </svg:text>
 @for (line of node().metaLines; track $index) {
   <svg:text class="node-meta" [attr.x]="node().x + 14" [attr.y]="metaLineY($index)">{{ line }}</svg:text>

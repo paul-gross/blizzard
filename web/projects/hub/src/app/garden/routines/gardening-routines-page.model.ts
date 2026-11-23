@@ -1,4 +1,5 @@
-import { asyncState, type AsyncStateQuery, type GraphSummaryView } from 'fleet';
+import { asyncState, type AsyncStateQuery } from 'fleet';
+import type { GraphSummary } from '../../graphs/graph.domain';
 import type { Routine } from '../core/routine.domain';
 import { isRoutineBlocked } from './gardening-effective-graph';
 import type { RoutineListRowVm } from './routine-list';
@@ -15,7 +16,7 @@ export function presentRoutineSlug(routineSlug: string | null, routines: readonl
  * blocked until it has resolved. */
 export function routineListRows(
   routines: readonly Routine[],
-  graphs: readonly GraphSummaryView[],
+  graphs: readonly GraphSummary[],
   graphsQuery: AsyncStateQuery,
 ): readonly RoutineListRowVm[] {
   const graphsUnread = asyncState(graphsQuery, false) !== 'ready';
