@@ -993,7 +993,6 @@ const LAYERED_PROJECTS = [
 const DOMAIN_BOUNDARY_EXEMPT = [
   'fleet/src/lib/chunk',
   'fleet/src/lib/host',
-  'fleet/src/lib/shell',
   'fleet/src/lib/transcripts',
   'hub/src/app/admin',
   'hub/src/app/admin/forges',
@@ -1012,9 +1011,7 @@ const DOMAIN_BOUNDARY_EXEMPT = [
   'hub/src/app/garden/routines',
   'hub/src/app/garden/runs',
   'hub/src/app/graphs',
-  'hub/src/app/login',
   'hub/src/app/runners',
-  'hub/src/app/shell',
   'runner/src/app/asks',
   'runner/src/app/board',
   'runner/src/app/core',
@@ -1034,6 +1031,12 @@ const DOMAIN_BOUNDARY_STRICT_SCOPES = [
   'hub/src/app/admin/config-revisions',
   'hub/src/app/admin/admin-shell',
   'fleet/src/lib/chunk/awaiting-human',
+  'hub/src/app/core/auth',
+  'hub/src/app/core/lens-note',
+  'hub/src/app/core/lensed-project',
+  'hub/src/app/core/project-lens-colors',
+  'hub/src/app/board/fleet-spend/fleet-spend.domain',
+  'hub/src/app/board/fleet-spend/fleet-spend.translate',
 ];
 
 /** The `DOMAIN_BOUNDARY_EXEMPT` unit of `rel`, a `projects/`-relative posix path.
