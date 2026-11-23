@@ -169,6 +169,7 @@ from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.sweeps.locks import SweepInProgress
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
 from blizzard.hub.layout import SIGNING_KEYS_PARTS, remove_retired_workdirs
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.process_root import HubProcess, open_store_backed, open_store_free
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, hub_key_provider, require_hub_key
@@ -179,7 +180,6 @@ from blizzard.hub.store.errors import HubStoreConnections, HubStoreError
 from blizzard.hub.store.forge_check_reads import UnreadableStore, read_forge_addresses
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
-from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.secret_store import SecretStore
@@ -469,7 +469,7 @@ def import_legacy_config(
     engine, connections = open_hub_store(config.db_url)
     try:
         with contextlib.closing(_open_offline_root(connections, config, environ)) as root:
-            open_tenants = root.resolver.get(HubScopedReads).tenants.open_tenants()
+            open_tenants = root.resolver.get(OpenTenants).every()
             scope = StoreScope(_legacy_import_tenant(open_tenants, named=tenant))
             tenants = root.tenants
             authoring = tenants.resolve(scope, ConfigAuthoring)
