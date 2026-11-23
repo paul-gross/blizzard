@@ -19,8 +19,9 @@ from blizzard.foundation.fact_kinds import (
 )
 from blizzard.foundation.hub_event_types import ChunkChangeCause
 from blizzard.hub.api.chunk_events import ChunkChanged, ChunkFrameState, load_frame_states
-from blizzard.hub.composition import TenantServices
+from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.domain.execution.facts import FactIngestResult, PushedFact
+from blizzard.hub.events.broker import EventBroker
 from blizzard.wire.facts import HostFactBatch, RunnerFact, RunnerFactBatch
 
 #: The ``chunk-changed`` cause for each chunk-scoped fact kind an ingest lands.
@@ -68,7 +69,8 @@ class IngestBroadcast:
     Built *before* the batch lands, so it carries each touched chunk's prior status, and
     published after, once the ack names which facts were freshly applied."""
 
-    services: TenantServices
+    frames: ChunkFrameLoader
+    events: EventBroker
     #: The pushing runner — the bearer token's, never a body field.
     runner_id: str
     batch: RunnerFactBatch
@@ -78,19 +80,27 @@ class IngestBroadcast:
 
     @classmethod
     def before_ingest(
-        cls, services: TenantServices, runner_id: str, batch: RunnerFactBatch, *, runner_name: str | None = None
+        cls,
+        frames: ChunkFrameLoader,
+        events: EventBroker,
+        runner_id: str,
+        batch: RunnerFactBatch,
+        *,
+        runner_name: str | None = None,
     ) -> IngestBroadcast:
         """One pre-mutation snapshot per distinct chunk, reused across the batch — this is the
         hot path."""
         chunk_ids = [chunk_id for fact in batch.facts if isinstance(chunk_id := fact.payload.get("chunk_id"), str)]
-        changes = ChunkChanged.before_many(services.chunk_frames, chunk_ids)
-        return cls(services=services, runner_id=runner_id, batch=batch, changes=changes, runner_name=runner_name)
+        changes = ChunkChanged.before_many(frames, chunk_ids)
+        return cls(
+            frames=frames, events=events, runner_id=runner_id, batch=batch, changes=changes, runner_name=runner_name
+        )
 
     def publish(self, result: FactIngestResult) -> None:
         applied = set(result.applied)
         applied_facts = [fact for fact in self.batch.facts if fact.seq in applied]
         chunk_ids = [cid for fact in applied_facts if (cid := self.chunk_arm_id(fact)) is not None]
-        states = load_frame_states(self.services.chunk_frames, chunk_ids)
+        states = load_frame_states(self.frames, chunk_ids)
         for fact in applied_facts:
             self._publish_one(fact, result.row_id_by_seq.get(fact.seq), states)
 
@@ -109,9 +119,7 @@ class IngestBroadcast:
         if arm is _RunnerArm.PAUSE:
             self._runner_pause(fact, row_id)
         elif arm is _RunnerArm.EXTERNAL_USAGE:
-            self.services.events.publish_runner_changed(
-                self.runner_id, kind="external-usage", runner_name=self.runner_name
-            )
+            self.events.publish_runner_changed(self.runner_id, kind="external-usage", runner_name=self.runner_name)
         elif arm is _RunnerArm.LOGGED:
             pass  # already published by EventLogService.record
         else:
@@ -124,7 +132,7 @@ class IngestBroadcast:
         default applied when the fact omits one."""
         by = fact.payload.get("by")
         reason = fact.payload.get("reason")
-        self.services.events.publish_runner_changed(
+        self.events.publish_runner_changed(
             self.runner_id,
             kind="locally-paused" if fact.kind == RUNNER_LOCALLY_PAUSED else "locally-resumed",
             runner_name=self.runner_name,
@@ -139,7 +147,7 @@ class IngestBroadcast:
         key = self._dedupe_key(fact, row_id, state)
         question_id = fact.payload.get("question_id")
         if fact.kind == QUESTION_ASKED and isinstance(question_id, str):
-            self.services.events.publish_question_asked(
+            self.events.publish_question_asked(
                 chunk_id, question_id, key=key, project_id=state.chunk.project_id if state.chunk is not None else None
             )
         change = self.changes[chunk_id]

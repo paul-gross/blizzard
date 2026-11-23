@@ -40,6 +40,7 @@ from blizzard.hub.api.analytics import (
 )
 from blizzard.hub.api.auth import RunnerPrincipal, require_runner_principal, require_runner_principal_even_if_retired
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant, tenant_bound
+from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.findings import finding_view
@@ -57,8 +58,11 @@ from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
 )
+from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.delivery.flows import Flow, describe_standing
+from blizzard.hub.domain.execution.apply import ApplyService
 from blizzard.hub.domain.execution.claim import (
     ClaimConflict,
     ClaimDeniedDependency,
@@ -68,16 +72,19 @@ from blizzard.hub.domain.execution.claim import (
     ClaimDeniedTerminal,
     ClaimDeniedUnregistered,
     ClaimDeniedVersionRefused,
+    ClaimService,
     RekeyDeniedNotHolder,
     RekeyDeniedTerminal,
 )
 from blizzard.hub.domain.execution.completion import MigrationTargets
+from blizzard.hub.domain.execution.decisions import DecisionService
 from blizzard.hub.domain.execution.envelope import Envelope, NoCurrentNode
-from blizzard.hub.domain.execution.release import ReleaseRefused
+from blizzard.hub.domain.execution.facts import FactIngestService
+from blizzard.hub.domain.execution.release import ReleaseRefused, ReleaseService
 from blizzard.hub.domain.execution.submissions import Completion
 from blizzard.hub.domain.garden.proposals.model import RoutineProposalState
 from blizzard.hub.domain.garden.run_context import RunContext
-from blizzard.hub.domain.graph.model import FollowLatest, Graph
+from blizzard.hub.domain.graph.model import FollowLatest, Graph, IReadGraphRepository
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.observability.transcripts import (
     LeaseSegmentsNotOwned,
@@ -219,6 +226,17 @@ class FleetRequest:
         )
 
 
+Records = FromDishka[IReadChunkRecordRepository]
+Graphs = FromDishka[IReadGraphRepository]
+Frames = FromDishka[ChunkFrameLoader]
+DecisionReads = FromDishka[IReadChunkDecisionsRepository]
+Claims = FromDishka[ClaimService]
+Releases = FromDishka[ReleaseService]
+Applies = FromDishka[ApplyService]
+Decisions = FromDishka[DecisionService]
+Facts = FromDishka[FactIngestService]
+
+
 def _demand_lease_owner(principal: RunnerPrincipal, owning_runner_id: str | None) -> None:
     """The lease-transcript read route's ownership gate, mapped — raises on a mismatch;
     :func:`refuse_foreign_lease_read` decides."""
@@ -236,10 +254,9 @@ def _demand_lease_owner(principal: RunnerPrincipal, owning_runner_id: str | None
 
 
 def _migration_targets(
-    services: TenantServices, chunk: Chunk, graph: Graph, completion: Completion, *, follow_latest_default: bool
+    graphs: IReadGraphRepository, chunk: Chunk, graph: Graph, completion: Completion, *, follow_latest_default: bool
 ) -> MigrationTargets:
     """Load the graphs one completion may move the chunk onto; :class:`MigrationTargets` decides."""
-    graphs = services.graphs
     cross_graph_name = MigrationTargets.cross_graph_name(graph, completion)
     intent = chunk.intended_migration
     intent_graph = graphs.get(intent.graph_id) if intent is not None else None
@@ -696,10 +713,16 @@ def _flow_namer(services: TenantServices, flows: Sequence[Flow]) -> Callable[[Fl
 
 
 @claim_router.post("/routes", response_model=RouteClaimResponse, status_code=status.HTTP_201_CREATED)
+@inject_sync
 def claim_route(
     claim: RouteClaim,
     request: Request,
-    services: Services,
+    claims: Claims,
+    records: Records,
+    graphs: Graphs,
+    frames: Frames,
+    projects: runners_api.Projects,
+    events: runners_api.Events,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of_even_if_retired)],
 ) -> object:
     """Claim a chunk; 403 if the runner is unregistered, retired, refused on version, or paused at the hub, 409 if
@@ -708,15 +731,15 @@ def claim_route(
     runner's stored capabilities, else the first node envelope."""
     runner_id = fleet.caller_id()
     instance = request.url.path
-    chunk = services.chunks.record.get(claim.chunk_id)
+    chunk = records.get(claim.chunk_id)
     if chunk is None:
         return problem_response(problems.chunk_not_found_problem(claim.chunk_id, instance=instance))
-    graph = services.graphs.get(chunk.graph_id)
+    graph = graphs.get(chunk.graph_id)
     if graph is None:
         return problem_response(problems.pinned_graph_missing_problem(instance=instance))
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk.chunk_id)
+    change = chunk_events.ChunkChanged.before(frames, chunk.chunk_id)
     try:
-        result = services.claim.claim(
+        result = claims.claim(
             chunk,
             graph,
             runner_id=runner_id,
@@ -746,7 +769,7 @@ def claim_route(
         return problem_response(problems.claim_dependency_problem(exc, instance=instance), status_code=409)
     except ClaimDeniedIncompatible as exc:
         project = (
-            services.projects.get(ProjectId(exc.project_id))
+            projects.get(ProjectId(exc.project_id))
             if exc.reason in (ClaimDenialReason.PROJECT, ClaimDenialReason.BINDING) and exc.project_id is not None
             else None
         )
@@ -759,7 +782,7 @@ def claim_route(
             problems.claim_conflict_problem(exc, chunk_id=claim.chunk_id, instance=instance), status_code=409
         )
     change.publish(cause="claimed", status="running", key=f"route_created:{result.route_id}")
-    services.events.publish_queue_changed()  # the claim removed the chunk from the ready queue
+    events.publish_queue_changed()  # the claim removed the chunk from the ready queue
     return RouteClaimResponse(
         chunk_id=result.route.chunk_id,
         runner_id=result.route.runner_id,
@@ -771,17 +794,19 @@ def claim_route(
 
 
 @router.post("/chunks/{chunk_id}/route-token", response_model=RouteTokenRekeyResponse)
+@inject_sync
 def rekey_route_token(
     chunk_id: str,
     http_request: Request,
-    services: Services,
+    claims: Claims,
+    routes: runners_api.Routes,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RouteTokenRekeyResponse | JSONResponse:
     """Rotate the chunk's live route capability token — the lost-plaintext recovery for a
     claim whose response was never read back. Confined to the live route's own runner; this route
     presents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting. 403
     when the route's runner is retired; 409 when the chunk has ended."""
-    route = services.chunks.route.route_of(chunk_id)
+    route = routes.route_of(chunk_id)
     if route is None:
         exc = RekeyDeniedNotHolder(chunk_id=chunk_id, holder=None)
         return problem_response(
@@ -795,7 +820,7 @@ def rekey_route_token(
             problems.rekey_not_holder_problem(exc, caller_id=fleet.caller_id(), instance=http_request.url.path),
         )
     try:
-        route_token = services.claim.rekey(route)
+        route_token = claims.rekey(route)
     except RekeyDeniedNotHolder as exc:
         return problem_response(
             problems.rekey_not_holder_problem(exc, caller_id=fleet.caller_id(), instance=http_request.url.path),
@@ -809,11 +834,15 @@ def rekey_route_token(
     "/chunks/{chunk_id}/release",
     response_model=ReleaseResponse,
 )
+@inject_sync
 def release_chunk(
     chunk_id: str,
     request: ReleaseRequest,
     http_request: Request,
-    services: Services,
+    releases: Releases,
+    records: Records,
+    frames: Frames,
+    events: runners_api.Events,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> object:
     """Give the chunk's route back at its holder's own request, so it re-derives ``ready`` at its
@@ -821,12 +850,12 @@ def release_chunk(
     ``epoch`` or is not running; 403 when the caller does not hold the route or its route token
     does not match; 404 for a chunk the tenant does not hold."""
     runner_id = fleet.caller_id()
-    chunk = services.chunks.record.get(chunk_id)
+    chunk = records.get(chunk_id)
     if chunk is None:
         return problem_response(problems.chunk_not_found_problem(chunk_id, instance=http_request.url.path))
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
+    change = chunk_events.ChunkChanged.before(frames, chunk_id)
     try:
-        released_id = services.release.release(
+        released_id = releases.release(
             chunk,
             runner_id=runner_id,
             epoch=request.epoch,
@@ -840,30 +869,36 @@ def release_chunk(
             return problem_response(problems.release_not_holder_problem(exc, instance=http_request.url.path))
         return problem_response(refusal)
     change.publish(cause="released", key=f"route_released:{released_id}", released_by=runner_id, reason=request.reason)
-    services.events.publish_queue_changed()  # a released chunk re-enters the ready queue
+    events.publish_queue_changed()  # a released chunk re-enters the ready queue
     return ReleaseResponse(chunk_id=chunk_id, released_id=released_id)
 
 
 @router.post("/chunks/{chunk_id}/completions", response_model=ApplyResponse)
+@inject_sync
 def submit_completion(
     chunk_id: str,
     submission: CompletionSubmission,
-    services: Services,
+    applies: Applies,
+    records: Records,
+    graphs: Graphs,
+    frames: Frames,
+    decision_reads: DecisionReads,
+    events: runners_api.Events,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> ApplyResponse:
     """Apply a node-step's completion atomically; reply carries the next envelope; 403 when the
     submitting runner is retired."""
     runner_id = fleet.caller_id()
-    chunk = services.chunks.record.get(chunk_id)
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    graph = services.graphs.get(chunk.graph_id)
+    graph = graphs.get(chunk.graph_id)
     if graph is None:
         raise ProblemHTTPException(problems.pinned_graph_missing_problem)
     completion = node_steps.completion_of(submission, runner_id=runner_id)
-    targets = _migration_targets(services, chunk, graph, completion, follow_latest_default=fleet.follow_latest)
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
-    result = services.apply.apply(
+    targets = _migration_targets(graphs, chunk, graph, completion, follow_latest_default=fleet.follow_latest)
+    change = chunk_events.ChunkChanged.before(frames, chunk_id)
+    result = applies.apply(
         chunk,
         graph,
         completion,
@@ -883,30 +918,36 @@ def submit_completion(
         key = None
     change.publish(cause=cause, key=key)
     if fresh_migration:
-        services.events.publish_queue_changed()  # a fresh migration re-queued the chunk under the target graph
+        events.publish_queue_changed()  # a fresh migration re-queued the chunk under the target graph
     # A completion landing on a human-judged node opens a graph gate: surface it.
-    chunks_api.OpenDecision(services, chunk_id).publish()
+    chunks_api.OpenDecision(decision_reads, records, events, chunk_id).publish()
     return node_steps.apply_response(result.outcome, detail=result.detail, envelope=result.envelope)
 
 
 @router.post("/chunks/{chunk_id}/decisions", response_model=ApplyResponse)
+@inject_sync
 def submit_decision(
     chunk_id: str,
     submission: DecisionSubmission,
-    services: Services,
+    decisions: Decisions,
+    records: Records,
+    graphs: Graphs,
+    frames: Frames,
+    decision_reads: DecisionReads,
+    events: runners_api.Events,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> ApplyResponse:
     """Runner-config gate: park the chunk on a decision in place of a transition; 403 when the
     submitting runner is retired."""
     runner_id = fleet.caller_id()
-    chunk = services.chunks.record.get(chunk_id)
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    graph = services.graphs.get(chunk.graph_id)
+    graph = graphs.get(chunk.graph_id)
     if graph is None:
         raise ProblemHTTPException(problems.pinned_graph_missing_problem)
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, chunk_id)
-    result = services.decisions.submit(
+    change = chunk_events.ChunkChanged.before(frames, chunk_id)
+    result = decisions.submit(
         chunk,
         graph,
         node_steps.gate_submission_of(submission, runner_id=runner_id),
@@ -916,22 +957,25 @@ def submit_decision(
     key = f"decisions:{result.decision_id}" if result.decision_id is not None else None
     change.publish(cause="decision-submitted", key=key)
     # The runner-config gate parked the chunk on an open decision: surface it.
-    chunks_api.OpenDecision(services, chunk_id).publish()
+    chunks_api.OpenDecision(decision_reads, records, events, chunk_id).publish()
     return node_steps.apply_response(result.outcome, detail=result.detail)
 
 
 @router.post("/events", response_model=RunnerFactAck)
+@inject_sync
 def ingest_runner_facts(
     batch: RunnerFactBatch,
-    services: Services,
+    facts: Facts,
+    frames: Frames,
+    events: runners_api.Events,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RunnerFactAck:
     """Land runner-minted facts — idempotent on the batch's per-runner ``seq`` high-water mark,
     with each freshly-applied fact re-broadcast on the SSE stream; 403 when the runner is retired."""
     runner_id = fleet.caller_id()
     runner_name = fleet.principal.runner_name
-    broadcast = IngestBroadcast.before_ingest(services, runner_id, batch, runner_name=runner_name)
-    result = services.facts.ingest(
+    broadcast = IngestBroadcast.before_ingest(frames, events, runner_id, batch, runner_name=runner_name)
+    result = facts.ingest(
         runner_id, pushed_facts(batch), route_token_mode=fleet.route_token_mode, runner_name=runner_name
     )
     broadcast.publish(result)

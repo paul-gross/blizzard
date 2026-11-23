@@ -25,6 +25,7 @@ from tests.support.credential_runners import seed_credential_runners
 from tests.support.hub_request_auth import bearer
 from tests.support.refusal_observation import RefusalObservation, coverage_mismatches, observe_refusal
 from tests.support.scaffolding import build_hub, close_tenant
+from tests.support.store_free_process import store_free
 
 
 @pytest.mark.parametrize("suffix", ["hub-advance", "completions", "decisions"])
@@ -64,10 +65,8 @@ def test_chunk_mutation_problem_variants_are_aggregated(
             client.post(path.format(chunk_id=chunk), json=body, headers=bearer(live)), 500, PinnedGraphMissingProblem
         )
 
-    services = hub.app.state.services
-    hub.app.state.services = None
-    observe(client.post(url, json=body, headers=bearer(live)), 503, HubStoreUnavailableProblem)
-    hub.app.state.services = services
+    with store_free(hub.app):
+        observe(client.post(url, json=body, headers=bearer(live)), 503, HubStoreUnavailableProblem)
 
     def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
         principal = RunnerAuth.of(request).demand()

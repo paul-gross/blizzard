@@ -16,7 +16,8 @@ from typing import Any
 
 import pytest
 
-from blizzard.hub.domain.execution.facts import FactIngestResult, PushedFact
+from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
+from blizzard.hub.domain.execution.facts import FactIngestResult, FactIngestService, PushedFact
 from blizzard.hub.domain.kernel.high_water import HighWaterConflict
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
@@ -167,7 +168,7 @@ def test_a_push_paused_after_its_mark_read_applies_no_seq_a_competing_push_appli
     hub = build_hub(tmp_path)
     chunk_id, node_id = _claim(hub)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    facts = hub.services.facts
+    facts = hub.default_adapter(FactIngestService)
     competed: list[FactIngestResult] = []
     since = hub.events.latest_id()
 
@@ -193,7 +194,7 @@ def test_a_push_resumes_from_the_mark_a_competing_push_left_below_its_own_seqs(
     hub = build_hub(tmp_path)
     chunk_id, node_id = _claim(hub)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    facts = hub.services.facts
+    facts = hub.default_adapter(FactIngestService)
     competed: list[FactIngestResult] = []
 
     _after_first_mark_read(
@@ -262,7 +263,7 @@ def test_a_conflict_on_a_mark_no_push_moved_surfaces_rather_than_retrying(
 
     monkeypatch.setattr(ChunkRouteStore, "set_runner_high_water", refuse)
     with pytest.raises(HighWaterConflict):
-        hub.services.facts.ingest("r1", _usage_facts(chunk_id, node_id, range(2, 3)))
+        hub.default_adapter(FactIngestService).ingest("r1", _usage_facts(chunk_id, node_id, range(2, 3)))
 
     assert attempts == [2]
     assert _stored_costs(hub, chunk_id) == []
@@ -336,7 +337,7 @@ def test_a_mid_batch_crash_persists_the_high_water_mark_at_the_last_applied_seq(
     chunk_id, node_id = _claim(hub)
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
-    real_record_usage = hub.services.facts.usage.record_usage
+    real_record_usage = hub.default_adapter(IWriteChunkUsageRepository).record_usage
     calls = {"n": 0}
 
     def _crash_on_second_call(chunk_id: str, **fields: Any) -> None:
@@ -346,7 +347,7 @@ def test_a_mid_batch_crash_persists_the_high_water_mark_at_the_last_applied_seq(
             # Seq 3's row is written; its mark advance is not.
             raise RuntimeError("simulated crash mid-batch")
 
-    hub.services.facts.usage.record_usage = _crash_on_second_call
+    hub.default_adapter(IWriteChunkUsageRepository).record_usage = _crash_on_second_call
     try:
         payloads = [_usage_payload(node_id, epoch=1, cost_usd=cost) for cost in (0.10, 0.20, 0.30)]
         for payload in payloads:
@@ -364,7 +365,7 @@ def test_a_mid_batch_crash_persists_the_high_water_mark_at_the_last_applied_seq(
                 },
             )
     finally:
-        hub.services.facts.usage.record_usage = real_record_usage
+        hub.default_adapter(IWriteChunkUsageRepository).record_usage = real_record_usage
 
     # Seq 2's write and mark committed together before the crash; seq 3's unit rolled back its
     # written row with it, and seq 4 was never attempted — so seq 2 replays as already_applied

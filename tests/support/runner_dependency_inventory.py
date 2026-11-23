@@ -67,11 +67,6 @@ GET /api/fleet/chunks/{chunk_id}/analytics/spend/nodes
         FLEET_REQUEST,
         """
 GET /api/fleet/runners/{runner_id}/decisions
-POST /api/fleet/chunks/{chunk_id}/completions
-POST /api/fleet/chunks/{chunk_id}/decisions
-POST /api/fleet/chunks/{chunk_id}/release
-POST /api/fleet/chunks/{chunk_id}/route-token
-POST /api/fleet/events
 POST /api/fleet/transcripts
 """,
     ),
@@ -79,6 +74,11 @@ POST /api/fleet/transcripts
         FLEET_REQUEST - {"blizzard.hub.api.deps.tenant_services", HUB},
         """
 GET /api/fleet/runners/{runner_id}
+POST /api/fleet/chunks/{chunk_id}/completions
+POST /api/fleet/chunks/{chunk_id}/decisions
+POST /api/fleet/chunks/{chunk_id}/release
+POST /api/fleet/chunks/{chunk_id}/route-token
+POST /api/fleet/events
 POST /api/fleet/runners
 """,
     ),
@@ -102,7 +102,7 @@ POST /api/fleet/host/runners/{runner_id}/retire
 """,
     ),
     (
-        TENANT
+        TENANT - {"blizzard.hub.api.deps.tenant_services", HUB}
         | {
             "blizzard.hub.api.auth.require_runner_principal_even_if_retired",
             "blizzard.hub.api.fleet.FleetRequest.of_even_if_retired",

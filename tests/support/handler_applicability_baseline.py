@@ -101,6 +101,12 @@ DIRECT_ENDPOINTS = {
 }
 #: The operations whose only route on the hub-level services was the tenant resolution, which now takes none.
 NO_HUB_SERVICES = {
+    ("POST", "/api/fleet/chunks/{chunk_id}/completions"),
+    ("POST", "/api/fleet/chunks/{chunk_id}/decisions"),
+    ("POST", "/api/fleet/chunks/{chunk_id}/release"),
+    ("POST", "/api/fleet/chunks/{chunk_id}/route-token"),
+    ("POST", "/api/fleet/events"),
+    ("POST", "/api/fleet/routes"),
     ("GET", "/api/fleet/system-artifacts"),
     ("GET", "/api/fleet/system-artifacts/{name}"),
     ("GET", "/api/fleet/host"),

@@ -38,6 +38,7 @@ from blizzard.wire.tenant import TenantCredentialMismatchProblem, TenantNotFound
 from tests.support.hub_request_auth import bearer
 from tests.support.refusal_observation import RefusalObservation, coverage_mismatches, observe_refusal
 from tests.support.scaffolding import build_hub, close_tenant, ingest, seed_runner
+from tests.support.store_free_process import store_free
 
 
 def test_claim_problem_variants_are_aggregated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -127,10 +128,8 @@ def test_claim_problem_variants_are_aggregated(tmp_path: Path, monkeypatch: pyte
         400,
         TenantCredentialMismatchProblem,
     )
-    services = hub.app.state.services
-    hub.app.state.services = None
-    observe(client.post(path, json={}, headers=bearer(live)), 503, HubStoreUnavailableProblem)
-    hub.app.state.services = services
+    with store_free(hub.app):
+        observe(client.post(path, json={}, headers=bearer(live)), 503, HubStoreUnavailableProblem)
 
     def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
         principal = RunnerAuth.of(request).demand()

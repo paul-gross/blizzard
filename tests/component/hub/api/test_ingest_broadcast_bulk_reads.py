@@ -13,7 +13,10 @@ from typing import Any
 
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.api.chunk_events import ChunkChanged
+from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast, pushed_facts
+from blizzard.hub.domain.execution.facts import FactIngestService
+from blizzard.hub.events.broker import EventBroker
 from blizzard.wire.facts import RunnerFact, RunnerFactBatch
 from tests.support.scaffolding import HubHarness, build_hub, capture_statements, count_queries, emitted_events, ingest
 
@@ -91,14 +94,16 @@ def test_before_ingest_and_publish_query_counts_are_independent_of_batch_size(tm
     def before(hub: HubHarness, ids: list[str], key: str) -> None:
         batch = _scaled_batch(ids)
         batches[key] = batch
-        broadcasts[key] = IngestBroadcast.before_ingest(hub.services, "counter", batch)
+        broadcasts[key] = IngestBroadcast.before_ingest(
+            hub.default_adapter(ChunkFrameLoader), hub.default_adapter(EventBroker), "counter", batch
+        )
 
     small_before_count = count_queries(small.engine, lambda: before(small, small_ids, "small"))
     large_before_count = count_queries(large.engine, lambda: before(large, large_ids, "large"))
     assert small_before_count == large_before_count
 
-    small_result = small.services.facts.ingest("counter", pushed_facts(batches["small"]))
-    large_result = large.services.facts.ingest("counter", pushed_facts(batches["large"]))
+    small_result = small.default_adapter(FactIngestService).ingest("counter", pushed_facts(batches["small"]))
+    large_result = large.default_adapter(FactIngestService).ingest("counter", pushed_facts(batches["large"]))
     assert len(small_result.applied) == 4
     assert len(large_result.applied) == 12
 

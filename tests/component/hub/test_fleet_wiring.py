@@ -8,7 +8,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from blizzard.hub.api.version_window import HubVersionWindow
+from blizzard.hub.domain.execution.apply import ApplyService
+from blizzard.hub.domain.execution.claim import ClaimService
+from blizzard.hub.domain.execution.decisions import DecisionService
 from blizzard.hub.domain.execution.detach import DetachService
+from blizzard.hub.domain.execution.facts import FactIngestService
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.execution.host_facts import HostFactIngestService
 from blizzard.hub.domain.execution.host_retirement import HostRetirementService
@@ -38,7 +42,7 @@ def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
             scope.get(IReadRunnerRegistry),
             scope.get(IWriteRunnerRegistry),
             services.registry,
-            services.claim.registry,
+            scope.get(ClaimService).registry,
             fleet.registry,
         ],
         "host registry": [
@@ -50,10 +54,10 @@ def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
         "retired-runner guard": [
             scope.get(RetiredRunnerGuard),
             fleet._retired,  # pyright: ignore[reportPrivateUsage]
-            services.claim._retired,  # pyright: ignore[reportPrivateUsage]
-            services.apply._retired,  # pyright: ignore[reportPrivateUsage]
-            services.decisions._retired,  # pyright: ignore[reportPrivateUsage]
-            services.facts._retired,  # pyright: ignore[reportPrivateUsage]
+            scope.get(ClaimService)._retired,  # pyright: ignore[reportPrivateUsage]
+            scope.get(ApplyService)._retired,  # pyright: ignore[reportPrivateUsage]
+            scope.get(DecisionService)._retired,  # pyright: ignore[reportPrivateUsage]
+            scope.get(FactIngestService)._retired,  # pyright: ignore[reportPrivateUsage]
             services.transcript_ingest._retired,  # pyright: ignore[reportPrivateUsage]
         ],
         "detach": [
@@ -63,7 +67,7 @@ def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
         ],
         "fleet": [
             fleet,
-            services.facts._fleet,  # pyright: ignore[reportPrivateUsage]
+            scope.get(FactIngestService)._fleet,  # pyright: ignore[reportPrivateUsage]
             scope.get(HostRetirementService)._fleet,  # pyright: ignore[reportPrivateUsage]
         ],
         "served projects": [scope.get(IServedProjects), scope.get(BulkProjectResolver)],

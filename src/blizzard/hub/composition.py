@@ -72,11 +72,18 @@ from blizzard.hub.domain.chunk.dependencies import DependencyService
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ingest import IngestService
 from blizzard.hub.domain.chunk.model import WorkRefLabel
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
+from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository, IWriteChunkDecisionsRepository
+from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository, IWriteChunkQuestionsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository, IWriteChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
+from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import IReadConfigChanges
@@ -88,14 +95,9 @@ from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.delivery.lines import FlowLineFactory
 from blizzard.hub.domain.delivery.ports.flows import IReadFlows, IReadFlowViews
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
-from blizzard.hub.domain.execution.apply import ApplyService
-from blizzard.hub.domain.execution.claim import ClaimService
-from blizzard.hub.domain.execution.decisions import DecisionService, RequeueService
+from blizzard.hub.domain.execution.apply import IHubStepWake
+from blizzard.hub.domain.execution.decisions import RequeueService
 from blizzard.hub.domain.execution.detach import DetachService
-from blizzard.hub.domain.execution.facts import FactIngestService
-from blizzard.hub.domain.execution.fleet import FleetService
-from blizzard.hub.domain.execution.questions import QuestionService
-from blizzard.hub.domain.execution.release import ReleaseService
 from blizzard.hub.domain.garden.delivery.materialize import GardenDelivery
 from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
 from blizzard.hub.domain.garden.delivery.stage_check import GardenStageCheck
@@ -296,13 +298,9 @@ class TenantServices:
     ingest: IngestService
     promote: PromoteService
     demote: DemoteService
-    claim: ClaimService
-    apply: ApplyService
-    decisions: DecisionService
     requeue: RequeueService
     restart: RestartService
     detach: DetachService
-    release: ReleaseService
     pause: PauseService
     stop: StopService
     complete: CompleteService
@@ -311,7 +309,6 @@ class TenantServices:
     dependencies: DependencyService
     #: The unacquired-chunk delete/withdraw service.
     delete: DeleteService
-    facts: FactIngestService
     #: The transcript lane's ingest policy — the write side; ``transcripts``
     #: above is the same store's read Protocol.
     transcript_ingest: TranscriptIngestService
@@ -319,7 +316,6 @@ class TenantServices:
     default_graph: DefaultGraphService
     #: The YAML binding of the config codec a graph definition is decoded and stored through.
     graph_yaml: IConfigCodec
-    questions: QuestionService
     queue: QueueService
     group: GroupService
     #: The fleet registry's read Protocol — the same store instance as the fleet service's writes.
@@ -948,13 +944,69 @@ def chunk_work_refs_leaf(chunks: ChunkStores) -> IReadChunkWorkRefsRepository:
     return chunks.work_refs
 
 
+def chunk_artifacts_leaf(chunks: ChunkStores) -> IReadChunkArtifactsRepository:
+    """The tenant's chunk-artifacts reads, projected from its chunk stores — a legacy leaf the chunk operations
+    area owns until it adopts it."""
+    return chunks.artifacts
+
+
+def chunk_dependencies_leaf(chunks: ChunkStores) -> IReadChunkDependenciesRepository:
+    """The tenant's chunk-dependencies reads, projected from its chunk stores — a legacy leaf the chunk operations
+    area owns until it adopts it."""
+    return chunks.dependencies
+
+
+def chunk_movement_writes_leaf(chunks: ChunkStores) -> IWriteChunkMovementRepository:
+    """The tenant's chunk-movement writes, projected from its chunk stores — a legacy leaf the chunk operations
+    area owns until it adopts it."""
+    return chunks.movement
+
+
+def chunk_decisions_writes_leaf(chunks: ChunkStores) -> IWriteChunkDecisionsRepository:
+    """The tenant's chunk-decisions writes, projected from its chunk stores — a legacy leaf the chunk operations
+    area owns until it adopts it."""
+    return chunks.decisions
+
+
+def chunk_decisions_leaf(chunks: ChunkStores) -> IReadChunkDecisionsRepository:
+    """The tenant's chunk-decisions reads, projected from its chunk stores — a legacy leaf the chunk operations
+    area owns until it adopts it."""
+    return chunks.decisions
+
+
+def chunk_escalations_writes_leaf(chunks: ChunkStores) -> IWriteChunkEscalationsRepository:
+    """The tenant's chunk-escalations writes, projected from its chunk stores — a legacy leaf the chunk operations
+    area owns until it adopts it."""
+    return chunks.escalations
+
+
+def chunk_questions_writes_leaf(chunks: ChunkStores) -> IWriteChunkQuestionsRepository:
+    """The tenant's chunk-questions writes, projected from its chunk stores — a legacy leaf the chunk operations
+    area owns until it adopts it."""
+    return chunks.questions
+
+
+def chunk_questions_leaf(chunks: ChunkStores) -> IReadChunkQuestionsRepository:
+    """The tenant's chunk-questions reads, projected from its chunk stores — a legacy leaf the chunk operations
+    area owns until it adopts it."""
+    return chunks.questions
+
+
+def chunk_usage_writes_leaf(chunks: ChunkStores) -> IWriteChunkUsageRepository:
+    """The tenant's chunk-usage writes, projected from its chunk stores — a legacy leaf the chunk operations
+    area owns until it adopts it."""
+    return chunks.usage
+
+
 def register_legacy(registry: LegacyRegistry) -> None:
     """Declare the legacy bridge's leaves, each built as the legacy builder built it, over the store's adapters: the
     process services a request's admission reads before its tenant is known, and the transitional ports the adapters
     answer to until their areas adopt them."""
     registry.leaf(open_tenants_leaf, lifetime=Lifetime.PROCESS)
     registry.leaf(action_loop_leaf, lifetime=Lifetime.PROCESS)
-    registry.leaf(step_wake_leaf, lifetime=Lifetime.PROCESS)
+    step_wake = registry.leaf(step_wake_leaf, lifetime=Lifetime.PROCESS)
+    # The wake a completion's apply names by the domain's own Protocol.
+    registry.alias(port(IHubStepWake), step_wake)
     hub_events = store_wiring.register_process(registry)
     registry.alias(port(IReadHubEventLog), hub_events)
     tenant = store_wiring.register_tenant(registry)
@@ -975,6 +1027,15 @@ def register_legacy(registry: LegacyRegistry) -> None:
         chunk_record_leaf,
         chunk_route_leaf,
         chunk_route_writes_leaf,
+        chunk_artifacts_leaf,
+        chunk_dependencies_leaf,
+        chunk_movement_writes_leaf,
+        chunk_decisions_writes_leaf,
+        chunk_decisions_leaf,
+        chunk_escalations_writes_leaf,
+        chunk_questions_writes_leaf,
+        chunk_questions_leaf,
+        chunk_usage_writes_leaf,
         chunk_work_refs_leaf,
         delete_leaf,
         work_item_edits_leaf,
@@ -999,6 +1060,15 @@ _LEGACY_TENANT_KEYS: tuple[type[Any], ...] = (
     IReadChunkRecordRepository,
     IReadChunkRouteRepository,
     IWriteChunkRouteRepository,
+    IReadChunkArtifactsRepository,
+    IReadChunkDependenciesRepository,
+    IWriteChunkMovementRepository,
+    IWriteChunkDecisionsRepository,
+    IReadChunkDecisionsRepository,
+    IWriteChunkEscalationsRepository,
+    IWriteChunkQuestionsRepository,
+    IReadChunkQuestionsRepository,
+    IWriteChunkUsageRepository,
     IReadChunkWorkRefsRepository,
     DeleteService,
     WorkItemEditService,
@@ -1013,6 +1083,7 @@ def register_legacy_absent(registry: LegacyRegistry) -> None:
         OpenTenants,
         ActionLoop,
         StepWake,
+        IHubStepWake,
         IReadHubEventLog,
     ):
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
@@ -1163,7 +1234,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     detach = tenant.get(DetachService)
     # One id-keyed retired-runner refusal, shared by every runner-contact operation.
     retired = tenant.get(RetiredRunnerGuard)
-    fleet = tenant.get(FleetService)
     graph_mint = tenant.get(GraphMintService)
     default_graph = tenant.get(DefaultGraphService)
     default_graph_yaml = packaged_default_yaml()
@@ -1311,49 +1381,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         demote=DemoteService(
             record=chunk_record, queue=chunk_queue, facts=chunk_facts, transactions=stores.transactions, clock=clock
         ),
-        claim=ClaimService(
-            route=chunk_route,
-            artifacts=chunk_artifacts,
-            graphs=graph_store,
-            registry=registry_store,
-            hosts=host_store,
-            retired=retired,
-            transactions=stores.transactions,
-            records=chunk_record,
-            facts=chunk_facts,
-            dependencies=chunk_dependencies,
-            targets=chunk_target_capture,
-            clock=clock,
-            label=work_ref_label,
-        ),
-        apply=ApplyService(
-            facts=chunk_facts,
-            movement=chunk_movement,
-            decisions=chunk_decisions,
-            escalations=chunk_escalations,
-            transactions=stores.transactions,
-            route=chunk_route,
-            artifacts=chunk_artifacts,
-            retired=retired,
-            clock=clock,
-            hub_step_wake=parts.step_wake,
-            label=work_ref_label,
-            closer_available=lambda source: work_sources.closer(source) is not None,
-            events=event_log,
-        ),
-        decisions=DecisionService(
-            facts=chunk_facts,
-            route=chunk_route,
-            decisions=chunk_decisions,
-            transactions=stores.transactions,
-            retired=retired,
-            clock=clock,
-            closer_available=lambda source: work_sources.closer(source) is not None,
-            events=event_log,
-        ),
-        requeue=RequeueService(
-            movement=chunk_movement, route=chunk_route, facts=chunk_facts, transactions=stores.transactions, clock=clock
-        ),
+        requeue=tenant.get(RequeueService),
         restart=RestartService(
             movement=chunk_movement,
             submissions=stores.flows,
@@ -1367,7 +1395,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             events=event_log,
         ),
         detach=detach,
-        release=ReleaseService(route=chunk_route, facts=chunk_facts, transactions=stores.transactions, clock=clock),
         pause=PauseService(lifecycle=chunk_lifecycle, facts=chunk_facts, transactions=stores.transactions, clock=clock),
         stop=StopService(
             lifecycle=chunk_lifecycle,
@@ -1401,19 +1428,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             clock=clock,
         ),
         delete=stores.delete,
-        facts=FactIngestService(
-            facts=chunk_facts,
-            chunks=chunk_record,
-            route=chunk_route,
-            escalations=chunk_escalations,
-            questions=chunk_questions,
-            usage=chunk_usage,
-            events=event_log,
-            fleet=fleet,
-            retired=retired,
-            transactions=stores.transactions,
-            clock=clock,
-        ),
         transcript_ingest=TranscriptIngestService(
             store=transcript_store,
             transactions=stores.transactions,
@@ -1424,9 +1438,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         graph_mint=graph_mint,
         default_graph=default_graph,
         graph_yaml=graph_yaml,
-        questions=QuestionService(
-            questions=chunk_questions, facts=chunk_facts, transactions=stores.transactions, clock=clock
-        ),
         queue=QueueService(
             queue=chunk_queue,
             record=chunk_record,

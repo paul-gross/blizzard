@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, status
 
 from blizzard.auth_core import Permission
@@ -17,6 +18,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events, problems, problems_chunks
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
@@ -24,6 +26,9 @@ from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.chunk.model import DecisionClosed, GateDecision, NotADecisionChoice
+from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
+from blizzard.hub.domain.execution.decisions import DecisionService
+from blizzard.hub.events.broker import EventBroker
 from blizzard.wire.completion import CheckResult
 from blizzard.wire.decision import (
     DecisionChoiceModel,
@@ -95,31 +100,35 @@ def list_decisions(services: Services, project: QueryProject) -> OpenDecisionsRe
         }
     },
 )
+@inject_sync
 def resolve_decision(
     decision_id: str,
     request: DecisionResolutionRequest,
-    services: Services,
+    decisions: FromDishka[DecisionService],
+    decision_reads: FromDishka[IReadChunkDecisionsRepository],
+    frames: FromDishka[ChunkFrameLoader],
+    events: FromDishka[EventBroker],
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GATE_RESOLVE))],
 ) -> object:
     """Resolve an open decision, first-write-wins CAS.
 
     ``resolved_by`` is taken from the authenticated session identity, never the request
     body's ``resolved_by`` field — a spoofed value there is silently ignored."""
-    pre_decision = services.chunks.decisions.get_decision(decision_id)
+    pre_decision = decision_reads.get_decision(decision_id)
     if pre_decision is None:
         raise ProblemHTTPException(
             partial(problems_chunks.decision_not_found_problem, f"unknown decision {decision_id}")
         )
-    change = chunk_events.ChunkChanged.before(services.chunk_frames, pre_decision.chunk_id)
+    change = chunk_events.ChunkChanged.before(frames, pre_decision.chunk_id)
     try:
-        result = services.decisions.resolve(
+        result = decisions.resolve(
             pre_decision, choice=request.choice, resolved_by=identity.username, note=request.note
         )
     except NotADecisionChoice as exc:
         raise ProblemHTTPException(partial(problems_chunks.not_a_decision_choice_problem, str(exc))) from exc
     except DecisionClosed as exc:
         raise ProblemHTTPException(partial(problems_chunks.decision_closed_problem, str(exc))) from exc
-    decision = services.chunks.decisions.get_decision(decision_id)
+    decision = decision_reads.get_decision(decision_id)
     if not result.resolved:
         raise ProblemHTTPException(
             partial(
@@ -132,16 +141,16 @@ def resolve_decision(
         )
     if decision is not None:
         key = f"decision_resolutions:{decision_id}"
-        state = chunk_events.ChunkFrameState.load(services.chunk_frames, decision.chunk_id)
-        services.events.publish_decision_resolved(
+        state = chunk_events.ChunkFrameState.load(frames, decision.chunk_id)
+        events.publish_decision_resolved(
             decision.chunk_id,
             decision_id,
             key=key,
             project_id=state.chunk.project_id if state.chunk is not None else None,
         )
-        chunk_events.ChunkChanged.of(
-            services.chunk_frames, decision.chunk_id, prev_status=change.prev_status
-        ).publish_from(state, cause="decision-resolved", status="running", key=key)
+        chunk_events.ChunkChanged.of(frames, decision.chunk_id, prev_status=change.prev_status).publish_from(
+            state, cause="decision-resolved", status="running", key=key
+        )
     assert result.resolved and result.resolved_by
     return DecisionResolutionResponse(
         decision_id=decision_id,
