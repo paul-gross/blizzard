@@ -100,7 +100,18 @@ DIRECT_ENDPOINTS = {
     ("POST", "/api/fleet/chunks/{chunk_id}/completions"): ("submit_completion", PROBLEM_EXCEPTION),
 }
 #: The operations whose only route on the hub-level services was the tenant resolution, which now takes none.
-NO_HUB_SERVICES = {("GET", "/api/fleet/system-artifacts"), ("GET", "/api/fleet/system-artifacts/{name}")}
+NO_HUB_SERVICES = {
+    ("GET", "/api/fleet/system-artifacts"),
+    ("GET", "/api/fleet/system-artifacts/{name}"),
+    ("GET", "/api/fleet/host"),
+    ("GET", "/api/fleet/runners/{runner_id}"),
+    ("POST", "/api/fleet/host"),
+    ("POST", "/api/fleet/host/events"),
+    ("POST", "/api/fleet/host/runners"),
+    ("POST", "/api/fleet/host/runners/{runner_id}/retire"),
+    ("POST", "/api/fleet/runners"),
+    ("POST", "/api/hosts"),
+}
 DIRECT_DISPATCH: dict[tuple[str, str], dict[str, set[str]]] = {
     operation: {
         HTTP_HANDLER: (set() if operation in NO_HUB_SERVICES else {HUB_SERVICES})
