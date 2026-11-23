@@ -1,4 +1,4 @@
-import type { ProjectView } from 'fleet/shell';
+import type { Project } from '../../core/project.domain';
 
 /** One choice the project lens offers: All (`slug` null) or one project. */
 export interface LensChoice {
@@ -9,7 +9,7 @@ export interface LensChoice {
 }
 
 /** The lens's choices: All, then `projects` by name. */
-export function lensChoices(projects: readonly ProjectView[]): readonly LensChoice[] {
+export function lensChoices(projects: readonly Project[]): readonly LensChoice[] {
   return [
     { slug: null, label: 'All', color: null },
     ...[...projects]

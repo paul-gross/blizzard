@@ -1,10 +1,10 @@
-import type { runnerApi } from 'fleet/runner-shell';
-
+import type { HostRunner } from '../../core/host-runner.domain';
+import type { PauseState } from '../../core/pause-state.domain';
 import type { PanelProject } from '../../core/panel-reads.model';
 
 /** A runner's brake in operator words — which side set it, and the local brake's reason
  * when it carries one — or `null` while neither brake is set. */
-export function brakeLabel(pause: runnerApi.PauseStateView | null | undefined): string | null {
+export function brakeLabel(pause: PauseState | null | undefined): string | null {
   if (!pause || (!pause.local && !pause.hub)) return null;
   if (pause.local && pause.hub) return 'paused here and by hub';
   if (pause.hub) return 'paused by hub';
@@ -37,7 +37,7 @@ const ALL: FilterChoice = { value: null, label: 'All', title: 'every runner', di
  * not yet landed.
  */
 export function runnerFilterChoices(
-  runners: readonly runnerApi.HostRunnerView[],
+  runners: readonly HostRunner[],
   current: string | null = null,
   pending = false,
 ): readonly FilterChoice[] {

@@ -1,7 +1,7 @@
 import { type SseStatus } from 'fleet';
-import { type MeResponse, type MeTenant, errorMessage } from 'fleet/shell';
+import { errorMessage } from 'fleet/shell';
 
-import { type TenantResolution } from '../core/auth/tenant-context';
+import type { Membership, Session, TenantResolution } from '../core/auth/session.domain';
 import { viewOf } from '../core/project-lens';
 
 /** Before initial navigation settles, the address bar is the only completed route. */
@@ -29,10 +29,10 @@ export function authState(isPending: boolean, tenancy: TenantResolution | null):
 
 /** The tenant `resolve` settles from an identity's memberships, `null` without an identity. */
 export function tenancyOf(
-  me: MeResponse | null,
-  resolve: (tenants: readonly MeTenant[]) => TenantResolution,
+  me: Session | null,
+  resolve: (tenants: readonly Membership[]) => TenantResolution,
 ): TenantResolution | null {
-  return me === null ? null : resolve(me.tenants ?? []);
+  return me === null ? null : resolve(me.tenants);
 }
 
 /** The selected tenant's name, empty while none is selected. */

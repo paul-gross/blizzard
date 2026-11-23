@@ -2,8 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { ProviderSummary } from 'fleet';
-import { type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
+import { providerSummary, type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 
 import { InvitePage } from './invite-page';
 
@@ -11,7 +10,7 @@ describe('InvitePage', () => {
   let stub: RequestClientStub;
   afterEach(() => stub.restore());
 
-  async function mount(providers: ProviderSummary[], token = 'tok_invited') {
+  async function mount(providers: ReturnType<typeof providerSummary>[], token = 'tok_invited') {
     stub = stubHubClient({ 'GET /api/auth/providers': () => providers });
     await TestBed.configureTestingModule({
       imports: [InvitePage],
@@ -28,8 +27,8 @@ describe('InvitePage', () => {
 
   it('starts each provider sign-in carrying the invitation token', async () => {
     const el = await mount([
-      { name: 'github', display_name: 'GitHub', type: 'github' },
-      { name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' },
+      providerSummary({ name: 'github', display_name: 'GitHub', type: 'github' }),
+      providerSummary({ name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' }),
     ]);
 
     expect(el.querySelector('[data-testid="login-provider-github"]')?.getAttribute('href')).toBe(
@@ -41,7 +40,7 @@ describe('InvitePage', () => {
   });
 
   it('tells the person which account accepts the invitation', async () => {
-    const el = await mount([{ name: 'github', display_name: 'GitHub', type: 'github' }]);
+    const el = await mount([providerSummary({ name: 'github', display_name: 'GitHub', type: 'github' })]);
 
     expect(el.querySelector('[data-testid="invite-page"]')?.textContent).toContain("You've been invited");
     expect(el.querySelector('[data-testid="invite-page-notice"]')?.textContent).toContain(

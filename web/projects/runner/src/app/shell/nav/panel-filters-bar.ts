@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 
 import { PanelFilters } from '../../core/panel-filters';
 import { injectPanelProjects } from '../../core/panel-reads';
-import { injectHostRunnersQuery } from '../../core/host.query';
+import { injectHostRunnerDomainsQuery } from '../../core/host.query';
 import { FilterChips } from './filter-chips';
 import { projectFilterChoices, runnerFilterChoices } from './panel-filters.model';
 
@@ -26,7 +26,7 @@ export class PanelFiltersBar {
   readonly variant = input<'inline' | 'mobile'>('inline');
 
   protected readonly filters = inject(PanelFilters);
-  private readonly runnersQuery = injectHostRunnersQuery();
+  private readonly runnersQuery = injectHostRunnerDomainsQuery();
   private readonly projects = injectPanelProjects();
 
   protected readonly runnerChoices = computed(() => runnerFilterChoices(this.runnersQuery.data() ?? [], this.filters.runner(), this.runnersQuery.isPending()));

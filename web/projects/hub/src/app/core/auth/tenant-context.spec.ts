@@ -6,125 +6,16 @@ import {
 } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import type { MeResponse, MeTenant } from 'fleet/shell';
+import { membership } from './session.builders';
 import {
   LAST_TENANT_KEY,
   PAGE_RELOAD,
   TAB_TENANT_KEY,
   TenantContext,
-  inSelectedTenant,
-  resolveTenant,
 } from './tenant-context';
 
-const ACME: MeTenant = {
-  tenant_id: 'ten_a',
-  name: 'Acme',
-  role: 'admin',
-  permissions: ['fleet:view', 'user:manage'],
-};
-const BETA: MeTenant = {
-  tenant_id: 'ten_b',
-  name: 'Beta',
-  role: 'guest',
-  permissions: ['fleet:view'],
-};
-
-describe('resolveTenant', () => {
-  it('has nothing to enter without a membership', () => {
-    expect(resolveTenant([], 'ten_a', 'ten_a')).toEqual({ kind: 'none' });
-  });
-
-  it('selects the only membership whatever the tab or the browser remembered', () => {
-    expect(resolveTenant([ACME], null, null)).toEqual({
-      kind: 'selected',
-      tenant: ACME,
-      tenants: [ACME],
-    });
-    expect(resolveTenant([ACME], 'ten_gone', 'ten_gone')).toEqual({
-      kind: 'selected',
-      tenant: ACME,
-      tenants: [ACME],
-    });
-  });
-
-  it("keeps the tab's tenant while it is still a membership, ahead of the browser's last choice", () => {
-    expect(resolveTenant([ACME, BETA], 'ten_b', 'ten_a')).toMatchObject({
-      kind: 'selected',
-      tenant: BETA,
-    });
-  });
-
-  it("falls back to the browser's last choice while it is still a membership", () => {
-    expect(resolveTenant([ACME, BETA], 'ten_gone', 'ten_a')).toMatchObject({
-      kind: 'selected',
-      tenant: ACME,
-    });
-    expect(resolveTenant([ACME, BETA], null, 'ten_b')).toMatchObject({
-      kind: 'selected',
-      tenant: BETA,
-    });
-  });
-
-  it('leaves the choice to the person when neither is a membership any more', () => {
-    expect(resolveTenant([ACME, BETA], 'ten_gone', 'ten_gone')).toEqual({
-      kind: 'choose',
-      tenants: [ACME, BETA],
-    });
-    expect(resolveTenant([ACME, BETA], null, null)).toEqual({
-      kind: 'choose',
-      tenants: [ACME, BETA],
-    });
-  });
-});
-
-describe('inSelectedTenant', () => {
-  const me: MeResponse = {
-    user_id: 'usr_1',
-    username: 'twohats',
-    display_name: 'Two Hats',
-    role: null,
-    permissions: [],
-    tenants: [ACME, BETA],
-    hub_admin: false,
-    assignable_roles: [],
-  };
-
-  it("reads the selected membership's role and permissions", () => {
-    expect(
-      inSelectedTenant(me, {
-        kind: 'selected',
-        tenant: BETA,
-        tenants: [ACME, BETA],
-      }),
-    ).toEqual({
-      ...me,
-      role: 'guest',
-      permissions: ['fleet:view'],
-    });
-  });
-
-  it("keeps the hub's answer when it resolved the tenant the request named", () => {
-    const resolved: MeResponse = {
-      ...me,
-      role: 'admin',
-      permissions: ['fleet:view', 'user:manage'],
-    };
-    expect(
-      inSelectedTenant(resolved, {
-        kind: 'selected',
-        tenant: ACME,
-        tenants: [ACME, BETA],
-      }),
-    ).toBe(resolved);
-  });
-
-  it("keeps the hub's answer while no membership is selected", () => {
-    expect(
-      inSelectedTenant(me, { kind: 'choose', tenants: [ACME, BETA] }),
-    ).toBe(me);
-    expect(inSelectedTenant(me, { kind: 'none' })).toBe(me);
-  });
-});
+const ACME = membership({ tenant_id: 'ten_a', name: 'Acme', permissions: ['fleet:view', 'user:manage'] });
+const BETA = membership({ tenant_id: 'ten_b', name: 'Beta', permissions: ['fleet:view'] });
 
 describe('TenantContext', () => {
   let queryClient: QueryClient;

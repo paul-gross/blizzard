@@ -1,5 +1,5 @@
 import { computed, type Signal } from '@angular/core';
-import { injectQuery } from '@tanstack/angular-query-experimental';
+import { injectQuery, type QueryClient } from '@tanstack/angular-query-experimental';
 import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet/runner-shell';
 
 import {
@@ -11,6 +11,9 @@ import {
 } from './query-keys';
 import { runnerNameResolver } from './host-pools.model';
 import { runnerSubscription } from './host-subscription.translate';
+import type { HostRunner } from './host-runner.domain';
+import { fromHostRunnerView } from './host-runner.translate';
+import { fromHostWorkspaceEnvironmentsView } from './host-environment.translate';
 
 /**
  * The host's reads — `GET /api/host/*`, at the host's root and through the generated
@@ -36,6 +39,23 @@ export function injectHostRunnersQuery() {
   }));
 }
 
+/** {@link injectHostRunnersQuery} projected to {@link HostRunner} domains, over the same cache entry. */
+export function injectHostRunnerDomainsQuery() {
+  return injectQuery(() => ({
+    queryKey: hostRunnersKey,
+    queryFn: fetchHostRunners,
+    select: (rows: runnerApi.HostRunnerView[]) => rows.map(fromHostRunnerView),
+    refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
+  }));
+}
+
+/** The host's runners through `queryClient`'s cache, as {@link HostRunner} domains — the one-shot read a route
+ * guard takes outside an injection-bound query. */
+export async function fetchHostRunnerDomains(queryClient: QueryClient): Promise<readonly HostRunner[]> {
+  const rows = await queryClient.fetchQuery({ queryKey: hostRunnersKey, queryFn: fetchHostRunners });
+  return rows.map(fromHostRunnerView);
+}
+
 /** `GET /api/host/workspaces` — the workspaces the host declares, each with its capacity. */
 export function injectHostWorkspacesQuery() {
   return injectQuery(() => ({
@@ -49,16 +69,29 @@ export function injectHostWorkspacesQuery() {
   }));
 }
 
+async function fetchHostEnvironments(): Promise<runnerApi.HostWorkspaceEnvironmentsView[]> {
+  const { data, error } = await runnerApi.listEnvironmentsApiHostEnvironmentsGet({ throwOnError: false });
+  if (error) throw error;
+  return data?.workspaces ?? [];
+}
+
 /** `GET /api/host/environments` — the host's environments grouped by workspace, each held
  * one naming its runner and its chunk's project. */
 export function injectHostEnvironmentsQuery() {
   return injectQuery(() => ({
     queryKey: hostEnvironmentsKey,
-    queryFn: async (): Promise<runnerApi.HostWorkspaceEnvironmentsView[]> => {
-      const { data, error } = await runnerApi.listEnvironmentsApiHostEnvironmentsGet({ throwOnError: false });
-      if (error) throw error;
-      return data?.workspaces ?? [];
-    },
+    queryFn: fetchHostEnvironments,
+    refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
+  }));
+}
+
+/** {@link injectHostEnvironmentsQuery} projected to `WorkspaceEnvironments` domains, over the same cache
+ * entry. */
+export function injectHostEnvironmentDomainsQuery() {
+  return injectQuery(() => ({
+    queryKey: hostEnvironmentsKey,
+    queryFn: fetchHostEnvironments,
+    select: (rows: runnerApi.HostWorkspaceEnvironmentsView[]) => rows.map(fromHostWorkspaceEnvironmentsView),
     refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
   }));
 }

@@ -1,9 +1,7 @@
 import { type Signal, computed, inject } from '@angular/core';
 
-import type { ChunkDetail } from 'fleet';
-
 import { ProjectLens } from './project-lens';
-import { injectProjectsQuery } from './projects.query';
+import { injectProjectDomainsQuery } from './projects.query';
 
 /** Whether project colouring carries information: the lens is on All and the tenant has more than one project. */
 export function showsProjectColors(
@@ -19,7 +17,7 @@ export function showsProjectColors(
  */
 export function injectShowProjectColors(): Signal<boolean> {
   const lens = inject(ProjectLens);
-  const projects = injectProjectsQuery();
+  const projects = injectProjectDomainsQuery();
   return computed(() =>
     showsProjectColors(lens.slug(), projects.data()?.length ?? 0),
   );
@@ -52,7 +50,7 @@ export function projectColorMap(
  * project is unknown. */
 export function openProjectColor(
   shown: boolean,
-  detail: ChunkDetail | undefined,
+  detail: { readonly project_id: string | null } | undefined,
   projects:
     | readonly { readonly project_id: string; readonly color: string }[]
     | undefined,

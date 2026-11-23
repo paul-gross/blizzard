@@ -43,7 +43,7 @@ import { branchDialogSchema } from './project-branch.form';
 import { projectEditSchema } from './project.form';
 import { injectProjectService } from './project.service';
 import { ProjectColorPicker } from './project-color-picker';
-import { PROJECT_COLORS } from './project-color.translate';
+import { PROJECT_COLORS } from '../../core/project-color.translate';
 import type { LandingPosition } from './project-landing-order.domain';
 import {
   foldLandingPositions,

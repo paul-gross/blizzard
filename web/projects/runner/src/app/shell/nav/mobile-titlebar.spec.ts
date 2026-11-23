@@ -2,12 +2,12 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type runnerApi } from 'fleet';
 import {
   capacitiesView,
   hostRunnerView,
   hubConnectivityView,
   type RequestClientStub,
+  runnerAuthSessionView,
   runnerDashboardView,
   runnerStatusView,
   settle,
@@ -131,7 +131,7 @@ describe('MobileTitlebar (runner)', () => {
    * out exactly where a mobile operator most needs it.
    */
   describe('the signed-in identity inside the titlebar menu', () => {
-    const withSession = (session: runnerApi.RunnerAuthSessionView) => {
+    const withSession = (session: ReturnType<typeof runnerAuthSessionView>) => {
       stub.restore();
       stub = stubRunnerClient(
         titlebarRoutes({ 'GET /api/auth/session': () => session, 'POST /api/auth/logout': () => undefined }),

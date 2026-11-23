@@ -10,7 +10,6 @@ import {
   provideTanStackQuery,
 } from '@tanstack/angular-query-experimental';
 
-import type { ProjectView } from 'fleet';
 import {
   projectView,
   type RequestClientStub,
@@ -54,7 +53,7 @@ class ColorsHost {
 
 describe('injectShowProjectColors', () => {
   let stub: RequestClientStub;
-  let projects: ProjectView[];
+  let projects: ReturnType<typeof projectView>[];
 
   beforeEach(async () => {
     stub = stubHubClient({ 'GET /api/projects': () => ({ projects }) });

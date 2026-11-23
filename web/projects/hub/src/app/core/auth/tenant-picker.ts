@@ -5,12 +5,9 @@ import {
   output,
 } from '@angular/core';
 
-import {
-  type MeResponse,
-  type MeTenant,
-  KitButton,
-  KitErrorLine,
-} from 'fleet/shell';
+import { KitButton, KitErrorLine } from 'fleet/shell';
+
+import type { Membership, Session } from './session.domain';
 
 /**
  * The tenant picker — a person with several memberships, none of them this tab's tenant or the browser's last
@@ -27,10 +24,10 @@ import {
 })
 export class TenantPicker {
   /** The memberships to choose among, as `/api/me` lists them. */
-  readonly tenants = input.required<readonly MeTenant[]>();
+  readonly tenants = input.required<readonly Membership[]>();
 
   /** The resolved identity — never `null` while this renders. */
-  readonly me = input<MeResponse | null>(null);
+  readonly me = input<Session | null>(null);
 
   /** Whether the logout is in flight; disables the button. */
   readonly logoutPending = input(false);

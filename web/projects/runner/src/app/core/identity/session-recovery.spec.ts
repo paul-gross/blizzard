@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideTanStackQuery, QueryClient } from '@tanstack/angular-query-experimental';
 import { runnerApi, runnerClient } from 'fleet';
-import { type StubDetailBody, type StubHttpError, stubError, stubRunnerClient } from 'fleet/testing';
+import { runnerAuthSessionView, runnerLeaseView, type StubDetailBody, type StubHttpError, stubError, stubRunnerClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { injectRunnerLogoutMutation, readRunnerSession } from './auth.query';
@@ -25,8 +25,8 @@ function unauthorized() {
  * registers (and the matching `afterEach` ejects) its own, and clears the
  * `sessionStorage` mark, to keep specs isolated.
  */
-type SessionResult = runnerApi.RunnerAuthSessionView | StubHttpError<number, StubDetailBody>;
-type LeasesResult = runnerApi.LeaseListResponse | StubHttpError<number, StubDetailBody>;
+type SessionResult = ReturnType<typeof runnerAuthSessionView> | StubHttpError<number, StubDetailBody>;
+type LeasesResult = { items: ReturnType<typeof runnerLeaseView>[] } | StubHttpError<number, StubDetailBody>;
 
 function setUp(session: () => SessionResult, leases: () => LeasesResult = unauthorized) {
   TestBed.configureTestingModule({
@@ -171,7 +171,7 @@ describe('SessionRecovery', () => {
 
   it('clears the mark and recovering state only on a session read that resolves a username', async () => {
     history.pushState({}, '', '/?chunk=ch_4');
-    let sessionBody: runnerApi.RunnerAuthSessionView = { auth_enabled: true, username: null };
+    let sessionBody: ReturnType<typeof runnerAuthSessionView> = { auth_enabled: true, username: null };
     const { navigateSpy, recovery, restore: r } = setUp(() => sessionBody);
     restore = r;
 

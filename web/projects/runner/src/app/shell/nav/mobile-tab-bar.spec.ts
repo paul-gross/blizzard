@@ -2,7 +2,6 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type runnerApi } from 'fleet';
 import { hostRunnerView, type RequestClientStub, runnerAskView, runnerDashboardView, runnerStatusView, settle, stubRunnerClient } from 'fleet/testing';
 
 import { MobileTabBar } from './mobile-tab-bar';
@@ -19,7 +18,7 @@ describe('MobileTabBar', () => {
 
   afterEach(() => stub.restore());
 
-  async function render(asks: readonly runnerApi.AskView[]) {
+  async function render(asks: readonly ReturnType<typeof runnerAskView>[]) {
     stub = stubRunnerClient({
       'GET /api/host/runners': () => RUNNERS,
       // Every covered runner's asks count toward the badge.

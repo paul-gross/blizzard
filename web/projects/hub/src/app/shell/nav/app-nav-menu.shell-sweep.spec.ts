@@ -1,10 +1,11 @@
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { BoardHeader, hubApi, type LaneCounts } from 'fleet';
-import { OPERATOR_ME_RESPONSE, fleetSpendView, stubHubClient } from 'fleet/testing';
+import { BoardHeader, type LaneCounts } from 'fleet';
+import { OPERATOR_ME_RESPONSE, stubHubClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
+import { fleetSpend } from '../../board/fleet-spend/fleet-spend.builders';
 import { AppNavMenu } from './app-nav-menu';
 
 /**
@@ -62,18 +63,13 @@ class TestHubShell {
   };
   // Carries its own estimate line too — the header's own widest natural content now
   // includes it, so this sweep still tests the tightest fit the header ever renders.
-  readonly spendToday: hubApi.FleetSpendView = fleetSpendView({
+  readonly spendToday = fleetSpend({
     cost_usd: 12.34,
     cost_partial: false,
     estimated_cost_usd: 0.07,
-    input_tokens: 0,
-    output_tokens: 0,
-    cache_create_tokens: 0,
-    cache_read_tokens: 0,
-    since: '2026-07-29T00:00:00.000Z',
   });
   // Partial, so the trailing `+` marker is part of the widest content the sweep fits.
-  readonly spendYesterday: hubApi.FleetSpendView = {
+  readonly spendYesterday = {
     ...this.spendToday,
     cost_usd: 56.78,
     cost_partial: true,

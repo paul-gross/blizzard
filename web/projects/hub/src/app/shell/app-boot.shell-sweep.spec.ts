@@ -2,7 +2,7 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { EVENT_SOURCE_FACTORY, ViewportService, provideFlags, type MeResponse } from 'fleet/shell';
+import { EVENT_SOURCE_FACTORY, ViewportService, provideFlags } from 'fleet/shell';
 import { OPERATOR_ME_RESPONSE, chunkCountsView, fleetSpendView, settle, stubHubClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 import { hubFlagsRead } from '../core/flags.query';
@@ -21,8 +21,8 @@ describe('app boot chrome (web:shell-sweep)', () => {
       await page.viewport(width, 844);
       sessionStorage.clear();
       localStorage.clear();
-      let release!: (me: MeResponse) => void;
-      const identity = new Promise<MeResponse>((resolve) => { release = resolve; });
+      let release!: (me: typeof OPERATOR_ME_RESPONSE) => void;
+      const identity = new Promise<typeof OPERATOR_ME_RESPONSE>((resolve) => { release = resolve; });
       const stub = stubHubClient({
         'GET /api/me': () => identity,
         'GET /api/auth/providers': () => [],

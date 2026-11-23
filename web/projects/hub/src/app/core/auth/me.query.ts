@@ -3,7 +3,9 @@ import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { type MeResponse, meApiMeGet } from 'fleet/shell';
 
-import { TenantContext, inSelectedTenant } from './tenant-context';
+import { type Session, inSelectedTenant } from './session.domain';
+import { fromMeResponse } from './session.translate';
+import { TenantContext } from './tenant-context';
 import { hubMeKey } from '../query-keys';
 
 /**
@@ -13,9 +15,9 @@ import { hubMeKey } from '../query-keys';
  * A **401** resolves the query to `null`; any other failure surfaces through
  * TanStack's error state. `retry: false` settles an expired session in one round trip.
  *
- * The identity it hands out is the one in the board's tenant: `role` and `permissions` are the selected
- * membership's ({@link inSelectedTenant}), so every permission check reads the tenant the board acts in. The
- * memberships themselves (`tenants`) and `hub_admin` pass through as the hub answered them.
+ * It hands out the {@link Session} in the board's tenant: `permissions` are the selected membership's
+ * ({@link inSelectedTenant}), so every permission check reads the tenant the board acts in. The memberships
+ * themselves (`tenants`) pass through as the hub answered them.
  */
 export function injectMeQuery() {
   const tenant = inject(TenantContext);
@@ -24,8 +26,11 @@ export function injectMeQuery() {
     return {
       queryKey: hubMeKey,
       queryFn: readMe,
-      select: (me: MeResponse | null) =>
-        me === null ? null : inSelectedTenant(me, resolve(me.tenants ?? [])),
+      select: (me: MeResponse | null) => {
+        if (me === null) return null;
+        const session = fromMeResponse(me);
+        return inSelectedTenant(session, resolve(session.tenants));
+      },
       retry: false,
     };
   });
@@ -41,16 +46,11 @@ export async function readMe(): Promise<MeResponse | null> {
   return data ?? null;
 }
 
-/** One permission `/api/me` can carry — the generated `Permission` vocabulary. */
-type Permission = MeResponse['permissions'][number];
-
-/** Whether a resolved identity carries `permission` — the single selector every
- * capability-gated control reads (`hasPermission(me(), 'user:manage')`) rather than
- * re-deriving its own role check. `null`/`undefined` (unauthenticated, or not yet
- * resolved) never carries a permission. */
-export function hasPermission(
-  me: MeResponse | null | undefined,
-  permission: Permission,
-): boolean {
-  return me !== null && me !== undefined && me.permissions.includes(permission);
+/** {@link readMe} as a {@link Session}, for a caller outside the query cache that reads the memberships as they are
+ * now. */
+export async function readSession(): Promise<Session | null> {
+  const me = await readMe();
+  return me === null ? null : fromMeResponse(me);
 }
+
+export { hasPermission } from './session.domain';

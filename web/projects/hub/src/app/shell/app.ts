@@ -28,17 +28,18 @@ import { DESKTOP_TABS, MOBILE_TABS } from './nav/navigation.model';
 import { NoAccess } from '../core/auth/no-access';
 import { TenantContext } from '../core/auth/tenant-context';
 import { TenantPicker } from '../core/auth/tenant-picker';
-import { hasPermission, injectMeQuery } from '../core/auth/me.query';
+import { injectMeQuery } from '../core/auth/me.query';
+import { hasPermission } from '../core/auth/session.domain';
 import { injectAuthProvidersQuery } from '../core/auth/providers.query';
 import { injectHubChunkCountsQuery } from '../board/chunks/chunk-counts.query';
-import { injectHubFleetSpendQuery } from '../board/fleet-spend/fleet-spend.query';
+import { injectHubFleetSpendDomainQuery } from '../board/fleet-spend/fleet-spend.query';
 import { injectHubHealthQuery } from '../board/health/health.query';
 import { injectLogoutMutation } from '../core/auth/logout.mutations';
 import { isPublicUrl, redirectToLogin } from '../core/auth/auth-redirect';
 
 import { readDemoConfig } from '../demo/demo-config';
 import { startOfLocalDayIso, startOfPreviousLocalDayIso } from '../core/local-day';
-import { injectProjectsQuery } from '../core/projects.query';
+import { injectProjectDomainsQuery } from '../core/projects.query';
 import { AppNav } from './nav/app-nav';
 import { AppNavMenu } from './nav/app-nav-menu';
 import { MobileTabBar } from './nav/mobile-tab-bar';
@@ -185,7 +186,7 @@ export class App {
 
   /** The fleet's spend-today read — `since` is local start-of-day off {@link dayStart},
    * so the window rolls forward at local midnight without a reload. */
-  protected readonly spendToday = injectHubFleetSpendQuery(
+  protected readonly spendToday = injectHubFleetSpendDomainQuery(
     () => this.dayStart(),
     undefined,
     () => this.ready(),
@@ -194,10 +195,10 @@ export class App {
   /** The fleet's spend-yesterday read — `[startOfPreviousLocalDayIso(now),
    * startOfLocalDayIso(now))`, both derived from the one local-day boundary helper so
    * the window rolls over with today by construction and never includes today's
-   * own spend. A second, independent `injectHubFleetSpendQuery` entry — distinct
+   * own spend. A second, independent `injectHubFleetSpendDomainQuery` entry — distinct
    * from {@link spendToday}'s in both `since` and `until`, so it is its own cache
    * entry rather than colliding on one. */
-  protected readonly spendYesterday = injectHubFleetSpendQuery(
+  protected readonly spendYesterday = injectHubFleetSpendDomainQuery(
     () => this.previousDayStart(),
     () => this.dayStart(),
     () => this.ready(),
@@ -329,7 +330,7 @@ export class App {
   }
 
   /** The tenant's projects, read once for both lens selectors once the board has entered the tenant. */
-  private readonly projectsQuery = injectProjectsQuery(() => this.ready());
+  private readonly projectsQuery = injectProjectDomainsQuery(() => this.ready());
 
   /** The lens selectors' choices — All, then the tenant's projects by name. */
   protected readonly lensChoices = computed(() => lensChoices(this.projectsQuery.data() ?? []));

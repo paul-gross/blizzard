@@ -2,8 +2,7 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { MeResponse } from 'fleet';
-import { OPERATOR_ME_RESPONSE, projectView, stubHubClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, meResponse, meTenant, projectView, stubHubClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { TAB_TENANT_KEY } from '../../core/auth/tenant-context';
@@ -122,17 +121,12 @@ describe('project lens control sweep (web:shell-sweep)', () => {
 });
 
 /** A caller whose tenant has a long name, so the mobile titlebar's tenant and project lines compete for the room. */
-const LONG_TENANT_ME: MeResponse = {
+const LONG_TENANT_ME = meResponse({
   ...OPERATOR_ME_RESPONSE,
   tenants: [
-    {
-      tenant_id: 'ten_acme',
-      name: 'Acme Interplanetary Holdings',
-      role: 'admin',
-      permissions: ['fleet:view'],
-    },
+    meTenant({ tenant_id: 'ten_acme', name: 'Acme Interplanetary Holdings', role: 'admin', permissions: ['fleet:view'] }),
   ],
-};
+});
 
 // Phone widths, down to the narrowest the board renders.
 const PHONE_WIDTHS = [430, 390, 360, 320];

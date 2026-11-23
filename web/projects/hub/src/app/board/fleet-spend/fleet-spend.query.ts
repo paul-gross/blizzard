@@ -3,6 +3,7 @@ import { injectQuery } from '@tanstack/angular-query-experimental';
 import { fleetSpendApiSpendGet, type FleetSpendView, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 import { hubFleetSpendKey, lensedKey } from '../../core/query-keys';
 import { injectProjectFilter } from '../../core/project-filter';
+import { fromFleetSpendView } from './fleet-spend.translate';
 
 /**
  * Hub `GET /api/spend?since=&until=` read — the fleet-wide usage/cost total over a
@@ -21,8 +22,23 @@ export function injectHubFleetSpendQuery(
   until: () => string | undefined = () => undefined,
   enabled: () => boolean = () => true,
 ) {
+  const options = fleetSpendQueryOptions(since, until, enabled);
+  return injectQuery(() => options());
+}
+
+/** Domain projection over the same cached read as {@link injectHubFleetSpendQuery} — the shell header's spend. */
+export function injectHubFleetSpendDomainQuery(
+  since: () => string,
+  until: () => string | undefined = () => undefined,
+  enabled: () => boolean = () => true,
+) {
+  const options = fleetSpendQueryOptions(since, until, enabled);
+  return injectQuery(() => ({ ...options(), select: fromFleetSpendView }));
+}
+
+function fleetSpendQueryOptions(since: () => string, until: () => string | undefined, enabled: () => boolean) {
   const projectFilter = injectProjectFilter();
-  return injectQuery(() => {
+  return () => {
     const project = projectFilter();
     return {
       queryKey: lensedKey([...hubFleetSpendKey, since(), until()], project),
@@ -39,5 +55,5 @@ export function injectHubFleetSpendQuery(
       // rides the same fact a chunk-changed frame reports. See LIVE_COVERED_POLL_BACKSTOP_MS.
       refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
     };
-  });
+  };
 }

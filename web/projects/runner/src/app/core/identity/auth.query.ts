@@ -4,6 +4,8 @@ import { runnerApi } from 'fleet/runner-shell';
 
 import { runnerLogoutMutationKey } from '../mutation-keys';
 import { sessionKey } from '../query-keys';
+import type { RunnerSession } from './session.domain';
+import { fromRunnerAuthSessionView } from './session.translate';
 
 const logoutInFlightSignal = signal(false);
 
@@ -38,6 +40,7 @@ export function injectRunnerSessionQuery() {
       if (error) throw error;
       return data!;
     },
+    select: fromRunnerAuthSessionView,
   }));
 }
 
@@ -51,22 +54,16 @@ export function readRunnerSession() {
   return runnerApi.readSessionApiAuthSessionGet({ throwOnError: false });
 }
 
-/**
- * The signed-in hub username a session read carries, or `null` when there is none
- * to show — a `none`-mode hub (authless surface), an unresolved read, or oauth
- * with no session riding along.
- *
- * One owner for the fold because two components gate on it: {@link LocalIdentity}
- * renders itself off it, and the mobile shell gates its own `Log out` **menu
- * item** off it. The shell cannot reuse the identity block's copy — that
- * component is constructed inside the menu overlay, so its signal is still
- * unresolved on the overlay's first change detection, and a menu item that
- * appears a tick late is one `CdkMenu` has already skipped when setting initial
- * focus. The shell reads the same query itself, long resolved by the time a menu
- * opens; this keeps the two answers from drifting.
- */
-export function signedInUsername(session: runnerApi.RunnerAuthSessionView | undefined): string | null {
-  return session?.auth_enabled ? (session.username ?? null) : null;
+/** {@link readRunnerSession} as a {@link RunnerSession}, `undefined` when the read itself failed. */
+export async function readRunnerSessionDomain(): Promise<RunnerSession | undefined> {
+  const { data } = await readRunnerSession();
+  return data === undefined ? undefined : fromRunnerAuthSessionView(data);
+}
+
+/** The {@link RunnerSession} a successful `GET /api/auth/session` response carries, read from a clone so the
+ * caller's response stays unconsumed. */
+export async function sessionOfResponse(response: Response): Promise<RunnerSession> {
+  return fromRunnerAuthSessionView((await response.clone().json()) as runnerApi.RunnerAuthSessionView);
 }
 
 /**

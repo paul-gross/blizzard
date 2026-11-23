@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import type { FleetSpendView } from '../../api/hub';
 import { LANES, laneCounts, type LaneCounts } from '../../core/chunk-lanes';
 import { BrandMark } from '../../core/design/brand-mark';
 import { formatCost } from '../../core/cost-format';
@@ -15,6 +14,13 @@ export interface StatCell {
   readonly capacity?: number;
 }
 
+/** The cost a spend cell renders: the exact cost, the estimate beside it, and whether the exact figure is partial. */
+export interface HeaderSpend {
+  readonly cost_usd: number;
+  readonly estimated_cost_usd: number | null;
+  readonly cost_partial: boolean;
+}
+
 /** One spend cell — today's or yesterday's — folded into one shape
  * so the template renders both from a single `@for` rather than a duplicated
  * `@if` block per window. `spend` is `null` while its own read is unresolved;
@@ -24,7 +30,7 @@ interface SpendCellView {
   readonly label: string;
   readonly testid: string;
   readonly valueTestid: string;
-  readonly spend: FleetSpendView | null;
+  readonly spend: HeaderSpend | null;
 }
 
 /**
@@ -88,12 +94,12 @@ export class BoardHeader {
 
   /** The fleet-wide spend-since read, or `null` before the first read
    * resolves — the cell withholds itself rather than show a misleading `$0.00`. */
-  readonly spendToday = input<FleetSpendView | null>(null);
+  readonly spendToday = input<HeaderSpend | null>(null);
 
   /** The fleet-wide spend-yesterday read — `[yesterday-midnight,
    * today-midnight)`, or `null` before the first read resolves (withheld the same
    * way as {@link spendToday}) and whenever none is supplied. */
-  readonly spendYesterday = input<FleetSpendView | null>(null);
+  readonly spendYesterday = input<HeaderSpend | null>(null);
 
   /** Explicit stat cells — when given, these render in place of
    * {@link chunkStats} below, opaque to this component. `null` falls through to

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 
-import { fleetSpendView } from '../../testing/public-api';
 import { BoardHeader } from './board-header';
+import { headerSpend } from './board-header.builders';
 
 const meta: Meta<BoardHeader> = {
   title: 'Shell/Board header',
@@ -12,8 +12,8 @@ const meta: Meta<BoardHeader> = {
     overridden: [],
     tagline: 'fleet hub · mission control',
     counts: { total: 0, terminal: 0, statuses: { not_ready: 0, ready: 0, running: 0, delivering: 0, waiting_on_human: 0, needs_human: 0, paused: 0, stopped: 0, done: 0 } },
-    spendToday: fleetSpendView({ cost_usd: 27.5 }),
-    spendYesterday: fleetSpendView({ cost_usd: 41.2 }),
+    spendToday: headerSpend({ cost_usd: 27.5 }),
+    spendYesterday: headerSpend({ cost_usd: 41.2 }),
     stats: null,
   },
 };
@@ -34,8 +34,8 @@ export const OrdinaryDay: Story = {};
 /** Spend that runs to five figures and a partial cost, widening its column. */
 export const SpendOutrunsItsColumn: Story = {
   args: {
-    spendToday: fleetSpendView({ cost_usd: 12_345.67, cost_partial: true }),
-    spendYesterday: fleetSpendView({ cost_usd: 98_765.43 }),
+    spendToday: headerSpend({ cost_usd: 12_345.67, cost_partial: true }),
+    spendYesterday: headerSpend({ cost_usd: 98_765.43 }),
   },
 };
 export const OverriddenFlags: Story = {

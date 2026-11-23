@@ -1,9 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { RouterLink } from '@angular/router';
-import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu, formatCost, type FleetSpendView } from 'fleet';
+import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu, formatCost } from 'fleet';
 import { KitSwatch, AppLink } from 'fleet/shell';
 
+import type { FleetSpend } from '../../board/fleet-spend/fleet-spend.domain';
 import { injectLensedProject } from '../../core/lensed-project';
 import { LENS_PICKER_PATH, ProjectLens } from '../../core/project-lens';
 import { TenantMenu } from './tenant-menu';
@@ -43,7 +44,7 @@ export class MobileTitlebar {
 
   /** The fleet's spend-today read the desktop header's TODAY cell shows (`app.ts`'s `spendToday`), `null` before it
    * resolves — shown beside the live dot. */
-  readonly spendToday = input<FleetSpendView | null>(null);
+  readonly spendToday = input<FleetSpend | null>(null);
 
   protected readonly formatCost = formatCost;
 

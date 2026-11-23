@@ -4,8 +4,7 @@ import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import type { MeResponse } from 'fleet';
-import { OPERATOR_ME_RESPONSE, projectView, type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, meResponse, meTenant, projectView, type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 import { LAST_TENANT_KEY, PAGE_RELOAD, TAB_TENANT_KEY } from '../../core/auth/tenant-context';
 import { provideProjectLens } from '../../core/project-lens';
 import { MobileTitlebar } from './mobile-titlebar';
@@ -16,20 +15,20 @@ class TestView {}
 const GLACIER = projectView({ project_id: 'proj_glacier', slug: 'glacier', name: 'Glacier', created_at: '2026-10-01T00:00:00Z' });
 
 /** A caller holding two memberships — the only caller the switcher is offered to. */
-const TWO_TENANTS: MeResponse = {
+const TWO_TENANTS = meResponse({
   ...OPERATOR_ME_RESPONSE,
   tenants: [
-    { tenant_id: 'ten_acme', name: 'Acme', role: 'admin', permissions: ['fleet:view'] },
-    { tenant_id: 'ten_globex', name: 'Globex', role: 'guest', permissions: ['fleet:view'] },
+    meTenant({ tenant_id: 'ten_acme', name: 'Acme', role: 'admin', permissions: ['fleet:view'] }),
+    meTenant({ tenant_id: 'ten_globex', name: 'Globex', role: 'guest', permissions: ['fleet:view'] }),
   ],
-};
+});
 
 /** The CDK renders each menu into an overlay on `document.body`, outside the
  * fixture's own element. */
 const inOverlay = (selector: string) => document.body.querySelector<HTMLElement>(selector);
 
 describe('MobileTitlebar', () => {
-  let me: MeResponse;
+  let me: typeof OPERATOR_ME_RESPONSE;
   let stub: RequestClientStub;
   let reload: ReturnType<typeof vi.fn>;
 
@@ -59,7 +58,7 @@ describe('MobileTitlebar', () => {
   afterEach(() => stub.restore());
 
   /** Mounts the titlebar in `ten_acme` for `identity`. */
-  async function mountIn(identity: MeResponse) {
+  async function mountIn(identity: typeof OPERATOR_ME_RESPONSE) {
     me = identity;
     sessionStorage.setItem(TAB_TENANT_KEY, 'ten_acme');
     const fixture = TestBed.createComponent(MobileTitlebar);
@@ -168,7 +167,7 @@ describe('MobileTitlebar', () => {
   it('offers no tenant switcher to a caller with one membership', async () => {
     const fixture = await mountIn({
       ...OPERATOR_ME_RESPONSE,
-      tenants: [{ tenant_id: 'ten_acme', name: 'Acme', role: 'admin', permissions: ['fleet:view'] }],
+      tenants: [meTenant({ tenant_id: 'ten_acme', name: 'Acme', role: 'admin', permissions: ['fleet:view'] })],
     });
     (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="mobile-titlebar-menu"]')?.click();
     await settle(fixture);

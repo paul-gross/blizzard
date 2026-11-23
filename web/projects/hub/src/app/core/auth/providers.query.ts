@@ -2,6 +2,7 @@ import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { type ProviderSummary, listProvidersApiAuthProvidersGet } from 'fleet/shell';
 import { hubAuthProvidersKey } from '../query-keys';
+import { fromProviderSummary } from './provider.translate';
 
 /**
  * `GET /api/auth/providers` — the configured login-provider list the login page
@@ -19,5 +20,6 @@ export function injectAuthProvidersQuery() {
       if (error) throw error;
       return data ?? [];
     },
+    select: (providers: readonly ProviderSummary[]) => providers.map(fromProviderSummary),
   }));
 }

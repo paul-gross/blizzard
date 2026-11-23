@@ -1,5 +1,8 @@
-import { type runnerApi, type StatCell } from 'fleet/runner-shell';
+import { type StatCell } from 'fleet/runner-shell';
 import { type SseStatus } from 'fleet/shell';
+
+import type { WorkspaceEnvironments } from '../../core/host-environment.domain';
+import type { HostRunner } from '../../core/host-runner.domain';
 
 /** The header's connection label: the live stream's reconnect first, then its settled auth failure, then the
  * host read's pending and failed states — `ok` otherwise. */
@@ -22,8 +25,8 @@ export function headerConnectionLabel(
  * the runners or the environments — is still pending, so a half-landed fold never reads as `Envs 0/0`. */
 export function headerStatCells(
   hostPending: boolean,
-  runners: readonly runnerApi.HostRunnerView[] | undefined,
-  environments: readonly runnerApi.HostWorkspaceEnvironmentsView[] | undefined,
+  runners: readonly HostRunner[] | undefined,
+  environments: readonly WorkspaceEnvironments[] | undefined,
   runnerName: string | null = null,
 ): readonly StatCell[] {
   if (hostPending) return [];

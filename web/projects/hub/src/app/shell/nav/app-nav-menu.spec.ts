@@ -3,26 +3,25 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import type { MeResponse } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, meResponse, meTenant, type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 import { LAST_TENANT_KEY, PAGE_RELOAD, TAB_TENANT_KEY } from '../../core/auth/tenant-context';
 import { AppNavMenu } from './app-nav-menu';
 
 /** A caller holding two memberships — the only caller the switcher is offered to. */
-const TWO_TENANTS: MeResponse = {
+const TWO_TENANTS = meResponse({
   ...OPERATOR_ME_RESPONSE,
   tenants: [
-    { tenant_id: 'ten_acme', name: 'Acme', role: 'admin', permissions: ['fleet:view'] },
-    { tenant_id: 'ten_globex', name: 'Globex', role: 'guest', permissions: ['fleet:view'] },
+    meTenant({ tenant_id: 'ten_acme', name: 'Acme', role: 'admin', permissions: ['fleet:view'] }),
+    meTenant({ tenant_id: 'ten_globex', name: 'Globex', role: 'guest', permissions: ['fleet:view'] }),
   ],
-};
+});
 
 /** The CDK renders each menu into an overlay on `document.body`, outside the
  * fixture's own element. */
 const inOverlay = (selector: string) => document.body.querySelector<HTMLElement>(selector);
 
 describe('AppNavMenu', () => {
-  let me: MeResponse;
+  let me: typeof OPERATOR_ME_RESPONSE;
   let stub: RequestClientStub;
   let reload: ReturnType<typeof vi.fn>;
 
@@ -44,7 +43,7 @@ describe('AppNavMenu', () => {
   afterEach(() => stub.restore());
 
   /** Mounts the menu in `ten_acme` and opens it. */
-  async function openIn(identity: MeResponse) {
+  async function openIn(identity: typeof OPERATOR_ME_RESPONSE) {
     me = identity;
     sessionStorage.setItem(TAB_TENANT_KEY, 'ten_acme');
     const fixture = TestBed.createComponent(AppNavMenu);

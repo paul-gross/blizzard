@@ -2,34 +2,21 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 
-import type { MeResponse, MeTenant } from 'fleet/shell';
+import { membership, session } from './session.builders';
 import { TenantPicker } from './tenant-picker';
 
-const TENANTS: readonly MeTenant[] = [
-  {
-    tenant_id: 'ten_a',
-    name: 'Acme',
-    role: 'admin',
-    permissions: ['fleet:view', 'user:manage'],
-  },
-  {
-    tenant_id: 'ten_b',
-    name: 'Acme',
-    role: 'guest',
-    permissions: ['fleet:view'],
-  },
+const TENANTS = [
+  membership({ tenant_id: 'ten_a', name: 'Acme', permissions: ['fleet:view', 'user:manage'] }),
+  membership({ tenant_id: 'ten_b', name: 'Acme', permissions: ['fleet:view'] }),
 ];
 
-const ME: MeResponse = {
-  user_id: 'usr_1',
+const ME = session({
   username: 'twohats',
   display_name: 'Two Hats',
-  role: null,
   permissions: [],
   tenants: [...TENANTS],
-  hub_admin: false,
-  assignable_roles: [],
-};
+  tenant_resolved: false,
+});
 
 async function render(): Promise<{ el: HTMLElement; picker: TenantPicker }> {
   await TestBed.configureTestingModule({

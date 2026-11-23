@@ -12,10 +12,11 @@ import {
   type EventSourceFactory,
   type FleetEventSource,
 } from 'fleet';
-import { type MeResponse } from 'fleet/shell';
 import {
   OPERATOR_ME_RESPONSE,
   chunkCountsView,
+  meResponse,
+  meTenant,
   configChangesPage,
   fleetSpendView,
   projectView,
@@ -309,26 +310,16 @@ describe('the fleet route (mobile RunnersPage, desktop FleetPage)', () => {
  */
 describe('the public pages (sign-in refusals and invitations)', () => {
   const GITHUB = [{ name: 'github', display_name: 'GitHub', type: 'github' }];
-  const TWO_TENANTS: MeResponse = {
+  const TWO_TENANTS = meResponse({
     ...OPERATOR_ME_RESPONSE,
     role: null,
     tenants: [
-      {
-        tenant_id: 'ten_acme',
-        name: 'Acme',
-        role: 'admin',
-        permissions: ['fleet:view'],
-      },
-      {
-        tenant_id: 'ten_globex',
-        name: 'Globex',
-        role: 'guest',
-        permissions: ['fleet:view'],
-      },
+      meTenant({ tenant_id: 'ten_acme', name: 'Acme', role: 'admin', permissions: ['fleet:view'] }),
+      meTenant({ tenant_id: 'ten_globex', name: 'Globex', role: 'guest', permissions: ['fleet:view'] }),
     ],
-  };
+  });
   let authStub: RequestClientStub;
-  let me: MeResponse | null;
+  let me: typeof OPERATOR_ME_RESPONSE | null;
 
   beforeEach(async () => {
     localStorage.clear();
