@@ -1,5 +1,5 @@
 import { HubEventKind } from 'fleet/shell';
-import { isActivityEvent } from './activity-event.model';
+import { isActivityEvent } from './activity-event.domain';
 
 describe('isActivityEvent', () => {
   it('classifies durable facts independently of invalidation', () => {

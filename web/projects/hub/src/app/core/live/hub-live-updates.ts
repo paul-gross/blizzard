@@ -1,4 +1,4 @@
-import { isActivityEvent } from './activity-event.model';
+import { isActivityEvent } from './activity-event.domain';
 import { DestroyRef, type EffectRef, EnvironmentInjector, Injectable, type Signal, effect, inject, signal, untracked } from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
