@@ -1,15 +1,10 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { type EventView, hubApi, listEventsApiEventsGet, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
+import type { EventLogEntry } from './event-log.domain';
+import { fromEventView } from './event-log.translate';
 import { hubEventsKey, lensedKey } from '../core/query-keys';
 import { injectProjectFilter } from '../core/project-filter';
-
-/** `value` narrowed to the generated severity vocabulary (`GET /api/events`'s own query
- * param), or `null` outside the closed set — so a filter value crossing from a generic UI
- * string into the typed query narrows against the wire's own values. */
-export function narrowEventSeverity(value: string): hubApi.EventLogSeverity | null {
-  return Object.values(hubApi.EventLogSeverity).find((severity) => severity === value) ?? null;
-}
 
 /** The event feed's filter axes — `null`/`undefined` on any of them means
  * "unfiltered" for that axis, matching the hub's own query-param contract. */
@@ -50,6 +45,7 @@ export function injectHubEventsQuery(filters: () => HubEventsFilters = () => ({}
         if (error) throw error;
         return data?.events ?? [];
       },
+      select: (wire: EventView[]): readonly EventLogEntry[] => wire.map(fromEventView),
       refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
     };
   });

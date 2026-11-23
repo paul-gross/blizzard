@@ -9,6 +9,7 @@ import { page } from 'vitest/browser';
 import { EventsPage } from './events-page';
 import { EventDetailPage } from './event-detail-page';
 import { eventFingerprint, findEvent } from './event-detail.model';
+import { eventLogEntry } from './event-log.builders';
 import { HUB_PROJECT_FILTER } from '../core/project-filter';
 
 /**
@@ -137,12 +138,12 @@ describe('events feed scroll shell sweep (web:shell-sweep)', () => {
     }
   });
   it('uses native SHA-256 to reject a replacement projected event', async () => {
-    const original = eventView({ id: -1, kind: 'needs-human', recorded_at: '2026-07-16T00:00:00Z',
-      chunk_id: 'ch_1', message: 'original', detail: { a: 1, b: 2 } });
+    const original = eventLogEntry({ id: -1, kind: 'needs-human', recordedAt: '2026-07-16T00:00:00Z',
+      chunkId: 'ch_1', message: 'original', detail: { a: 1, b: 2 } });
     const fingerprint = await eventFingerprint(original);
     expect(fingerprint).toMatch(/^[a-f0-9]{64}$/);
     const resolve = (event: typeof original) =>
-      findEvent([event], '-1', original.recorded_at, original.kind, original.chunk_id, fingerprint);
+      findEvent([event], '-1', original.recordedAt, original.kind, original.chunkId, fingerprint);
     expect(await resolve({ ...original, id: -5, detail: { b: 2, a: 1 } })).not.toBeNull();
     expect(await resolve({ ...original, id: -5, message: 'replacement' })).toBeNull();
     expect(await resolve({ ...original, id: -5, detail: { a: 2, b: 2 } })).toBeNull();

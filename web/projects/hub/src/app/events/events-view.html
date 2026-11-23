@@ -16,12 +16,12 @@
       </div>
       <div class="rows" data-testid="events-rows">
         @for (ev of events(); track ev.id) {
-          <div class="ev" data-testid="events-row" [attr.data-severity]="ev.severity">
-            <a class="hit" [routerLink]="['/events', ev.id] | appLink: { severity: severity(), runner: runner(), chunk: chunk(), at: ev.recorded_at, kind: ev.kind, eventChunk: ev.chunk_id, fingerprint: fingerprint(ev) }"
-              [attr.aria-label]="'Open event ' + ev.kind + ', ' + ev.severity" data-testid="events-open"></a>
+          <div class="ev" data-testid="events-row" [attr.data-severity]="severityText(ev.severity)">
+            <a class="hit" [routerLink]="['/events', ev.id] | appLink: { severity: severity(), runner: runner(), chunk: chunk(), at: ev.recordedAt, kind: ev.kind, eventChunk: ev.chunkId, fingerprint: fingerprint(ev) }"
+              [attr.aria-label]="'Open event ' + ev.kind + ', ' + severityText(ev.severity)" data-testid="events-open"></a>
             <div class="card-main">
               <span class="card-layout">
-              <span class="severity-icon" [attr.data-icon]="iconFor(ev.severity)" [attr.title]="ev.severity" [attr.aria-label]="ev.severity">
+              <span class="severity-icon" [attr.data-icon]="iconFor(ev.severity)" [attr.title]="severityText(ev.severity)" [attr.aria-label]="severityText(ev.severity)">
                 @switch (iconFor(ev.severity)) {
                   @case ('info') { <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7v.2"/></svg> }
                   @case ('warning') { <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 22 20H2L12 3ZM12 9v5M12 17v.2"/></svg> }
@@ -30,17 +30,17 @@
                 }
               </span>
               <span class="card-content">
-                <span class="headline"><span class="kind" data-testid="events-kind">{{ ev.kind }}</span><fleet-when class="time" data-testid="events-time" [iso]="ev.recorded_at" /></span>
+                <span class="headline"><span class="kind" data-testid="events-kind">{{ ev.kind }}</span><fleet-when class="time" data-testid="events-time" [iso]="ev.recordedAt" /></span>
                 <span class="msg" data-testid="events-message">{{ ev.message }}</span>
               </span>
               </span>
             </div>
             <div class="meta">
-              @if (ev.runner_id; as runnerId) {
-                <a data-testid="events-runner" [routerLink]="['/fleet', fleetId(runnerId)] | appLink" [title]="runnerTitle(runnerId, ev.runner_name)" (click)="$event.stopPropagation()">{{ runnerName(runnerId, ev.runner_name) }}</a>
+              @if (ev.runnerId; as runnerId) {
+                <a data-testid="events-runner" [routerLink]="['/fleet', fleetId(runnerId)] | appLink" [title]="runnerTitle(runnerId, ev.runnerName)" (click)="$event.stopPropagation()">{{ runnerName(runnerId, ev.runnerName) }}</a>
               }
-              @if (ev.runner_id && ev.chunk_id) { <span aria-hidden="true"> · </span> }
-              @if (ev.chunk_id; as chunkId) {
+              @if (ev.runnerId && ev.chunkId) { <span aria-hidden="true"> · </span> }
+              @if (ev.chunkId; as chunkId) {
                 <a class="chunk" data-testid="events-chunk" [attr.aria-label]="'Open chunk ' + shortId(chunkId)"
                   [routerLink]="(mobile() ? ['/board', 'chunk', chunkId] : ['/board']) | appLink: (mobile() ? null : { chunk: chunkId })" (click)="$event.stopPropagation()">{{ shortId(chunkId) }}</a>
               }

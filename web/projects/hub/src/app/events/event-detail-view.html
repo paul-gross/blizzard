@@ -3,13 +3,13 @@
     <div loading class="loading"><fleet-kit-skeleton [rows]="5" /></div>
     @if (event(); as ev) {
       <ng-template #runnerFact>
-        @if (ev.runner_id; as id) {
+        @if (ev.runnerId; as id) {
           <a class="runner-link" data-testid="event-detail-runner"
-            [routerLink]="['/fleet', fleetId(id)] | appLink">{{ runnerName(id, ev.runner_name) }} ({{ id }})</a>
+            [routerLink]="['/fleet', fleetId(id)] | appLink">{{ runnerName(id, ev.runnerName) }} ({{ id }})</a>
         }
       </ng-template>
       <ng-template #chunkFact>
-        @if (ev.chunk_id; as id) {
+        @if (ev.chunkId; as id) {
           <a class="chunk-link" data-testid="event-detail-chunk"
             [routerLink]="(mobile() ? ['/board', 'chunk', id] : ['/board']) | appLink: (mobile() ? null : { chunk: id })">{{ id }}</a>
         }

@@ -25,22 +25,21 @@ describe('filterUniverse', () => {
 
 describe('eventRunnerIds', () => {
   it('strips falsy runner ids before building the universe', () => {
-    const events = [{ runner_id: 'r2' }, { runner_id: null }, { runner_id: '' }, {}, { runner_id: 'r1' }];
+    const events = [{ runnerId: 'r2' }, { runnerId: null }, { runnerId: '' }, { runnerId: 'r1' }];
     expect(eventRunnerIds(events, null)).toEqual(['r1', 'r2']);
   });
 
   it('keeps the selected runner', () => {
-    expect(eventRunnerIds([{ runner_id: 'r1' }], 'r9')).toEqual(['r1', 'r9']);
+    expect(eventRunnerIds([{ runnerId: 'r1' }], 'r9')).toEqual(['r1', 'r9']);
   });
 });
 
 describe('eventRunnerNames', () => {
   it('maps each runner id to the name its events carry, skipping a nameless or runnerless event', () => {
     const names = eventRunnerNames([
-      { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' },
-      { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M', runner_name: null },
-      { runner_id: null, runner_name: 'r-orphan' },
-      {},
+      { runnerId: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runnerName: 'r-claude' },
+      { runnerId: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M', runnerName: null },
+      { runnerId: null, runnerName: 'r-orphan' },
     ]);
     expect([...names]).toEqual([['rn_01KXKVVF1J3D6H6VYZ3XYNABF3', 'r-claude']]);
   });
@@ -48,11 +47,11 @@ describe('eventRunnerNames', () => {
 
 describe('eventChunkIds', () => {
   it('strips falsy chunk ids before building the universe', () => {
-    const events = [{ chunk_id: 'ch_b' }, { chunk_id: null }, { chunk_id: 'ch_a' }];
+    const events = [{ chunkId: 'ch_b' }, { chunkId: null }, { chunkId: 'ch_a' }];
     expect(eventChunkIds(events, null)).toEqual(['ch_a', 'ch_b']);
   });
 
   it('offers a single chunk alongside chunkless events', () => {
-    expect(eventChunkIds([{ chunk_id: 'ch_a' }, { chunk_id: undefined }], null)).toEqual(['ch_a']);
+    expect(eventChunkIds([{ chunkId: 'ch_a' }, { chunkId: null }], null)).toEqual(['ch_a']);
   });
 });

@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { eventView } from 'fleet/testing';
+import { eventLogEntry } from './event-log.builders';
 import { EventsView } from './events-view';
 
 describe('EventsView', () => {
@@ -12,9 +12,9 @@ describe('EventsView', () => {
 
   async function render(state = 'ready', mobile = false) {
     const fixture = TestBed.createComponent(EventsView);
-    fixture.componentRef.setInput('events', [eventView({
-      id: 12, kind: 'lease-minted', severity: 'info', recorded_at: '2026-07-16T00:00:00Z',
-      runner_id: 'rn_01', chunk_id: 'ch_1234', message: 'Lease minted',
+    fixture.componentRef.setInput('events', [eventLogEntry({
+      id: 12, kind: 'lease-minted', severity: 'info', recordedAt: '2026-07-16T00:00:00Z',
+      runnerId: 'rn_01', chunkId: 'ch_1234', message: 'Lease minted',
     })]);
     fixture.componentRef.setInput('state', state);
     fixture.componentRef.setInput('mobile', mobile);

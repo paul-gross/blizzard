@@ -1,4 +1,5 @@
-import { asyncState, type AsyncStateQuery, type EventView, type KitAsyncStateValue } from 'fleet';
+import { asyncState, type AsyncStateQuery, type KitAsyncStateValue } from 'fleet';
+import { eventSeverityText, type EventLogEntry } from './event-log.domain';
 
 /** Stable JSON for wire payloads, independent of object key order. */
 function canonical(value: unknown): string {
@@ -9,11 +10,11 @@ function canonical(value: unknown): string {
 }
 
 /** The projection's id and runner display name can change without changing the event. */
-export async function eventFingerprint(event: EventView): Promise<string | null> {
+export async function eventFingerprint(event: EventLogEntry): Promise<string | null> {
   if (!globalThis.crypto?.subtle) return null;
   const payload = canonical([
-    event.recorded_at, event.kind, event.chunk_id, event.severity, event.runner_id,
-    event.lease_id, event.node_name, event.message, event.detail,
+    event.recordedAt, event.kind, event.chunkId, eventSeverityText(event.severity), event.runnerId,
+    event.leaseId, event.nodeName, event.message, event.detail,
   ]);
   try {
     const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload));
@@ -23,21 +24,21 @@ export async function eventFingerprint(event: EventView): Promise<string | null>
   }
 }
 
-export async function eventFingerprints(events: readonly EventView[]): Promise<ReadonlyMap<EventView, string>> {
+export async function eventFingerprints(events: readonly EventLogEntry[]): Promise<ReadonlyMap<EventLogEntry, string>> {
   const entries = await Promise.all(events.filter((event) => event.id < 0).map(async (event) =>
     [event, await eventFingerprint(event)] as const,
   ));
-  return new Map(entries.filter((entry): entry is readonly [EventView, string] => entry[1] !== null));
+  return new Map(entries.filter((entry): entry is readonly [EventLogEntry, string] => entry[1] !== null));
 }
 
 /** Refuse projected events unless their full payload fingerprint resolves uniquely. */
 export async function findEvent(
-  events: readonly EventView[], id: string | null, at: string | null, kind: string | null, chunk: string | null,
+  events: readonly EventLogEntry[], id: string | null, at: string | null, kind: string | null, chunk: string | null,
   fingerprint: string | null,
-): Promise<EventView | null> {
+): Promise<EventLogEntry | null> {
   if (!id || !at || !kind) return null;
   const matches = events.filter((event) =>
-    event.recorded_at === at && event.kind === kind && event.chunk_id === chunk &&
+    event.recordedAt === at && event.kind === kind && event.chunkId === chunk &&
     (Number(id) < 0 ? event.id < 0 : String(event.id) === id),
   );
   if (Number(id) >= 0) return matches.length === 1 ? matches[0] : null;
@@ -48,7 +49,7 @@ export async function findEvent(
   return verified.length === 1 ? verified[0] : null;
 }
 
-export function detailState(query: AsyncStateQuery, loading: boolean, event: EventView | null): KitAsyncStateValue {
+export function detailState(query: AsyncStateQuery, loading: boolean, event: EventLogEntry | null): KitAsyncStateValue {
   if (query.isPending() || loading) return 'loading';
   return asyncState(query, event === null);
 }

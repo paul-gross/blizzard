@@ -4,11 +4,12 @@ import { AppLink } from 'fleet/shell';
 
 import { fleetIdOf, type HostMembership } from '../core/runners.domain';
 
-import { type EventView, hubApi, compactRef, runnerDisplayName, runnerTitle, FleetWhen, KitAsyncState, type KitAsyncStateValue, type KitChipOption, KitSelect, KitSkeleton, openLookup } from 'fleet';
+import { compactRef, runnerDisplayName, runnerTitle, FleetWhen, KitAsyncState, type KitAsyncStateValue, type KitChipOption, KitSelect, KitSkeleton, openLookup } from 'fleet';
 import { eventFingerprints } from './event-detail.model';
+import { EVENT_SEVERITIES, eventSeverityText, type EventLogEntry, type EventSeverity } from './event-log.domain';
 
 /** Each severity's chip label; a severity this build does not know reads raw. */
-const SEVERITY_LABEL = openLookup<hubApi.EventLogSeverity, string>(
+const SEVERITY_LABEL = openLookup<(typeof EVENT_SEVERITIES)[number], string>(
   { info: 'Info', warning: 'Warning', critical: 'Critical' },
   (raw) => raw,
 );
@@ -16,17 +17,17 @@ const SEVERITY_LABEL = openLookup<hubApi.EventLogSeverity, string>(
 /** The severity filter row's options — `''` reads as "no filter" (every event). A
  * fixed closed set (unlike the runner/chunk axes, whose values are open and so are
  * derived from the feed's own ids — {@link EventsView.toOptions}). The chips read in
- * ascending severity, the generated const's order reversed. */
+ * ascending severity. */
 const SEVERITY_OPTIONS: readonly KitChipOption[] = [
   { value: '', label: 'Severity', testid: 'events-filter-all' },
-  ...[...Object.values(hubApi.EventLogSeverity)].reverse().map((severity) => ({
+  ...EVENT_SEVERITIES.map((severity) => ({
     value: severity,
     label: SEVERITY_LABEL(severity),
     testid: `events-filter-${severity}`,
   })),
 ];
 
-const SEVERITY_ICON = openLookup<EventView['severity'], string>(
+const SEVERITY_ICON = openLookup<(typeof EVENT_SEVERITIES)[number], string>(
   { critical: 'critical', warning: 'warning', info: 'info' }, () => 'unknown',
 );
 
@@ -52,12 +53,12 @@ const SEVERITY_ICON = openLookup<EventView['severity'], string>(
 })
 export class EventsView {
   /** The event feed to render, in the order given (server-sorted). */
-  readonly events = input.required<readonly EventView[]>();
+  readonly events = input.required<readonly EventLogEntry[]>();
   private readonly identities = resource({
     params: () => this.events(),
     loader: ({ params }) => eventFingerprints(params),
   });
-  protected fingerprint(event: EventView): string | null {
+  protected fingerprint(event: EventLogEntry): string | null {
     return this.identities.value()?.get(event) ?? null;
   }
 
@@ -129,7 +130,9 @@ export class EventsView {
     ];
   }
 
-  protected iconFor(severity: EventView['severity']): string { return SEVERITY_ICON(severity); }
+  protected iconFor(severity: EventSeverity): string { return SEVERITY_ICON(eventSeverityText(severity)); }
+
+  protected severityText(severity: EventSeverity): string { return eventSeverityText(severity); }
 
   protected fleetId(runnerId: string): string { return fleetIdOf(runnerId, this.hosts()); }
 

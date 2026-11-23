@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { eventView } from 'fleet/testing';
+import { eventLogEntry } from './event-log.builders';
 import { EventDetailView } from './event-detail-view';
 
 describe('EventDetailView', () => {
@@ -11,7 +11,7 @@ describe('EventDetailView', () => {
       providers: [provideZonelessChangeDetection(), provideRouter([])],
     });
     const fixture = TestBed.createComponent(EventDetailView);
-    fixture.componentRef.setInput('event', eventView({ runner_id: 'rn_1', chunk_id: 'ch_1' }));
+    fixture.componentRef.setInput('event', eventLogEntry({ runnerId: 'rn_1', chunkId: 'ch_1' }));
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('mobile', mobile);
     fixture.componentRef.setInput('hosts', [{ host_id: 'hs_1', runner_ids: ['rn_1'] }]);
