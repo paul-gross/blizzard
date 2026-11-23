@@ -2,7 +2,6 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, RouterOutlet, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { GardenProposalView } from 'fleet';
 import {
   type RequestClientStub,
   gardenCadenceView,
@@ -23,7 +22,7 @@ describe('GardeningPage (blizzard#397)', () => {
 
   afterEach(() => stub.restore());
 
-  async function render(proposals: GardenProposalView[]) {
+  async function render(proposals: ReturnType<typeof gardenProposalView>[]) {
     stub = stubHubClient({
       'GET /api/garden-proposals': () => ({ proposals, next_cursor: null }),
       'GET /api/scopes': () => [gardenScopeView({ slug: 'a' }), gardenScopeView({ slug: 'b' })],

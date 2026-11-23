@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type GraphSummaryView, type RoutineView, ViewportService } from 'fleet';
+import { ViewportService } from 'fleet';
 import {
   OPERATOR_ME_RESPONSE,
   stubError,
@@ -70,7 +70,7 @@ describe('GardeningRoutinesPage', () => {
   afterEach(() => stub?.restore());
 
   async function render(
-    opts: { routines?: RoutineView[]; graphs?: GraphSummaryView[]; url?: string; mobile?: boolean; create?: () => unknown } = {},
+    opts: { routines?: ReturnType<typeof gardenRoutineView>[]; graphs?: ReturnType<typeof gardenGraphSummaryView>[]; url?: string; mobile?: boolean; create?: () => unknown } = {},
   ) {
     const routines = opts.routines ?? [ROUTINE];
     const graphs = opts.graphs ?? [EFFECTIVE_GRAPH_SUMMARY];

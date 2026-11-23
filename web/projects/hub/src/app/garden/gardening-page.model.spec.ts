@@ -1,3 +1,4 @@
+import type { Project } from '../core/project.domain';
 import type { Proposal } from './core/proposal.domain';
 import { gardenProposal, gardenProposalClosure } from './core/proposal.builders';
 import { gardenProjectChoices, gardenSurfaceCounts, gardenSurfaceTabs, surfaceLabel, surfaceOf, waitingLabel, waitingProposalCount } from './gardening-page.model';
@@ -45,10 +46,16 @@ describe('gardenSurfaceTabs', () => {
 });
 
 describe('gardenProjectChoices', () => {
-  const projects = [
-    { project_id: 'p_w', slug: 'winter', name: 'winter' },
-    { project_id: 'p_b', slug: 'blizzard', name: 'blizzard' },
-  ] as never[];
+  const project = (project_id: string, slug: string): Project => ({
+    project_id,
+    slug,
+    name: slug,
+    description: '',
+    color: '#888888',
+    revision: 1,
+    created_at: '2026-01-01T00:00:00Z',
+  });
+  const projects = [project('p_w', 'winter'), project('p_b', 'blizzard')];
 
   it('lists the projects by name with their proposals waiting, then All', () => {
     const proposals = [

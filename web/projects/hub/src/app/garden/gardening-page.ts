@@ -7,16 +7,16 @@ import { AppLink } from 'fleet/shell';
 
 import { gardenPathOf } from './garden-lens.guard';
 import { injectHubCadencesQuery } from './core/cadences.query';
-import { injectHubRoutinesQuery } from './core/routines.query';
+import { injectHubRoutinesDomainQuery } from './core/routines.query';
 import { defaultRoutineWindow } from './core/routine-window';
-import { injectHubScopesQuery } from './core/scopes.query';
+import { injectHubDomainScopesQuery } from './core/scopes.query';
 import {
   gardenSurfaceCounts,
   gardenSurfaceTabs,
   surfaceOf,
 } from './gardening-page.model';
 import { injectHubGardenProposalsQuery } from './proposals/garden-proposals.query';
-import { injectHubRunsQuery } from './runs/garden-runs.query';
+import { injectHubRunRowsQuery } from './runs/garden-runs.query';
 
 /**
  * One project's garden — the `/p/{project}/gardening` route, a top-level tab beside the board, not a
@@ -44,10 +44,10 @@ import { injectHubRunsQuery } from './runs/garden-runs.query';
 export class GardeningPage {
   private readonly router = inject(Router);
   private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());
-  private readonly scopesQuery = injectHubScopesQuery();
-  private readonly routinesQuery = injectHubRoutinesQuery();
+  private readonly scopesQuery = injectHubDomainScopesQuery();
+  private readonly routinesQuery = injectHubRoutinesDomainQuery();
   private readonly cadencesQuery = injectHubCadencesQuery();
-  private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
+  private readonly runsQuery = injectHubRunRowsQuery(() => this.window.since);
   private readonly proposalsQuery = injectHubGardenProposalsQuery();
   private readonly url = toSignal(
     this.router.events.pipe(

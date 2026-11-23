@@ -1,11 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import {
-  type hubApi,
-  KitAsyncState,
-  type KitAsyncStateValue,
-  KitPanel,
-} from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitPanel } from 'fleet';
 
 /** One origin/class pair's garden-proposal counts over the panel's window,
  * already scoped to the one selected routine by the query's own
@@ -13,10 +8,11 @@ import {
  * own reason for not repeating what every row already shares). `origin` splits a
  * routine's own rows from an operator-authored proposal naming the same routine,
  * since one class can appear under both. `proposalClass` renames the
- * wire's `class`, `FindingListRowVm`'s own `findingClass` rename, so a template never
+ * hub's `class`, `FindingListRowVm`'s own `findingClass` rename, so a template never
  * confuses it with the DOM `class` attribute. */
 export interface ProposalCountsRowVm {
-  readonly origin: hubApi.GardenProposalOrigin;
+  /** Who raised the proposals, as the hub spells it — an origin this build does not know included. */
+  readonly origin: string;
   readonly proposalClass: string;
   readonly created: number;
   readonly open: number;

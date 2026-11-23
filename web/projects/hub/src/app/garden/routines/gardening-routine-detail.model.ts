@@ -1,13 +1,8 @@
-import {
-  type AsyncStateQuery,
-  type GardenProposalCountsView,
-  type GardenSweepsView,
-  type KitAsyncStateValue,
-  type RunRowView,
-  type TrendView,
-  restingAsyncState,
-} from 'fleet';
+import { type AsyncStateQuery, type KitAsyncStateValue, restingAsyncState } from 'fleet';
 import type { Routine } from '../core/routine.domain';
+import type { RoutineProposalCounts, RoutineSweeps, RoutineTrend } from '../core/routine-read.domain';
+import type { RunRow } from '../core/run.domain';
+import { vocabularyText } from '../core/vocabulary.domain';
 import type { Graph, GraphSummary } from '../../graphs/graph.domain';
 import { effectiveGraphByName } from './gardening-effective-graph';
 import type { RoutineLifecycleVars } from './routine-lifecycle.mutations';
@@ -57,21 +52,21 @@ export function strategySteps(graph: Graph | undefined): readonly StrategyStepVm
 }
 
 /** The window's measurement readings, one per sweep that produced one. */
-export function measurementReadings(sweeps: GardenSweepsView | undefined): readonly MeasurementReadingVm[] {
+export function measurementReadings(sweeps: RoutineSweeps | undefined): readonly MeasurementReadingVm[] {
   return (sweeps?.measurements ?? []).map((m) => ({
-    scopeSlug: m.scope_slug,
-    producedAt: m.produced_at,
+    scopeSlug: m.scopeSlug,
+    producedAt: m.producedAt,
     measurement: m.measurement,
   }));
 }
 
 /** Each related scope's last sweep, its revisions rendered `repo@rev` in repo order —
  * `—` when the sweep pinned no revision. */
-export function lastSweptRows(sweeps: GardenSweepsView | undefined): readonly LastSweptRowVm[] {
-  return (sweeps?.last_swept ?? []).map((row) => ({
-    scopeSlug: row.scope_slug,
-    findingSetId: row.finding_set_id,
-    producedAt: row.produced_at,
+export function lastSweptRows(sweeps: RoutineSweeps | undefined): readonly LastSweptRowVm[] {
+  return (sweeps?.lastSwept ?? []).map((row) => ({
+    scopeSlug: row.scopeSlug,
+    findingSetId: row.findingSetId,
+    producedAt: row.producedAt,
     revisionsLabel:
       Object.entries(row.revisions)
         .sort(([a], [b]) => a.localeCompare(b))
@@ -91,20 +86,20 @@ export function relatedScopeRows(
 }
 
 /** The proposal-counts table's rows, one per origin and class. */
-export function proposalCountsRows(counts: GardenProposalCountsView | undefined): readonly ProposalCountsRowVm[] {
+export function proposalCountsRows(counts: RoutineProposalCounts | undefined): readonly ProposalCountsRowVm[] {
   return (counts?.rows ?? []).map((row) => ({
-    origin: row.origin,
-    proposalClass: row.class,
+    origin: vocabularyText(row.origin),
+    proposalClass: row.proposalClass,
     created: row.created,
     open: row.open,
     passed: row.passed,
-    acceptedWithItem: row.accepted_with_item,
-    acceptedWithoutItem: row.accepted_without_item,
+    acceptedWithItem: row.acceptedWithItem,
+    acceptedWithoutItem: row.acceptedWithoutItem,
   }));
 }
 
 /** The trend read summed across every period of the window. */
-export function trendTotals(trend: TrendView): TrendSummaryVm {
+export function trendTotals(trend: RoutineTrend): TrendSummaryVm {
   return {
     created: trend.periods.reduce((sum, p) => sum + p.created, 0),
     outflow: trend.periods.reduce((sum, p) => sum + p.outflow, 0),
@@ -124,17 +119,17 @@ export function modelEffortLabel(models: readonly string[], effort: string | nul
 
 /** The routine `slug`'s runs in the runs window, newest first, each with the findings its delivered sets added — `null`
  * while the runs read is pending. */
-export function routineRecentRuns(runs: readonly RunRowView[] | undefined, slug: string | null): readonly RecentRunVm[] | null {
+export function routineRecentRuns(runs: readonly RunRow[] | undefined, slug: string | null): readonly RecentRunVm[] | null {
   if (runs === undefined || slug === null) return null;
   return runs
-    .filter((run) => run.routine_name === slug)
-    .sort((a, b) => Date.parse(b.minted_at) - Date.parse(a.minted_at))
+    .filter((run) => run.routineName === slug)
+    .sort((a, b) => Date.parse(b.mintedAt) - Date.parse(a.mintedAt))
     .map((run) => ({
-      chunkId: run.chunk_id,
-      scopeSlug: run.scope_slug,
-      mode: run.mode,
-      findings: run.delivered.reduce((sum, set) => sum + set.added_count, 0),
-      mintedAt: run.minted_at,
+      chunkId: run.chunkId,
+      scopeSlug: run.scopeSlug,
+      mode: vocabularyText(run.mode),
+      findings: run.delivered.reduce((sum, set) => sum + set.addedCount, 0),
+      mintedAt: run.mintedAt,
     }));
 }
 
@@ -158,7 +153,7 @@ export function keptByVms(routine: Pick<Routine, 'keptBy'> | null): readonly Kep
 export interface RoutinePanelParts {
   readonly blocked: boolean;
   readonly strategy: readonly StrategyStepVm[];
-  readonly trend: TrendView | undefined;
+  readonly trend: RoutineTrend | undefined;
   readonly measurements: readonly MeasurementReadingVm[];
   readonly lastSwept: readonly LastSweptRowVm[];
   readonly windowLabel: string;

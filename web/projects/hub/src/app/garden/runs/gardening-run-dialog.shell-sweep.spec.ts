@@ -4,7 +4,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { commands, page, userEvent } from 'vitest/browser';
 
-import type { RoutineBaselineView, ScopeView } from 'fleet';
+import { gardenRoutineBaseline } from '../core/run.builders';
+import { gardenScope } from '../core/scope.builders';
 import { EMPTY_RUN_DRAFT, type RunDraft } from '../core/run.domain';
 import { runRules } from './run.form';
 import { GardeningRunDialogView } from './gardening-run-dialog-view';
@@ -48,21 +49,21 @@ function tokenColor(token: string): string {
  * `*.shell-sweep.spec.ts` is — run it via `npm run shell-sweep`
  * (`web/scripts/shell-sweep.js`).
  */
-const SCOPES: ScopeView[] = [
-  { slug: 'web', description: 'the frontend', created_at: '2026-01-01T00:00:00Z', retired: false, revision: null, project_id: null, project_name: null, project_slug: null },
-  { slug: 'blizzard', description: 'the hub itself', created_at: '2026-01-01T00:00:00Z', retired: false, revision: null, project_id: null, project_name: null, project_slug: null },
+const SCOPES = [
+  gardenScope({ slug: 'web', description: 'the frontend' }),
+  gardenScope({ slug: 'blizzard', description: 'the hub itself' }),
 ];
 
-const BASELINES: RoutineBaselineView[] = [
-  {
-    scope_slug: 'web',
-    finding_set_id: 'fins_02SWEEP0000000000000000000',
-    recorded_at: '2026-02-01T00:00:00Z',
+const BASELINES = [
+  gardenRoutineBaseline({
+    scopeSlug: 'web',
+    findingSetId: 'fins_02SWEEP0000000000000000000',
+    recordedAt: '2026-02-01T00:00:00Z',
     repos: [
-      { repo: 'blizzard', revision: 'abc123d', landed_since: 3 },
-      { repo: 'blizzard-context', revision: 'def456a', landed_since: 1 },
+      { repo: 'blizzard', revision: 'abc123d', landedSince: 3 },
+      { repo: 'blizzard-context', revision: 'def456a', landedSince: 1 },
     ],
-  },
+  }),
 ];
 
 /** The field tree the container hands the view, over `draft`. */

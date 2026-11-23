@@ -9,8 +9,8 @@ import {
 } from 'fleet';
 import { injectProjectFilter } from '../../core/project-filter';
 import { lensedKey } from '../../core/query-keys';
-import type { Cadence } from './cadence.domain';
-import { fromCadenceView } from './cadence.translate';
+import type { Cadence, CadenceErrand } from './cadence.domain';
+import { fromCadenceErrandView, fromCadenceView } from './cadence.translate';
 
 /** The cadence list's key — `GET /api/projects/{project}/cadences`, or `GET /api/cadences` on All. Cadences carry no
  * SSE event of their own, so only a cadence write invalidates it. */
@@ -51,7 +51,7 @@ export function injectHubCadencesQuery() {
 
 /**
  * One cadence's errands — each chore over each scope, with its state, the attention stopping it, its last run, and
- * when it is next due. Disabled while `cadenceId()` is `null`.
+ * when it is next due, as {@link CadenceErrand}s. Disabled while `cadenceId()` is `null`.
  */
 export function injectHubCadenceErrandsQuery(cadenceId: () => string | null) {
   return injectQuery(() => {
@@ -67,6 +67,7 @@ export function injectHubCadenceErrandsQuery(cadenceId: () => string | null) {
         if (error) throw error;
         return data ?? [];
       },
+      select: (wire: CadenceErrandView[]): readonly CadenceErrand[] => wire.map(fromCadenceErrandView),
     };
   });
 }

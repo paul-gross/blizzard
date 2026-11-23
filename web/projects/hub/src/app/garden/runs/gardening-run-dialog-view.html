@@ -15,7 +15,7 @@
   @if (confirmedRun(); as run) {
     <div data-testid="run-confirmation">
       <p>
-        Chunk <strong data-testid="run-confirmation-chunk-id">{{ run.chunk_id }}</strong> is on the board, resting
+        Chunk <strong data-testid="run-confirmation-chunk-id">{{ run.chunkId }}</strong> is on the board, resting
         not_ready — promote it before a runner can claim it.
         @if (run.downgraded) {
           <span data-testid="run-confirmation-downgraded">Downgraded to full — the pair had no recorded baseline.</span>
@@ -23,7 +23,7 @@
       </p>
       <a
         class="board-link"
-        [routerLink]="['/board', 'chunk', run.chunk_id] | appLink"
+        [routerLink]="['/board', 'chunk', run.chunkId] | appLink"
         data-testid="run-confirmation-board-link"
         >View on the board</a
       >
@@ -54,12 +54,12 @@
         @if (f.mode().value() === 'delta' && baseline(); as baseline) {
           <div class="baseline" data-testid="run-mode-baseline">
             <p>
-              Baseline <strong>{{ baseline.finding_set_id }}</strong>, recorded
-              <fleet-when [iso]="baseline.recorded_at" />
+              Baseline <strong>{{ baseline.findingSetId }}</strong>, recorded
+              <fleet-when [iso]="baseline.recordedAt" />
             </p>
             <ul>
               @for (repo of baseline.repos; track repo.repo) {
-                <li>{{ repo.repo }}&#64;{{ repo.revision }} — {{ repo.landed_since }} landed since</li>
+                <li>{{ repo.repo }}&#64;{{ repo.revision }} — {{ repo.landedSince }} landed since</li>
               }
             </ul>
           </div>

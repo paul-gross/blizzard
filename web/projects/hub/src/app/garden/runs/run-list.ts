@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type hubApi, type LaneStatus, domainStatusTone, compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectList, KitSelectRow, FleetWhen } from 'fleet';
+import { type LaneStatus, domainStatusTone, compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectList, KitSelectRow, FleetWhen } from 'fleet';
 
 /** A run's finding counts, summed across every set it delivered — `null` when it
  * delivered none, so the row renders no triple rather than a misleading `+0`. */
@@ -17,7 +17,7 @@ interface CountLeg {
 }
 
 /** One row of the run list — three fixed lines: routine/scope + outcome, mode +
- * chunk ref, minted time + counts. `escalated` folds `RunRowView.escalation`
+ * chunk ref, minted time + counts. `escalated` folds `RunRow.escalation`
  * non-`null` once here so the row's own tint never disagrees with what counts as
  * escalated; the status is what makes a
  * failed, running or escalated run legible without relying on that tint. */
@@ -25,7 +25,8 @@ export interface RunListRowVm {
   readonly chunkId: string;
   readonly routineName: string;
   readonly scopeSlug: string;
-  readonly mode: hubApi.RunMode;
+  /** The run mode as the hub spells it — one this build does not know included. */
+  readonly mode: string;
   readonly mintedAt: string;
   readonly laneStatus: LaneStatus;
   readonly escalated: boolean;
@@ -77,7 +78,7 @@ export class FleetRunList {
     this.runPick.emit(chunkId);
   }
 
-  protected modeLabel(mode: hubApi.RunMode): string {
+  protected modeLabel(mode: string): string {
     return mode.length === 0 ? mode : mode[0].toUpperCase() + mode.slice(1);
   }
 

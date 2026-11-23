@@ -126,3 +126,22 @@ export const EMPTY_CHORE_DRAFT: ChoreDraft = {
   note: '',
   urgency: '',
 };
+
+/** Where one errand stands: due now, running, waiting for its next moment, or stopped by attention. */
+export type ErrandState = 'due' | 'running' | 'waiting' | 'stopped';
+
+/** The last run an errand minted: its chunk, once minted, and when it was scheduled. */
+export interface ErrandRun {
+  readonly chunkId: string | null;
+  readonly scheduledAt: string;
+}
+
+/** One chore over one scope, as a cadence keeps it: its state, what stops it, its last run, and when it is next due. */
+export interface CadenceErrand {
+  readonly chore: string;
+  readonly scope: string;
+  readonly state: Vocabulary<ErrandState>;
+  readonly attention: readonly CadenceAttention[];
+  readonly lastRun: ErrandRun | null;
+  readonly dueAt: string | null;
+}

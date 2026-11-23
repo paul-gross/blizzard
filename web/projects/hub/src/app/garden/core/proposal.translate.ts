@@ -7,7 +7,8 @@ import type { Vocabulary } from './vocabulary.domain';
 
 const unlisted = (raw: string) => ({ unlisted: raw });
 
-const originOf = openLookup<hubApi.GardenProposalOrigin, Vocabulary<ProposalOrigin>>(
+/** Who raised a proposal, as the domain holds it. */
+export const proposalOriginOf = openLookup<hubApi.GardenProposalOrigin, Vocabulary<ProposalOrigin>>(
   { [hubApi.GardenProposalOrigin.ROUTINE_RUN]: 'routine-run', [hubApi.GardenProposalOrigin.OPERATOR]: 'operator' },
   unlisted,
 );
@@ -42,7 +43,7 @@ export function fromGardenProposalView(wire: GardenProposalView): Proposal {
     title: wire.title,
     body: wire.body,
     proposalClass: wire.class,
-    origin: originOf(wire.origin),
+    origin: proposalOriginOf(wire.origin),
     createdBy: wire.created_by ?? null,
     createdAt: wire.created_at,
     routineSlug: wire.routine_name ?? null,

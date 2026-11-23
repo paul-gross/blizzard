@@ -2,7 +2,6 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, RouterOutlet, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { GardenProposalView } from 'fleet';
 import { gardenProjectView, gardenProposalView, settle, stubHubClient } from 'fleet/testing';
 import { commands, page } from 'vitest/browser';
 
@@ -46,7 +45,7 @@ class TestGardenSweepHost {}
 const PROJECTS = [gardenProjectView({ project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard' })];
 const waiting = (id: string) => gardenProposalView({ proposal_id: id, project_id: 'proj_b' });
 
-async function render(proposals: GardenProposalView[]) {
+async function render(proposals: ReturnType<typeof gardenProposalView>[]) {
   const stub = stubHubClient({
     'GET /api/projects': () => ({ projects: PROJECTS }),
     'GET /api/runners': () => ({ runners: [] }),

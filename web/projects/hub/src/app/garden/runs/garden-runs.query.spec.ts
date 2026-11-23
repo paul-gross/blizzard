@@ -4,7 +4,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import type { ChunkStatus } from 'fleet';
 
 import { type RequestClientStub, runDeltaView, runRowView, settle, stubHubClient } from 'fleet/testing';
-import { injectHubRunDeltaQuery, injectHubRunListQuery, injectHubRunsQuery } from './garden-runs.query';
+import { injectHubRunDeltaQuery, injectHubRunRowsQuery, injectHubScopeSweepsQuery } from './garden-runs.query';
 
 @Component({
   selector: 'app-test-runs-query-host',
@@ -12,8 +12,8 @@ import { injectHubRunDeltaQuery, injectHubRunListQuery, injectHubRunsQuery } fro
   template: '',
 })
 class TestRunsQueryHost {
-  readonly query = injectHubRunsQuery(() => '2026-01-01T00:00:00Z');
-  readonly list = injectHubRunListQuery(() => '2026-01-01T00:00:00Z');
+  readonly list = injectHubRunRowsQuery(() => '2026-01-01T00:00:00Z');
+  readonly sweeps = injectHubScopeSweepsQuery(() => '2026-01-01T00:00:00Z');
 }
 
 @Component({
@@ -34,7 +34,7 @@ class TestRunDeltaDisabledQueryHost {
   readonly query = injectHubRunDeltaQuery(() => null);
 }
 
-describe('injectHubRunsQuery', () => {
+describe('injectHubRunRowsQuery', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
@@ -49,9 +49,8 @@ describe('injectHubRunsQuery', () => {
     const fixture = TestBed.createComponent(TestRunsQueryHost);
     await settle(fixture);
 
-    expect(fixture.componentInstance.query.data()).toHaveLength(1);
-    expect(fixture.componentInstance.list.data()?.[0].laneStatus).toEqual({ kind: 'done' });
-    expect(fixture.componentInstance.query.data()?.[0]).not.toHaveProperty('laneStatus');
+    expect(fixture.componentInstance.list.data()).toMatchObject([{ chunkId: 'ch_1', laneStatus: { kind: 'done' } }]);
+    expect(fixture.componentInstance.sweeps.data()).toEqual([{ scopeSlug: 'blizzard', mintedAt: '2026-01-10T00:00:00Z' }]);
     const calls = stub.forRoute('/api/runs', 'GET');
     expect(calls).toHaveLength(1);
   });
@@ -85,7 +84,7 @@ describe('injectHubRunDeltaQuery', () => {
     const fixture = TestBed.createComponent(TestRunDeltaQueryHost);
     await settle(fixture);
 
-    expect(fixture.componentInstance.query.data()?.routine_name).toBe('nightly');
+    expect(fixture.componentInstance.query.data()?.routineName).toBe('nightly');
     expect(stub.forRoute('/api/runs/ch_1', 'GET')).toHaveLength(1);
   });
 

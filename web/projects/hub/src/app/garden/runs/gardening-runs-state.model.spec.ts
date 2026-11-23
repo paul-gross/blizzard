@@ -1,45 +1,31 @@
-import type { LaneStatus, RunRowView } from 'fleet';
 import { gardenRoutine } from '../core/routine.builders';
+import { gardenDeliveredSet, gardenRunEscalation, gardenRunRow } from '../core/run.builders';
 import { describe, expect, it } from 'vitest';
-import { runCadenceView } from 'fleet/testing';
 
 import { mintedAtFor, runListRows, summedCounts } from './gardening-runs-state.model';
 
-const DELIVERED_RUN: RunRowView & { laneStatus: LaneStatus } = {
-  chunk_id: 'ch_1',
-  routine_name: 'nightly',
-  scope_slug: 'blizzard',
+const DELIVERED_RUN = gardenRunRow({
+  chunkId: 'ch_1',
+  routineName: 'nightly',
+  scopeSlug: 'blizzard',
   mode: 'full',
-  minted_at: '2026-01-10T00:00:00Z',
-  outcome: 'done',
+  mintedAt: '2026-01-10T00:00:00Z',
   laneStatus: { kind: 'done' },
-  escalation: null,
-  // Minted by a cadence — the list row reads the same as a hand-started run's.
-  cadence: runCadenceView(),
   delivered: [
-    { finding_set_id: 'fins_1', revisions: { blizzard: 'abc123' }, measurement: '3 findings', added_count: 1, observed_count: 11, gone_count: 0 },
-    { finding_set_id: 'fins_2', revisions: { blizzard: 'def456' }, measurement: null, added_count: 0, observed_count: 0, gone_count: 2 },
+    gardenDeliveredSet({ addedCount: 1, observedCount: 11, goneCount: 0 }),
+    gardenDeliveredSet({ addedCount: 0, observedCount: 0, goneCount: 2 }),
   ],
-  project_id: null,
-  project_name: null,
-  project_slug: null,
-};
+});
 
-const ESCALATED_RUN: RunRowView & { laneStatus: LaneStatus } = {
-  chunk_id: 'ch_2',
-  routine_name: 'nightly',
-  scope_slug: 'web',
+const ESCALATED_RUN = gardenRunRow({
+  chunkId: 'ch_2',
+  routineName: 'nightly',
+  scopeSlug: 'web',
   mode: 'delta',
-  minted_at: '2026-01-11T00:00:00Z',
-  outcome: 'needs_human',
+  mintedAt: '2026-01-11T00:00:00Z',
   laneStatus: { kind: 'needs_human' },
-  escalation: { node_name: 'survey', takeover_command: 'blizzard hub chunk takeover ch_2', wrapped_takeover_command: '' },
-  cadence: null,
-  delivered: [],
-  project_id: null,
-  project_name: null,
-  project_slug: null,
-};
+  escalation: gardenRunEscalation({ takeoverCommand: 'blizzard hub chunk takeover ch_2' }),
+});
 
 describe('summedCounts', () => {
   it('answers null for a run that delivered no set', () => {
@@ -75,6 +61,10 @@ describe('runListRows', () => {
         counts: null,
       },
     ]);
+  });
+
+  it('renders a mode this build does not know raw', () => {
+    expect(runListRows([gardenRunRow({ chunkId: 'ch_3', mode: { unlisted: 'sampled' } })], [])[0].mode).toBe('sampled');
   });
 
   it("names each run's routine by its display name, looked up by the slug the run carries", () => {

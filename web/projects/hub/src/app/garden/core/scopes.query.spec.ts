@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import { gardenScopeView, type RequestClientStub, stubHubClient, settle } from 'fleet/testing';
-import { injectHubScopesQuery } from './scopes.query';
+import { injectHubDomainScopesQuery } from './scopes.query';
 
 @Component({
   selector: 'app-test-scopes-query-host',
@@ -11,10 +11,10 @@ import { injectHubScopesQuery } from './scopes.query';
   template: '',
 })
 class TestScopesQueryHost {
-  readonly query = injectHubScopesQuery();
+  readonly query = injectHubDomainScopesQuery();
 }
 
-describe('injectHubScopesQuery', () => {
+describe('injectHubDomainScopesQuery', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
@@ -29,7 +29,7 @@ describe('injectHubScopesQuery', () => {
     const fixture = TestBed.createComponent(TestScopesQueryHost);
     await settle(fixture);
 
-    expect(fixture.componentInstance.query.data()).toHaveLength(1);
+    expect(fixture.componentInstance.query.data()).toMatchObject([{ slug: 'blizzard', description: 'the hub itself' }]);
     expect(stub.forRoute('/api/scopes', 'GET')).toHaveLength(1);
   });
 });

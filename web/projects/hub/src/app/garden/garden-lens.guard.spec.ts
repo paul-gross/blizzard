@@ -2,7 +2,6 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, RouterOutlet, type Routes, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { ProjectView } from 'fleet';
 import {
   OPERATOR_ME_RESPONSE,
   type RequestClientStub,
@@ -32,7 +31,7 @@ class TestLensedGarden {}
 
 const LANDING_ONLY: Routes = [{ path: '**', component: TestLensedGarden }];
 
-function project(slug: string, name: string): ProjectView {
+function project(slug: string, name: string) {
   return gardenProjectView({ project_id: `proj_${slug}`, slug, name });
 }
 
@@ -48,7 +47,7 @@ describe('the gardening guards on All', () => {
   let stub: RequestClientStub;
 
   async function boot(
-    projects: readonly ProjectView[],
+    projects: readonly ReturnType<typeof project>[],
     records: Parameters<typeof stubHubClient>[0] = {},
     lensedGarden: Routes = GARDENING_ROUTES,
   ) {

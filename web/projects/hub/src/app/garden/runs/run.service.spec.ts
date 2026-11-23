@@ -29,7 +29,7 @@ describe('injectRunService', () => {
 
     const outcome = await service.run('rtn_1', { ...EMPTY_RUN_DRAFT, scope: 'web', mode: 'delta', urgency: 'urgent', note: ' hi ' });
 
-    expect(outcome.ok && outcome.run.chunk_id).toBe('ch_1');
+    expect(outcome.ok && outcome.run.chunkId).toBe('ch_1');
     expect(stub.forRoute('/api/routines/rtn_1/run', 'POST')[0].body).toEqual({
       scope_slug: 'web',
       mode: 'delta',

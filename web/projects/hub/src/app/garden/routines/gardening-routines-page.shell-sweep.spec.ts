@@ -2,7 +2,7 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type MeResponse, ViewportService } from 'fleet';
+import { ViewportService } from 'fleet';
 import {
   OPERATOR_ME_RESPONSE,
   gardenGraphSummaryView,
@@ -91,7 +91,7 @@ const SCOPES = [
   gardenScopeView({ slug: 'blizzard', description: 'the hub, runner, CLI and board', created_at: '2026-01-01T00:00:00Z' }),
 ];
 
-const ME: MeResponse = {
+const ME: typeof OPERATOR_ME_RESPONSE = {
   ...OPERATOR_ME_RESPONSE,
   user_id: 'usr_1',
   username: 'gardener',

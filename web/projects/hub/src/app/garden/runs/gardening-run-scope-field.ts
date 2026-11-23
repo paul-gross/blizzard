@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
 
-import { KitBadge, KitField, KitOption, KitOptionGroup, type ScopeView } from 'fleet';
+import { KitBadge, KitField, KitOption, KitOptionGroup } from 'fleet';
+
+import type { Scope } from '../core/scope.domain';
 
 /**
  * The gardening run dialog's scope field.
@@ -22,7 +24,7 @@ export class GardeningRunScopeField {
 
   /** The routine's own related, non-retired scopes, previously-swept-by-this-routine
    * first; rendered in the order given. */
-  readonly scopes = input.required<readonly ScopeView[]>();
+  readonly scopes = input.required<readonly Scope[]>();
 
   /** The scope slugs this routine has previously swept — renders a "previously swept"
    * marker per row; membership only, the ordering itself already lives in `scopes()`. */

@@ -35,7 +35,7 @@ import { map } from 'rxjs';
 
 import { isRoutineBlocked } from './gardening-effective-graph';
 import { injectLensedProject } from '../../core/lensed-project';
-import { injectHubRunsQuery } from '../runs/garden-runs.query';
+import { injectHubRunRowsQuery } from '../runs/garden-runs.query';
 import { GardeningRunDialog } from '../runs/gardening-run-dialog';
 import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
 
@@ -96,7 +96,7 @@ export class GardeningRoutineDetail {
   protected readonly projectName = computed(() => this.project()?.name ?? null);
 
   /** The project's runs in the reporting window — the selected routine's recent runs and its Runs count. */
-  private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
+  private readonly runsQuery = injectHubRunRowsQuery(() => this.window.since);
   private readonly graphs = computed<readonly GraphSummary[]>(() => this.graphsQuery.data() ?? []);
 
   /** The `routineSlug` route param, or `null` on the bare child route. Routines are

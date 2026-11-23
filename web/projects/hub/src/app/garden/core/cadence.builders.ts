@@ -3,7 +3,7 @@
 // specs and for answering a stubbed transport.
 import { fixtureInstant } from 'fleet/testing';
 
-import type { Cadence, CadenceAttention, Chore } from './cadence.domain';
+import type { Cadence, CadenceAttention, CadenceErrand, Chore, ErrandRun } from './cadence.domain';
 
 /** One chore keyed `nightly`, running routine `nightly` over every scope in full, promoting, with no note. */
 export function gardenChore(overrides: Partial<Chore> = {}): Chore {
@@ -49,4 +49,22 @@ export function gardenCadence(overrides: Pick<Cadence, 'slug'> & Partial<Cadence
 /** One thing stopping a cadence: chore `nightly` over a scope the project lacks. */
 export function gardenCadenceAttention(overrides: Partial<CadenceAttention> = {}): CadenceAttention {
   return { chore: 'nightly', scope: 'gone', reason: 'scope_unknown', ...overrides };
+}
+
+/** A finished last run: its chunk, scheduled an hour before the fixture clock. */
+export function gardenErrandRun(overrides: Partial<ErrandRun> = {}): ErrandRun {
+  return { chunkId: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', scheduledAt: fixtureInstant(-3600), ...overrides };
+}
+
+/** A waiting errand: chore `nightly` over scope `blizzard`, never run, due fourteen hours after the fixture clock. */
+export function gardenCadenceErrand(overrides: Partial<CadenceErrand> = {}): CadenceErrand {
+  return {
+    chore: 'nightly',
+    scope: 'blizzard',
+    state: 'waiting',
+    attention: [],
+    lastRun: null,
+    dueAt: fixtureInstant(14 * 3600),
+    ...overrides,
+  };
 }

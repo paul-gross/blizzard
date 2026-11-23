@@ -17,7 +17,7 @@ import {
   injectHubRoutineSweepsQuery,
   injectHubRoutineTrendQuery,
   injectHubRoutinesDomainQuery,
-  injectHubRoutinesQuery,
+  injectHubScopeRoutinesDomainQuery,
 } from './routines.query';
 
 @Component({
@@ -26,7 +26,8 @@ import {
   template: '',
 })
 class TestRoutinesQueryHost {
-  readonly query = injectHubRoutinesQuery();
+  readonly query = injectHubRoutinesDomainQuery();
+  readonly scopeRoutines = injectHubScopeRoutinesDomainQuery();
 }
 
 @Component({
@@ -105,7 +106,7 @@ class TestRoutineProposalCountsDisabledQueryHost {
   );
 }
 
-describe('injectHubRoutinesQuery', () => {
+describe('the routine list read', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
@@ -123,6 +124,7 @@ describe('injectHubRoutinesQuery', () => {
     await settle(fixture);
 
     expect(fixture.componentInstance.query.data()).toHaveLength(1);
+    expect(fixture.componentInstance.scopeRoutines.data()).toMatchObject([{ routineId: 'rtn_1', slug: 'nightly' }]);
     expect(stub.forRoute('/api/routines', 'GET')).toHaveLength(1);
   });
 });
@@ -161,7 +163,7 @@ describe('injectHubRoutineTrendQuery', () => {
     const fixture = TestBed.createComponent(TestRoutineTrendQueryHost);
     await settle(fixture);
 
-    expect(fixture.componentInstance.query.data()?.routine_name).toBe('nightly');
+    expect(fixture.componentInstance.query.data()).toEqual({ periods: [] });
     expect(stub.forRoute('/api/routines/trend', 'GET')).toHaveLength(1);
   });
 });
@@ -181,7 +183,7 @@ describe('injectHubRoutineSweepsQuery', () => {
     const fixture = TestBed.createComponent(TestRoutineSweepsQueryHost);
     await settle(fixture);
 
-    expect(fixture.componentInstance.query.data()?.routine_name).toBe('nightly');
+    expect(fixture.componentInstance.query.data()).toEqual({ lastSwept: [], measurements: [] });
     expect(stub.forRoute('/api/routines/rtn_1/sweeps', 'GET')).toHaveLength(1);
   });
 
@@ -219,7 +221,7 @@ describe('injectHubRoutineProposalCountsQuery', () => {
     const fixture = TestBed.createComponent(TestRoutineProposalCountsQueryHost);
     await settle(fixture);
 
-    expect(fixture.componentInstance.query.data()?.rows).toHaveLength(1);
+    expect(fixture.componentInstance.query.data()?.rows).toMatchObject([{ proposalClass: 'stale-docstring', acceptedWithItem: 3 }]);
     const calls = stub.forRoute('/api/routines/proposal-counts', 'GET');
     expect(calls).toHaveLength(1);
   });

@@ -1,5 +1,4 @@
-import { type ProjectView } from 'fleet';
-
+import type { Project } from '../core/project.domain';
 import type { Proposal } from './core/proposal.domain';
 
 import { isGardenProposalWaiting, waitingLabel } from './proposals/gardening-proposals-page.model';
@@ -90,7 +89,7 @@ export interface GardenProjectChoice {
 }
 
 export function gardenProjectChoices(
-  projects: readonly ProjectView[],
+  projects: readonly Project[],
   proposals: readonly Proposal[] | undefined,
 ): readonly GardenProjectChoice[] {
   return [

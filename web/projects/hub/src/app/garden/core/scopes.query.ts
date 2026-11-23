@@ -12,21 +12,13 @@ import { hubScopeRoutinesKey, hubScopesKey, lensedKey } from '../../core/query-k
 import { injectProjectFilter } from '../../core/project-filter';
 
 /**
- * The scope list — every scope, newest first, each marked retired or not. Under a project lens it is that project's
- * scopes (`GET /api/projects/{project}/scopes`); on All it is the tenant's (`GET /api/scopes`), which only the
- * gardening doorway reads, grouping them by project. Feeds the gardening run dialog's scope picker and the routines
- * panel's scope list. Scopes change rarely and carry no SSE event of their own, `injectHubRoutinesQuery`'s own
- * standing.
+ * The scope list as {@link Scope}s — every scope, newest first, each marked retired or not. Under a project lens it is
+ * that project's scopes (`GET /api/projects/{project}/scopes`); on All it is the tenant's (`GET /api/scopes`), which
+ * only the gardening doorway reads, grouping them by project. Feeds the gardening run dialog's scope picker and the
+ * routines panel's scope list. Scopes change rarely and carry no SSE event of their own, `injectHubRoutinesDomainQuery`'s
+ * own standing.
  *
  * `tenantWide` reads the whole tenant even under a lens, for a figure that sets one project beside the others.
- */
-export function injectHubScopesQuery(options: { readonly tenantWide?: boolean } = {}) {
-  return injectQuery(scopesQueryOptions(options));
-}
-
-/**
- * The scope list as {@link Scope}s — the same read and cache entry as {@link injectHubScopesQuery}, which keeps the
- * wire response; this reader takes the domain.
  */
 export function injectHubDomainScopesQuery(options: { readonly tenantWide?: boolean } = {}) {
   const read = scopesQueryOptions(options);

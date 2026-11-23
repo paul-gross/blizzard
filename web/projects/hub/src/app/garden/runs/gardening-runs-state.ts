@@ -2,7 +2,7 @@ import { computed, inject, Injectable, type Signal } from '@angular/core';
 import { FLEET_CLOCK, asyncState, type KitAsyncStateValue } from 'fleet';
 import { defaultRoutineWindow } from '../core/routine-window';
 import { injectHubRoutinesDomainQuery } from '../core/routines.query';
-import { injectHubRunListQuery } from './garden-runs.query';
+import { injectHubRunRowsQuery } from './garden-runs.query';
 import { mintedAtFor, runListRows } from './gardening-runs-state.model';
 import { type RunListRowVm } from './run-list';
 
@@ -24,7 +24,7 @@ export class GardeningRunsState {
    * rather than the read's own 24-hour server default. */
   private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());
 
-  readonly runsQuery = injectHubRunListQuery(() => this.window.since);
+  readonly runsQuery = injectHubRunRowsQuery(() => this.window.since);
 
   /** The routines a run row's slug resolves against for its display name. */
   readonly routinesQuery = injectHubRoutinesDomainQuery();

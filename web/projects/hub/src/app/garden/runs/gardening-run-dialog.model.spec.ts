@@ -1,23 +1,17 @@
-import type { RoutineBaselineView, ScopeView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
+import { gardenRoutineBaseline } from '../core/run.builders';
+import type { RoutineBaseline } from '../core/run.domain';
+import { gardenScope } from '../core/scope.builders';
+import type { Scope } from '../core/scope.domain';
 import { baselineForScope, liveRelatedScopes, orderScopesBySwept, sweptScopeSlugs } from './gardening-run-dialog.model';
 
-function scope(slug: string, retired = false): ScopeView {
-  return {
-    slug,
-    description: `${slug} scope`,
-    created_at: '2026-01-01T00:00:00Z',
-    retired,
-    revision: null,
-    project_id: null,
-    project_name: null,
-    project_slug: null,
-  };
+function scope(slug: string, retired = false): Scope {
+  return gardenScope({ slug, description: `${slug} scope`, retired });
 }
 
-function baseline(scopeSlug: string): RoutineBaselineView {
-  return { scope_slug: scopeSlug, finding_set_id: `fins_${scopeSlug}`, recorded_at: '2026-01-10T00:00:00Z', repos: [] };
+function baseline(scopeSlug: string): RoutineBaseline {
+  return gardenRoutineBaseline({ scopeSlug, findingSetId: `fins_${scopeSlug}`, recordedAt: '2026-01-10T00:00:00Z' });
 }
 
 const ALPHA = scope('alpha');
@@ -70,7 +64,7 @@ describe('orderScopesBySwept', () => {
 
 describe('baselineForScope', () => {
   it('finds the scope\'s baseline, and none for a never-swept scope or no choice', () => {
-    const web = { scope_slug: 'web' } as RoutineBaselineView;
+    const web = gardenRoutineBaseline({ scopeSlug: 'web' });
     expect(baselineForScope([web], 'web')).toBe(web);
     expect(baselineForScope([web], 'hub')).toBeUndefined();
     expect(baselineForScope([web], '')).toBeUndefined();
