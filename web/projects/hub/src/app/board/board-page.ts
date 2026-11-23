@@ -15,7 +15,7 @@ import { boardLayoutOf, type BoardLayout } from '../core/board-layout.model';
 import { BoardShell } from './board-shell/board-shell';
 import { TracksPanel } from './tracks/tracks-panel';
 import { type BoardLaneMove, type BoardReposition } from './board-shell/board-column';
-import { type ChunkSummary, asyncState, injectChunkUrlSelection, injectRunnerHostNames, errorMessage, type KitAsyncStateValue, injectHubChunkDetailQuery, injectPendingMutationVariables, KitErrorLine } from 'fleet';
+import { asyncState, injectChunkUrlSelection, injectRunnerHostNames, errorMessage, type KitAsyncStateValue, injectHubChunkDetailQuery, injectPendingMutationVariables, KitErrorLine } from 'fleet';
 import { ChunkDetail } from './chunk-dock/chunk-detail';
 import { StepDrawer } from './tracks/step-drawer';
 import { ActivityPanel } from './activity/activity-panel';
@@ -172,7 +172,7 @@ export class BoardPage {
 
   /** {@link chunks} with pending board changes applied (`withPendingBoardChanges`);
    * {@link boardState} and {@link selected} stay off the real list. */
-  protected readonly boardChunks = computed<readonly ChunkSummary[]>(() =>
+  protected readonly boardChunks = computed(() =>
     withPendingUrgencies(withPendingBoardChanges(this.chunks(), this.pendingPromotes(), this.pendingDeletes(), this.pendingDemotes()), this.pendingUrgencies(), this.urgenciesQuery.data() ?? []),
   );
 

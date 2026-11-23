@@ -16,7 +16,7 @@ export const INVALIDATION_COALESCE_WINDOW_MS = 1000;
  * event kinds it carries, and the registry mapping each kind to the query keys it
  * stales — a lookup (`openLookup`) that stales nothing for a kind it does not list.
  * `onFrame`/`onAuthFailed` are invoked on every frame or auth failure, uninterpreted. */
-export interface LiveInvalidationSpineOptions<TPayload extends object, TType extends string> {
+export interface LiveInvalidationSpineOptions<TPayload extends object, TType> {
   sse: SseService;
   queryClient: QueryClient;
   injector: EnvironmentInjector;
@@ -24,7 +24,9 @@ export interface LiveInvalidationSpineOptions<TPayload extends object, TType ext
   /** The stream's URL, or a function read each time the stream opens — so a {@link LiveInvalidationSpine.restart}
    * can reopen it on another URL. */
   streamUrl: string | (() => string);
-  eventTypes: readonly TType[];
+  eventTypes: readonly string[];
+  /** Optional boundary mapping, applied once before either consumer sees a frame. */
+  mapFrame?: (type: string, data: unknown) => { type: TType; data: TPayload } | null;
   registry: (type: TType) => (data: TPayload) => readonly (readonly unknown[])[];
   coalesceWindowMs: number;
   onFrame?: (type: TType, data: TPayload) => void;
@@ -36,7 +38,7 @@ export interface LiveInvalidationSpineOptions<TPayload extends object, TType ext
  * dispatched through the caller's registry into a coalesced `invalidateQueries`
  * pass, plus reconnect-then-re-GET gap recovery.
  */
-export class LiveInvalidationSpine<TPayload extends object, TType extends string> {
+export class LiveInvalidationSpine<TPayload extends object, TType> {
   /** The open stream, held in a signal so {@link status} and {@link authFailed} follow it across a
    * {@link restart}. */
   private readonly current = signal<SseHandle<TPayload> | null>(null);
@@ -101,8 +103,10 @@ export class LiveInvalidationSpine<TPayload extends object, TType extends string
     this.current.set(handle);
 
     this.sub = handle.events.subscribe(({ type, data }) => {
-      onFrame?.(type as TType, data);
-      this.dispatch(type as TType, data);
+      const frame = this.opts.mapFrame ? this.opts.mapFrame(type, data) : { type: type as TType, data };
+      if (frame === null) return;
+      onFrame?.(frame.type, frame.data);
+      this.dispatch(frame.type, frame.data);
     });
 
     // Reconnect-then-re-GET: a fresh reconnect re-reads the whole tree to close any

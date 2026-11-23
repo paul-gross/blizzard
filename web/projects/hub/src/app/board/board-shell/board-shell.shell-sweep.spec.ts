@@ -2,8 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { commands, page, userEvent } from 'vitest/browser';
 
-import type { ChunkStatus, ChunkSummary } from 'fleet';
-import { chunkSummary } from 'fleet/testing';
+import { boardChunk } from '../board.fixture';
 import { BoardShell } from './board-shell';
 
 /**
@@ -17,19 +16,21 @@ import { BoardShell } from './board-shell';
  */
 const LONG_NODE = 'n'.repeat(120);
 
-const RUNNING: ChunkSummary = chunkSummary({
+const RUNNING = boardChunk({
   chunk_id: 'ch_01longnode000000000000000',
   graph_id: 'gr_1',
   status: 'running',
+  laneStatus: { kind: 'running' },
   current_node_id: 'nd_long',
   current_node_name: LONG_NODE,
   work_refs: [],
 });
 
-const NEWER_STATUS: ChunkSummary = chunkSummary({
+const NEWER_STATUS = boardChunk({
   chunk_id: 'ch_01unknownstatus00000000000',
   graph_id: 'gr_1',
-  status: 'newer-status' as ChunkStatus,
+  status: 'newer-status' as never,
+  laneStatus: { kind: 'unknown', raw: 'newer-status' },
   current_node_id: 'nd_review',
   current_node_name: 'review',
 });

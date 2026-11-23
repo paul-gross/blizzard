@@ -6,7 +6,7 @@
     data-testid="glance-card"
     [attr.data-chunk]="row.chunkId"
     [attr.data-status]="row.status"
-    [style.--status-color]="statusColor(row.status)"
+    [style.--status-color]="statusColor(row.laneStatus)"
     [class.tinted]="projectTint(row.projectColor) !== null"
     [style.--project-tint]="projectTint(row.projectColor)"
   >
@@ -14,7 +14,7 @@
     @if (urgencyPill({ urgency: row.urgency ?? null, terminal: row.terminal }, urgencies()); as urgency) {
       <fleet-chunk-urgency class="urgency-banner" [detail]="{ chunk_id: row.chunkId, terminal: row.terminal, urgency: row.urgency ? { urgency_id: row.urgency.id, slug: row.urgency.slug } : null }" [resolvedUrgency]="urgency" [iconUrl]="urgencyIconUrls()[urgency.id] ?? null" [banner]="true" bannerLayout="mobile" />
     }
-    <fleet-lane-icon class="lane" [lane]="row.lane" [status]="row.status" />
+    <fleet-lane-icon class="lane" [lane]="row.lane" [status]="row.laneStatus" />
     <span class="grow">
       <span class="head">
         @if (row.lines[0]?.label; as label) {

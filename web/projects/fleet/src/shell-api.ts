@@ -8,8 +8,9 @@ export { AppShell } from './lib/shell/app-shell/app-shell';
 export { BoardHeader } from './lib/shell/board-header/board-header';
 export { EVENT_SOURCE_FACTORY, FetchEventSource, SseService, type EventSourceFactory, type SseStatus } from './lib/sse/sse.service';
 export { INVALIDATION_COALESCE_WINDOW_MS, LiveInvalidationSpine } from './lib/sse/live-invalidation-spine';
-export { HUB_EVENT_TYPES, hubEventStreamUrl, type HubEventPayload } from './lib/sse/hub-events';
-export { ActivityChunkChangeCause, ActivityHubEventType, ActivityRunnerChangeKind, HubEventType, type ActivityView } from './lib/api/hub/types.gen';
+export { HUB_EVENT_TYPES, hubEventStreamUrl } from './lib/sse/hub-events';
+export { HubEventKind, hubEventTypeName, type HubEventType, type HubEventData, type ActivityFact } from './lib/sse/hub-events.domain';
+export { translateHubEvent, translateHubEventType } from './lib/sse/hub-events.translate';
 export { openLookup } from './lib/core/open-lookup';
 export { chunkDetailKey, chunkWorkItemsKey } from './lib/core/query-keys';
 export { FLEET_CLOCK, injectNowSignal } from './lib/core/now-signal';
@@ -66,3 +67,10 @@ export type {
 } from './lib/api/hub/types.gen';
 export { KitChipGroup } from './lib/kit/kit-chip-group';
 export { KitChipOptionDirective } from './lib/kit/kit-chip-option';
+
+export { laneCountInput, laneStatus } from './lib/core/chunk-lanes.translate';
+export type { LaneCounts, LaneStatus } from './lib/core/chunk-lanes';
+
+export type { HostFact, HostUsage, SubscriptionUsage } from './lib/core/host.domain';
+export { hostConnection, sampleMiss } from './lib/core/host.translate';
+export type { SubscriptionUsageView, HostSubscriptionUsageView } from './lib/api/hub';

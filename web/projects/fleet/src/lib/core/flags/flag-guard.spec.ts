@@ -3,27 +3,10 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { flagsApiFlagsGet } from '../../api/hub';
-import type { FlagsResponse } from '../../api/hub';
-import {
-  type RequestClientStub,
-  type StubDetailBody,
-  type StubHttpError,
-  stubError,
-  stubHubClient,
-} from '../../testing/transport/stub-request-client';
+import type { Flags } from '../flags.domain';
 import { APP_SCOPE, type InAppLink } from '../app-scope';
 import { flagGuard } from './flag-guard';
 import { FlagStore, type FlagsRead, provideFlags } from './flag-store';
-
-const READ: FlagsRead = {
-  queryKey: ['test', 'flags'],
-  queryFn: async () => {
-    const { data, error } = await flagsApiFlagsGet({ throwOnError: false });
-    if (error) throw error;
-    return data!;
-  },
-};
 
 @Component({ selector: 'fleet-test-view', template: '' })
 class View {}
@@ -38,18 +21,19 @@ class Nav {
 }
 
 describe('flagGuard', () => {
-  let stub: RequestClientStub;
-
   const setup = async (
-    answer: FlagsResponse | StubHttpError<number, StubDetailBody>,
+    answer: Flags | Error,
     lens: string | null = null,
   ) => {
-    stub = stubHubClient({ 'GET /api/flags': () => answer });
+    const read: FlagsRead = { queryKey: ['test', 'flags'], queryFn: async () => {
+      if (answer instanceof Error) throw answer;
+      return answer;
+    } };
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        provideFlags(READ),
+        provideFlags(read),
         provideRouter([
           { path: 'shiny', canActivate: [flagGuard('shiny')], component: View },
           { path: 'p/:slug', children: [{ path: '**', component: View }] },
@@ -63,8 +47,6 @@ describe('flagGuard', () => {
     return TestBed.inject(Router);
   };
 
-  afterEach(() => stub.restore());
-
   it('activates the route while the flag is on', async () => {
     const router = await setup({ flags: { shiny: true }, overridden: [] });
 
@@ -74,10 +56,10 @@ describe('flagGuard', () => {
   });
 
   it('redirects to the app root while the flag is off, or unknown, or the read failed', async () => {
-    const answers: (FlagsResponse | StubHttpError<number, StubDetailBody>)[] = [
+    const answers: (Flags | Error)[] = [
       { flags: { shiny: false }, overridden: [] },
       { flags: {}, overridden: [] },
-      stubError(500, { detail: 'down' }),
+      new Error('down'),
     ];
     for (const answer of answers) {
       TestBed.resetTestingModule();
@@ -86,7 +68,6 @@ describe('flagGuard', () => {
       await router.navigateByUrl('/shiny');
 
       expect(router.url).toBe('/');
-      stub.restore();
     }
   });
 

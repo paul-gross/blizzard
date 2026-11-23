@@ -1,21 +1,23 @@
+import { boardChunk, boardCounts } from '../board.fixture';
+import type { BoardChunk } from '../../core/chunks.model';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { ChunkSummary, KitAsyncStateValue } from 'fleet';
-import { chunkCountsView, chunkSummary } from 'fleet/testing';
+import type { KitAsyncStateValue } from 'fleet';
+
 import { BoardShell } from './board-shell';
 import { glanceListGroups } from '../glance/glance-board.model';
 import { boardDonePolicy } from '../../core/board-done-policy.model';
 
 /** The DONE column counts the hub-selected rows, rather than the all-time total. */
 describe('BoardShell DONE window', () => {
-  const done = (suffix: string): ChunkSummary =>
-    chunkSummary({
+  const done = (suffix: string): BoardChunk =>
+    boardChunk({
       completed_at: '2026-07-01T00:00:00+00:00',
       terminal: true,
       chunk_id: `ch_01done${suffix}`,
       graph_id: 'gr_1',
-      status: 'done',
+      status: 'done', laneStatus: { kind: 'done' },
       current_node_id: 'done',
     });
 
@@ -27,11 +29,11 @@ describe('BoardShell DONE window', () => {
     }).compileComponents();
   });
 
-  const render = async (chunks: readonly ChunkSummary[], state: KitAsyncStateValue, allTimeDone: number | null) => {
+  const render = async (chunks: readonly BoardChunk[], state: KitAsyncStateValue, allTimeDone: number | null) => {
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
     fixture.componentRef.setInput('state', state);
-    fixture.componentRef.setInput('counts', allTimeDone === null ? null : chunkCountsView({ done: allTimeDone, terminal: allTimeDone }));
+    fixture.componentRef.setInput('counts', allTimeDone === null ? null : boardCounts({ done: allTimeDone }, allTimeDone));
     await fixture.whenStable();
     return fixture.nativeElement as HTMLElement;
   };

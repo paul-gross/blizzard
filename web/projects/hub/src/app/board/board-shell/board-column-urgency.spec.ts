@@ -4,7 +4,7 @@ import type { Urgency } from 'fleet';
 import type { BoardCard } from '../board-card/board-card-view.model';
 import { BoardColumn } from './board-column';
 
-const card = { chunkId: 'ch_a', shortId: 'C-A', status: 'ready', terminal: false, promotable: false, node: 'build', nodeId: '', graphName: null, graphProgress: [], workLines: [{ label: 'hub:1', title: 'Title' }], itemsRead: true, costUsd: 0, costPartial: false, estimatedCostUsd: null, completedAt: null, blockedOn: null, blockedCount: 0, blockedOnStatus: null, urgency: { id: 'u', slug: 'urgent' } } as BoardCard;
+const card = { chunkId: 'ch_a', shortId: 'C-A', status: 'ready', laneStatus: { kind: 'ready' }, terminal: false, promotable: false, node: 'build', nodeId: '', graphName: null, graphProgress: [], workLines: [{ label: 'hub:1', title: 'Title' }], itemsRead: true, costUsd: 0, costPartial: false, estimatedCostUsd: null, completedAt: null, blockedOn: null, blockedCount: 0, blockedOnStatus: null, urgency: { id: 'u', slug: 'urgent' } } as BoardCard;
 const urgent = { id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false, emoji: '🔥', icon: null, color: 'red' } as Urgency;
 
 describe('BoardColumn urgency', () => {

@@ -1,7 +1,7 @@
 import type * as runnerApi from '../api/runner';
+import type { RunnerSubscription, SampleMiss, KnownSampleMiss, RenewalResult, RenewalFailure, KnownRenewalFailure } from '../core/host.domain';
 import { compactRef } from '../core/compact-ref';
-import { openLookup, unlisted } from '../core/open-lookup';
-import { SampleMissReason } from '../api/hub';
+import { openLookup } from '../core/open-lookup';
 import { ageMs, formatAge, formatHeldFor, formatRefreshedAgo, formatSeenTag } from '../core/when';
 import { type SubscriptionLine, subscriptionLine } from './subscription-blocks.model';
 import { classifySubscriptionFreshness, type SubscriptionPace, toPaceBars } from './subscription-pace.model';
@@ -71,7 +71,7 @@ export function runnerWorkspaceRows(
 
 /** Operator-facing text per miss reason — what to do about it, not the machine word. A reason
  * this build does not know reads raw. */
-export const MISS_REASON_TEXT = openLookup<runnerApi.SampleMissReason, string>(
+export const MISS_REASON_TEXT = openLookup<KnownSampleMiss, string>(
   {
     credential_lapsed: 'credential lapsed: log in again',
     credential_unreadable: 'credential unreadable',
@@ -82,7 +82,7 @@ export const MISS_REASON_TEXT = openLookup<runnerApi.SampleMissReason, string>(
 );
 
 /** Operator-facing text per renewal failure reason; a reason this build does not know reads raw. */
-export const RENEWAL_FAILURE_TEXT = openLookup<runnerApi.RenewalFailureReason, string>(
+export const RENEWAL_FAILURE_TEXT = openLookup<KnownRenewalFailure, string>(
   {
     renewer_unavailable: 'vendor CLI unavailable',
     timed_out: 'timed out',
@@ -100,17 +100,17 @@ export function sampledAgoLabel(sampledAt: string | null, now: number): string {
 
 /** "ok", "never sampled", or "miss: <operator text>" — the operator-facing distinguishable
  * condition, one string per wire `SampleMissReason`. */
-export function conditionLabel(ok: boolean | null, missReason: runnerApi.SampleMissReason | null): string {
+export function conditionLabel(ok: boolean | null, missReason: SampleMiss | null): string {
   if (ok === null) return 'never sampled';
   if (ok) return 'ok';
-  return `miss: ${missReason === null ? 'unknown' : MISS_REASON_TEXT(missReason)}`;
+  return `miss: ${missReason === null ? 'unknown' : typeof missReason === 'string' ? MISS_REASON_TEXT(missReason) : missReason.raw}`;
 }
 
 /** The newest credential renewal in operator words, aged against `now` — `null` when the
  * subscription was never renewed. Reads the wire's typed result and reason; parses nothing. */
 export function renewalLabel(
-  result: runnerApi.RenewalResult | null,
-  failureReason: runnerApi.RenewalFailureReason | null,
+  result: RenewalResult | null,
+  failureReason: RenewalFailure | null,
   attemptedAt: string | null,
   now: number,
 ): string | null {
@@ -120,11 +120,11 @@ export function renewalLabel(
     case 'renewed':
       return `renewed ${ago}`;
     case 'failed':
-      return `failed (${failureReason === null ? 'unknown cause' : RENEWAL_FAILURE_TEXT(failureReason)}) ${ago}`;
+      return `failed (${failureReason === null ? 'unknown cause' : typeof failureReason === 'string' ? RENEWAL_FAILURE_TEXT(failureReason) : failureReason.raw}) ${ago}`;
     case 'unrecorded':
       return `attempted ${ago}, outcome not recorded`;
     default:
-      return `${unlisted(result)} ${ago}`;
+      return `${result.raw} ${ago}`;
   }
 }
 
@@ -134,7 +134,7 @@ export function renewalLabel(
  * A lapsed credential reads as lapsed; a subscription attempted but never sampled carries its
  * {@link SubscriptionPace.sample} line in place of the bars; one never attempted has no sample yet. */
 export function runnerSubscriptionPaces(
-  subs: readonly runnerApi.HostSubscriptionView[],
+  subs: readonly RunnerSubscription[],
   now: number,
   runnerName: (runnerId: string) => string,
 ): readonly SubscriptionPace[] {
@@ -142,7 +142,7 @@ export function runnerSubscriptionPaces(
     const windowsSampledAt = sub.windows_sampled_at ?? null;
     const delta = windowsSampledAt === null ? null : ageMs(windowsSampledAt, now);
     const condition = sub.condition ?? null;
-    const lapsed = condition === SampleMissReason.CREDENTIAL_LAPSED;
+    const lapsed = condition === 'credential_lapsed';
     const ok = sub.ok ?? null;
     const missReason = sub.miss_reason ?? null;
     return {
@@ -150,7 +150,7 @@ export function runnerSubscriptionPaces(
       name: sub.name,
       provider: sub.provider,
       paceBars: toPaceBars(now, sub.windows ?? []),
-      condition: lapsed ? SampleMissReason.CREDENTIAL_LAPSED : null,
+      condition: lapsed || (condition !== null && typeof condition !== 'string') ? condition : null,
       sampledAt: windowsSampledAt,
       refreshedLabel: delta === null ? null : formatRefreshedAgo(delta),
       refreshedTag: delta === null ? null : formatSeenTag(windowsSampledAt, now),
@@ -178,7 +178,7 @@ export function runnerSubscriptionPaces(
 /** One line of blocks per declared subscription, in wire order, aged against `now`: its newest
  * sampled snapshot's windows, paced; a lapsed credential reads `lapsed`; one never sampled carries
  * its newest attempt's condition as the line's note, or the dash when never attempted. */
-export function runnerSubscriptionLines(subs: readonly runnerApi.HostSubscriptionView[], now: number): readonly SubscriptionLine[] {
+export function runnerSubscriptionLines(subs: readonly RunnerSubscription[], now: number): readonly SubscriptionLine[] {
   return runnerSubscriptionPaces(subs, now, (id) => id).map((pace) => ({
     ...subscriptionLine(pace),
     note: pace.sample?.conditionLabel ?? null,

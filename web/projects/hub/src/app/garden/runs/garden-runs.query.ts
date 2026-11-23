@@ -9,6 +9,7 @@ import {
   type RunRowView,
 } from 'fleet';
 import type { ScopeSweep } from '../core/scope.domain';
+import { laneStatus } from 'fleet/shell';
 import { fromRunRowView } from '../core/scope.translate';
 import { injectProjectFilter } from '../../core/project-filter';
 import { lensedKey, hubRunDeltaKey, hubRunsKey } from '../../core/query-keys';
@@ -29,6 +30,12 @@ import { lensedKey, hubRunDeltaKey, hubRunsKey } from '../../core/query-keys';
  */
 export function injectHubRunsQuery(since: () => string) {
   return injectQuery(runsQueryOptions(since));
+}
+
+/** Run-list projection; the shared query cache retains the wire response. */
+export function injectHubRunListQuery(since: () => string) {
+  const read = runsQueryOptions(since);
+  return injectQuery(() => ({ ...read(), select: (wire: RunRowView[]) => wire.map((row) => ({ ...row, laneStatus: laneStatus(row.outcome) })) }));
 }
 
 /** The run list as the {@link ScopeSweep}s of its scopes — the same read and cache entry as {@link injectHubRunsQuery}. */

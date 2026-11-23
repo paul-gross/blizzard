@@ -138,7 +138,7 @@ export function stepFacts<T>(
 }
 
 /** The chunk detail read, once it answers for `chunkId` — a read still on the chunk before reads as none. */
-export function chunkFor(detail: ChunkDetail | undefined, chunkId: string | null): ChunkDetail | null {
+export function chunkFor<T extends ChunkDetail>(detail: T | undefined, chunkId: string | null): T | null {
   return detail !== undefined && detail.chunk_id === chunkId ? detail : null;
 }
 

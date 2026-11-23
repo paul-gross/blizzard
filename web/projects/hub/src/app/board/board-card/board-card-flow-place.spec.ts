@@ -9,7 +9,7 @@ import { placeLines } from '../../core/flow-place.model';
 const DELIVERING: BoardCard = {
   chunkId: 'ch_01deliver000000000000000000',
   shortId: 'C-DLVR',
-  status: 'delivering',
+  status: 'delivering', laneStatus: { kind: 'delivering' },
   terminal: false,
   promotable: false,
   node: 'deliver',

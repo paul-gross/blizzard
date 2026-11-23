@@ -1,18 +1,18 @@
+import { isActivityEvent } from './activity-event.domain';
 import { DestroyRef, type EffectRef, EnvironmentInjector, Injectable, type Signal, effect, inject, signal, untracked } from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
 import {
-  ActivityChunkChangeCause,
-  ActivityHubEventType,
-  ActivityRunnerChangeKind,
-  type ActivityView,
   FLEET_CLOCK,
   HUB_EVENT_TYPES,
-  HubEventType,
+  HubEventKind,
   INVALIDATION_COALESCE_WINDOW_MS,
   LiveInvalidationSpine,
   SseService,
-  type HubEventPayload,
+  type HubEventData,
+  type HubEventType,
+  type ActivityFact,
+  translateHubEvent,
   type SseStatus,
   hubEventStreamUrl,
   openLookup,
@@ -39,49 +39,12 @@ import { HUB_PROJECT_FILTER } from '../project-filter';
 
 /**
  * The one shape the Activity feed reads a frame through, live or backfilled: the
- * activity read's row (`ActivityView`) less its envelope (`at`, `type`, `key`), every
- * field optional: a frame omits what it does not carry, where the read always sends the
- * field. Every {@link HubEventPayload} member is assignable to it, so the live tee stores
- * frames unchanged, and a backfilled row — which may lack `status`, or carry a `cause` or
- * `kind` from a newer hub — fits without narrowing.
+ * shared domain payload, used by both the live and backfilled feed.
  */
-export type LoggedEventData = Partial<Omit<ActivityView, 'at' | 'type' | 'key'>> & { readonly key?: string | null };
-
-/**
- * The general rule behind every Activity feed drop: a frame belongs in the ring only when
- * its type has a row of its own type on reload — the wire's {@link ActivityHubEventType}.
- * `queue-changed` reports a reorder with no per-chunk row behind it (`bzh:ranking-is-per-list`),
- * and `question-*` and `decision-*` frames reach the feed as the `chunk-changed` cause they
- * also raise, so each is dropped whole, whichever hub sent it. {@link ACTIVITY_RUNNER_KINDS}
- * is the same rule applied within `runner-changed`, whose frames are factual only for the pause kinds.
- *
- * Dropping is scoped to the feed either way: {@link LiveInvalidationSpine.dispatch}
- * still invalidates on every dropped frame, keyed off `type` alone.
- */
-const ACTIVITY_FRAME_TYPES: ReadonlySet<string> = new Set<string>(Object.values(ActivityHubEventType));
-
-/** The `runner-changed` kinds the hub's activity read backfills from a durable pause fact —
- * the wire's own {@link ActivityRunnerChangeKind}. Every other kind (a liveness `registered`
- * or `heartbeat`, `external-usage`, a roster `added`/`retired`) has no row on reload, so the
- * feed drops it live too. Dropping is scoped to the feed: {@link LiveInvalidationSpine.dispatch}
- * still invalidates on every kind, so queries keyed on runner liveness keep refreshing. */
-const ACTIVITY_RUNNER_KINDS: ReadonlySet<string> = new Set<string>(Object.values(ActivityRunnerChangeKind));
-
-/** The causes the hub's activity read backfills from its chunk fact sources — the wire's own
- * {@link ActivityChunkChangeCause}. A chunk-scoped telemetry fact can repeat the last
- * transition's status and key; neither makes that fact another activity occurrence. */
-const ACTIVITY_CHUNK_CAUSES: ReadonlySet<string> = new Set<string>(Object.values(ActivityChunkChangeCause));
-
-/** Whether a frame belongs in the Activity feed — see {@link ACTIVITY_FRAME_TYPES} and
- * {@link ACTIVITY_RUNNER_KINDS}. */
-function isLoggable(type: string, data: LoggedEventData): boolean {
-  if (!ACTIVITY_FRAME_TYPES.has(type)) return false;
-  if (type === HubEventType.CHUNK_CHANGED) return ACTIVITY_CHUNK_CAUSES.has(data.cause ?? '');
-  return type !== HubEventType.RUNNER_CHANGED || ACTIVITY_RUNNER_KINDS.has(data.kind ?? '');
-}
+export type LoggedEventData = HubEventData;
 
 /** The named chunk's own detail key, when the frame names a chunk. */
-function chunkDetailKeys(data: HubEventPayload): readonly (readonly unknown[])[] {
+function chunkDetailKeys(data: HubEventData): readonly (readonly unknown[])[] {
   return 'chunk_id' in data && data.chunk_id ? [hubChunkKey(data.chunk_id)] : [];
 }
 
@@ -94,7 +57,7 @@ function chunkDetailKeys(data: HubEventPayload): readonly (readonly unknown[])[]
  * to `needs_human`), and the feed unifies open escalations with logged events, so a
  * status flip that carries an escalation must re-read it too. A deletion also stales
  * the Activity backfill, which drops the deleted chunk's facts. */
-function chunkChangedKeys(data: HubEventPayload): readonly (readonly unknown[])[] {
+function chunkChangedKeys(data: HubEventData): readonly (readonly unknown[])[] {
   return [
     hubChunksKey,
     hubQueueKey,
@@ -111,27 +74,27 @@ function chunkChangedKeys(data: HubEventPayload): readonly (readonly unknown[])[
 }
 
 /** Whether a chunk-changed frame reports the chunk ended — the hub's own `terminal` flag. */
-function chunkEnded(data: HubEventPayload): boolean {
+function chunkEnded(data: HubEventData): boolean {
   return 'terminal' in data && data.terminal === true;
 }
 
 /** Whether a chunk-changed frame reports the chunk deleted. */
-function chunkDeleted(data: HubEventPayload): boolean {
-  return 'cause' in data && data.cause === ActivityChunkChangeCause.DELETED;
+function chunkDeleted(data: HubEventData): boolean {
+  return data.cause === 'deleted';
 }
 
 /** A question-asked/-answered frame invalidates the fleet-wide ask list (the right
  * rail surfaces an ask on a chunk nobody has selected, so it cannot ride on the
  * chunk's own detail read), the fleet list, and that chunk's detail when named —
  * both flip the derived status to/from `waiting_on_human`. */
-function chunkQuestionKeys(data: HubEventPayload): readonly (readonly unknown[])[] {
+function chunkQuestionKeys(data: HubEventData): readonly (readonly unknown[])[] {
   return [hubQuestionsKey, hubChunksKey, ...chunkDetailKeys(data)];
 }
 
 /** A decision-opened/-resolved frame invalidates the fleet list, the fleet-wide
  * open-decision list, and that chunk's detail when named — same status-flip
  * reasoning as {@link chunkQuestionKeys}. */
-function chunkDecisionKeys(data: HubEventPayload): readonly (readonly unknown[])[] {
+function chunkDecisionKeys(data: HubEventData): readonly (readonly unknown[])[] {
   return [hubChunksKey, hubDecisionsKey, ...chunkDetailKeys(data)];
 }
 
@@ -139,7 +102,7 @@ function chunkDecisionKeys(data: HubEventPayload): readonly (readonly unknown[])
  * The event → query-key invalidation registry — the single place a live
  * event names what it stales, so wiring a new live feature into the SSE spine is
  * adding a row here, not a `case` in {@link LiveInvalidationSpine.dispatch}. Exhaustive
- * over {@link HubEventType} (a compile-time guard, same intent as `STATUS_LANE`): a
+ * over {@link HubEventKind} (a compile-time guard, same intent as `STATUS_LANE`): a
  * new event type added to the generated vocabulary is then a compile error here until
  * it is given a row, instead of silently dispatching to nothing. A type a newer hub sends
  * before then stales nothing.
@@ -147,23 +110,23 @@ function chunkDecisionKeys(data: HubEventPayload): readonly (readonly unknown[])
  * The live-update service re-reads a query on the events its row names; the poll is a
  * backstop for a dropped frame, never the primary freshness path.
  */
-const EVENT_INVALIDATION_REGISTRY = openLookup<HubEventType, (data: HubEventPayload) => readonly (readonly unknown[])[]>(
+const EVENT_INVALIDATION_REGISTRY = openLookup<HubEventKind, (data: HubEventData) => readonly (readonly unknown[])[]>(
   {
-    [HubEventType.CHUNK_CHANGED]: chunkChangedKeys,
-    [HubEventType.QUESTION_ASKED]: chunkQuestionKeys,
-    [HubEventType.QUESTION_ANSWERED]: chunkQuestionKeys,
-    [HubEventType.DECISION_OPENED]: chunkDecisionKeys,
-    [HubEventType.DECISION_RESOLVED]: chunkDecisionKeys,
+    [HubEventKind.CHUNK_CHANGED]: chunkChangedKeys,
+    [HubEventKind.QUESTION_ASKED]: chunkQuestionKeys,
+    [HubEventKind.QUESTION_ANSWERED]: chunkQuestionKeys,
+    [HubEventKind.DECISION_OPENED]: chunkDecisionKeys,
+    [HubEventKind.DECISION_RESOLVED]: chunkDecisionKeys,
     // A backlog reorder fires the same event as a ready-queue one (no distinct
     // payload key, `bzh:ranking-is-per-list`), so both cached orders invalidate.
-    [HubEventType.QUEUE_CHANGED]: () => [hubQueueKey, hubBacklogKey, hubUrgenciesKey, hubRunnerNextClaimKey],
+    [HubEventKind.QUEUE_CHANGED]: () => [hubQueueKey, hubBacklogKey, hubUrgenciesKey, hubRunnerNextClaimKey],
     // A host's usage samples arrive only as its spenders' frames, so a runner frame re-reads the hosts too.
-    [HubEventType.RUNNER_CHANGED]: () => [hubRunnersKey, hubHostsKey, hubEnvTimelineLiveKey, hubRunnerNextClaimKey],
+    [HubEventKind.RUNNER_CHANGED]: () => [hubRunnersKey, hubHostsKey, hubEnvTimelineLiveKey, hubRunnerNextClaimKey],
     // Adopt, release and retire move runners between hosts, so a host frame re-reads both registries.
-    [HubEventType.HOST_CHANGED]: () => [hubHostsKey, hubRunnersKey],
+    [HubEventKind.HOST_CHANGED]: () => [hubHostsKey, hubRunnersKey],
     // A flow fact moves the line every flow read and every card's place shows, and the named chunk's record.
-    [HubEventType.FLOW_CHANGED]: (data) => [hubFlowsKey, hubChunksKey, ...chunkDetailKeys(data)],
-    [HubEventType.EVENT_LOGGED]: (data) => [hubEventsKey, ...chunkDetailKeys(data)],
+    [HubEventKind.FLOW_CHANGED]: (data) => [hubFlowsKey, hubChunksKey, ...chunkDetailKeys(data)],
+    [HubEventKind.EVENT_LOGGED]: (data) => [hubEventsKey, ...chunkDetailKeys(data)],
   },
   () => () => [],
 );
@@ -171,18 +134,13 @@ const EVENT_INVALIDATION_REGISTRY = openLookup<HubEventType, (data: HubEventPayl
 /**
  * One event recorded for the Activity feed: its stream arrival order (`seq` — a stable, monotonic client
  * key), its board vocabulary `type`, the parsed `data`, and the client-side arrival time `at` (ms epoch;
- * the hub frames carry no timestamp of their own). `type` is a plain string, so a type this client does
- * not know still fits.
+ * the hub frames carry no timestamp of their own). Unknown event names retain their raw value.
  *
  * `key` is `data.key` (`KeyedEvent`), lifted to the top level. Absent on a frame
  * from a hub that predates this stamp.
  */
-export interface LoggedEvent {
+export interface LoggedEvent extends ActivityFact {
   readonly seq: number;
-  readonly type: string;
-  readonly data: LoggedEventData;
-  readonly at: number;
-  readonly key?: string;
 }
 
 /**
@@ -206,7 +164,7 @@ const LOG_LIMIT = 256;
  * event feed into {@link log}, a bounded ring the Activity feed panel renders.
  * Because the spine's `onFrame` hook records every frame before dispatch runs, the
  * broker's connect-time replay (its buffered history) lands in the log as backfill for
- * free. The tee is where the feed's noise floor is set — {@link isLoggable} mutes
+ * free. The tee is where the feed's noise floor is set — {@link isActivityEvent} mutes
  * frames an operator cannot act on, and only there, never on the dispatch side.
  */
 @Injectable({ providedIn: 'root' })
@@ -223,14 +181,15 @@ export class HubLiveUpdates {
   private lensRef: EffectRef | null = null;
   private seq = 0;
   private readonly _log = signal<readonly LoggedEvent[]>([]);
-  private readonly spine = new LiveInvalidationSpine<HubEventPayload, HubEventType>({
+  private readonly spine = new LiveInvalidationSpine<HubEventData, HubEventType>({
     sse: this.sse,
     queryClient: this.queryClient,
     injector: this.injector,
     destroyRef: this.destroyRef,
     streamUrl: () => hubEventStreamUrl(this.streamProject),
     eventTypes: HUB_EVENT_TYPES,
-    registry: EVENT_INVALIDATION_REGISTRY,
+    registry: (type) => typeof type === 'string' ? EVENT_INVALIDATION_REGISTRY(type) : () => [],
+    mapFrame: translateHubEvent,
     coalesceWindowMs: INVALIDATION_COALESCE_WINDOW_MS,
     onFrame: (type, data) => this.record(type, data),
   });
@@ -249,7 +208,7 @@ export class HubLiveUpdates {
 
   /**
    * The recent-event feed for the Activity feed, oldest → newest, capped at
-   * {@link LOG_LIMIT} and excluding the muted frames ({@link isLoggable}). Empty before
+   * {@link LOG_LIMIT} and excluding the muted frames ({@link isActivityEvent}). Empty before
    * {@link start}.
    */
   get log(): Signal<readonly LoggedEvent[]> {
@@ -290,17 +249,17 @@ export class HubLiveUpdates {
   }
 
   /** Append one frame to the bounded Activity feed ring, dropping the oldest past the cap.
-   * Frames the feed mutes ({@link isLoggable}) never enter the ring — and never consume
+   * Frames the feed mutes ({@link isActivityEvent}) never enter the ring — and never consume
    * a `seq`, so the panel's row keys stay dense. */
   private record(type: HubEventType, data: LoggedEventData): void {
-    if (!isLoggable(type, data)) return;
+    if (!isActivityEvent(type, data)) return;
     this._log.update((prev) => {
       // A question/decision notification and its chunk frame report the same
       // fact. Prefer the latter's fuller state regardless of arrival order;
       // replayed keyed frames also occupy just one slot in this bounded ring.
       const existing = data.key ? prev.findIndex((event) => event.key === data.key) : -1;
       if (existing >= 0) {
-        if (prev[existing].type === HubEventType.CHUNK_CHANGED && type !== HubEventType.CHUNK_CHANGED) return prev;
+        if (prev[existing].type === HubEventKind.CHUNK_CHANGED && type !== HubEventKind.CHUNK_CHANGED) return prev;
         const replacement: LoggedEvent = { seq: prev[existing].seq, at: prev[existing].at, type, data, key: data.key ?? undefined };
         return [...prev.slice(0, existing), replacement, ...prev.slice(existing + 1)];
       }

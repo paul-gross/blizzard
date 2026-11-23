@@ -1,8 +1,10 @@
+import { boardChunk } from '../board.fixture';
+import type { BoardChunk } from '../../core/chunks.model';
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { ChunkSummary, WorkItemsView } from 'fleet';
-import { workItemEntry, workRefView, chunkSummary } from 'fleet/testing';
+import type { WorkItemsView } from 'fleet';
+import { workItemEntry, workRefView } from 'fleet/testing';
 import { BoardShell } from './board-shell';
 
 @Component({
@@ -18,10 +20,10 @@ import { BoardShell } from './board-shell';
 class TestTracksHost {}
 
 describe('BoardShell layouts', () => {
-  const RUNNING = (suffix: string): ChunkSummary => (chunkSummary({
+  const RUNNING = (suffix: string): BoardChunk => (boardChunk({
     chunk_id: `ch_01running${suffix}`,
     graph_id: 'gr_1',
-    status: 'running',
+    status: 'running', laneStatus: { kind: 'running' },
     current_node_id: 'nd_build',
     work_refs: [workRefView({ source: 'hub', ref: suffix, label: `hub#${suffix}`, web_url: null })],
   }));
@@ -29,7 +31,7 @@ describe('BoardShell layouts', () => {
   const render = async (
     layout: 'board' | 'list',
     workItems: ReadonlyMap<string, WorkItemsView> = new Map(),
-    chunks: readonly ChunkSummary[] = [RUNNING('a')],
+    chunks: readonly BoardChunk[] = [RUNNING('a')],
   ) => {
     await TestBed.configureTestingModule({
       imports: [BoardShell],
@@ -56,9 +58,9 @@ describe('BoardShell layouts', () => {
   });
 
   it('lists what wants a person and work in flight, then READY and BACKLOG in their hub order, then DONE', async () => {
-    const done: ChunkSummary = { ...RUNNING('b'), status: 'done', terminal: true };
-    const ready: ChunkSummary = { ...RUNNING('c'), status: 'ready' };
-    const backlog: ChunkSummary = { ...RUNNING('d'), status: 'not_ready' };
+    const done: BoardChunk = { ...RUNNING('b'), status: 'done', laneStatus: { kind: 'done' }, terminal: true };
+    const ready: BoardChunk = { ...RUNNING('c'), status: 'ready', laneStatus: { kind: 'ready' } };
+    const backlog: BoardChunk = { ...RUNNING('d'), status: 'not_ready', laneStatus: { kind: 'not_ready' } };
     const list = (await render('list', new Map(), [done, backlog, RUNNING('a'), ready])).nativeElement as HTMLElement;
 
     const rows = [...list.querySelectorAll('[data-testid="list-row"]')];

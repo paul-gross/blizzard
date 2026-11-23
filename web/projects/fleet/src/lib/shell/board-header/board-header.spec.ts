@@ -2,45 +2,28 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { hiddenAtContainerWidth } from 'fleet/testing';
 
-import type { ChunkCountsView, ChunkSummary } from '../../api/hub';
-import { LANES, STATUS_LANE } from '../../core/chunk-lanes';
-import { chunkCountsView, chunkSummary } from '../../testing/builders/board.translate';
-import { chunkUsageTotalView } from '../../testing/builders/chunk.translate';
+import { LANES, type LaneCounts, type KnownLaneStatus } from '../../core/chunk-lanes';
+import { STATUS_LANE } from '../../core/chunk-lanes';
 import { BoardHeader } from './board-header';
 
-const chunk = (id: string, status: ChunkSummary['status']): ChunkSummary =>
-  chunkSummary({
-    chunk_id: id,
-    graph_id: 'gr_1',
-    status,
-    terminal: status === 'done' || status === 'stopped',
-    current_node_id: 'nd_build',
-    cost: chunkUsageTotalView(),
-  });
-
-
-const ZERO_COUNTS: ChunkCountsView = chunkCountsView({
-  total: 0,
-  not_ready: 0,
-  ready: 0,
-  running: 0,
-  delivering: 0,
-  waiting_on_human: 0,
-  needs_human: 0,
-  paused: 0,
-  stopped: 0,
-  done: 0,
-  terminal: 0,
+interface TestChunk { readonly status: KnownLaneStatus; readonly terminal: boolean }
+const chunk = (_id: string, status: KnownLaneStatus): TestChunk => ({
+  status, terminal: status === 'done' || status === 'stopped',
 });
 
-/** The hub's counts read for a fleet of exactly these chunks. */
-const tally = (chunks: readonly ChunkSummary[]): ChunkCountsView => {
-  const counts = { ...ZERO_COUNTS, total: chunks.length };
+const ZERO_STATUSES = {
+  not_ready: 0, ready: 0, running: 0, delivering: 0,
+  waiting_on_human: 0, needs_human: 0, paused: 0, stopped: 0, done: 0,
+};
+
+const tally = (chunks: readonly TestChunk[]): LaneCounts => {
+  const statuses = { ...ZERO_STATUSES };
+  let terminal = 0;
   for (const c of chunks) {
-    counts[c.status] += 1;
-    if (c.terminal) counts.terminal += 1;
+    statuses[c.status] += 1;
+    if (c.terminal) terminal += 1;
   }
-  return counts;
+  return { statuses, terminal, total: chunks.length };
 };
 
 describe('BoardHeader', () => {
@@ -51,7 +34,7 @@ describe('BoardHeader', () => {
     }).compileComponents();
   });
 
-  const render = async (chunks: ChunkSummary[], connection = 'ok') => {
+  const render = async (chunks: TestChunk[], connection = 'ok') => {
     const fixture = TestBed.createComponent(BoardHeader);
     fixture.componentRef.setInput('counts', tally(chunks));
     fixture.componentRef.setInput('connection', connection);
@@ -61,7 +44,7 @@ describe('BoardHeader', () => {
 
   it('renders the all-time totals from the counts read, not from any chunk list', async () => {
     const fixture = TestBed.createComponent(BoardHeader);
-    fixture.componentRef.setInput('counts', { ...ZERO_COUNTS, total: 500, done: 480, stopped: 3, terminal: 483, running: 2 });
+    fixture.componentRef.setInput('counts', { statuses: { ...ZERO_STATUSES, done: 480, stopped: 3, running: 2 }, total: 500, terminal: 483 });
     await fixture.whenStable();
     const stat = (key: string) =>
       (fixture.nativeElement as HTMLElement).querySelector(`[data-testid="stat-${key}"]`)?.textContent?.trim();
@@ -109,7 +92,7 @@ describe('BoardHeader', () => {
 
   it("counts DONE off the hub's terminal count, not the done and stopped statuses", async () => {
     const fixture = TestBed.createComponent(BoardHeader);
-    fixture.componentRef.setInput('counts', { ...ZERO_COUNTS, total: 3, done: 1, stopped: 1, terminal: 3 });
+    fixture.componentRef.setInput('counts', { statuses: { ...ZERO_STATUSES, done: 1, stopped: 1 }, total: 3, terminal: 3 });
     fixture.componentRef.setInput('connection', 'ok');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -126,7 +109,7 @@ describe('BoardHeader', () => {
     expect(cells).toEqual(['total', ...LANES.filter((l) => l.key !== 'waiting').map((l) => l.key)]);
   });
 
-  it('counts every wire status into some cell, so none can go silently missing', async () => {
+  it('counts every status into some cell, so none can go silently missing', async () => {
     // The exhaustive Record in chunk-lanes makes a new status a compile error there;
     // this asserts the consequence — the lanes account for the whole fleet, so
     // total always equals the sum of the cells beside it.

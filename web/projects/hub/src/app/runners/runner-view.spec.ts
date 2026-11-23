@@ -188,7 +188,7 @@ describe('RunnerPanelView', () => {
     const el = await render(
       [
         row('rn_full', {
-          claims: [{ chunkId: 'ch_01', shortId: 'C-01', node: 'build', status: 'running' }],
+          claims: [{ chunkId: 'ch_01', shortId: 'C-01', node: 'build', status: { kind: 'running' as const } }],
           served: ['Blizzard'],
           env_capacity: 4,
           used: 2,

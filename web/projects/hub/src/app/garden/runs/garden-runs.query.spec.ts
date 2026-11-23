@@ -1,9 +1,10 @@
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import type { ChunkStatus } from 'fleet';
 
 import { type RequestClientStub, runDeltaView, runRowView, settle, stubHubClient } from 'fleet/testing';
-import { injectHubRunDeltaQuery, injectHubRunsQuery } from './garden-runs.query';
+import { injectHubRunDeltaQuery, injectHubRunListQuery, injectHubRunsQuery } from './garden-runs.query';
 
 @Component({
   selector: 'app-test-runs-query-host',
@@ -12,6 +13,7 @@ import { injectHubRunDeltaQuery, injectHubRunsQuery } from './garden-runs.query'
 })
 class TestRunsQueryHost {
   readonly query = injectHubRunsQuery(() => '2026-01-01T00:00:00Z');
+  readonly list = injectHubRunListQuery(() => '2026-01-01T00:00:00Z');
 }
 
 @Component({
@@ -48,8 +50,23 @@ describe('injectHubRunsQuery', () => {
     await settle(fixture);
 
     expect(fixture.componentInstance.query.data()).toHaveLength(1);
+    expect(fixture.componentInstance.list.data()?.[0].laneStatus).toEqual({ kind: 'done' });
+    expect(fixture.componentInstance.query.data()?.[0]).not.toHaveProperty('laneStatus');
     const calls = stub.forRoute('/api/runs', 'GET');
     expect(calls).toHaveLength(1);
+  });
+
+  it('preserves an unrecognized outcome at the projection boundary', async () => {
+    stub = stubHubClient({
+      'GET /api/runs': () => [runRowView({ chunk_id: 'ch_1', outcome: 'future-status' as ChunkStatus })],
+    });
+    TestBed.configureTestingModule({
+      imports: [TestRunsQueryHost],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    });
+    const fixture = TestBed.createComponent(TestRunsQueryHost);
+    await settle(fixture);
+    expect(fixture.componentInstance.list.data()?.[0].laneStatus).toEqual({ kind: 'unknown', raw: 'future-status' });
   });
 });
 

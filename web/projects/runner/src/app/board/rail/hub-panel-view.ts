@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { FleetWhen, KitBadge, type runnerApi, STATUS_TONE, toneColor } from 'fleet';
+import { FleetWhen, KitBadge, type runnerApi, domainStatusTone, toneColor } from 'fleet';
 
 import type { hubLink } from '../../core/runner-health.model';
 import type { HubSummary } from './hub-panel.model';
@@ -19,9 +19,9 @@ export class HubPanelView {
 
   protected readonly issueColor = toneColor;
   protected readonly bucketColor = {
-    ready: toneColor(STATUS_TONE('ready')),
-    running: toneColor(STATUS_TONE('running')),
-    waiting: toneColor(STATUS_TONE('waiting_on_human')),
-    needs: toneColor(STATUS_TONE('needs_human')),
+    ready: toneColor(domainStatusTone('ready')),
+    running: toneColor(domainStatusTone('running')),
+    waiting: toneColor(domainStatusTone('waiting_on_human')),
+    needs: toneColor(domainStatusTone('needs_human')),
   } as const;
 }

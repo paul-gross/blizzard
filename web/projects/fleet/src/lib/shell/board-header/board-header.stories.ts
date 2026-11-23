@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 
-import { chunkCountsView, fleetSpendView } from '../../testing/public-api';
+import { fleetSpendView } from '../../testing/public-api';
 import { BoardHeader } from './board-header';
 
 const meta: Meta<BoardHeader> = {
@@ -11,7 +11,7 @@ const meta: Meta<BoardHeader> = {
     connectionLabel: 'Hub',
     overridden: [],
     tagline: 'fleet hub · mission control',
-    counts: chunkCountsView(),
+    counts: { total: 0, terminal: 0, statuses: { not_ready: 0, ready: 0, running: 0, delivering: 0, waiting_on_human: 0, needs_human: 0, paused: 0, stopped: 0, done: 0 } },
     spendToday: fleetSpendView({ cost_usd: 27.5 }),
     spendYesterday: fleetSpendView({ cost_usd: 41.2 }),
     stats: null,

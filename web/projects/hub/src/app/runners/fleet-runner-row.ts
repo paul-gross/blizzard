@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, type TemplateRef, computed, input, 
 import { RouterLink } from '@angular/router';
 
 import {
-  type ChunkStatus,
+  type LaneStatus,
   compactRef,
   harnessName,
   GateBadgeGroup,
@@ -11,7 +11,7 @@ import {
   KitButton,
   type KitFact,
   KitFactList,
-  STATUS_TONE,
+  domainStatusTone,
   type Tone,
 } from 'fleet';
 import { AppLink } from 'fleet/shell';
@@ -124,7 +124,7 @@ export class FleetRunnerRow {
       : []),
   ]);
 
-  protected toneFor(status: ChunkStatus): Tone {
-    return STATUS_TONE(status);
+  protected toneFor(status: LaneStatus): Tone {
+    return domainStatusTone(status.kind);
   }
 }

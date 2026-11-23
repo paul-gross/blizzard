@@ -20,6 +20,7 @@ const CARD: BoardCard = {
   chunkId: 'ch_01list0000000000000000000',
   shortId: 'C-LIST',
   status: 'running',
+  laneStatus: { kind: 'running' },
   terminal: false,
   promotable: false,
   node: 'build',
@@ -49,7 +50,7 @@ const GROUPS: BoardListGroups = {
   live: [entry('running', 'RUN1')],
   ready: [entry('ready', 'RDY1', { status: 'ready' }), entry('ready', 'RDY2', { status: 'ready' })],
   backlog: [entry('notready', 'BKL1', { status: 'not_ready' })],
-  done: [entry('done', 'DNE1', { status: 'done', terminal: true, completedAt: '2026-07-20T09:30:00Z' })],
+  done: [entry('done', 'DNE1', { status: 'done', laneStatus: { kind: 'done' }, terminal: true, completedAt: '2026-07-20T09:30:00Z' })],
 };
 
 /** The list's own width: a wide centre column, and the narrowest the desktop board gives it. */

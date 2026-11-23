@@ -1,5 +1,5 @@
 import type { RunnerDecliningView, RunnerRegistryView } from 'fleet';
-import type { ChunkSummary } from 'fleet/shell';
+import type { BoardChunk } from '../core/chunks.model';
 
 import { decliningLabel, foldRunnerRows, lensRunners, versionStandingBadge } from './runner-rows.model';
 
@@ -9,14 +9,15 @@ function runner(id: string): RunnerRegistryView {
   return { runner_id: id, subscriptions: [] } as unknown as RunnerRegistryView;
 }
 
-function chunk(id: string, runnerId: string | null, envs: number): ChunkSummary {
+function chunk(id: string, runnerId: string | null, envs: number): BoardChunk {
   return {
     chunk_id: id,
     runner_id: runnerId,
     current_node_name: 'build',
     status: 'in_progress',
+    laneStatus: { kind: 'unknown', raw: 'in_progress' },
     environment_count: envs,
-  } as unknown as ChunkSummary;
+  } as unknown as BoardChunk;
 }
 
 describe('foldRunnerRows', () => {

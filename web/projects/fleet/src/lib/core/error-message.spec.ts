@@ -1,13 +1,11 @@
-import type { ProjectRequiredBody } from '../api/hub';
-import type { PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostErrors } from '../api/runner';
 import { errorMessage } from './error-message';
 
 describe('errorMessage', () => {
   it('accepts both generated proxy 422 variants', () => {
-    const problem: PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostErrors[422] = {
+    const problem = {
       type: 'urn:example:refusal', detail: 'refused',
     };
-    const validation: PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostErrors[422] = {
+    const validation = {
       detail: [{ loc: ['body'], msg: 'invalid', type: 'value_error' }],
     };
     expect(errorMessage(problem, 'failed')).toBe('refused');
@@ -94,7 +92,7 @@ describe('errorMessage', () => {
   });
 
   it('names every project a project_required refusal asks to choose from', () => {
-    const detail: ProjectRequiredBody = {
+    const detail = {
       code: 'project_required',
       message: 'This tenant holds several projects; name one.',
       projects: [

@@ -5,7 +5,7 @@ import { type KitAsyncStateValue, injectNowSignal, asyncStateOf, LIVE_COVERED_PO
 import { boardChunksQueryOptions } from '../core/chunks.query';
 import { foldRunnerRows, lensRunners, type RunnerRow } from './runner-rows.model';
 import { foldHostCards, type HostCard } from './host-rows.model';
-import { injectHubHostsQuery } from '../core/hosts.query';
+import { injectHostFactsQuery } from '../core/hosts.query';
 import { injectHubRunnersQuery } from '../core/runners.query';
 import { injectProjectFilter } from '../core/project-filter';
 
@@ -36,7 +36,7 @@ export function injectRunnerRows(includeRetired: () => boolean = () => false): {
   readonly chunksError: () => boolean;
 } {
   const runnersQuery = injectHubRunnersQuery(includeRetired);
-  const hostsQuery = injectHubHostsQuery(includeRetired);
+  const hostsQuery = injectHostFactsQuery(includeRetired);
   const chunksQuery = injectQuery(() => ({
     ...boardChunksQueryOptions(null),
     refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,

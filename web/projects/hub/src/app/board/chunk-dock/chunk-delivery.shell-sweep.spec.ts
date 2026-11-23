@@ -3,8 +3,9 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
-import { type ChunkDetail, type ChunkSummary, ChunkGeneralTab } from 'fleet';
-import { chunkDetail, chunkSummary, chunkUsageTotalView } from 'fleet/testing';
+import { type ChunkDetail, ChunkGeneralTab } from 'fleet';
+import { chunkDetail } from 'fleet/testing';
+import { boardChunk } from '../board.fixture';
 import { BoardShell } from '../board-shell/board-shell';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 
@@ -16,9 +17,9 @@ const detail: ChunkDetail = chunkDetail({
   current_node_name: null, latest_epoch: null, work_refs: [], history: [], artifacts: [],
   open_prs: [pr], landed_repos: [landed], awaiting_external_merge: true,
 });
-const summary: ChunkSummary = chunkSummary({
+const summary = boardChunk({
   chunk_id: detail.chunk_id, graph_id: detail.graph_id, status: detail.status,
-  open_prs: [pr], landed_repos: [landed], awaiting_external_merge: true, cost: chunkUsageTotalView(),
+  laneStatus: { kind: 'delivering' }, open_prs: [pr], landed_repos: [landed], awaiting_external_merge: true,
 });
 
 describe('delivery links real Chromium shell sweep', () => {
@@ -49,6 +50,7 @@ describe('delivery links real Chromium shell sweep', () => {
       try {
         const card = host.querySelector<HTMLElement>('[data-testid="chunk-card"]')!;
         expect(card, 'board card did not mount').not.toBeNull();
+        expect(card.closest('[data-col="running"]'), 'delivery belongs in the running lane').not.toBeNull();
         expect(card.querySelector('button a')).toBeNull();
         expect(card.querySelector('a')?.closest('button')).toBeNull();
         expect(host.querySelectorAll('[data-testid="chunk-delivery"]')).toHaveLength(2);

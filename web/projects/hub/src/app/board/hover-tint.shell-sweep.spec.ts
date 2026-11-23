@@ -83,6 +83,7 @@ const CARD: BoardCard = {
   chunkId: 'ch_01hover0000000000000000000',
   shortId: 'C-HOVR',
   status: 'running',
+  laneStatus: { kind: 'running' },
   terminal: false,
   promotable: false,
   node: 'build',

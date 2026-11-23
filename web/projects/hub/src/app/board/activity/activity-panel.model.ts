@@ -1,31 +1,27 @@
 import {
-  type ActivityView,
   asyncState,
   type AsyncStateQuery,
   compactRef,
   formatClockTime,
-  hubApi,
   type KitAsyncStateValue,
-  type RunnerChangeKind,
   runnerDisplayName,
 } from 'fleet';
+import { HubEventKind, hubEventTypeName, type ActivityFact } from 'fleet/shell';
 import { type ActivityRow } from './activity-view';
 import { summarizeChunkChange } from './chunk-change-summary';
 import { type LoggedEvent } from '../../core/live/hub-live-updates';
 
-const { ActivityChunkChangeCause, HubEventType, RunnerChangeKind: Kind } = hubApi;
-
 /** The verb a `runner-changed` kind reads as, where the kind alone does not already read
  * as one; {@link summarizeRunnerChange} renders any kind absent here as itself. */
-const RUNNER_CHANGE_VERB: ReadonlyMap<string, string> = new Map<RunnerChangeKind, string>([
-  [Kind.ADDED, 'added to the fleet'],
-  [Kind.PAUSED, 'paused'],
-  [Kind.RESUMED, 'resumed'],
-  [Kind.LOCALLY_PAUSED, 'locally paused'],
-  [Kind.LOCALLY_RESUMED, 'locally resumed'],
-  [Kind.RETIRED, 'retired'],
-  [Kind.REINSTATED, 'reinstated'],
-  [Kind.TOKEN_REVOKED, 'had its token revoked'],
+const RUNNER_CHANGE_VERB: ReadonlyMap<string, string> = new Map([
+  ['added', 'added to the fleet'],
+  ['paused', 'paused'],
+  ['resumed', 'resumed'],
+  ['locally-paused', 'locally paused'],
+  ['locally-resumed', 'locally resumed'],
+  ['retired', 'retired'],
+  ['reinstated', 'reinstated'],
+  ['token-revoked', 'had its token revoked'],
 ]);
 
 /**
@@ -52,54 +48,53 @@ interface RowSummary {
 
 /**
  * A human-readable summary of a hub event, two lines for `chunk-changed`. Maps the
- * generated `HubEventType` vocabulary onto plain phrasing; an unknown type degrades to
+ * known event vocabulary onto plain phrasing; an unknown type degrades to
  * its raw name rather than dropping the row.
  */
 function summarize(event: LoggedEvent, hostNames: ReadonlyMap<string, string>): RowSummary {
   const chunk = event.data.chunk_id ? compactRef(event.data.chunk_id) : '';
   switch (event.type) {
-    case HubEventType.CHUNK_CHANGED: {
+    case HubEventKind.CHUNK_CHANGED: {
       const { transition, runner } = summarizeChunkChange(event.data, hostNames);
       return { message: transition, detail: runner };
     }
-    case HubEventType.QUESTION_ASKED:
+    case HubEventKind.QUESTION_ASKED:
       return { message: `${chunk} asked a question` };
-    case HubEventType.QUESTION_ANSWERED:
+    case HubEventKind.QUESTION_ANSWERED:
       return { message: `${chunk} question answered` };
-    case HubEventType.DECISION_OPENED:
+    case HubEventKind.DECISION_OPENED:
       return { message: `${chunk} gate opened` };
-    case HubEventType.DECISION_RESOLVED:
+    case HubEventKind.DECISION_RESOLVED:
       return { message: `${chunk} gate resolved` };
-    case HubEventType.QUEUE_CHANGED:
+    case HubEventKind.QUEUE_CHANGED:
       return { message: 'ready queue changed' };
-    case HubEventType.RUNNER_CHANGED:
+    case HubEventKind.RUNNER_CHANGED:
       return { message: summarizeRunnerChange(event.data, hostNames) };
-    case HubEventType.EVENT_LOGGED:
+    case HubEventKind.EVENT_LOGGED:
       return {
         message: `${chunk || (event.data.runner_id ? runnerDisplayName(event.data.runner_id, event.data.runner_name, hostNames.get(event.data.runner_id)) : '—')} · ${event.data.severity ?? '—'} ${event.data.kind ?? '—'}`,
       };
     default:
-      return { message: event.type };
+      return { message: hubEventTypeName(event.type) };
   }
 }
 
 /** Shape one activity row into a {@link LoggedEvent}, so {@link summarize} runs unchanged
  * over backfilled and live frames. `seq` is caller-assigned and serves only as a stable
  * `track` key, never for ordering (that's `at`). */
-function fromActivity(row: ActivityView, seq: number): LoggedEvent {
-  const { at, type, ...data } = row;
-  return { seq, type, data, at: Date.parse(at), key: row.key };
+function fromActivity(row: ActivityFact, seq: number): LoggedEvent {
+  return { ...row, seq };
 }
 
 /** The backfill read shaped into {@link LoggedEvent}s, each given a distinct negative `seq`
  * (see {@link fromActivity}). Empty until the first read resolves. */
-export function backfillEvents(rows: readonly ActivityView[] | undefined): readonly LoggedEvent[] {
+export function backfillEvents(rows: readonly ActivityFact[] | undefined): readonly LoggedEvent[] {
   return (rows ?? []).map((row, i) => fromActivity(row, -1 - i));
 }
 
 /** Whether a frame reports its chunk deleted. */
 function isChunkDeletion(event: LoggedEvent): boolean {
-  return event.type === HubEventType.CHUNK_CHANGED && event.data.cause === ActivityChunkChangeCause.DELETED;
+  return event.type === HubEventKind.CHUNK_CHANGED && event.data.cause === 'deleted';
 }
 
 /** The backfill and live feeds merged and deduped by `key` — a backfilled row whose `key`
@@ -132,7 +127,7 @@ export function activityRows(merged: readonly LoggedEvent[], hostNames: Readonly
   return merged
     .map((event) => ({
       seq: event.seq,
-      type: event.type,
+      type: hubEventTypeName(event.type),
       time: formatClockTime(event.at),
       ...summarize(event, hostNames),
     }))

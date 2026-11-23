@@ -63,6 +63,18 @@ describe('injectHubBoardChunksQuery', () => {
     expect(stub.forRoute('/api/chunks', 'GET')).toHaveLength(1);
   });
 
+  it('projects statuses for observers without changing cached wire data', async () => {
+    stub = stubHubClient({
+      'GET /api/chunks': () => ({ chunks: [chunk('ch_1')], next_cursor: null, board_done_policy: null }),
+    });
+    const fixture = mount();
+    await settle(fixture);
+    expect(fixture.componentInstance.query.data()?.chunks[0].laneStatus).toEqual({ kind: 'ready' });
+    const client = TestBed.inject(QueryClient);
+    const cached = client.getQueryData<BoardChunksRead>(boardChunksQueryOptions(null).queryKey);
+    expect(cached?.chunks[0]).not.toHaveProperty('laneStatus');
+  });
+
   it('drains every page of a multi-page response and concatenates them in order', async () => {
     let calls = 0;
     stub = stubHubClient({

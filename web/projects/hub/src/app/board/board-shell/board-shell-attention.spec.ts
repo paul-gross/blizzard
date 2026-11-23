@@ -1,15 +1,16 @@
+import { boardChunk, boardCounts } from '../board.fixture';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import { chunkCountsView, chunkSummary } from 'fleet/testing';
+
 import { BoardShell } from './board-shell';
 
 const CHUNKS = [
-  chunkSummary({ chunk_id: 'ch_wait1', graph_id: 'gr_1', status: 'waiting_on_human' }),
-  chunkSummary({ chunk_id: 'ch_need1', graph_id: 'gr_1', status: 'needs_human' }),
-  chunkSummary({ chunk_id: 'ch_pause', graph_id: 'gr_1', status: 'paused' }),
-  chunkSummary({ chunk_id: 'ch_need2', graph_id: 'gr_1', status: 'needs_human' }),
-  chunkSummary({ chunk_id: 'ch_wait2', graph_id: 'gr_1', status: 'waiting_on_human' }),
+  boardChunk({ chunk_id: 'ch_wait1', graph_id: 'gr_1', status: 'waiting_on_human', laneStatus: { kind: 'waiting_on_human' } }),
+  boardChunk({ chunk_id: 'ch_need1', graph_id: 'gr_1', status: 'needs_human', laneStatus: { kind: 'needs_human' } }),
+  boardChunk({ chunk_id: 'ch_pause', graph_id: 'gr_1', status: 'paused', laneStatus: { kind: 'paused' } }),
+  boardChunk({ chunk_id: 'ch_need2', graph_id: 'gr_1', status: 'needs_human', laneStatus: { kind: 'needs_human' } }),
+  boardChunk({ chunk_id: 'ch_wait2', graph_id: 'gr_1', status: 'waiting_on_human', laneStatus: { kind: 'waiting_on_human' } }),
 ];
 
 describe('BoardShell human attention', () => {
@@ -45,11 +46,11 @@ describe('BoardShell human attention', () => {
     const count = () => el.querySelector('[data-col="needs"] [data-testid="lane-count"]')?.textContent?.trim();
     expect(count()).toBe('');
 
-    fixture.componentRef.setInput('counts', chunkCountsView({ needs_human: 7, waiting_on_human: 4, paused: 2 }));
+    fixture.componentRef.setInput('counts', boardCounts({ needs_human: 7, waiting_on_human: 4, paused: 2 }));
     await fixture.whenStable();
     expect(count()).toBe('13');
 
-    fixture.componentRef.setInput('counts', chunkCountsView({ needs_human: 0, waiting_on_human: 0, paused: 0 }));
+    fixture.componentRef.setInput('counts', boardCounts({ needs_human: 0, waiting_on_human: 0, paused: 0 }));
     await fixture.whenStable();
     expect(count()).toBe('0');
   });

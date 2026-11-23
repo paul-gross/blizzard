@@ -1,4 +1,5 @@
-import { type ActivityView, type AsyncStateQuery, hubApi } from 'fleet';
+import { type AsyncStateQuery } from 'fleet';
+import { HubEventKind as HubEventType, type ActivityFact } from 'fleet/shell';
 import { describe, expect, it } from 'vitest';
 
 import { activityPanelState, activityRows, backfillEvents, mergeActivityFeeds } from './activity-panel.model';
@@ -6,8 +7,6 @@ import { type LoggedEvent } from '../../core/live/hub-live-updates';
 
 /** No runner's host known — every runner keeps its compact-id name. */
 const NO_HOSTS: ReadonlyMap<string, string> = new Map();
-
-const { HubEventType } = hubApi;
 
 const event = (seq: number, at: number, fields: Partial<LoggedEvent> = {}): LoggedEvent => ({
   seq,
@@ -29,9 +28,9 @@ describe('backfillEvents', () => {
 
   it('shapes each row into a logged event with a distinct negative seq and an epoch `at`', () => {
     const rows = [
-      { at: '2026-06-01T12:00:00Z', type: HubEventType.QUEUE_CHANGED, key: 'k1' },
-      { at: '2026-06-01T11:00:00Z', type: HubEventType.QUESTION_ASKED, key: 'k2', chunk_id: 'ch_1' },
-    ] as ActivityView[];
+      { at: Date.parse('2026-06-01T12:00:00Z'), type: HubEventType.QUEUE_CHANGED, key: 'k1', data: { key: 'k1' } },
+      { at: Date.parse('2026-06-01T11:00:00Z'), type: HubEventType.QUESTION_ASKED, key: 'k2', data: { key: 'k2', chunk_id: 'ch_1' } },
+    ] satisfies ActivityFact[];
     expect(backfillEvents(rows)).toEqual([
       { seq: -1, type: HubEventType.QUEUE_CHANGED, data: { key: 'k1' }, at: Date.parse('2026-06-01T12:00:00Z'), key: 'k1' },
       {
@@ -86,7 +85,7 @@ describe('activityRows', () => {
     const rows = activityRows(
       [
         event(1, 0, { type: HubEventType.QUESTION_ASKED, data: { chunk_id: 'ch_1' } }),
-        event(2, 0, { type: 'some-new-type' }),
+        event(2, 0, { type: { kind: 'unknown', raw: 'some-new-type' } }),
       ],
       NO_HOSTS,
     );

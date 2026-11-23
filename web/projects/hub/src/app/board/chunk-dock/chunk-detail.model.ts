@@ -21,7 +21,7 @@ export function pendingStatusOverride(
 
 
 /** The open chunk's aggregate — `undefined` while the dock is closed, whatever a disabled query still holds. */
-export function openDetail(chunkId: string | null, data: ChunkDetail | undefined): ChunkDetail | undefined {
+export function openDetail<T extends ChunkDetail>(chunkId: string | null, data: T | undefined): T | undefined {
   return chunkId === null ? undefined : data;
 }
 

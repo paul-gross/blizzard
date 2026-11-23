@@ -23,7 +23,7 @@
         {{ sample.conditionLabel }}
       </div>
       <div class="sub-sampled" data-testid="subscription-pace-group-sampled">sampled {{ sample.sampledAgo }}</div>
-    } @else if (group.condition === SampleMissReason.CREDENTIAL_LAPSED) {
+    } @else if (group.condition === 'credential_lapsed') {
       <div
         class="sub-lapsed"
         [style.color]="lapsedColor"
@@ -62,9 +62,9 @@
       <div
         class="sub-no-sample"
         data-testid="subscription-pace-group-no-sample"
-        [attr.aria-label]="group.name + ' has no sample yet' + (group.missReason ? ' — ' + group.missReason : '')"
+        [attr.aria-label]="group.name + ' has no sample yet' + (group.missReason ? ' — ' + missLabel(group.missReason) : '')"
       >
-        NO SAMPLE YET{{ group.missReason ? ' — ' + group.missReason : '' }}
+        NO SAMPLE YET{{ group.missReason ? ' — ' + missLabel(group.missReason) : '' }}
       </div>
     }
     @if (group.renewalLabel) {

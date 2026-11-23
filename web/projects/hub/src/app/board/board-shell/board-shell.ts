@@ -1,7 +1,10 @@
 import { fromUrgencyRef } from '../../core/urgency.translate';
+import { domainLaneCounts } from 'fleet';
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type Urgency, type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, workLines, compactRef, DONE_LANE, LANES, laneCounts, UNKNOWN_LANE, unknownLane, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabContent, KitTabGroup, KitTabPanel, KitTabs, type KitTabOption } from 'fleet';
+import { type Urgency, type LaneCounts, type WorkItemsView, workLines, compactRef, DONE_LANE, LANES, UNKNOWN_LANE, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabContent, KitTabGroup, KitTabPanel, KitTabs, type KitTabOption } from 'fleet';
+import { domainChunkLane, domainUnknownLane } from 'fleet';
+import type { BoardChunk } from '../../core/chunks.model';
 import type { ChunkControl } from 'fleet';
 import type { BoardCard } from '../board-card/board-card-view.model';
 import { placeLines } from '../../core/flow-place.model';
@@ -45,11 +48,11 @@ export class BoardShell {
   /** Each banner urgency's image-mark URL by urgency id, read by the page. */
   readonly urgencyIconUrls = input<Readonly<Record<string, string | undefined>>>({});
   readonly chunkControl = input<ChunkControl | null>(null);
-  readonly chunks = input<readonly ChunkSummary[]>([]);
+  readonly chunks = input<readonly BoardChunk[]>([]);
 
   /** The all-time fleet counts each column head shows — `null` while the read is
    * pending, when the heads withhold their numbers. */
-  readonly counts = input<ChunkCountsView | null>(null);
+  readonly counts = input<LaneCounts | null>(null);
 
   /**
    * The ready chunk ids in hub dispatch order. The READY lane renders in exactly this order; a ready
@@ -121,7 +124,7 @@ export class BoardShell {
   readonly layoutChange = output<BoardLayout>();
 
   protected readonly columns = computed(() => {
-    const unknown = unknownLane(this.chunks());
+    const unknown = domainUnknownLane(this.chunks().map((chunk) => ({ status: chunk.laneStatus, terminal: chunk.terminal })));
     const lanes = LANES.filter((lane) => lane.key !== 'waiting').map((lane) => {
       if (lane.key === 'needs') return { ...lane, label: 'HUMAN ATTENTION' };
       return lane.key === DONE_LANE ? { ...lane, label: this.donePolicy().heading } : lane;
@@ -163,10 +166,11 @@ export class BoardShell {
     const statusById = new Map(this.chunks().map((c) => [c.chunk_id, c.status]));
     for (const chunk of this.chunks()) {
       const workItems = this.workItems().get(chunk.chunk_id);
-      grouped.get(chunkLane(chunk))?.push({
+      grouped.get(domainChunkLane({ status: chunk.laneStatus, terminal: chunk.terminal }))?.push({
         chunkId: chunk.chunk_id,
         shortId: compactRef(chunk.chunk_id),
         status: chunk.status,
+        laneStatus: chunk.laneStatus,
         terminal: chunk.terminal ?? false,
         urgency: chunk.urgency ? fromUrgencyRef(chunk.urgency) : null,
         promotable: chunk.promotable ?? false,
@@ -239,7 +243,7 @@ export class BoardShell {
 
   private readonly laneTotals = computed(() => {
     const counts = this.counts();
-    return counts === null ? null : laneCounts(counts);
+    return counts === null ? null : domainLaneCounts(counts);
   });
 
   /** A lane's all-time count. DONE and the unknown lane count the chunks they show instead: the board

@@ -992,10 +992,8 @@ const LAYERED_PROJECTS = [
  */
 const DOMAIN_BOUNDARY_EXEMPT = [
   'fleet/src/lib/chunk',
-  'fleet/src/lib/core',
   'fleet/src/lib/host',
   'fleet/src/lib/shell',
-  'fleet/src/lib/sse',
   'fleet/src/lib/transcripts',
   'hub/src/app/admin',
   'hub/src/app/admin/forges',

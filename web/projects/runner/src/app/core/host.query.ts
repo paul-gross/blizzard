@@ -10,6 +10,7 @@ import {
   hostWorkspacesKey,
 } from './query-keys';
 import { runnerNameResolver } from './host-pools.model';
+import { runnerSubscription } from './host-subscription.translate';
 
 /**
  * The host's reads — `GET /api/host/*`, at the host's root and through the generated
@@ -72,6 +73,7 @@ export function injectHostSubscriptionsQuery() {
       if (error) throw error;
       return data?.items ?? [];
     },
+    select: (rows: runnerApi.HostSubscriptionView[]) => rows.map(runnerSubscription),
     refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
   }));
 }

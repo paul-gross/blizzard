@@ -1,4 +1,6 @@
 import type { runnerApi } from 'fleet';
+import { hostSubscriptionView } from 'fleet/testing';
+import { runnerSubscription } from '../core/host-subscription.translate';
 
 import { floorClearScope } from './throttle.model';
 
@@ -7,7 +9,7 @@ const runners = [
   { runner_id: 'rn_b', name: 'r-chatgpt' },
   { runner_id: 'rn_c', name: 'r-test' },
 ] as runnerApi.HostRunnerView[];
-const subscriptions = [{ slug: 'anthropic', spenders: ['rn_a', 'rn_b', 'rn_c'] }] as runnerApi.HostSubscriptionView[];
+const subscriptions = [runnerSubscription(hostSubscriptionView({ slug: 'anthropic', name: 'Anthropic', provider: 'anthropic', spenders: ['rn_a', 'rn_b', 'rn_c'] }))];
 
 describe('floorClearScope', () => {
   it('names every spender of the subscription, not just the runner whose page is open', () => {

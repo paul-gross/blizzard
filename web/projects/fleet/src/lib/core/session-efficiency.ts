@@ -1,18 +1,15 @@
-import type { ChunkUsageTotalView } from '../api/hub';
 import { formatCost, formatTokens } from './cost-format';
 
-/** The usage fields the session efficiency cost reads — the wire's own names, so a chunk's, a step's or the fleet's
- * usage total passes straight through. */
-export type SessionEfficiencyInput = Pick<
-  ChunkUsageTotalView,
-  | 'cost_usd'
-  | 'estimated_cost_usd'
-  | 'cost_partial'
-  | 'input_tokens'
-  | 'output_tokens'
-  | 'cache_read_tokens'
-  | 'cache_create_tokens'
->;
+/** The usage figures needed to display session efficiency. */
+export interface SessionEfficiencyInput {
+  readonly cost_usd: number;
+  readonly estimated_cost_usd: number | null;
+  readonly cost_partial: boolean;
+  readonly input_tokens: number;
+  readonly output_tokens: number;
+  readonly cache_read_tokens: number;
+  readonly cache_create_tokens: number;
+}
 
 /** The session efficiency cost: `$0.30 · 220kI / 32.7kO × 2.57%` — the cost, the distinct input (input plus cache
  * write, cache read excluded), the output, and the cache miss percent (distinct input over distinct input plus cache

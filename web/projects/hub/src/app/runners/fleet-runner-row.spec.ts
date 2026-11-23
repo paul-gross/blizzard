@@ -84,19 +84,24 @@ describe('FleetRunnerRow', () => {
   }
 
   it('ends each claim with the chunk status', async () => {
-    const { el } = await render(row('rn_a', { claims: [{ chunkId: 'ch_01', shortId: 'C-01', node: 'build', status: 'running' }] }));
+    const { el } = await render(row('rn_a', { claims: [{ chunkId: 'ch_01', shortId: 'C-01', node: 'build', status: { kind: 'running' as const } }] }));
 
     const claim = el.querySelector('[data-testid="fleet-runner-claims"] .claim');
     expect(claim?.textContent).toContain('build');
     expect(claim?.textContent).toContain('running');
   });
 
+  it('preserves an unknown status on a held chunk', async () => {
+    const { el } = await render(row('rn_a', { claims: [{ chunkId: 'ch_01', shortId: 'C-01', node: 'build', status: { kind: 'unknown', raw: 'future status' } }] }));
+    expect(el.querySelector('[data-testid="fleet-runner-claims"] .claim')?.textContent).toContain('future status');
+  });
+
   it("opens each held chunk's page from its whole line", async () => {
     const { el } = await render(
       row('rn_a', {
         claims: [
-          { chunkId: 'ch_01', shortId: 'C-01', node: 'build', status: 'running' },
-          { chunkId: 'ch_02', shortId: 'C-02', node: 'deliver', status: 'delivering' },
+          { chunkId: 'ch_01', shortId: 'C-01', node: 'build', status: { kind: 'running' as const } },
+          { chunkId: 'ch_02', shortId: 'C-02', node: 'deliver', status: { kind: 'delivering' as const } },
         ],
       }),
     );
@@ -177,7 +182,7 @@ describe('FleetRunnerRow', () => {
   });
 
   it('states a live runner as working or idle by its claims, an offline one as such, and says when it holds no chunk', async () => {
-    const claim = { chunkId: 'ch_1', shortId: 'C-0001', node: 'build', status: 'running' };
+    const claim = { chunkId: 'ch_1', shortId: 'C-0001', node: 'build', status: { kind: 'running' as const } };
     const working = await render(row('rn_busy', { claims: [claim] } as unknown as Partial<RunnerRow>));
     expect(working.el.querySelector('[data-testid="fleet-runner-claims"]')?.textContent).toContain('C-0001');
     expect(working.el.querySelector('.badges')?.textContent?.trim()).toBe('WORKING');

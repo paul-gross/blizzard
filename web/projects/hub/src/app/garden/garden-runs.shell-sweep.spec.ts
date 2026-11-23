@@ -54,7 +54,7 @@ const ROWS: readonly RunListRowVm[] = [
     scopeSlug: 'blizzard',
     mode: 'full',
     mintedAt: '2026-01-10T00:00:00Z',
-    outcome: 'done',
+    laneStatus: { kind: 'done' },
     escalated: false,
     counts: { added: 1, observed: 11, gone: 0 },
   },
@@ -64,7 +64,7 @@ const ROWS: readonly RunListRowVm[] = [
     scopeSlug: 'web',
     mode: 'delta',
     mintedAt: '2026-01-11T00:00:00Z',
-    outcome: 'needs_human',
+    laneStatus: { kind: 'needs_human' },
     escalated: true,
     counts: null,
   },
@@ -361,7 +361,7 @@ describe('gardening panels shell sweep (web:shell-sweep)', () => {
     fixture.componentRef.setInput('canEdit', true);
     fixture.componentRef.setInput(
       'descriptionForm',
-      TestBed.runInInjectionContext(() => form(signal({ description: PANEL_SCOPE.description }), SCOPE_DESCRIPTION_RULES)),
+      TestBed.runInInjectionContext(() => form(signal({ description: PANEL_SCOPE.description ?? '' }), SCOPE_DESCRIPTION_RULES)),
     );
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);

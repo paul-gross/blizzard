@@ -7,6 +7,6 @@ export const hubFlagsRead: FlagsRead = {
   queryFn: async () => {
     const { data, error } = await flagsApiFlagsGet({ throwOnError: false });
     if (error) throw error;
-    return data!;
+    return { flags: data!.flags, overridden: data!.overridden };
   },
 };

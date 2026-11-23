@@ -1,16 +1,16 @@
 import { Injectable, InjectionToken, type Provider, computed, inject } from '@angular/core';
 import { QueryClient, injectQuery } from '@tanstack/angular-query-experimental';
 
-import type { FlagsResponse } from '../../api/hub';
+import type { Flags } from '../flags.domain';
 
 /** An app's read of its own server's flags — the query key and the call through that app's generated client. */
 export interface FlagsRead {
   readonly queryKey: readonly unknown[];
-  readonly queryFn: () => Promise<FlagsResponse>;
+  readonly queryFn: () => Promise<Flags>;
 }
 
 /** What a server that could not answer reads as: every flag off, nothing overridden. */
-const ALL_OFF: FlagsResponse = { flags: {}, overridden: [] };
+const ALL_OFF: Flags = { flags: {}, overridden: [] };
 
 const FLAGS_READ = new InjectionToken<FlagsRead>('fleet.FLAGS_READ');
 
@@ -40,7 +40,7 @@ export class FlagStore {
   private readonly query = injectQuery(() => this.options);
 
   /** The answer, with a part a server left out read as empty — never a throw in a template. */
-  private readonly answer = computed<FlagsResponse>(() => {
+  private readonly answer = computed<Flags>(() => {
     const data = this.query.data();
     return { flags: data?.flags ?? ALL_OFF.flags, overridden: data?.overridden ?? ALL_OFF.overridden };
   });

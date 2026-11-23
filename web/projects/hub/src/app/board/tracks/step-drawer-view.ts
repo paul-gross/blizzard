@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import {
   ChunkDelivery,
   type ChunkDetail,
+  type FactsDetail,
   ChunkFacts,
   ChunkIssuePane,
   KitAsyncState,
@@ -95,7 +96,7 @@ export class StepDrawerView {
   readonly nowMs = input.required<number>();
   readonly project = input<StepProject | null>(null);
   /** The step's chunk, once read. */
-  readonly chunk = input<ChunkDetail | null>(null);
+  readonly chunk = input<(ChunkDetail & FactsDetail) | null>(null);
   readonly workItems = input<WorkItemsState>({ status: 'loading', items: [] });
   /** The chunk with only this step's artifacts. */
   readonly stepArtifacts = input<ChunkDetail | null>(null);

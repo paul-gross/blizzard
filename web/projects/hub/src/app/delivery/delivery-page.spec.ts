@@ -130,6 +130,16 @@ describe('DeliveryPage', () => {
     expect([BOUNCED, IN_LINE, LANDED].map((id) => row(el, id).getAttribute('data-stage'))).toEqual(['-1', '1', '3']);
   });
 
+  it('draws the projected paused status through the delivery lane icon', async () => {
+    configure(hubRoutes(undefined, {
+      'GET /api/chunks': () => ({ chunks: [chunkSummary({ chunk_id: IN_LINE, graph_id: 'gr_1', status: 'paused', open_prs: [prView()] })], next_cursor: null, board_done_policy: null }),
+    }));
+    const { el } = await open();
+    const icon = row(el, IN_LINE).querySelector('[data-testid="delivery-lane-icon"]');
+    expect(icon?.getAttribute('data-glyph')).toBe('paused');
+    expect(icon?.getAttribute('title')).toBe('Paused');
+  });
+
   it('draws a row\'s place in line, its bounce, its step and its links', async () => {
     configure();
     const { el } = await open();

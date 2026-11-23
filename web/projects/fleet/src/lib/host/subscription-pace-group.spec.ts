@@ -33,6 +33,13 @@ describe('SubscriptionPaceGroup', () => {
     }).compileComponents();
   });
 
+  it('renders an unknown miss reason verbatim in text and accessibility label', async () => {
+    const el = await render([pace({ slug: 's', name: 'Service', missReason: { kind: 'unknown', raw: 'Future-Miss' } })]);
+    const line = el.querySelector('[data-testid="subscription-pace-group-no-sample"]');
+    expect(line?.textContent).toContain('NO SAMPLE YET — Future-Miss');
+    expect(line?.getAttribute('aria-label')).toBe('Service has no sample yet — Future-Miss');
+  });
+
   it('keeps two subscriptions sharing an identical window label distinct, each under its own slug', async () => {
     const el = await render([
       pace({

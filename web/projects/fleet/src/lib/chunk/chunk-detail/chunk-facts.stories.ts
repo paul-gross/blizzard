@@ -1,34 +1,22 @@
-import type { Meta, StoryObj } from '@storybook/angular-vite';
+import { ROUTES } from '@angular/router';
+import { applicationConfig, type Meta, type StoryObj } from '@storybook/angular-vite';
 
-import {
-  chunkDetail,
-  chunkNeighborhoodView,
-  chunkNeighborView,
-  chunkUsageTotalView,
-  fixtureInstant,
-  routeView,
-  workRefView,
-} from 'fleet/testing';
 import { ChunkFacts } from './chunk-facts';
+import { factsDetail, factsNeighbor } from './chunk-facts.fixture';
 
 const meta: Meta<ChunkFacts> = {
   title: 'Chunk/Facts',
   component: ChunkFacts,
+  // The workshop has no router outlet; accept both selection and standalone links in its iframe.
+  decorators: [applicationConfig({ providers: [{ provide: ROUTES, multi: true, useValue: [{ path: '**', children: [] }] }] })],
   args: {
-    detail: chunkDetail({
-      project_name: 'Blizzard',
-      project_slug: 'blizzard',
-      graph_name: 'build',
-      graph_created_at: fixtureInstant(-86_400),
-      route: routeView(),
-      cost: chunkUsageTotalView(),
-      work_refs: [workRefView(), workRefView({ ref: '1275', label: 'blizzard#1275' })],
-    }),
+    detail: factsDetail(),
     chunkLinkBase: ['/board', 'chunk'],
+    boardChunkIds: new Set(['ch_01neighbor00000000000000000']),
   },
   render: (args) => ({
     props: args,
-    template: `<fleet-chunk-detail-facts [detail]="detail" [chunkLinkBase]="chunkLinkBase" />`,
+    template: `<fleet-chunk-detail-facts [detail]="detail" [chunkLinkBase]="chunkLinkBase" [boardChunkIds]="boardChunkIds" />`,
   }),
 };
 export default meta;
@@ -37,39 +25,31 @@ type Story = StoryObj<ChunkFacts>;
 
 export const EveryFact: Story = {
   args: {
-    detail: chunkDetail({
-      project_name: 'Blizzard',
-      project_slug: 'blizzard',
-      graph_name: 'build',
-      graph_created_at: fixtureInstant(-86_400),
-      route: routeView(),
-      cost: chunkUsageTotalView(),
-      work_refs: [workRefView(), workRefView({ ref: '1275', label: 'blizzard#1275' })],
-      neighborhood: chunkNeighborhoodView({
-        prerequisites: [chunkNeighborView()],
-        dependents: [chunkNeighborView({ chunk_id: 'ch_01dependent0000000000000000', satisfied: false, status: 'not_ready' })],
-      }),
+    detail: factsDetail({
+      neighborhood: {
+        prerequisites: [factsNeighbor()],
+        dependents: [factsNeighbor({ chunk_id: 'ch_01dependent0000000000000000', laneStatus: { kind: 'not_ready' } })],
+      },
     }),
   },
 };
 export const AlmostNone: Story = {
-  args: { detail: chunkDetail({ work_refs: [], route: null, graph_name: null, history: [], latest_epoch: null }) },
+  args: { detail: factsDetail() },
 };
 export const NeighborsBlockingAndBlocked: Story = {
   args: {
-    detail: chunkDetail({
-      status: 'not_ready',
-      neighborhood: chunkNeighborhoodView({
+    detail: factsDetail({
+      neighborhood: {
         prerequisites: [
-          chunkNeighborView({ chunk_id: 'ch_01prereqdone000000000000000', satisfied: true, status: 'done' }),
-          chunkNeighborView({ chunk_id: 'ch_01prereqrunning00000000000', satisfied: false, status: 'running' }),
+          factsNeighbor({ chunk_id: 'ch_01prereqdone000000000000000', laneStatus: { kind: 'done' } }),
+          factsNeighbor({ chunk_id: 'ch_01prereqrunning00000000000', laneStatus: { kind: 'running' } }),
         ],
-        dependents: [chunkNeighborView({ chunk_id: 'ch_01dependent0000000000000000', satisfied: false, status: 'not_ready' })],
-      }),
+        dependents: [factsNeighbor({ chunk_id: 'ch_01dependent0000000000000000', laneStatus: { kind: 'not_ready' } })],
+      },
     }),
   },
 };
 /** A step-free chunk — the efficiency figure reads its cost alone. */
 export const NoUsage: Story = {
-  args: { detail: chunkDetail({ cost: chunkUsageTotalView({ input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 0 }) }) },
+  args: { detail: factsDetail({ cost: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 0, cost_partial: false, estimated_cost_usd: null } }) },
 };

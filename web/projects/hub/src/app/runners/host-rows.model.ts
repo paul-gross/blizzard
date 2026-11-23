@@ -1,5 +1,5 @@
 import {
-  type HostRegistryView,
+  type HostFact,
   RunnerConnection,
   type RunnerRegistryView,
   type SubscriptionPace,
@@ -72,7 +72,7 @@ export interface HostCard {
   readonly hostId: string;
   readonly hostName: string;
   readonly online: boolean;
-  readonly connection: RunnerConnection;
+  readonly connection: HostFact['connection'];
   readonly reportLabel: string;
   readonly workspaces: readonly WorkspaceRow[];
   readonly subscriptionPaces: readonly SubscriptionPace[];
@@ -143,7 +143,7 @@ export function bindingLines(runner: RunnerRegistryView, chunks: readonly ChunkS
  * slug itself where the roster names no such subscription; `null` for none. */
 export function subscriptionName(
   runner: RunnerRegistryView,
-  hosts: ReadonlyMap<string, HostRegistryView>,
+  hosts: ReadonlyMap<string, HostFact>,
 ): string | null {
   const slug = runner.subscription ?? null;
   if (slug === null) return null;
@@ -211,7 +211,7 @@ function reportedAgo(lastSeenAt: string | null | undefined, nowMs: number): stri
  * lensed runner is hidden; on All every host shows, one with no runners included.
  */
 export function foldHostCards(
-  hosts: readonly HostRegistryView[],
+  hosts: readonly HostFact[],
   runners: readonly RunnerRegistryView[],
   lensed: readonly RunnerRegistryView[] | null,
   chunks: readonly ChunkSummary[],
