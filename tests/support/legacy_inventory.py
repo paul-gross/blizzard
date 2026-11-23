@@ -10,21 +10,7 @@ from collections.abc import Mapping
 from blizzard.foundation.registry.internal.recording import Kind, RecordingRegistry
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.flow_driver import StepWake
-from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
-from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository, IWriteChunkDecisionsRepository
-from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
-from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
-from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
-from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository, IWriteChunkQuestionsRepository
-from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
-from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository, IWriteChunkRouteRepository
-from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
-from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
-from blizzard.hub.domain.operations.delete import DeleteService
-from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.open_tenants import OpenTenants
 
 #: Each legacy key the hub registry declares (a class or a callable alias), and the area that owns it until adopted.
@@ -32,23 +18,6 @@ LEGACY_INVENTORY: Mapping[object, str] = {
     OpenTenants: "hub lifecycle",
     ActionLoop: "hub lifecycle",
     StepWake: "hub lifecycle",
-    DeleteService: "chunk operations",
-    WorkItemEditService: "chunk operations",
-    EventLogService: "chunk operations",
-    IReadChunkFactsRepository: "chunk operations",
-    IReadChunkRecordRepository: "chunk operations",
-    IReadChunkRouteRepository: "chunk operations",
-    IWriteChunkRouteRepository: "chunk operations",
-    IReadChunkArtifactsRepository: "chunk operations",
-    IReadChunkDependenciesRepository: "chunk operations",
-    IWriteChunkMovementRepository: "chunk operations",
-    IWriteChunkDecisionsRepository: "chunk operations",
-    IReadChunkDecisionsRepository: "chunk operations",
-    IWriteChunkEscalationsRepository: "chunk operations",
-    IWriteChunkQuestionsRepository: "chunk operations",
-    IReadChunkQuestionsRepository: "chunk operations",
-    IWriteChunkUsageRepository: "chunk operations",
-    IReadChunkWorkRefsRepository: "chunk operations",
     GardenProposalDeliveryResolution: "garden authoring",
 }
 

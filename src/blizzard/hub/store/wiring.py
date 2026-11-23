@@ -148,11 +148,13 @@ def scoped_connections(connections: HubStoreConnections, scope: StoreScope) -> S
 
 def register_tenant(registry: Registry) -> StoreRefs:
     """Declare every tenant adapter but the configured records' once per tenant, handing back the ``Ref`` of each
-    adapter the legacy bridge's ports alias."""
+    adapter the legacy bridge's or an adopted area's ports alias, the tenant's flow store among them."""
     registry.factory(scoped_connections, lifetime=Lifetime.TENANT)
     registry.factory(build_chunk_stores, lifetime=Lifetime.TENANT)
-    registry.factory(tenant_flows, lifetime=Lifetime.TENANT)
-    aliased = StoreRefs({each: registry.service(each, lifetime=Lifetime.TENANT) for each in _TENANT_ALIASED})
+    flows = registry.factory(tenant_flows, lifetime=Lifetime.TENANT)
+    aliased = StoreRefs(
+        {FlowStore: flows, **{each: registry.service(each, lifetime=Lifetime.TENANT) for each in _TENANT_ALIASED}}
+    )
     for each in _TENANT_SERVICES:
         registry.service(each, lifetime=Lifetime.TENANT)
     return aliased

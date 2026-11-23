@@ -30,15 +30,18 @@ from blizzard.hub.delivery import wiring as delivery
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.documents import wiring as documents
 from blizzard.hub.domain.cadence import wiring as cadence_area
+from blizzard.hub.domain.chunk import wiring as chunk_area
 from blizzard.hub.domain.config import wiring as config_wiring
 from blizzard.hub.domain.config_apply import wiring as config_apply
 from blizzard.hub.domain.execution import wiring as execution
 from blizzard.hub.domain.garden import wiring as garden_area
 from blizzard.hub.domain.garden.findings import wiring as findings
 from blizzard.hub.domain.graph import wiring as graph_area
+from blizzard.hub.domain.operations import wiring as operations_area
 from blizzard.hub.domain.projects import wiring as projects
 from blizzard.hub.domain.runners import wiring as runners
 from blizzard.hub.domain.urgency import wiring as urgency_area
+from blizzard.hub.domain.work_items import wiring as work_items_area
 from blizzard.hub.events import wiring as events
 from blizzard.hub.forge import wiring as forge
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
@@ -52,7 +55,9 @@ from blizzard.hub.settings import wiring as settings_wiring
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store import wiring as store
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import TenantId, UnknownTenant
@@ -103,7 +108,7 @@ def register_hub(
     forge.register_process(registry)
     if store_backed:
         delivery.register(registry)
-        register_legacy(registry)
+        _register_chunk_operations(registry, register_legacy(registry))
         auth.register(registry)
         secrets.register(registry)
         findings.register(registry, store.register_findings(registry))
@@ -121,6 +126,9 @@ def register_hub(
         api.register(registry)
     else:
         register_legacy_absent(registry)
+        chunk_area.register_absent(registry)
+        operations_area.register_absent(registry)
+        work_items_area.register_absent(registry)
         auth.register_absent(registry)
         secrets.register_absent(registry)
         store.register_findings_absent(registry)
@@ -149,6 +157,14 @@ def register_hub(
     else:
         settings_wiring.register_boot_source(registry)
         settings_wiring.register_absent(registry)
+
+
+def _register_chunk_operations(registry: LegacyRegistry, tenant: store.StoreRefs) -> None:
+    """The chunk, chunk operations and work-items areas, over the tenant's flow and work-item stores."""
+    items = tenant.of(WorkItemStore)
+    chunk_area.register(registry, submissions=tenant.of(FlowStore), work_items=items)
+    operations_area.register(registry, withdrawals=items)
+    work_items_area.register(registry, items=items)
 
 
 def _register_projects(registry: LegacyRegistry) -> None:
