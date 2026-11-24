@@ -2,11 +2,11 @@
   <div class="strip" data-testid="node-strip" role="img" [attr.aria-label]="'Graph progress'">
     @for (group of groups(); track $index) {
       <span class="group" [style.--blocks]="group.length">
-        @for (block of group; track block.node_id) {
-          <span class="block" [attr.data-state]="blockState(block.state)"
-            [style.--block-fill]="blockFill(blockState(block.state))"
-            [style.--block-edge]="blockEdge(blockState(block.state))"
-            [title]="block.name + ' · ' + block.state"
+        @for (block of group; track block.nodeId) {
+          <span class="block" [attr.data-state]="block.state.kind"
+            [style.--block-fill]="blockFill(block.state.kind)"
+            [style.--block-edge]="blockEdge(block.state.kind)"
+            [title]="block.name + ' · ' + blockStateLabel(block.state)"
           ></span>
         }
       </span>

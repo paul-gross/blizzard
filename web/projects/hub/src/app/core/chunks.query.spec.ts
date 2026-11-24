@@ -9,7 +9,7 @@ import {
   provideTanStackQuery,
 } from '@tanstack/angular-query-experimental';
 
-import type { ChunkSummary } from 'fleet';
+import type { ChunkSummary, hubApi } from 'fleet';
 import {
   chunkSummary,
   settle,
@@ -81,6 +81,7 @@ describe('injectHubBoardChunksQuery', () => {
       status: 'future_status' as ChunkSummary['status'],
       terminal: true,
       promotable: false,
+      graph_progress: [{ node_id: 'nd_1', name: 'build', state: 'future' as hubApi.GraphProgressState }],
     };
     stub = stubHubClient({
       'GET /api/chunks': () => ({ chunks: [future], next_cursor: null, board_done_policy: null }),
@@ -92,6 +93,11 @@ describe('injectHubBoardChunksQuery', () => {
     expect(observed?.laneStatus).toEqual({ kind: 'unknown', raw: 'future_status' });
     expect(observed?.terminal).toBe(true);
     expect(observed?.promotable).toBe(false);
+    expect(observed?.graphProgress).toEqual([{
+      nodeId: 'nd_1',
+      name: 'build',
+      state: { kind: 'unknown', raw: 'future' },
+    }]);
     const cached = TestBed.inject(QueryClient).getQueryData<BoardChunksRead>(boardChunksQueryOptions(null).queryKey);
     expect(cached?.chunks[0]).toEqual(future);
     expect(cached?.pages[0].chunks[0]).toEqual(future);

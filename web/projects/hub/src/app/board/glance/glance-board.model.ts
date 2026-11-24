@@ -1,6 +1,7 @@
 import { fromUrgencyRef } from '../../core/urgency.translate';
-import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, blockedLabel, domainChunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type ChunkStatus, type LaneStatus, type UrgencyReference, type ChunkSummary, type DecisionView, type hubApi, type QuestionView, type RunnerRegistryView, type WorkItemsView, workLines } from 'fleet';
+import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, blockedLabel, domainChunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type ChunkStatus, type LaneStatus, type UrgencyReference, type ChunkSummary, type DecisionView, type QuestionView, type RunnerRegistryView, type WorkItemsView, workLines } from 'fleet';
 import type { BoardChunk } from '../../core/chunks.model';
+import type { GraphProgressNode } from '../../core/chunks.domain';
 
 import type { RowWork, Vitals } from './glance-view';
 
@@ -49,7 +50,7 @@ export interface GlanceRow extends RowWork {
   /** The chunk's graph's name, `null` when unresolvable. */
   readonly graphName: string | null;
   /** The chunk's progress through its graph — the strip its card carries. */
-  readonly graphProgress: readonly hubApi.GraphProgressNodeView[];
+  readonly graphProgress: readonly GraphProgressNode[];
   /** The holding runner's host and name, or `null` when none holds it. */
   readonly runner: RunnerBoardParts | null;
   readonly gated: boolean;
@@ -110,7 +111,7 @@ export function glanceListGroups(
       terminal: chunk.terminal ?? false,
       urgency: chunk.urgency ? fromUrgencyRef(chunk.urgency) : null,
       graphName: chunk.graph_name,
-      graphProgress: chunk.graph_progress,
+      graphProgress: chunk.graphProgress,
       runner: chunk.runner_id ? runnerBoardParts(chunk.runner_id, chunk.runner_name, runnerHosts.get(chunk.runner_id) ?? null) : null,
       gated: gated.has(chunk.chunk_id),
       blocked: chunk.blocked ? {

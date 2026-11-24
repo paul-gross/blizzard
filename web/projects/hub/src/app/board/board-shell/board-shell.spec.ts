@@ -593,9 +593,9 @@ describe('BoardShell', () => {
     };
 
     it('carries the node strip in a mid-graph card\'s cost row, at its current node, and on no other card', async () => {
-    const progress = [{ node_id: 'nd_build', name: 'build', state: 'current' as const }];
-    const running = boardChunk({ chunk_id: 'ch_01running00000000000000000', graph_id: 'gr_1', status: 'running', laneStatus: { kind: 'running' }, current_node_id: 'nd_build', work_refs: [], graph_progress: progress });
-    const ready = boardChunk({ ...READY('a'), graph_progress: progress });
+    const progress = [{ nodeId: 'nd_build', name: 'build', state: { kind: 'current' as const } }];
+    const running = boardChunk({ chunk_id: 'ch_01running00000000000000000', graph_id: 'gr_1', status: 'running', laneStatus: { kind: 'running' }, current_node_id: 'nd_build', work_refs: [], graphProgress: progress });
+    const ready = boardChunk({ ...READY('a'), graphProgress: progress });
     const el = (await render([running, ready])).nativeElement as HTMLElement;
     const strips = [...el.querySelectorAll('[data-testid="node-strip"]')];
     expect(strips).toHaveLength(1);

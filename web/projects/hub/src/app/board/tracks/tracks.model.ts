@@ -1,6 +1,5 @@
 import {
   type AsyncStateQuery,
-  type ChunkSummary,
   type KitAsyncStateValue,
   type ProjectView,
   asyncState,
@@ -296,8 +295,8 @@ export function tracksState(
 }
 
 /** Each chunk's progress through its graph, by chunk id. */
-export function progressByChunk(chunks: readonly ChunkSummary[] | undefined): ReadonlyMap<string, readonly NodeBlock[]> {
-  return new Map((chunks ?? []).map((c) => [c.chunk_id, c.graph_progress]));
+export function progressByChunk(chunks: readonly { readonly chunk_id: string; readonly graphProgress: readonly NodeBlock[] }[] | undefined): ReadonlyMap<string, readonly NodeBlock[]> {
+  return new Map((chunks ?? []).map((c) => [c.chunk_id, c.graphProgress]));
 }
 
 /** Each project's tint, by id, while blocks wear their project's colour — else `null`, and they wear their runner's. */

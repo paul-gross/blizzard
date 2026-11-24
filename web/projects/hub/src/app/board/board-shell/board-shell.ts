@@ -177,7 +177,7 @@ export class BoardShell {
         node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
         nodeId: chunk.current_node_id ?? '',
         graphName: chunk.graph_name,
-        graphProgress: chunk.graph_progress,
+        graphProgress: chunk.graphProgress,
         costUsd: chunk.cost?.cost_usd ?? 0,
         costPartial: chunk.cost?.cost_partial ?? false,
         estimatedCostUsd: chunk.cost?.estimated_cost_usd ?? null,

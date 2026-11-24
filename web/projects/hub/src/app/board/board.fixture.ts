@@ -19,6 +19,7 @@ export function boardChunk(overrides: Pick<BoardChunk, 'chunk_id' | 'graph_id' |
     flow_places: [],
     graph_name: null,
     graph_progress: [],
+    graphProgress: [],
     landed: false,
     landed_repos: [],
     latest_bounce: null,

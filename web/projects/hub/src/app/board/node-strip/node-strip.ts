@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { blockEdge, blockFill, blockState, groupBlocks, isDenseStrip, type NodeBlock } from './node-strip.model';
+import { blockEdge, blockFill, blockStateLabel, groupBlocks, isDenseStrip, type NodeBlock } from './node-strip.model';
 
 /**
  * A chunk's progress through its graph: one block per node, start to finish, each lit by the chunk's last visit
@@ -17,7 +17,7 @@ import { blockEdge, blockFill, blockState, groupBlocks, isDenseStrip, type NodeB
   host: { '[class.dense]': 'dense()' },
 })
 export class NodeStrip {
-  protected readonly blockState = blockState;
+  protected readonly blockStateLabel = blockStateLabel;
   protected readonly blockFill = blockFill;
   protected readonly blockEdge = blockEdge;
 

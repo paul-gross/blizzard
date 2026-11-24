@@ -2,7 +2,8 @@ import { boardChunk } from '../board.fixture';
 import type { BoardChunk } from '../../core/chunks.model';
 import type { LaneStatus } from 'fleet';
 type KnownLaneStatus = Exclude<LaneStatus['kind'], 'unknown'>;
-import { type ChunkSummary, type DecisionView, type QuestionView, type RunnerRegistryView, type WorkItemsView } from 'fleet';
+import { type DecisionView, type QuestionView, type RunnerRegistryView, type WorkItemsView } from 'fleet';
+type ChunkSummary = BoardChunk;
 import { describe, expect, it, vi } from 'vitest';
 
 import { filterGlanceRows, type GlanceFilter, glanceListGroups, glanceVitals, liveRunners } from './glance-board.model';
@@ -14,7 +15,7 @@ const NOW = Date.parse('2026-06-01T12:00:00Z');
 const HOUR = 60 * 60 * 1000;
 const ago = (ms: number): string => new Date(NOW - ms).toISOString();
 
-const chunk = (id: string, status: KnownLaneStatus, fields: Partial<ChunkSummary> = {}): BoardChunk => (boardChunk({
+const chunk = (id: string, status: KnownLaneStatus, fields: Partial<BoardChunk> = {}): BoardChunk => (boardChunk({
   chunk_id: id,
   graph_id: 'gr_1',
   status,
@@ -161,8 +162,8 @@ describe('glanceListGroups', () => {
   });
 
   it("names a card's graph and carries its progress, node id and terminal flag", () => {
-    const graphProgress = [{ node_id: 'nd_build', name: 'build', state: 'current' as const }];
-    const [named] = groups([chunk('ch_1', 'running', { graph_name: 'adv-dwf', graph_progress: graphProgress })]).live;
+    const graphProgress = [{ nodeId: 'nd_build', name: 'build', state: { kind: 'current' as const } }];
+    const [named] = groups([chunk('ch_1', 'running', { graph_name: 'adv-dwf', graphProgress })]).live;
     expect(named).toMatchObject({ graphName: 'adv-dwf', graphProgress, nodeId: 'nd_build', terminal: false });
 
     const [unread] = groups([chunk('ch_1', 'running')]).live;

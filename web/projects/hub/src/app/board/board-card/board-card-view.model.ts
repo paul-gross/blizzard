@@ -7,7 +7,6 @@ import {
   type LaneStatus,
   finishedWord,
   formatCost,
-  type hubApi,
   hasCostFigure,
   type LandedRepoView,
   type PrView,
@@ -20,6 +19,7 @@ import {
   runnerBoardLabel,
 } from 'fleet';
 import type { FlowPlaceLine } from '../../core/flow-place.model';
+import type { GraphProgressNode } from '../../core/chunks.domain';
 import { graphStepLabel, STEP_RUNNER_SEP } from '../../core/step-label';
 
 /** One rendered board card — the derived-status view of a chunk. */
@@ -40,7 +40,7 @@ export interface BoardCard {
   /** The chunk's graph's name, from `ChunkSummary.graph_name` — null when unresolvable. */
   readonly graphName: string | null;
   /** The chunk's progress through its graph, from `ChunkSummary.graph_progress` — the strip it carries. */
-  readonly graphProgress: readonly hubApi.GraphProgressNodeView[];
+  readonly graphProgress: readonly GraphProgressNode[];
   /** The chunk's work items as label-and-title pairs, in pointer order (`workLines`). */
   readonly workLines: readonly WorkLine[];
   /** Whether the chunk's work items have been read — until then each title holds a skeleton. */
