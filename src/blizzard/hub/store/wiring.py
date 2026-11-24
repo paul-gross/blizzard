@@ -15,6 +15,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
 from blizzard.foundation.roles import adapter_model
 from blizzard.hub.auth.invitations import IInvitationTokenReads
@@ -52,6 +53,7 @@ from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
 from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads, build_hub_scoped_reads
+from blizzard.hub.store.internal.invariants import HubInvariants, TenantReads
 from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
@@ -78,15 +80,8 @@ from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import ClosedTenantUnits, HubTransactions
 from blizzard.hub.tenancy import STORE_UNAVAILABLE, StoreScope
 
-#: Every other tenant adapter built as a service over the tenant's connections (one also takes the link port).
-_TENANT_SERVICES: tuple[type[Any], ...] = (
-    TranscriptSegmentStore,
-    TranscriptEventStore,
-    AnalyticsEventQueryStore,
-    AnalyticsOperationalStore,
-    EnvTimelineStore,
-    ForgeAnnotationStore,
-)
+#: Every other tenant adapter built as a service over the tenant's connections.
+_TENANT_SERVICES: tuple[type[Any], ...] = ()
 
 
 class StoreRefs:
@@ -305,6 +300,65 @@ def register_cadence_absent(registry: Registry) -> None:
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
 
 
+#: The observability adapters, whose ``Ref`` the observability area aliases its ports onto.
+_OBSERVABILITY_SERVICES: tuple[type[Any], ...] = (
+    TranscriptSegmentStore,
+    TranscriptEventStore,
+    AnalyticsEventQueryStore,
+    AnalyticsOperationalStore,
+    EnvTimelineStore,
+    ForgeAnnotationStore,
+)
+
+
+@adapter_model
+@dataclass(frozen=True)
+class ObservabilityRefs:
+    """The ``Ref`` of each observability adapter, named for the observability area's port family it fills."""
+
+    segments: Ref[TranscriptSegmentStore]
+    events: Ref[TranscriptEventStore]
+    event_queries: Ref[AnalyticsEventQueryStore]
+    operational: Ref[AnalyticsOperationalStore]
+    env_timeline: Ref[EnvTimelineStore]
+    annotations: Ref[ForgeAnnotationStore]
+    #: The hub half of the invariant checker, one per process.
+    invariants: Ref[HubInvariants]
+
+
+def hub_invariant_checker(connections: HubStoreConnections, clock: IClock) -> HubInvariants:
+    """The hub half of the invariant checker over ``connections``. Every check runs in one read transaction, so each
+    tenant's reads are built over the scoped connections the half hands them, never resolved from a tenant scope."""
+
+    def tenant_reads(scoped: ScopedConnections) -> TenantReads:
+        chunk_stores = build_chunk_stores(scoped, clock)
+        return TenantReads(chunk_stores.facts, chunk_stores.record, tenant_flows(scoped, clock))
+
+    return HubInvariants(connections, tenant_reads, clock)
+
+
+def register_observability(registry: Registry) -> ObservabilityRefs:
+    """Declare the tenant's observability adapters and the process's invariant checker, handing back the ``Ref`` of
+    each, which the observability area's ports alias."""
+    refs = StoreRefs({each: registry.service(each, lifetime=Lifetime.TENANT) for each in _OBSERVABILITY_SERVICES})
+    return ObservabilityRefs(
+        segments=refs.of(TranscriptSegmentStore),
+        events=refs.of(TranscriptEventStore),
+        event_queries=refs.of(AnalyticsEventQueryStore),
+        operational=refs.of(AnalyticsOperationalStore),
+        env_timeline=refs.of(EnvTimelineStore),
+        annotations=refs.of(ForgeAnnotationStore),
+        invariants=registry.factory(hub_invariant_checker, lifetime=Lifetime.PROCESS),
+    )
+
+
+def register_observability_absent(registry: Registry) -> None:
+    """Declare the observability adapters and the invariant checker absent, for the store-free graph."""
+    for missing in _OBSERVABILITY_SERVICES:
+        registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
+    registry.absent(port(HubInvariants), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+
+
 #: The adapters built once per hub, as services over the borrowed connections.
 _PROCESS_SERVICES: tuple[type[Any], ...] = (
     TenantAdministrationStore,
@@ -345,8 +399,8 @@ def invitation_writers() -> InvitationWriters:
 
 
 def register_process(registry: Registry) -> Ref[HubEventLogStore]:
-    """Declare every hub-level adapter once per process, handing back the hub event log's ``Ref``, which the legacy
-    bridge's ``IReadHubEventLog`` aliases."""
+    """Declare every hub-level adapter once per process, handing back the hub event log's ``Ref``, which the
+    observability area's hub event log ports alias."""
     registry.factory(build_hub_scoped_reads, lifetime=Lifetime.PROCESS)
     registry.factory(usage_corpus, lifetime=Lifetime.PROCESS)
     registry.factory(flow_lines_corpus, lifetime=Lifetime.PROCESS)

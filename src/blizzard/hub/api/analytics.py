@@ -14,6 +14,7 @@ from datetime import datetime
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response, StreamingResponse
 
@@ -23,12 +24,15 @@ from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import problems, problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.api.work_source_params import QuerySource
 from blizzard.hub.domain.kernel.pagination import MalformedCursor
-from blizzard.hub.domain.observability.analytics.derivation import ReDeriveScope, ReDeriveScopeRefused
+from blizzard.hub.domain.observability.analytics.derivation import (
+    EventDerivationService,
+    ReDeriveScope,
+    ReDeriveScopeRefused,
+)
 from blizzard.hub.domain.observability.analytics.extraction import read_version
 from blizzard.hub.domain.observability.analytics.operational import (
     DurationStats,
@@ -73,7 +77,8 @@ _STREAM_BATCH_SIZE = 500
 
 
 @router.post("/re-derive", response_model=ReDeriveResponse, dependencies=[Depends(require(Permission.ANALYTICS_ADMIN))])
-def re_derive(request: ReDeriveRequest, services: Services) -> ReDeriveResponse:
+@inject_sync
+def re_derive(request: ReDeriveRequest, derivation: FromDishka[EventDerivationService]) -> ReDeriveResponse:
     """A segment scope forces that one visible segment regardless of its candidacy; a chunk
     or all scope derives up to ``limit`` of that scope's current candidates and reports how
     many remain, so the caller drives to convergence with repeated calls."""
@@ -81,7 +86,7 @@ def re_derive(request: ReDeriveRequest, services: Services) -> ReDeriveResponse:
         scope = ReDeriveScope.of(segment_id=request.segment_id, chunk_id=request.chunk_id)
     except ReDeriveScopeRefused as exc:
         raise ProblemHTTPException(partial(problems_runners.re_derive_scope_refused_problem, exc)) from exc
-    outcome = services.event_derivation_service.re_derive(scope, limit=request.limit)
+    outcome = derivation.re_derive(scope, limit=request.limit)
     return ReDeriveResponse(derived=outcome.derived, remaining=outcome.remaining, not_visible=outcome.not_visible)
 
 
@@ -339,8 +344,9 @@ def counts_response(rows: list[KeyedCount]) -> AnalyticsCountsResponse:
 @router.get(
     "/events", response_model=AnalyticsEventsResponse, dependencies=[Depends(require(Permission.TRANSCRIPT_READ))]
 )
+@inject_sync
 def list_events(
-    services: Services,
+    queries: FromDishka[IReadAnalyticsEventQueries],
     filters: Annotated[EventFilters, Depends(EventFilters.of)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
@@ -349,7 +355,7 @@ def list_events(
     to the current extractor version — a caller wanting an older one names it, since
     mixing versions would double-count the same occurrence."""
     try:
-        page = services.analytics_events.events(filters.criteria, cursor=cursor, limit=limit)
+        page = queries.events(filters.criteria, cursor=cursor, limit=limit)
     except MalformedCursor as exc:
         raise ProblemHTTPException(partial(problems.malformed_cursor_problem, exc)) from exc
     return _events_response(page)
@@ -361,26 +367,27 @@ def list_events(
     # Declared, not defaulted: FastAPI's default 200 for a `StreamingResponse` would
     # claim `application/json` in the spec the TS client is generated from.
     response_class=StreamingResponse,
+    response_model=None,
     responses={200: {"content": {"application/x-ndjson": {"schema": {"type": "string"}}}}},
 )
+@inject_sync
 def stream_events(
-    services: Services,
+    queries: FromDishka[IReadAnalyticsEventQueries],
     filters: Annotated[EventFilters, Depends(EventFilters.of)],
 ) -> StreamingResponse:
     """Every event matching the same filters as the paginated events endpoint, streamed
     one JSON object per line in the same order — the bulk-export encoding. Internally
     paginated so an arbitrarily large result set never loads into memory at once, unlike
     the single-page JSON response."""
-    return StreamingResponse(
-        ndjson_lines(services.analytics_events, filters.criteria), media_type="application/x-ndjson"
-    )
+    return StreamingResponse(ndjson_lines(queries, filters.criteria), media_type="application/x-ndjson")
 
 
 @router.get(
     "/counts/files", response_model=AnalyticsCountsResponse, dependencies=[Depends(require(Permission.TRANSCRIPT_READ))]
 )
+@inject_sync
 def counts_by_file(
-    services: Services,
+    queries: FromDishka[IReadAnalyticsEventQueries],
     scope: Annotated[EventScopeFilters, Depends(EventScopeFilters.of)],
     tool: Annotated[str | None, Query()] = None,
     subject_prefix: Annotated[str | None, Query()] = None,
@@ -391,7 +398,7 @@ def counts_by_file(
     filter. ``kind`` is not offered: this count fixes it to ``file_read``. ``limit`` opts
     into the top N by count; omitted, every path returns."""
     criteria = replace(scope.criteria, tool=tool, subject_prefix=subject_prefix, node_id=node_id)
-    return counts_response(services.analytics_events.counts_by_file(criteria, limit=limit))
+    return counts_response(queries.counts_by_file(criteria, limit=limit))
 
 
 @router.get(
@@ -399,8 +406,9 @@ def counts_by_file(
     response_model=AnalyticsCountsResponse,
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
+@inject_sync
 def counts_by_skill(
-    services: Services,
+    queries: FromDishka[IReadAnalyticsEventQueries],
     scope: Annotated[EventScopeFilters, Depends(EventScopeFilters.of)],
     node_id: Annotated[str | None, Query()] = None,
 ) -> AnalyticsCountsResponse:
@@ -408,7 +416,7 @@ def counts_by_skill(
     other filter. ``kind`` is not offered (this count fixes it), nor ``tool`` (that kind
     always records ``Skill``), nor ``subject_prefix`` — a skill name is a flat name, so a
     prefix of one narrows nothing a caller could not name outright."""
-    return counts_response(services.analytics_events.counts_by_skill(replace(scope.criteria, node_id=node_id)))
+    return counts_response(queries.counts_by_skill(replace(scope.criteria, node_id=node_id)))
 
 
 @router.get(
@@ -416,22 +424,24 @@ def counts_by_skill(
     response_model=AnalyticsCountsResponse,
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
+@inject_sync
 def counts_by_agent_type(
-    services: Services,
+    queries: FromDishka[IReadAnalyticsEventQueries],
     filters: Annotated[EventFilters, Depends(EventFilters.of)],
 ) -> AnalyticsCountsResponse:
     """Occurrence counts by the enclosing sidechain's agent type, across every kind
     matching the filters — how much activity happened under which agent type, not
     narrowed to spawn events alone. Filter ``kind=agent_spawn`` on the raw events
     endpoint instead for counts of spawns by the type each one spawned."""
-    return counts_response(services.analytics_events.counts_by_agent_type(filters.criteria))
+    return counts_response(queries.counts_by_agent_type(filters.criteria))
 
 
 @router.get(
     "/counts/nodes", response_model=AnalyticsCountsResponse, dependencies=[Depends(require(Permission.TRANSCRIPT_READ))]
 )
+@inject_sync
 def counts_by_node(
-    services: Services,
+    queries: FromDishka[IReadAnalyticsEventQueries],
     scope: Annotated[EventScopeFilters, Depends(EventScopeFilters.of)],
     kind: Annotated[str | None, Query()] = None,
     tool: Annotated[str | None, Query()] = None,
@@ -442,7 +452,7 @@ def counts_by_node(
     ``node_id`` is not offered: it would select a single group, not narrow the count.
     ``by_name`` folds the per-mint rows into one per ``<graph_name>/<node_name>``."""
     criteria = replace(scope.criteria, kind=kind, tool=tool, subject_prefix=subject_prefix)
-    rows = services.analytics_events.counts_by_node(criteria)
+    rows = queries.counts_by_node(criteria)
     return counts_response(named_counts(rows, by_name))
 
 
@@ -465,13 +475,15 @@ def _durations_response(stats: list[DurationStats]) -> AnalyticsDurationsRespons
     response_model=AnalyticsDurationsResponse,
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
+@inject_sync
 def durations_by_node(
-    services: Services, scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)]
+    operational: FromDishka[IReadOperationalAnalytics],
+    scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)],
 ) -> AnalyticsDurationsResponse:
     """Completed-step duration rollups grouped by node — see
     ``AnalyticsDurationView`` for the wall-clock semantics. Complete history unless filtered, so the read's cost
     grows with the history it covers."""
-    return _durations_response(services.operational_analytics.durations_by_node(scope.criteria))
+    return _durations_response(operational.durations_by_node(scope.criteria))
 
 
 @router.get(
@@ -479,13 +491,15 @@ def durations_by_node(
     response_model=AnalyticsDurationsResponse,
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
+@inject_sync
 def durations_by_graph(
-    services: Services, scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)]
+    operational: FromDishka[IReadOperationalAnalytics],
+    scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)],
 ) -> AnalyticsDurationsResponse:
     """The same rollup grouped by the graph the step happened in — the transition's
     own ``graph_id``, never the chunk's current pin. Complete history unless filtered, so the read's cost grows with
     the history it covers."""
-    return _durations_response(services.operational_analytics.durations_by_graph(scope.criteria))
+    return _durations_response(operational.durations_by_graph(scope.criteria))
 
 
 def spend_response(stats: list[SpendStats]) -> AnalyticsSpendResponse:
@@ -521,39 +535,43 @@ def named_spend(stats: list[SpendStats], by_name: bool) -> list[SpendStats]:
 @router.get(
     "/spend/nodes", response_model=AnalyticsSpendResponse, dependencies=[Depends(require(Permission.TRANSCRIPT_READ))]
 )
+@inject_sync
 def spend_by_node(
-    services: Services,
+    operational: FromDishka[IReadOperationalAnalytics],
     scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)],
     by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsSpendResponse:
     """Usage/cost rollups grouped by node — the same lower-bound + PARTIAL contract
     ``GET /api/spend`` publishes. ``by_name`` folds the per-mint rows into one per
     ``<graph_name>/<node_name>``."""
-    return spend_response(named_spend(services.operational_analytics.spend_by_node(scope.criteria), by_name))
+    return spend_response(named_spend(operational.spend_by_node(scope.criteria), by_name))
 
 
 @router.get(
     "/spend/graphs", response_model=AnalyticsSpendResponse, dependencies=[Depends(require(Permission.TRANSCRIPT_READ))]
 )
+@inject_sync
 def spend_by_graph(
-    services: Services,
+    operational: FromDishka[IReadOperationalAnalytics],
     scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)],
     by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsSpendResponse:
     """The same rollup grouped by each usage fact's chunk's *current* graph pin — a
     chunk that migrated attributes every usage fact it ever recorded to where it lives
     today. ``by_name`` folds the per-mint rows into one per graph name."""
-    return spend_response(named_spend(services.operational_analytics.spend_by_graph(scope.criteria), by_name))
+    return spend_response(named_spend(operational.spend_by_graph(scope.criteria), by_name))
 
 
 @router.get(
     "/spend/models", response_model=AnalyticsSpendResponse, dependencies=[Depends(require(Permission.TRANSCRIPT_READ))]
 )
+@inject_sync
 def spend_by_model(
-    services: Services, scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)]
+    operational: FromDishka[IReadOperationalAnalytics],
+    scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)],
 ) -> AnalyticsSpendResponse:
     """The same rollup grouped by the model each usage fact recorded."""
-    return spend_response(services.operational_analytics.spend_by_model(scope.criteria))
+    return spend_response(operational.spend_by_model(scope.criteria))
 
 
 def _chunk_spend_view(record: SpendStats) -> AnalyticsChunkSpendView:
@@ -593,8 +611,9 @@ def chunk_spend_ndjson_lines(
     response_model=AnalyticsChunkSpendResponse,
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
+@inject_sync
 def spend_by_chunk(
-    services: Services,
+    operational: FromDishka[IReadOperationalAnalytics],
     scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
@@ -603,7 +622,7 @@ def spend_by_chunk(
     wide window, unlike the per-node/per-graph groupings, so this takes a cursor rather
     than a single envelope."""
     try:
-        page = services.operational_analytics.spend_by_chunk(scope.criteria, cursor=cursor, limit=limit)
+        page = operational.spend_by_chunk(scope.criteria, cursor=cursor, limit=limit)
     except MalformedCursor as exc:
         raise ProblemHTTPException(partial(problems.malformed_cursor_problem, exc)) from exc
     return AnalyticsChunkSpendResponse(spend=[_chunk_spend_view(r) for r in page.records], next_cursor=page.next_cursor)
@@ -615,15 +634,18 @@ def spend_by_chunk(
     # Declared, not defaulted: FastAPI's default 200 for a `StreamingResponse` would
     # claim `application/json` in the spec the TS client is generated from.
     response_class=StreamingResponse,
+    response_model=None,
     responses={200: {"content": {"application/x-ndjson": {"schema": {"type": "string"}}}}},
 )
+@inject_sync
 def stream_chunk_spend(
-    services: Services, scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)]
+    operational: FromDishka[IReadOperationalAnalytics],
+    scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)],
 ) -> StreamingResponse:
     """Every chunk's spend rollup matching the same filters as the paginated route,
     streamed one JSON object per line in the same order."""
     return StreamingResponse(
-        chunk_spend_ndjson_lines(services.operational_analytics, scope.criteria),
+        chunk_spend_ndjson_lines(operational, scope.criteria),
         media_type="application/x-ndjson",
     )
 
@@ -642,11 +664,13 @@ def _outcomes_response(stats: list[OutcomeStats]) -> AnalyticsOutcomesResponse:
     response_model=AnalyticsOutcomesResponse,
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
+@inject_sync
 def outcomes_by_node(
-    services: Services, scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)]
+    operational: FromDishka[IReadOperationalAnalytics],
+    scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)],
 ) -> AnalyticsOutcomesResponse:
     """Judged-choice distribution and attempt-failure counts grouped by node —
     a judged failure edge and a retry-consuming attempt failure reported separately,
     never blended into one rate. A delivery kick-back (``chunk_bounces``) counts as
     neither. Complete history unless filtered, so the read's cost grows with the history it covers."""
-    return _outcomes_response(services.operational_analytics.outcomes_by_node(scope.criteria))
+    return _outcomes_response(operational.outcomes_by_node(scope.criteria))

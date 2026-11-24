@@ -24,6 +24,7 @@ from tests.support.credential_runners import seed_credential_runners
 from tests.support.hub_request_auth import bearer
 from tests.support.refusal_observation import RefusalObservation, coverage_mismatches, observe_refusal
 from tests.support.scaffolding import build_hub, close_tenant
+from tests.support.store_free_process import store_free
 
 
 @pytest.mark.parametrize(
@@ -55,10 +56,8 @@ def test_runner_analytics_problem_variants_are_aggregated(tmp_path: Path, suffix
         observe(client.get(url, headers=headers, params=params), status, model)
     observe(client.get(path.format(chunk_id=chunk), headers=bearer(live), params=params), 404, NoRunContextProblem)
 
-    services = hub.app.state.services
-    hub.app.state.services = None
-    observe(client.get(url, headers=bearer(live), params=params), 503, HubStoreUnavailableProblem)
-    hub.app.state.services = services
+    with store_free(hub.app):
+        observe(client.get(url, headers=bearer(live), params=params), 503, HubStoreUnavailableProblem)
 
     def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
         principal = RunnerAuth.of(request).demand()

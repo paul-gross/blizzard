@@ -39,6 +39,7 @@ from blizzard.hub.domain.execution import wiring as execution
 from blizzard.hub.domain.garden import wiring as garden_area
 from blizzard.hub.domain.garden.findings import wiring as findings
 from blizzard.hub.domain.graph import wiring as graph_area
+from blizzard.hub.domain.observability import wiring as observability_area
 from blizzard.hub.domain.operations import wiring as operations_area
 from blizzard.hub.domain.projects import wiring as projects
 from blizzard.hub.domain.runners import wiring as runners
@@ -57,6 +58,7 @@ from blizzard.hub.settings import wiring as settings_wiring
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store import wiring as store
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
@@ -109,6 +111,7 @@ def register_hub(
     if store_backed:
         delivery.register(registry)
         chunk_operations = store.register_chunk_operations(registry)
+        hub_events = store.register_process(registry)
         register_legacy(registry)
         delivery.register_tenant(registry)
         delivery_area.register(registry, flows=chunk_operations.flows)
@@ -127,7 +130,9 @@ def register_hub(
         live_config.register(registry)
         forge.register_tenant(registry)
         work_sources.register(registry)
+        _register_observability(registry, hub_events=hub_events)
     else:
+        store.register_process_absent(registry)
         register_legacy_absent(registry)
         delivery.register_tenant_absent(registry)
         delivery_area.register_absent(registry)
@@ -161,6 +166,8 @@ def register_hub(
         live_config.register_absent(registry)
         forge.register_tenant_absent(registry)
         work_sources.register_absent(registry)
+        store.register_observability_absent(registry)
+        observability_area.register_absent(registry)
         api.register_absent(registry)
     if store_backed and settings:
         settings_wiring.register(registry)
@@ -175,6 +182,22 @@ def _register_chunk_operations(registry: LegacyRegistry, refs: store.ChunkOperat
     chunk_area.register(registry, stores=refs.chunks, submissions=refs.flows, work_items=refs.work_items)
     operations_area.register(registry, withdrawals=refs.work_items)
     work_items_area.register(registry, items=refs.work_items)
+
+
+def _register_observability(registry: LegacyRegistry, *, hub_events: Ref[HubEventLogStore]) -> None:
+    """The observability adapters, and the observability area's ports and services over them and the hub event log."""
+    refs = store.register_observability(registry)
+    observability_area.register(
+        registry,
+        segments=refs.segments,
+        events=refs.events,
+        event_queries=refs.event_queries,
+        operational=refs.operational,
+        env_timeline=refs.env_timeline,
+        annotations=refs.annotations,
+        hub_events=hub_events,
+        invariants=refs.invariants,
+    )
 
 
 def _register_projects(registry: LegacyRegistry) -> None:

@@ -1,7 +1,8 @@
 """The production opener of the hub's own event log for the offline store verbs (``bzh:dependency-injection``).
 
-It is part of the short-lived process's composition root: it opens an engine on the resolved config's store, builds
-the hub core over the root's clock, and closes the core's container, then disposes the engine, when the caller is done.
+It is part of the short-lived process's composition root: it opens an engine on the resolved config's store, opens the
+store-backed hub root over the caller's clock, and yields the root's registered event-log service. It closes the root,
+then disposes the engine, when the caller is done — or when the root fails to open.
 """
 
 from __future__ import annotations
@@ -11,10 +12,11 @@ from contextlib import AbstractContextManager, closing, contextmanager
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
-from blizzard.hub.composition import build_hub_core, open_hub_store
+from blizzard.hub.composition import open_hub_store
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.action_registry import build_hub_actions
 from blizzard.hub.domain.observability.hub_events import HubEventLogService
+from blizzard.hub.process_root import open_store_backed
 
 
 def system_event_log_opener(
@@ -26,7 +28,7 @@ def system_event_log_opener(
     def open_event_log(config: HubConfig) -> Generator[HubEventLogService, None, None]:
         engine, connections = open_hub_store(config.db_url)
         try:
-            core = build_hub_core(
+            process = open_store_backed(
                 connections,
                 clock=clock,
                 config=config,
@@ -34,8 +36,8 @@ def system_event_log_opener(
                 environ=environ,
                 actions=build_hub_actions(environ),
             )
-            with closing(core.process):
-                yield core.hub_event_log
+            with closing(process):
+                yield process.resolver.get(HubEventLogService)
         finally:
             engine.dispose()
 

@@ -16,6 +16,7 @@ from blizzard.hub.domain.execution.facts import FactIngestService
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.execution.host_facts import HostFactIngestService
 from blizzard.hub.domain.execution.host_retirement import HostRetirementService
+from blizzard.hub.domain.observability.transcripts import TranscriptIngestService
 from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.host import IReadHostRegistry, IWriteHostRegistry
@@ -58,7 +59,7 @@ def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
             scope.get(ApplyService)._retired,  # pyright: ignore[reportPrivateUsage]
             scope.get(DecisionService)._retired,  # pyright: ignore[reportPrivateUsage]
             scope.get(FactIngestService)._retired,  # pyright: ignore[reportPrivateUsage]
-            services.transcript_ingest._retired,  # pyright: ignore[reportPrivateUsage]
+            scope.get(TranscriptIngestService)._retired,  # pyright: ignore[reportPrivateUsage]
         ],
         "detach": [
             scope.get(DetachService),

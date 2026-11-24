@@ -64,6 +64,7 @@ from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsReposit
 from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.delivery.flows import Flow, describe_standing
@@ -95,8 +96,12 @@ from blizzard.hub.domain.garden.run_context import IReadRunContextRepository, Ru
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 from blizzard.hub.domain.graph.model import FollowLatest, Graph, IReadGraphRepository
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
+from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
+from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
 from blizzard.hub.domain.observability.transcripts import (
+    IReadTranscriptSegments,
     LeaseSegmentsNotOwned,
+    TranscriptIngestService,
     refuse_foreign_lease_read,
 )
 from blizzard.hub.domain.operations.pause import PauseService
@@ -369,10 +374,19 @@ def get_chunk(
 
 
 @router.get("/chunk-statuses", response_model=list[ChunkStatusView])
-def get_chunk_statuses(chunk_id: Annotated[list[str], Query()], services: Services) -> list[ChunkStatusView]:
+@inject_sync
+def get_chunk_statuses(
+    chunk_id: Annotated[list[str], Query()],
+    facts: FromDishka[IReadChunkFactsRepository],
+    route: FromDishka[IReadChunkRouteRepository],
+    decisions: FromDishka[IReadChunkDecisionsRepository],
+    records: Records,
+    projects: ProjectReads,
+) -> list[ChunkStatusView]:
     """The runner tick's slim batch status read — repeatable ``chunk_id``;
     an unknown or ephemeral id is omitted, never a 404."""
-    return chunk_statuses_api.chunk_statuses(chunk_id, services)
+    reads = chunk_statuses_api.ChunkStatusReads(facts, route, decisions, records, projects)
+    return chunk_statuses_api.chunk_statuses(chunk_id, reads)
 
 
 @router.get("/chunks/{chunk_id}/work-items", response_model=WorkItemsView)
@@ -617,7 +631,7 @@ class AnalyticsWindow:
 @inject_sync
 def get_chunk_analytics_counts_files(
     chunk_id: str,
-    services: Services,
+    queries: FromDishka[IReadAnalyticsEventQueries],
     records: Records,
     run_contexts: RunContexts,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
@@ -626,42 +640,42 @@ def get_chunk_analytics_counts_files(
     rows, over the window it names, gated on the chunk carrying a run context rather than
     on operator credentials."""
     _routine_run_or_404(chunk_id, records, run_contexts)
-    return counts_response(services.analytics_events.counts_by_file(window.event_scope.criteria))
+    return counts_response(queries.counts_by_file(window.event_scope.criteria))
 
 
 @router.get("/chunks/{chunk_id}/analytics/counts/skills", response_model=AnalyticsCountsResponse)
 @inject_sync
 def get_chunk_analytics_counts_skills(
     chunk_id: str,
-    services: Services,
+    queries: FromDishka[IReadAnalyticsEventQueries],
     records: Records,
     run_contexts: RunContexts,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/skills``."""
     _routine_run_or_404(chunk_id, records, run_contexts)
-    return counts_response(services.analytics_events.counts_by_skill(window.event_scope.criteria))
+    return counts_response(queries.counts_by_skill(window.event_scope.criteria))
 
 
 @router.get("/chunks/{chunk_id}/analytics/counts/agent-types", response_model=AnalyticsCountsResponse)
 @inject_sync
 def get_chunk_analytics_counts_agent_types(
     chunk_id: str,
-    services: Services,
+    queries: FromDishka[IReadAnalyticsEventQueries],
     records: Records,
     run_contexts: RunContexts,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/agent-types``."""
     _routine_run_or_404(chunk_id, records, run_contexts)
-    return counts_response(services.analytics_events.counts_by_agent_type(window.event_scope.criteria))
+    return counts_response(queries.counts_by_agent_type(window.event_scope.criteria))
 
 
 @router.get("/chunks/{chunk_id}/analytics/counts/nodes", response_model=AnalyticsCountsResponse)
 @inject_sync
 def get_chunk_analytics_counts_nodes(
     chunk_id: str,
-    services: Services,
+    queries: FromDishka[IReadAnalyticsEventQueries],
     records: Records,
     run_contexts: RunContexts,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
@@ -669,14 +683,14 @@ def get_chunk_analytics_counts_nodes(
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/nodes``."""
     _routine_run_or_404(chunk_id, records, run_contexts)
-    return counts_response(named_counts(services.analytics_events.counts_by_node(window.event_scope.criteria), by_name))
+    return counts_response(named_counts(queries.counts_by_node(window.event_scope.criteria), by_name))
 
 
 @router.get("/chunks/{chunk_id}/analytics/spend/nodes", response_model=AnalyticsSpendResponse)
 @inject_sync
 def get_chunk_analytics_spend_nodes(
     chunk_id: str,
-    services: Services,
+    operational: FromDishka[IReadOperationalAnalytics],
     records: Records,
     run_contexts: RunContexts,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
@@ -684,7 +698,7 @@ def get_chunk_analytics_spend_nodes(
 ) -> AnalyticsSpendResponse:
     """A worker's own routine-run read of ``GET /api/analytics/spend/nodes``."""
     _routine_run_or_404(chunk_id, records, run_contexts)
-    stats = services.operational_analytics.spend_by_node(operational_criteria(window.scope))
+    stats = operational.spend_by_node(operational_criteria(window.scope))
     return spend_response(named_spend(stats, by_name))
 
 
@@ -692,7 +706,7 @@ def get_chunk_analytics_spend_nodes(
 @inject_sync
 def get_chunk_analytics_spend_graphs(
     chunk_id: str,
-    services: Services,
+    operational: FromDishka[IReadOperationalAnalytics],
     records: Records,
     run_contexts: RunContexts,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
@@ -700,7 +714,7 @@ def get_chunk_analytics_spend_graphs(
 ) -> AnalyticsSpendResponse:
     """A worker's own routine-run read of ``GET /api/analytics/spend/graphs``."""
     _routine_run_or_404(chunk_id, records, run_contexts)
-    stats = services.operational_analytics.spend_by_graph(operational_criteria(window.scope))
+    stats = operational.spend_by_graph(operational_criteria(window.scope))
     return spend_response(named_spend(stats, by_name))
 
 
@@ -1097,9 +1111,10 @@ def ingest_runner_facts(
 
 
 @router.post("/transcripts", response_model=TranscriptSegmentAck)
+@inject_sync
 def ingest_transcript_segments(
     batch: TranscriptSegmentBatch,
-    services: Services,
+    ingest: FromDishka[TranscriptIngestService],
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> TranscriptSegmentAck:
     """Land the runner's batched transcript records — the transcript lane's own
@@ -1108,23 +1123,24 @@ def ingest_transcript_segments(
     runner_id = fleet.caller_id()
     records = [(record.seq, transcripts_api.to_domain_record(record, runner_id=runner_id)) for record in batch.records]
     caps = fleet.config.transcripts.transcript_caps()
-    result = services.transcript_ingest.ingest(runner_id, records, caps=caps if fleet.live_settings else None)
+    result = ingest.ingest(runner_id, records, caps=caps if fleet.live_settings else None)
     return transcripts_api.to_ack(runner_id, result)
 
 
 @router.get("/chunks/{chunk_id}/transcript-segments", response_model=LeaseTranscriptView)
+@inject_sync
 def get_lease_transcript_segments(
     chunk_id: str,
     node_id: str,
     epoch: int,
-    services: Services,
+    transcripts: FromDishka[IReadTranscriptSegments],
     principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
 ) -> LeaseTranscriptView:
     """A runner's read-back of its own shipped segments — every
     accepted record across every spawn generation under a lease's ``(chunk_id, node_id,
     epoch)``, confined against the ``runner_id`` already on those rows."""
     try:
-        owner = services.transcripts.runner_id_for_lease(chunk_id, node_id, epoch)
+        owner = transcripts.runner_id_for_lease(chunk_id, node_id, epoch)
     except RuntimeError as exc:
         # A violated fencing-epoch invariant: an integrity bug elsewhere, never a caller
         # error, and undeclared by the seam — logged with context, then a definite 500.
@@ -1139,7 +1155,7 @@ def get_lease_transcript_segments(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="lease segments in an inconsistent state"
         ) from exc
     _demand_lease_owner(principal, owner)
-    records = services.transcripts.records_for_lease(chunk_id, node_id, epoch, principal.runner_id)
+    records = transcripts.records_for_lease(chunk_id, node_id, epoch, principal.runner_id)
     return transcripts_api.lease_content_view(chunk_id, node_id, epoch, records)
 
 

@@ -37,6 +37,10 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.delivery.action_registry import SHIPPED_ACTIONS, HubActions
 from blizzard.hub.domain.chunk.event_log import EventLogService
+from blizzard.hub.domain.chunk.ports.escalations import IReadChunkEscalationsRepository
+from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
+from blizzard.hub.domain.chunk.ports.usage import IReadChunkUsageRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import IReadConfigChanges
@@ -49,11 +53,19 @@ from blizzard.hub.domain.execution.host_facts import HostFactIngestService
 from blizzard.hub.domain.execution.host_retirement import HostRetirementService
 from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
 from blizzard.hub.domain.graph.authoring import DefaultGraphService
+from blizzard.hub.domain.observability.analytics.derivation import EventDerivationService
+from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
+from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
+from blizzard.hub.domain.observability.env_timeline import EnvTimelineReading
+from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
+from blizzard.hub.domain.observability.invariants import HubInvariantCheck
+from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments, TranscriptIngestService
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.host_enrollment import HostEnrollmentService
 from blizzard.hub.domain.runners.host_report import HostReportService
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.budget import ForgeBudgets
@@ -253,6 +265,27 @@ def test_every_routes_container_dependencies_resolve_at_the_lifetime_it_runs_in(
         ("POST /api/users/{user_id}/role", EventBroker),
         ("POST /api/invitations", InvitationService),
     }
+    assert {(each.route, each.dependency) for each in _hub_routes} >= {
+        ("GET /api/events/stream", EventBroker),
+        ("GET /api/events/stream", IReadRunnerRegistry),
+        ("GET /api/events", IReadChunkEventsRepository),
+        ("GET /api/events", IReadChunkEscalationsRepository),
+        ("GET /api/activity", IClock),
+        ("GET /api/chunks/{chunk_id}/transcripts", IReadTranscriptSegments),
+        ("GET /api/env-timeline", EnvTimelineReading),
+        ("GET /api/env-timeline/step/transcript", IReadTranscriptSegments),
+        ("GET /api/spend", IReadChunkUsageRepository),
+        ("POST /api/analytics/re-derive", EventDerivationService),
+        ("GET /api/analytics/events/ndjson", IReadAnalyticsEventQueries),
+        ("GET /api/analytics/spend/chunks/ndjson", IReadOperationalAnalytics),
+        ("GET /api/admin/events", IReadHubEventLog),
+        ("GET /api/admin/invariants", HubInvariantCheck),
+        ("GET /api/fleet/chunk-statuses", IReadChunkRouteRepository),
+        ("POST /api/fleet/transcripts", TranscriptIngestService),
+        ("GET /api/fleet/chunks/{chunk_id}/analytics/counts/files", IReadAnalyticsEventQueries),
+        ("GET /api/fleet/chunks/{chunk_id}/analytics/spend/nodes", IReadOperationalAnalytics),
+    }
+    assert [each.route for each in _hub_routes if each.route.split(" ")[1] == "/api/admin/events" and each.tenant] == []
     assert unresolved_route_dependencies(_hub_routes, _process) == []
 
 

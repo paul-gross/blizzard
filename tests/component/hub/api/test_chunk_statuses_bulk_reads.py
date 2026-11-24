@@ -9,7 +9,6 @@ unknown to the store is silently omitted rather than answered with a 404."""
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -17,6 +16,9 @@ import pytest
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import ChunkFacts, GateDecision
+from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStore
@@ -30,7 +32,7 @@ from tests.support.scaffolding import (
     hub_store_connections,
     ingest,
     report_lease,
-    serve_default_tenant,
+    resolve_default_tenant_with,
 )
 
 _YAML = """
@@ -202,7 +204,9 @@ class _CountingDecisionsStore(ChunkDecisionsStore):
         return super().decision_for_chunk(chunk_id)
 
 
-def test_chunk_statuses_calls_bulk_reads_and_never_the_per_chunk_ones(tmp_path: Path) -> None:
+def test_chunk_statuses_calls_bulk_reads_and_never_the_per_chunk_ones(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     hub = build_hub(tmp_path)
     chunk_ids = _seed_batch(hub, 4)
 
@@ -210,14 +214,14 @@ def test_chunk_statuses_calls_bulk_reads_and_never_the_per_chunk_ones(tmp_path: 
     counting_route = _CountingRouteStore(hub_store_connections(hub.engine), hub.clock)
     counting_decisions = _CountingDecisionsStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
-    serve_default_tenant(
+    resolve_default_tenant_with(
         hub,
-        replace(
-            hub.services,
-            chunks=replace(
-                hub.services.chunks, facts=counting_facts, route=counting_route, decisions=counting_decisions
-            ),
-        ),
+        monkeypatch,
+        {
+            IReadChunkFactsRepository: counting_facts,
+            IReadChunkRouteRepository: counting_route,
+            IReadChunkDecisionsRepository: counting_decisions,
+        },
     )
 
     resp = hub.client.get("/api/fleet/chunk-statuses", params={"chunk_id": chunk_ids})

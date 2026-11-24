@@ -6,7 +6,7 @@ parameters are resolved by their annotations, as the registration's own are."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import timedelta
 from typing import Any
 
@@ -16,6 +16,7 @@ from blizzard.foundation.registry.internal.recording import OWNING, RecordingReg
 from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_pass import ActionPassDriver, PassBound
+from blizzard.hub.domain.observability.analytics.extraction import ITurnEventExtractor, TurnEventExtractors
 from blizzard.hub.forge.readiness import ICredentialProbe
 from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.settings.source import HubConfigSource
@@ -42,11 +43,12 @@ def replaced_adapters(
     work_sources: WorkSourceRegistryBuild | None = None,
     oauth_providers: IOAuthProviderRegistry | None = None,
     action_pass_grace: timedelta | None = None,
+    extractors: Sequence[ITurnEventExtractor] | None = None,
 ) -> OverrideSet:
     """Replacements supplying ``probes`` as every forge kind's credential check, borrowed, and building each tenant's
     forge and work-source registries with ``forges`` and ``work_sources``, and serving ``oauth_providers`` as the
-    hub's OAuth provider registry, and letting each action pass go ``action_pass_grace`` past its live bound; each left
-    ``None`` stays registered."""
+    hub's OAuth provider registry, and letting each action pass go ``action_pass_grace`` past its live bound, and
+    deriving transcript events with ``extractors``; each left ``None`` stays registered."""
     overrides = OverrideSet(registry)
     if probes is not None:
         overrides.replace_value(owned_ref(registry, Mapping[str, ICredentialProbe]), probes)
@@ -58,6 +60,8 @@ def replaced_adapters(
         overrides.replace_value(owned_ref(registry, IOAuthProviderRegistry), oauth_providers)
     if action_pass_grace is not None:
         overrides.replace_factory(owned_ref(registry, ActionPassDriver), _action_passes_graced(action_pass_grace))
+    if extractors is not None:
+        overrides.replace_value(owned_ref(registry, TurnEventExtractors), TurnEventExtractors(extractors))
     return overrides
 
 

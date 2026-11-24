@@ -142,9 +142,11 @@ def test_a_deleted_tenant_leaves_no_scope_closes_its_clients_once_and_refuses_th
 
     monkeypatch.setattr(ConfigObjectCache, "close", counting)
     hub.open_services(tenant)  # serve the tenant, building the configured clients its deletion closes
+    deleted = id(before.resolver.get(ConfigObjectCache))
 
     hub.hub_services.tenant_teardown.delete(tenant, by="usr_deleter")
-    (deleted,) = closed
+    # Only this tenant's cache is counted: another tenant's cache closing in the same process is not its deletion.
+    closed = [identity for identity in closed if identity == deleted]
     hub.hub_services.process.tenants.close()
 
     with pytest.raises(TenantClosed):

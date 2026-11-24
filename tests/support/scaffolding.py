@@ -79,7 +79,7 @@ from blizzard.hub.composition import (
     connections_for_engine,
     hub_core_over,
 )
-from blizzard.hub.config import AUTH_MODE_NONE, AuthConfig, HubConfig, LoginThrottleConfig
+from blizzard.hub.config import AUTH_MODE_NONE, AuthConfig, HubConfig, LoginThrottleConfig, TranscriptCapsConfig
 from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE
@@ -133,7 +133,7 @@ from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
-from blizzard.hub.domain.observability.analytics.extraction import ITurnEventExtractor, shipped_extractors
+from blizzard.hub.domain.observability.analytics.extraction import ITurnEventExtractor
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.ports import (
     EgressBatch,
@@ -1878,6 +1878,17 @@ def seed_fake_work_sources(engine: Engine, names: Iterable[str], *, tmp_path: Pa
             link_project(engine, source=name)
 
 
+def _caps_config(caps: TranscriptCaps | None) -> TranscriptCapsConfig:
+    """``caps`` as the boot config's ``[transcripts]`` overrides; ``None`` overrides nothing."""
+    if caps is None:
+        return TranscriptCapsConfig()
+    return TranscriptCapsConfig(
+        record_max_bytes=caps.record_max_bytes,
+        chunk_budget_max_bytes=caps.chunk_budget_max_bytes,
+        runner_daily_rate_max_bytes=caps.runner_daily_rate_max_bytes,
+    )
+
+
 def build_hub(
     tmp_path: Path,
     *,
@@ -1905,7 +1916,7 @@ def build_hub(
     hub_version: str | None = None,
     version_window: VersionWindow = VERSION_WINDOW,
     actions: HubActions = TEST_HUB_ACTIONS,
-    extractors: Sequence[ITurnEventExtractor] = shipped_extractors(),
+    extractors: Sequence[ITurnEventExtractor] | None = None,
     action_pass_seconds: float = DEFAULT_ACTION_PASS_SECONDS,
     action_pass_grace: timedelta = ACTION_PASS_GRACE,
     forges: ForgeRegistryBuild | None = None,
@@ -1929,6 +1940,7 @@ def build_hub(
         egress=egress or EgressConfig(),
         action_pass_seconds=action_pass_seconds,
         public_url=public_url,
+        transcripts=_caps_config(transcript_caps),
     )
     # A second build over the same ``tmp_path`` reopens the store the first one wrote;
     # copying over it would discard that state, so only a fresh directory takes the copy.
@@ -1994,6 +2006,7 @@ def build_hub(
             work_sources=tenant_work_sources,
             oauth_providers=OAuthProviderRegistry(oauth_providers) if oauth_providers is not None else None,
             action_pass_grace=action_pass_grace,
+            extractors=extractors,
         ),
     )
     default_stores = core.open(default)
@@ -2011,11 +2024,9 @@ def build_hub(
     hub_services = build_services(
         core,
         public_url=public_url,
-        transcript_caps=transcript_caps,
         trace_exporter=trace_exporter,
         tracing_settings=tracing_settings,
         egress_path_key=egress_path_key,
-        extractors=extractors,
         cadences_on=lambda: (flags or HUB_FLAGS).on("cadences"),
     )
     hub_services.tenants.open_tenants.refresh()

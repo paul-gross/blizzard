@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends
 
 from blizzard.auth_core import Permission
@@ -18,9 +19,9 @@ from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.api import problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import QueryProject
+from blizzard.hub.domain.chunk.ports.usage import IReadChunkUsageRepository
 from blizzard.wire.fleet import FleetSpendView
 
 router = APIRouter(
@@ -52,12 +53,15 @@ def _instant(value: str, *, field: str) -> datetime:
 
 
 @router.get("/spend", response_model=FleetSpendView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def fleet_spend(since: str, services: Services, project: QueryProject, until: str | None = None) -> FleetSpendView:
+@inject_sync
+def fleet_spend(
+    since: str, usage_reads: FromDishka[IReadChunkUsageRepository], project: QueryProject, until: str | None = None
+) -> FleetSpendView:
     """The fleet's total usage/cost since ``since`` (an ISO-8601 instant) — summed
     over every usage fact recorded at or after it, across every chunk, or ``?project=``'s
     chunks alone. An optional ``until`` bounds the window's other edge, exclusive."""
     window = SpendWindow.of(since, until)
-    usage = services.chunks.usage.usage_total_since(window.since, until=window.until, project=project)
+    usage = usage_reads.usage_total_since(window.since, until=window.until, project=project)
     return FleetSpendView(
         since=since,
         until=until,

@@ -25,6 +25,7 @@ from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.domain.execution.fleet import FleetService
+from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
 from blizzard.hub.domain.tenancy import teardown
 from blizzard.hub.domain.tenancy.teardown import (
     CloseOutcome,
@@ -95,7 +96,11 @@ def _deletions(hub: HubHarness) -> list[sa.Row[Any]]:
 
 
 def _hub_events(hub: HubHarness) -> list[tuple[str, Mapping[str, object] | None]]:
-    return [(e.kind, e.detail) for e in reversed(hub.hub_services.hub_events.recent(50)) if e.kind.startswith("tenant")]
+    return [
+        (e.kind, e.detail)
+        for e in reversed(hub.hub_services.process.resolver.get(IReadHubEventLog).recent(50))
+        if e.kind.startswith("tenant")
+    ]
 
 
 def _small_teardown(hub: HubHarness, *, batch_rows: int) -> tuple[TenantTeardown, TenantTeardownStore]:

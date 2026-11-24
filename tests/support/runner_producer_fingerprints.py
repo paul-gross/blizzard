@@ -4,7 +4,7 @@ FINGERPRINTS = """\
 src/blizzard/hub/api/admin_invariants.py 2 3b7a7969c36d6e20b5a5b84738c13f894c38329ecaa4c01d5a4b99a595e897b8
 src/blizzard/hub/api/admin_settings.py 3 94b706743c5b0ea3d59069d9a657dab0dc82a960cb78ce5049dac65285351f17
 src/blizzard/hub/api/admin_tenants.py 9 dfc8f084e6dfd45c2a25ef48955ce4f58b6eabd1909fc3869de25d7500718757
-src/blizzard/hub/api/analytics.py 12 78121178001f8dfc47d3ca9444023657cd4a0e4c21e6bbfa2bc8fc6d74560f56
+src/blizzard/hub/api/analytics.py 12 2734bfe63ccfd2ebc48a7e817329581f9463a86ca09f93a2dd21ecd88792d697
 src/blizzard/hub/api/auth.py 5 12ac8948923033da98c0be3f084798ab23f1f1be9f9306a73736ad0eac3db863
 src/blizzard/hub/api/auth_login.py 7 912c53b4df487d79b83b459afe8882d0714bb921dba130a636c78b1466caeb03
 src/blizzard/hub/api/auth_session.py 14 0f07ee5a634cb06f08fbc135a55bb39e9f1b6503498249ed1b095a2784fbc4da

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from functools import partial
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends
 from pydantic import TypeAdapter
 
@@ -17,9 +18,10 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems, problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.observability.transcripts import (
+    IReadTranscriptSegments,
     SegmentRecordContent,
     SegmentSummary,
     TranscriptIngestResult,
@@ -138,11 +140,14 @@ def lease_content_view(
     response_model=TranscriptSegmentIndexView,
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
-def list_transcript_segments(chunk_id: str, services: Services) -> TranscriptSegmentIndexView:
+@inject_sync
+def list_transcript_segments(
+    chunk_id: str, records: FromDishka[IReadChunkRecordRepository], transcripts: FromDishka[IReadTranscriptSegments]
+) -> TranscriptSegmentIndexView:
     """The chunk's segment index — metadata and byte counts only, never turns."""
-    if services.chunks.record.get(chunk_id) is None:
+    if records.get(chunk_id) is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    rows = services.transcripts.segments_for_chunk(chunk_id)
+    rows = transcripts.segments_for_chunk(chunk_id)
     return TranscriptSegmentIndexView(chunk_id=chunk_id, segments=[_index_entry(row) for row in rows])
 
 
@@ -151,12 +156,18 @@ def list_transcript_segments(chunk_id: str, services: Services) -> TranscriptSeg
     response_model=TranscriptSegmentContentView,
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
-def get_transcript_segment(chunk_id: str, segment_id: str, services: Services) -> TranscriptSegmentContentView:
+@inject_sync
+def get_transcript_segment(
+    chunk_id: str,
+    segment_id: str,
+    records: FromDishka[IReadChunkRecordRepository],
+    transcripts: FromDishka[IReadTranscriptSegments],
+) -> TranscriptSegmentContentView:
     """One segment's decompressed turns, concatenated across its stored records in
     turn-range order — the lazy per-segment content read."""
-    if services.chunks.record.get(chunk_id) is None:
+    if records.get(chunk_id) is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    records = services.transcripts.records_for_segment(chunk_id, segment_id)
-    if not records:
+    stored = transcripts.records_for_segment(chunk_id, segment_id)
+    if not stored:
         raise ProblemHTTPException(partial(problems_runners.transcript_segment_not_found_problem, segment_id))
-    return content_view(segment_id, records)
+    return content_view(segment_id, stored)

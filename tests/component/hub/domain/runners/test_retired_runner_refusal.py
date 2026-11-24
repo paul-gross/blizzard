@@ -19,7 +19,7 @@ from blizzard.hub.domain.execution.facts import FactIngestService, PushedFact
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.execution.submissions import Completion, GateSubmission
 from blizzard.hub.domain.graph.model import Graph
-from blizzard.hub.domain.observability.transcripts import TranscriptSlice
+from blizzard.hub.domain.observability.transcripts import TranscriptIngestService, TranscriptSlice
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.registration import (
     IWriteRunnerRegistry,
@@ -184,7 +184,9 @@ _GUARDED: dict[str, Callable[[_Routed], object]] = {
     "fact ingest": lambda r: r.hub.default_adapter(FactIngestService).ingest(
         _RUNNER, [PushedFact(seq=2, kind="lease.minted", payload={"chunk_id": r.chunk_id, "epoch": 2})]
     ),
-    "transcript ingest": lambda r: r.hub.services.transcript_ingest.ingest(_RUNNER, [r.transcript_record()]),
+    "transcript ingest": lambda r: r.hub.default_adapter(TranscriptIngestService).ingest(
+        _RUNNER, [r.transcript_record()]
+    ),
     "completion": lambda r: r.hub.default_adapter(ApplyService).apply(
         r.chunk,
         r.graph,

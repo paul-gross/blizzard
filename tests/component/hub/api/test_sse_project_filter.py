@@ -20,7 +20,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from blizzard.foundation.event_log import EventLogSeverity
-from blizzard.hub.api.events import events_stream
+from blizzard.hub.api.events import StreamReads, events_stream
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.events.broker import EventBroker
 from tests.support.repo_files import repo_root
@@ -73,8 +73,8 @@ async def _open(
     broker: EventBroker, registry: _Registry, project: ProjectId | None = _MINE, *, last_event_id: int | None = None
 ) -> AsyncIterator[bytes]:
     """The stream's frames, the reserved comment already read — the subscription is live from here."""
-    services = SimpleNamespace(events=broker, registry=registry)
-    response = await events_stream(_ConnectedRequest(last_event_id), services, project)  # pyright: ignore[reportArgumentType]  # a two-seam stand-in for the tenant services; the handler reads only events and registry
+    reads = StreamReads(broker, registry)  # pyright: ignore[reportArgumentType]  # the registry stand-in answers only the served-runner read
+    response = await events_stream(_ConnectedRequest(last_event_id), reads, project)
     frames = _frames(response)
     first = await anext(frames)
     assert first.startswith(b": blizzard hub event stream")
@@ -231,8 +231,8 @@ async def test_from_latest_sends_only_the_projects_frames_published_after_it_joi
     broker = EventBroker()
     broker.publish_chunk_changed("ch_old", "ready", project_id=_MINE)
     request = _ConnectedRequest(query={"from": "latest"})
-    services = SimpleNamespace(events=broker, registry=_Registry())
-    response = await events_stream(request, services, _MINE)  # pyright: ignore[reportArgumentType]  # a two-seam stand-in for the tenant services; the handler reads only events and registry
+    reads = StreamReads(broker, _Registry())  # pyright: ignore[reportArgumentType]  # the registry stand-in answers only the served-runner read
+    response = await events_stream(request, reads, _MINE)
     frames = _frames(response)
     assert (await anext(frames)).startswith(b": blizzard hub event stream")
     broker.publish_chunk_changed("ch_mine", "ready", project_id=_MINE)
@@ -244,8 +244,8 @@ async def test_from_latest_sends_only_the_projects_frames_published_after_it_joi
 
 async def _route(query: dict[str, str], header: str | None = None, *, broker: EventBroker) -> AsyncIterator[bytes]:
     request = _ConnectedRequest(None if header is None else int(header), query)
-    services = SimpleNamespace(events=broker, registry=_Registry())
-    response = await events_stream(request, services, None)  # pyright: ignore[reportArgumentType]  # a two-seam stand-in for the tenant services; the handler reads only events and registry
+    reads = StreamReads(broker, _Registry())  # pyright: ignore[reportArgumentType]  # the registry stand-in answers only the served-runner read
+    response = await events_stream(request, reads, None)
     return _frames(response)
 
 

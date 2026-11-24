@@ -15,25 +15,28 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from blizzard.auth_core import Permission
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.events.stream import Cursor, CursorRefused, Stream
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import PresentedSession, require, tenant_bound
-from blizzard.hub.api.deps import Services
+from blizzard.hub.api.auth_session import PresentedSession, RequestTenant, require, tenant_bound
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.model import ActivityEntry, ActivityFeed, EventFeed, OperationalEvent
-from blizzard.hub.domain.chunk.ports.events import FeedLens
+from blizzard.hub.domain.chunk.ports.escalations import IReadChunkEscalationsRepository
+from blizzard.hub.domain.chunk.ports.events import FeedLens, IReadChunkEventsRepository
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
+from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.project_lens import ProjectLens
 from blizzard.wire.activity import ActivityResponse, ActivityView
 from blizzard.wire.events import EventsResponse, EventView
@@ -45,10 +48,25 @@ RESERVED_COMMENT = ": blizzard hub event stream\n\n"
 FEED_MAX_LIMIT = 200
 
 
+@dataclass(frozen=True)
+class StreamReads:
+    """The tenant's broker a stream subscribes to, and the registry its project lens reads served runners from."""
+
+    events: EventBroker
+    registry: IReadRunnerRegistry
+
+
+@inject_sync
+def _streaming(
+    _tenant: RequestTenant, events: FromDishka[EventBroker], registry: FromDishka[IReadRunnerRegistry]
+) -> StreamReads:
+    return StreamReads(events, registry)
+
+
 @router.get("/events/stream", include_in_schema=False, dependencies=[Depends(reject_runner_principal)])
 async def events_stream(
     request: Request,
-    services: Services,
+    streaming: Annotated[StreamReads, Depends(_streaming)],
     project: QueryProject = None,
     viewer: Annotated[ResolvedIdentity | None, Depends(require(Permission.FLEET_VIEW))] = None,
 ) -> StreamingResponse:
@@ -60,11 +78,11 @@ async def events_stream(
     or ``from=latest`` with ``?last_event_id=``, is a ``422``."""
     cursor = _cursor(request)
     shutdown: asyncio.Event | None = getattr(request.app.state, "shutdown", None)
-    admits = None if project is None else (await _stream_lens(services, project)).admits
+    admits = None if project is None else (await _stream_lens(streaming.registry, project)).admits
     owner = viewer.user_id if viewer is not None else None
     session = PresentedSession(request).id_hash if viewer is not None else None
     stream = Stream(
-        services.events, request, cursor, RESERVED_COMMENT, shutdown, admits=admits, owner=owner, session=session
+        streaming.events, request, cursor, RESERVED_COMMENT, shutdown, admits=admits, owner=owner, session=session
     )
     return StreamingResponse(stream.frames(), media_type="text/event-stream")
 
@@ -76,23 +94,23 @@ def _cursor(request: Request) -> Cursor:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
 
-async def _stream_lens(services: TenantServices, project: ProjectId) -> ProjectLens:
+async def _stream_lens(registry: IReadRunnerRegistry, project: ProjectId) -> ProjectLens:
     """The stream's lens for ``project``, its served-runner set read off the event loop, now and on each refresh."""
 
     async def serving() -> frozenset[str]:
-        return await run_in_threadpool(services.registry.runners_serving, project)
+        return await run_in_threadpool(registry.runners_serving, project)
 
     return ProjectLens(project, await serving(), serving)
 
 
-def _feed_lens(services: TenantServices, project: ProjectId | None) -> FeedLens | None:
+def _feed_lens(registry: IReadRunnerRegistry, project: ProjectId | None) -> FeedLens | None:
     """The lens ``?project=`` puts on a feed — ``None`` when the feed reads the whole tenant."""
-    return None if project is None else FeedLens(project, services.registry.runners_serving(project))
+    return None if project is None else FeedLens(project, registry.runners_serving(project))
 
 
-def _runner_names(services: TenantServices, runner_ids: Iterable[str | None]) -> dict[str, str]:
+def _runner_names(registry: IReadRunnerRegistry, runner_ids: Iterable[str | None]) -> dict[str, str]:
     """The registered names of the runners a feed's rows name — one batched registry read."""
-    return services.registry.names_for(runner_id for runner_id in runner_ids if runner_id is not None)
+    return registry.names_for(runner_id for runner_id in runner_ids if runner_id is not None)
 
 
 def _event_view(row: OperationalEvent, runner_names: Mapping[str, str]) -> EventView:
@@ -127,8 +145,11 @@ class Events:
     response_model=EventsResponse,
     dependencies=[Depends(reject_runner_principal), Depends(require(Permission.FLEET_VIEW))],
 )
+@inject_sync
 def list_events(
-    services: Services,
+    events_reads: FromDishka[IReadChunkEventsRepository],
+    open_escalations: FromDishka[IReadChunkEscalationsRepository],
+    registry: FromDishka[IReadRunnerRegistry],
     severity: Annotated[EventLogSeverity | None, Query()] = None,
     runner_id: Annotated[str | None, Query()] = None,
     chunk_id: Annotated[str | None, Query()] = None,
@@ -143,27 +164,27 @@ def list_events(
     project's, a row naming only a runner when that runner serves it, and a row naming neither always. A tz-naive
     ``since`` is coerced to UTC so the escalations' aware ``recorded_at`` comparison never raises against it."""
     since_utc = as_utc(since) if since is not None else None
-    events = services.chunks.events.list_events(
+    events = events_reads.list_events(
         severity=severity,
         runner_id=runner_id,
         chunk_id=chunk_id,
         since=since_utc,
         limit=limit,
-        lens=_feed_lens(services, project),
+        lens=_feed_lens(registry, project),
     )
     # Escalations project as critical, runner-less events. Without a chunk filter, their
     # candidate scan is intentional: open-ness is derived by ChunkFacts and volume is low.
     escalations = (
         [
             e
-            for e in services.chunks.escalations.list_open_escalations(project=project, chunk_id=chunk_id)
+            for e in open_escalations.list_open_escalations(project=project, chunk_id=chunk_id)
             if e.matches(severity=severity, runner_id=runner_id, chunk_id=chunk_id, since=since_utc)
         ]
         if (severity is None or severity is EventLogSeverity.CRITICAL) and runner_id is None
         else []
     )
     rows = EventFeed.of(events, escalations).rows[:limit]
-    return Events(rows, _runner_names(services, (row.runner_id for row in rows))).response()
+    return Events(rows, _runner_names(registry, (row.runner_id for row in rows))).response()
 
 
 def _activity_view(row: ActivityEntry, runner_names: Mapping[str, str]) -> ActivityView:
@@ -203,8 +224,11 @@ class Activity:
     response_model=ActivityResponse,
     dependencies=[Depends(reject_runner_principal), Depends(require(Permission.FLEET_VIEW))],
 )
+@inject_sync
 def list_activity(
-    services: Services,
+    events: FromDishka[IReadChunkEventsRepository],
+    registry: FromDishka[IReadRunnerRegistry],
+    clock: FromDishka[IClock],
     since: Annotated[datetime | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=FEED_MAX_LIMIT)] = DEFAULT_LIMIT,
     project: QueryProject = None,
@@ -215,12 +239,12 @@ def list_activity(
 
     ``since`` defaults to 24h before the server's current time. A tz-naive ``since`` is coerced to
     UTC so it never raises against the store's aware timestamps."""
-    since_utc = as_utc(since) if since is not None else services.clock.now() - timedelta(hours=24)
-    lens = _feed_lens(services, project)
-    chunk_changed = services.chunks.events.activity_facts_since(since_utc, limit=limit, project=project)
-    events = services.chunks.events.activity_events_since(since_utc, limit=limit, lens=lens)
-    runner_changed = services.registry.list_pause_facts_since(
+    since_utc = as_utc(since) if since is not None else clock.now() - timedelta(hours=24)
+    lens = _feed_lens(registry, project)
+    chunk_changed = events.activity_facts_since(since_utc, limit=limit, project=project)
+    activity = events.activity_events_since(since_utc, limit=limit, lens=lens)
+    runner_changed = registry.list_pause_facts_since(
         since_utc, limit=limit, runners=lens.runners if lens is not None else None
     )
-    rows = ActivityFeed.of(chunk_changed, events, runner_changed, limit=limit).rows
-    return Activity(rows, _runner_names(services, (row.runner_id for row in rows))).response()
+    rows = ActivityFeed.of(chunk_changed, activity, runner_changed, limit=limit).rows
+    return Activity(rows, _runner_names(registry, (row.runner_id for row in rows))).response()

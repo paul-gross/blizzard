@@ -2762,60 +2762,72 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         w.hub.hub_services.hub_scoped_reads.corpus.pending_close_intents()
     ),
     (IReadOperationalAnalytics, "durations_by_node"): lambda w: (
-        w.hub.services.operational_analytics.durations_by_node(OperationalCriteria()),
-        w.hub.services.operational_analytics.durations_by_node(OperationalCriteria(project=w.project_id)),
+        w.hub.default_adapter(IReadOperationalAnalytics).durations_by_node(OperationalCriteria()),
+        w.hub.default_adapter(IReadOperationalAnalytics).durations_by_node(OperationalCriteria(project=w.project_id)),
     ),
     (IReadOperationalAnalytics, "durations_by_graph"): lambda w: (
-        w.hub.services.operational_analytics.durations_by_graph(OperationalCriteria()),
-        w.hub.services.operational_analytics.durations_by_graph(OperationalCriteria(project=w.project_id)),
+        w.hub.default_adapter(IReadOperationalAnalytics).durations_by_graph(OperationalCriteria()),
+        w.hub.default_adapter(IReadOperationalAnalytics).durations_by_graph(OperationalCriteria(project=w.project_id)),
     ),
     (IReadOperationalAnalytics, "spend_by_node"): lambda w: (
-        w.hub.services.operational_analytics.spend_by_node(OperationalCriteria()),
-        w.hub.services.operational_analytics.spend_by_node(OperationalCriteria(project=w.project_id)),
+        w.hub.default_adapter(IReadOperationalAnalytics).spend_by_node(OperationalCriteria()),
+        w.hub.default_adapter(IReadOperationalAnalytics).spend_by_node(OperationalCriteria(project=w.project_id)),
     ),
     (IReadOperationalAnalytics, "spend_by_graph"): lambda w: (
-        w.hub.services.operational_analytics.spend_by_graph(OperationalCriteria()),
-        w.hub.services.operational_analytics.spend_by_graph(OperationalCriteria(project=w.project_id)),
+        w.hub.default_adapter(IReadOperationalAnalytics).spend_by_graph(OperationalCriteria()),
+        w.hub.default_adapter(IReadOperationalAnalytics).spend_by_graph(OperationalCriteria(project=w.project_id)),
     ),
     (IReadOperationalAnalytics, "spend_by_model"): lambda w: (
-        w.hub.services.operational_analytics.spend_by_model(OperationalCriteria()),
-        w.hub.services.operational_analytics.spend_by_model(OperationalCriteria(project=w.project_id)),
+        w.hub.default_adapter(IReadOperationalAnalytics).spend_by_model(OperationalCriteria()),
+        w.hub.default_adapter(IReadOperationalAnalytics).spend_by_model(OperationalCriteria(project=w.project_id)),
     ),
     (IReadOperationalAnalytics, "spend_by_chunk"): lambda w: (
-        w.hub.services.operational_analytics.spend_by_chunk(OperationalCriteria(), limit=50),
-        w.hub.services.operational_analytics.spend_by_chunk(OperationalCriteria(project=w.project_id), limit=50),
+        w.hub.default_adapter(IReadOperationalAnalytics).spend_by_chunk(OperationalCriteria(), limit=50),
+        w.hub.default_adapter(IReadOperationalAnalytics).spend_by_chunk(
+            OperationalCriteria(project=w.project_id), limit=50
+        ),
     ),
     (IReadOperationalAnalytics, "outcomes_by_node"): lambda w: (
-        w.hub.services.operational_analytics.outcomes_by_node(OperationalCriteria()),
-        w.hub.services.operational_analytics.outcomes_by_node(OperationalCriteria(project=w.project_id)),
+        w.hub.default_adapter(IReadOperationalAnalytics).outcomes_by_node(OperationalCriteria()),
+        w.hub.default_adapter(IReadOperationalAnalytics).outcomes_by_node(OperationalCriteria(project=w.project_id)),
     ),
     (IReadAnalyticsEventQueries, "events"): lambda w: (
-        w.hub.services.analytics_events.events(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION), limit=50),
-        w.hub.services.analytics_events.events(
+        w.hub.default_adapter(IReadAnalyticsEventQueries).events(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION), limit=50
+        ),
+        w.hub.default_adapter(IReadAnalyticsEventQueries).events(
             EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id), limit=50
         ),
     ),
     (IReadAnalyticsEventQueries, "counts_by_file"): lambda w: (
-        w.hub.services.analytics_events.counts_by_file(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)),
-        w.hub.services.analytics_events.counts_by_file(
+        w.hub.default_adapter(IReadAnalyticsEventQueries).counts_by_file(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)
+        ),
+        w.hub.default_adapter(IReadAnalyticsEventQueries).counts_by_file(
             EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id)
         ),
     ),
     (IReadAnalyticsEventQueries, "counts_by_skill"): lambda w: (
-        w.hub.services.analytics_events.counts_by_skill(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)),
-        w.hub.services.analytics_events.counts_by_skill(
+        w.hub.default_adapter(IReadAnalyticsEventQueries).counts_by_skill(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)
+        ),
+        w.hub.default_adapter(IReadAnalyticsEventQueries).counts_by_skill(
             EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id)
         ),
     ),
     (IReadAnalyticsEventQueries, "counts_by_agent_type"): lambda w: (
-        w.hub.services.analytics_events.counts_by_agent_type(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)),
-        w.hub.services.analytics_events.counts_by_agent_type(
+        w.hub.default_adapter(IReadAnalyticsEventQueries).counts_by_agent_type(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)
+        ),
+        w.hub.default_adapter(IReadAnalyticsEventQueries).counts_by_agent_type(
             EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id)
         ),
     ),
     (IReadAnalyticsEventQueries, "counts_by_node"): lambda w: (
-        w.hub.services.analytics_events.counts_by_node(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)),
-        w.hub.services.analytics_events.counts_by_node(
+        w.hub.default_adapter(IReadAnalyticsEventQueries).counts_by_node(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)
+        ),
+        w.hub.default_adapter(IReadAnalyticsEventQueries).counts_by_node(
             EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id)
         ),
     ),
@@ -3360,18 +3372,18 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadScopeRepository, "retired_slugs"): lambda w: w.hub.default_adapter(IReadScopeRepository).retired_slugs(
         w.project_id
     ),
-    (IReadTranscriptSegments, "segments_for_chunk"): lambda w: w.hub.services.transcripts.segments_for_chunk(
-        w.transcript_chunk
-    ),
-    (IReadTranscriptSegments, "records_for_segment"): lambda w: w.hub.services.transcripts.records_for_segment(
-        w.transcript_chunk, w.transcript_segment_id
-    ),
-    (IReadTranscriptSegments, "runner_id_for_lease"): lambda w: w.hub.services.transcripts.runner_id_for_lease(
-        w.transcript_chunk, w.build_node_id, 1
-    ),
-    (IReadTranscriptSegments, "records_for_lease"): lambda w: w.hub.services.transcripts.records_for_lease(
-        w.transcript_chunk, w.build_node_id, 1, HUB_RUNNER_ID
-    ),
+    (IReadTranscriptSegments, "segments_for_chunk"): lambda w: w.hub.default_adapter(
+        IReadTranscriptSegments
+    ).segments_for_chunk(w.transcript_chunk),
+    (IReadTranscriptSegments, "records_for_segment"): lambda w: w.hub.default_adapter(
+        IReadTranscriptSegments
+    ).records_for_segment(w.transcript_chunk, w.transcript_segment_id),
+    (IReadTranscriptSegments, "runner_id_for_lease"): lambda w: w.hub.default_adapter(
+        IReadTranscriptSegments
+    ).runner_id_for_lease(w.transcript_chunk, w.build_node_id, 1),
+    (IReadTranscriptSegments, "records_for_lease"): lambda w: w.hub.default_adapter(
+        IReadTranscriptSegments
+    ).records_for_lease(w.transcript_chunk, w.build_node_id, 1, HUB_RUNNER_ID),
     (IReadTraceSteps, "closing_candidates"): lambda w: _trace_store_of(w.store_connections, w.hub).closing_candidates(
         _HUB_BASE, _ht(10_000), 50
     ),

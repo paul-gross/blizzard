@@ -34,7 +34,7 @@ from blizzard.hub.composition import (
     connections_for_engine,
 )
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.observability.analytics.extraction import shipped_extractors
+from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantClosed, TenantId, UnknownTenant
 from tests.support.config_inputs import VERSION_WINDOW
@@ -237,7 +237,6 @@ def test_hub_scoped_reads_mark_every_statement_they_issue(tmp_path: Path) -> Non
 def _served(core: HubCore) -> HubServices:
     return build_services(
         core,
-        extractors=shipped_extractors(),
         cadences_on=lambda: False,
     )
 
@@ -261,7 +260,7 @@ def test_a_tenants_services_are_built_once_over_its_own_stores(tmp_path: Path) -
 def test_each_tenant_publishes_to_its_own_broker(tmp_path: Path) -> None:
     core, engine = _core(tmp_path)
     hub = _served(core)
-    brokers = hub.event_brokers
+    brokers = hub.process.resolver.get(TenantBrokers)
     tenant = default_tenant(engine)
     first = hub.tenants.open_services(StoreScope(tenant))
     second = add_tenant(engine, "second")
@@ -276,7 +275,7 @@ def test_each_tenant_publishes_to_its_own_broker(tmp_path: Path) -> None:
 def test_eviction_drops_a_tenants_services_and_its_broker(tmp_path: Path) -> None:
     core, engine = _core(tmp_path)
     hub = _served(core)
-    brokers = hub.event_brokers
+    brokers = hub.process.resolver.get(TenantBrokers)
     second = add_tenant(engine, "second")
     before = hub.tenants.open_services(StoreScope(second))
     broker = before.events

@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
+from blizzard.hub.domain.observability.analytics.derivation import EventDerivationService
 from blizzard.hub.domain.observability.analytics.extraction import FileReadExtractor
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION
@@ -47,4 +48,4 @@ def test_the_event_derivation_service_derives_with_the_extractors_the_hub_was_bu
 
     hub = build_hub(tmp_path, extractors=extractors)
 
-    assert list(hub.services.event_derivation_service._extractors) == list(extractors)  # pyright: ignore[reportPrivateUsage]  # the wiring is the observation
+    assert list(hub.default_adapter(EventDerivationService)._extractors) == list(extractors)  # pyright: ignore[reportPrivateUsage]  # the wiring is the observation

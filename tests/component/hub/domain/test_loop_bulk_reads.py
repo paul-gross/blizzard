@@ -26,7 +26,7 @@ from blizzard.hub.domain.chunk.ports.fence import EpochOwner
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.execution.fleet import FleetService
-from blizzard.hub.domain.observability.analytics.derivation import ReDeriveScope
+from blizzard.hub.domain.observability.analytics.derivation import EventDerivationService, ReDeriveScope
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, DeleteService
 from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
 from blizzard.hub.store import schema as s
@@ -330,7 +330,9 @@ def _derived_hub(tmp_path: Path, *, others: int) -> tuple[HubHarness, str]:
     push = hub.client.post("/api/fleet/transcripts", json={"runner_id": "r1", "records": records})
     assert push.status_code == 200, push.text
     for i in range(others + 1):
-        hub.services.event_derivation_service.re_derive(ReDeriveScope.of(segment_id=f"sg_{i}", chunk_id=None), limit=1)
+        hub.default_adapter(EventDerivationService).re_derive(
+            ReDeriveScope.of(segment_id=f"sg_{i}", chunk_id=None), limit=1
+        )
     return hub, chunk_ids[0]
 
 
@@ -338,7 +340,7 @@ def test_a_one_chunk_re_derive_reads_flat_rows_as_other_chunks_derived_segments_
     rows: list[int] = []
     for others in (1, 6):
         hub, chunk_id = _derived_hub(_dir(tmp_path, others), others=others)
-        derive = hub.services.event_derivation_service
+        derive = hub.default_adapter(EventDerivationService)
         rows.append(
             count_rows_read(
                 hub.engine,

@@ -19,7 +19,7 @@ from blizzard.hub.domain.chunk.model import UsageFact, UsageTotal, WorkRef, deci
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.kernel.pagination import encode_cursor
-from blizzard.hub.domain.observability.analytics.operational import OperationalCriteria
+from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics, OperationalCriteria
 from tests.support.analytics_spend_world import (
     _GRAPH_YAML,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.analytics_spend_world
     _cookie,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.analytics_spend_world
@@ -340,7 +340,9 @@ def test_the_ndjson_stream_carries_its_cursor_across_batches(tmp_path: Path) -> 
     push_usage(hub, chunk_id=chunk_b, node_id=nodes["build"], epoch=1, seq=2, cost_usd=0.1)
     criteria = OperationalCriteria()
 
-    body = b"".join(chunk_spend_ndjson_lines(hub.services.operational_analytics, criteria, batch_size=1)).decode()
+    body = b"".join(
+        chunk_spend_ndjson_lines(hub.default_adapter(IReadOperationalAnalytics), criteria, batch_size=1)
+    ).decode()
     lines = [json.loads(line) for line in body.splitlines()]
 
     whole = hub.client.get("/api/analytics/spend/chunks", headers=_cookie(token)).json()["spend"]

@@ -135,12 +135,20 @@ class AgentSpawnExtractor:
 
 def shipped_extractors() -> tuple[ITurnEventExtractor, ...]:
     """The registered set this build derives — appending a new extractor here is the
-    whole of "adding a kind." The composition root builds it once and injects it."""
+    whole of "adding a kind." The observability area registers it once, as the hub's
+    :class:`TurnEventExtractors`."""
     return (
         FileReadExtractor(),
         SkillInvocationExtractor(),
         AgentSpawnExtractor(),
     )
+
+
+class TurnEventExtractors(tuple[ITurnEventExtractor, ...]):
+    """The extractor set a build derives transcript events with: a sequence of its own type, so the set is keyed apart
+    from any single extractor."""
+
+    __slots__ = ()
 
 
 def _parse_occurred_at(raw: str | None) -> datetime | None:
