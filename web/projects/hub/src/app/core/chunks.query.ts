@@ -6,7 +6,7 @@ import { DRAIN_LIMIT, drainPages } from './paginated-read';
 import type { BoardChunksRead } from './chunks.model';
 import { hubBoardChunksKey, lensedKey } from './query-keys';
 import { injectProjectFilter } from './project-filter';
-import { fromGraphProgressNode } from './chunks.translate';
+import { fromBoardPage, fromGraphProgressNode } from './chunks.translate';
 
 /**
  * The board's chunk list as one query, for the project `project` names (`null` for the whole tenant): `GET
@@ -33,6 +33,7 @@ export function boardChunksQueryOptions(project: string | null) {
     },
     select: (read: BoardChunksRead) => ({
       ...read,
+      pages: read.pages.map(fromBoardPage),
       chunks: read.chunks.map((chunk) => ({
         ...chunk,
         laneStatus: laneStatus(chunk.status),

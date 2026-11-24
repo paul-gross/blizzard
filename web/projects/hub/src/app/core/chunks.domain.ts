@@ -8,3 +8,15 @@ export interface GraphProgressNode {
   readonly name: string;
   readonly state: GraphProgressState;
 }
+
+export interface BoardDoneWindow {
+  readonly done_since: string;
+  readonly floor: number;
+  readonly window_seconds: number;
+}
+
+/** Metadata for each drained page, kept separately from the raw cached pages. */
+export interface BoardPageMetadata {
+  readonly next_cursor: string | null;
+  readonly board_done_policy: BoardDoneWindow | null | undefined;
+}

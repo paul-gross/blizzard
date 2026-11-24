@@ -120,6 +120,9 @@ describe('injectHubBoardChunksQuery', () => {
       fixture.componentInstance.query.data()?.chunks.map((c) => c.chunk_id),
     ).toEqual(['ch_1', 'ch_2', 'ch_3']);
     expect(fixture.componentInstance.query.data()?.pages.map((p) => p.next_cursor)).toEqual(['cursor-1', null]);
+    expect(fixture.componentInstance.query.data()?.pages[0]).not.toHaveProperty('chunks');
+    const cached = TestBed.inject(QueryClient).getQueryData<BoardChunksRead>(boardChunksQueryOptions(null).queryKey);
+    expect(cached?.pages.map((page) => page.chunks.length)).toEqual([2, 1]);
     expect(stub.forRoute('/api/chunks', 'GET')).toHaveLength(2);
   });
 
