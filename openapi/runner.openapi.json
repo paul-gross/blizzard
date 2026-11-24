@@ -4702,8 +4702,20 @@
             "type": "string"
           },
           "step": {
+            "enum": [
+              "seed",
+              "compose",
+              "worker_shell",
+              "tracing",
+              "worker_scratch",
+              "resume",
+              "takeovers",
+              "sessions",
+              "serve"
+            ],
             "title": "Step",
-            "type": "string"
+            "type": "string",
+            "x-blizzard-open": true
           }
         },
         "required": [

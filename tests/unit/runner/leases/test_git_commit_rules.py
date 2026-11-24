@@ -229,6 +229,15 @@ def test_converge_disagreement_submits_all() -> None:
     ]
 
 
+def test_converge_folds_owner_case_into_one_group() -> None:
+    a = _pointer("feat/x", "abc123", forge="https://github.com/Acme/toy-api")
+    b = _pointer("feat/x", "def456", forge="https://github.com/acme/toy-api")
+    groups = converge_pointers({("e1", "toy-api"): a, ("e2", "toy-api"): b})
+    assert len(groups) == 1
+    assert groups[0].pointers == (a, b)
+    assert groups[0].disagreement is not None
+
+
 def test_converge_keeps_repositories_apart() -> None:
     a = _pointer("feat/x", "abc123")
     b = _pointer("feat/x", "abc123", name="acme/web", forge="git@github.com:acme/web.git", repo="web")

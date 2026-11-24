@@ -87,6 +87,7 @@ def test_repo_identity(origin_url: str | None, name: str, expected: str) -> None
         ("https://user:tok@github.com:8443/owner-a/widget.git", "widget", "github.com/owner-a/widget"),
         ("ssh://git@github.com:2222/owner-a/widget.git", "widget", "github.com/owner-a/widget"),
         ("https://git.example.test/owner-a/widget", "widget", "git.example.test/owner-a/widget"),
+        ("https://github.com/Owner-A/widget", "widget", "github.com/owner-a/widget"),
         ("file:///srv/repos/widget.git", "widget", "widget"),
         (None, "owner-a/widget", "owner-a/widget"),
     ],
