@@ -13,6 +13,7 @@ export { ChunkArtifactBody } from './chunk-artifact-body';
 export { sortArtifacts } from './sort-artifacts';
 export { filterArtifactsByStep } from './filter-artifacts-by-step';
 export { ChunkEscalation } from './chunk-escalation';
+export { EscalationTakeover } from './escalation-takeover';
 export { ChunkFacts } from './chunk-facts';
 export { chunkGraphLabel } from './graph-label';
 export { ChunkIssuePane } from './chunk-issue-pane';

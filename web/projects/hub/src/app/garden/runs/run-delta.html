@@ -38,9 +38,9 @@
         }
         @if (delta.escalation; as escalation) {
           <div class="rd-escalation" data-testid="gardening-run-delta-escalation">
-            <fleet-kit-takeover [wrapped]="escalation.wrappedTakeoverCommand" [raw]="escalation.takeoverCommand">
+            <fleet-chunk-detail-escalation-takeover [wrapped]="escalation.wrappedTakeoverCommand" [raw]="escalation.takeoverCommand">
               Escalated at {{ escalation.nodeName ?? 'unknown node' }}.
-            </fleet-kit-takeover>
+            </fleet-chunk-detail-escalation-takeover>
           </div>
         }
       </header>

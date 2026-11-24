@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { createCopyFlash } from '../core/clipboard';
-import { KitButton } from './kit-button';
+import { createCopyFlash } from '../../core/clipboard';
+import { KitButton } from '../../kit/kit-button';
 
 /**
  * An escalation's takeover commands, shown by the one rule every panel that renders an
@@ -19,13 +19,13 @@ import { KitButton } from './kit-button';
  * The projected content leads the hint paragraph — the caller's own cause sentence.
  */
 @Component({
-  selector: 'fleet-kit-takeover',
+  selector: 'fleet-chunk-detail-escalation-takeover',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitButton],
-  templateUrl: './kit-takeover.html',
-  styleUrl: './kit-takeover.css',
+  templateUrl: './escalation-takeover.html',
+  styleUrl: './escalation-takeover.css',
 })
-export class KitTakeover {
+export class EscalationTakeover {
   /** The runner-composed `blizzard runner takeover` command; empty when absent. */
   readonly wrapped = input<string>('');
   /** The raw takeover field — a command or guidance prose; empty when absent. */

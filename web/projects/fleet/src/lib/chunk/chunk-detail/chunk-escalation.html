@@ -1,11 +1,11 @@
 @if (escalation(); as esc) {
   <div class="escalation" data-testid="escalation">
     <fleet-kit-section-head label="Needs human · takeover" />
-    <fleet-kit-takeover [wrapped]="esc.wrapped_takeover_command" [raw]="esc.takeover_command">
+    <fleet-chunk-detail-escalation-takeover [wrapped]="esc.wrapped_takeover_command" [raw]="esc.takeover_command">
       <span data-testid="escalation-cause">{{ causeSentence() }}</span>&ngsp;
       @if (esc.detail) {
         <span data-testid="escalation-detail">{{ esc.detail }}</span>
       }
-    </fleet-kit-takeover>
+    </fleet-chunk-detail-escalation-takeover>
   </div>
 }

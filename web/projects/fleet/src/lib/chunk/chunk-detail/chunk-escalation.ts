@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 import { openLookup } from '../../core/open-lookup';
 import { KitSectionHead } from '../../kit/kit-section-head';
-import { KitTakeover } from '../../kit/kit-takeover';
+import { EscalationTakeover } from './escalation-takeover';
 import type { ChunkEscalationState, EscalationDetail } from './escalation.model';
 
 /**
@@ -10,12 +10,12 @@ import type { ChunkEscalationState, EscalationDetail } from './escalation.model'
  * holds the `detail` input and derives everything else
  * (`bzh:frontend-container-presentational`) — no query, no store access.
  *
- * The takeover commands render through `fleet-kit-takeover`, which owns the wrapped-vs-raw rule.
+ * The takeover commands render through `fleet-chunk-detail-escalation-takeover`, which owns the wrapped-vs-raw rule.
  */
 @Component({
   selector: 'fleet-chunk-detail-escalation',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitSectionHead, KitTakeover],
+  imports: [KitSectionHead, EscalationTakeover],
   templateUrl: './chunk-escalation.html',
   styleUrl: './chunk-escalation.css',
 })
