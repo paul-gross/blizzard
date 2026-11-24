@@ -48,7 +48,7 @@
         </fleet-kit-option-group>
         @if (!deltaAvailable()) {
           <p class="mode-note" data-testid="run-mode-never-swept">
-            This routine has never swept this scope — delta has no baseline to run against, so only full is offered.
+            This routine has never swept this scope, so delta is unavailable until a full run sets a baseline.
           </p>
         }
         @if (f.mode().value() === 'delta' && baseline(); as baseline) {

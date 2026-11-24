@@ -180,7 +180,7 @@ describe('GardeningRunDialog', () => {
     expect(baseline.textContent).toContain('5 landed since');
   });
 
-  it('says a never-swept pair has no baseline and steers to full — no delta submission is possible', async () => {
+  it('says a never-swept pair has no baseline, keeps full selected, and offers no delta', async () => {
     const mounted = await mount();
     stub = mounted.stub;
     const { el, fixture } = mounted;
@@ -193,7 +193,7 @@ describe('GardeningRunDialog', () => {
     expect(el.querySelector<HTMLInputElement>('[data-testid="run-mode-full"]')!.checked).toBe(true);
   });
 
-  it('switching off a swept scope steers a selected delta mode back to full', async () => {
+  it('keeps delta selected on a never-swept scope, hints, and blocks submission until full is picked', async () => {
     const mounted = await mount();
     stub = mounted.stub;
     const { el, fixture } = mounted;
@@ -202,12 +202,62 @@ describe('GardeningRunDialog', () => {
     await settle(fixture);
     el.querySelector<HTMLInputElement>('[data-testid="run-mode-delta"]')!.click();
     await settle(fixture);
-    expect(el.querySelector<HTMLInputElement>('[data-testid="run-mode-delta"]')!.checked).toBe(true);
-
     el.querySelector<HTMLInputElement>('[data-testid="run-scope-option-blizzard"]')!.click();
     await settle(fixture);
 
-    expect(el.querySelector<HTMLInputElement>('[data-testid="run-mode-full"]')!.checked).toBe(true);
+    expect(el.querySelector<HTMLInputElement>('[data-testid="run-mode-delta"]')!.checked).toBe(true);
+    expect(el.querySelector('[data-testid="run-mode-never-swept"]')?.textContent).toContain('until a full run sets a baseline');
+
+    el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!.click();
+    await settle(fixture);
+    expect(stub.forRoute('/api/routines/rtn_1/run', 'POST')).toHaveLength(0);
+
+    el.querySelector<HTMLInputElement>('[data-testid="run-mode-full"]')!.click();
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!.click();
+    await settle(fixture);
+    await settle(fixture);
+    expect(stub.forRoute('/api/routines/rtn_1/run', 'POST')[0].body).toMatchObject({ scope_slug: 'blizzard', mode: 'full' });
+  });
+
+  it('never re-addresses a selected scope a refresh drops: blocks with a message until another is picked', async () => {
+    let routineScopes = ['blizzard', 'web'];
+    const mounted = await mount({ 'GET /api/routines/{routine_id}/scopes': () => routineScopes });
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
+
+    el.querySelector<HTMLInputElement>('[data-testid="run-scope-option-web"]')!.click();
+    await settle(fixture);
+    routineScopes = ['blizzard'];
+    await TestBed.inject(QueryClient).invalidateQueries();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="run-scope-option-web"]')).toBeNull();
+    el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!.click();
+    await settle(fixture);
+    expect(stub.forRoute('/api/routines/rtn_1/run', 'POST')).toHaveLength(0);
+    expect(el.querySelector('[data-testid="run-scope-field"]')?.textContent).toContain('no longer available');
+
+    el.querySelector<HTMLInputElement>('[data-testid="run-scope-option-blizzard"]')!.click();
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!.click();
+    await settle(fixture);
+    await settle(fixture);
+    expect(stub.forRoute('/api/routines/rtn_1/run', 'POST')[0].body).toMatchObject({ scope_slug: 'blizzard' });
+  });
+
+  it('defaults the first scope when the options arrive after an initially empty list', async () => {
+    let routineScopes: string[] = [];
+    const mounted = await mount({ 'GET /api/routines/{routine_id}/scopes': () => routineScopes });
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
+    expect(el.querySelector('[data-testid="run-dialog-empty"]')).not.toBeNull();
+
+    routineScopes = ['blizzard', 'web'];
+    await TestBed.inject(QueryClient).invalidateQueries();
+    await settle(fixture);
+
+    expect(el.querySelector<HTMLInputElement>('[data-testid="run-scope-option-web"]')!.checked).toBe(true);
   });
 
   it('runs against the selected related scope and confirms the chunk id and a board link — no board of its own', async () => {
