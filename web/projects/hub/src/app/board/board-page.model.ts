@@ -1,5 +1,3 @@
-import { type ChunkSummary } from 'fleet';
-
 /** A requested lane placement — `chunkId` lands immediately after `afterChunkId`, or at the very top when that is `null`. */
 export interface LaneMove {
   readonly chunkId: string;
@@ -22,7 +20,7 @@ export function orderedChunkIds(entries: readonly { readonly chunk_id: string }[
  * (a paused chunk in particular) stays as read, since the hub's verdict on it is not known from here.
  * Returns `chunks` itself when no override applies.
  */
-export function withPendingBoardChanges<T extends ChunkSummary>(
+export function withPendingBoardChanges<T extends { readonly chunk_id: string; readonly status: string; readonly promotable: boolean }>(
   chunks: readonly T[],
   pendingPromotes: readonly { readonly chunkId: string }[],
   pendingDeletes: readonly { readonly chunkId: string }[],
@@ -77,7 +75,7 @@ export function foldRepositions(order: readonly string[], moves: readonly LaneMo
  */
 export function resolveSelectedChunk(
   chunkId: string | null,
-  chunks: readonly ChunkSummary[],
+  chunks: readonly { readonly chunk_id: string }[],
   linkedDetailChunkId: string | null | undefined,
 ): string | null {
   if (chunkId === null) return null;
