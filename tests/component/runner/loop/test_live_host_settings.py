@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from structlog.testing import capture_logs
 
 import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import SystemClock
@@ -117,6 +118,34 @@ def test_a_tracing_write_reaches_the_next_sweep_and_not_the_running_one(
         assert (spy.seen[-1].batch_limit, spy.seen[-1].sweep_seconds) == (20, 2)
         assert stepper.trace_interval() == 2
         assert spy.seen[0].batch_limit == 10
+    finally:
+        stepper.close()
+        host.close()
+
+
+def test_a_trace_sweep_keeps_its_last_good_tracing_when_a_revision_does_not_resolve(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    host = _host(tmp_path, monkeypatch, "[tracing]\nbatch_limit = 10")
+    runner = host.runners[0]
+    spy = _SweepSpy([])
+    stepper = RunnerStepper(runner.config, process_graph=replace(runner, trace_sweep=spy))
+    reader = runner.settings_reader
+    assert reader is not None
+    try:
+        stepper.timed_trace_sweep()
+
+        def unresolvable(*_args: object, **_kwargs: object) -> object:
+            raise ValueError("revision does not resolve")
+
+        monkeypatch.setattr(reader, "resolve_pair", unresolvable)
+        with capture_logs() as logs:
+            stepper.timed_trace_sweep()
+            stepper.timed_trace_sweep()
+        assert [config.batch_limit for config in spy.seen] == [10, 10, 10]
+        assert [entry["event"] for entry in logs if entry["log_level"] == "error"] == [
+            "trace sweep settings did not resolve"
+        ]
     finally:
         stepper.close()
         host.close()

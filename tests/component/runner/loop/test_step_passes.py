@@ -528,8 +528,11 @@ def test_trace_sweep_uses_its_own_snapshot_until_it_finishes(tmp_path: Path) -> 
     observed: list[int] = []
 
     class Reader:
-        def snapshot(self) -> tuple[None, RunnerConfig]:
-            return None, current[0]
+        def pair_record(self) -> Any:
+            return SimpleNamespace(runner=SimpleNamespace(revision=1))
+
+        def resolve_pair(self, pair: Any) -> RunnerConfig:
+            return current[0]
 
     class Sweep:
         def sweep(self, tracing: Any) -> None:
