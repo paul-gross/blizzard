@@ -1,16 +1,17 @@
-import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, blockedLabel, domainChunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type LaneStatus, type UrgencyReference, type RunnerRegistryView, workLines } from 'fleet';
+import { DONE_LANE, UNKNOWN_LANE, blockedLabel, domainChunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type LaneStatus, type UrgencyReference, workLines } from 'fleet';
 import type { BoardChunk } from '../../core/chunks.model';
 import type { GraphProgressNode } from '../../core/chunks.domain';
 import type { BoardQuestion } from '../questions/questions.domain';
 import type { BoardDecision } from '../gates/gates.domain';
 import type { BoardWorkItems } from '../../core/work-items/board-work-items.domain';
+import type { GlanceRunner } from '../../core/runners.domain';
 
 import type { RowWork, Vitals } from './glance-view';
 
 /** The runners that count toward runners-up: a retired runner has left the fleet, and a never-connected
  * one (added but never started) has not joined it yet — neither reads as down. */
-export function liveRunners(runners: readonly RunnerRegistryView[]): readonly RunnerRegistryView[] {
-  return runners.filter((runner) => !runner.retired && runner.connection !== RunnerConnection.NEVER_CONNECTED);
+export function liveRunners(runners: readonly GlanceRunner[]): readonly GlanceRunner[] {
+  return runners.filter((runner) => !runner.retired && runner.connection.kind !== 'never_connected');
 }
 
 /** A chunk's work items as its row names them — the board card's own `workLines`, so a glance row and a
@@ -23,7 +24,7 @@ function rowWork(chunk: BoardChunk | undefined, workItems: ReadonlyMap<string, B
 
 /** The vitals strip, counted off the mobile list: what needs a person, what is moving, what is queued, what
  * completed, and the registry's online fraction. */
-export function glanceVitals(runners: readonly RunnerRegistryView[], list: GlanceListGroups): Vitals {
+export function glanceVitals(runners: readonly GlanceRunner[], list: GlanceListGroups): Vitals {
   const online = runners.filter((runner) => runner.online).length;
   return {
     needsYou: filterGlanceRows(list, 'needs').length,

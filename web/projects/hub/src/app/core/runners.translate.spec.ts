@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { runnerRegistryView } from 'fleet/testing';
 import { servingProjectRunners } from './runners.domain';
-import { toHubRunner, toProjectRunner } from './runners.translate';
+import { fromGlanceConnection, toGlanceRunner, toHubRunner, toProjectRunner } from './runners.translate';
 
 describe('project runner projection', () => {
   it('uses online and the hub claimability judgment, not paused flags', () => {
@@ -57,5 +57,14 @@ describe('hub runner translation', () => {
     expect(runner.version_refusal).toBeNull();
     expect(runner.declining[0].lever_kind).toBe('pace');
     expect(runner.unenforceable_gates.map((gate) => gate.reason)).toEqual(['hub-executed', 'unknown-node']);
+  });
+});
+
+describe('glance runner projection', () => {
+  it('keeps hub liveness judgments and preserves unknown connection values', () => {
+    expect(toGlanceRunner(runnerRegistryView({ runner_id: 'r', online: true, retired: false, connection: 'online' })))
+      .toEqual({ runner_id: 'r', online: true, retired: false, connection: { kind: 'online' } });
+    expect(fromGlanceConnection('new-connection')).toEqual({ kind: 'unknown', raw: 'new-connection' });
+
   });
 });

@@ -16,7 +16,7 @@ import { injectProjectDomainsQuery } from '../../core/projects.query';
 import { orderedChunkIds } from '../board-page.model';
 import { injectBoardQuestionsQuery } from '../questions/questions.query';
 import { injectBoardDecisionsQuery } from '../gates/gates.query';
-import { injectHubRunnersQuery } from '../../core/runners.query';
+import { injectGlanceRunnersQuery } from '../../core/runners.query';
 import { injectBoardWorkItemsQuery } from '../../core/work-items/board-work-items.query';
 
 import { glanceListGroups, glanceVitals, liveRunners, type GlanceListGroups } from './glance-board.model';
@@ -46,7 +46,7 @@ export class GlanceBoard {
   private readonly backlogQuery = injectHubBacklogQuery(this.canReorder);
   private readonly questionsQuery = injectBoardQuestionsQuery();
   private readonly decisionsQuery = injectBoardDecisionsQuery();
-  private readonly runnersQuery = injectHubRunnersQuery();
+  private readonly runnersQuery = injectGlanceRunnersQuery();
   private readonly runnerHosts = injectRunnerHostNames();
   private readonly projectsQuery = injectProjectDomainsQuery();
   private readonly showProjectColors = injectShowProjectColors();

@@ -2,7 +2,8 @@ import { boardChunk } from '../board.fixture';
 import type { BoardChunk } from '../../core/chunks.model';
 import type { LaneStatus } from 'fleet';
 type KnownLaneStatus = Exclude<LaneStatus['kind'], 'unknown'>;
-import { type RunnerRegistryView, type WorkItemsView } from 'fleet';
+import { type WorkItemsView } from 'fleet';
+import type { GlanceRunner } from '../../core/runners.domain';
 import type { BoardDecision } from '../gates/gates.domain';
 import type { BoardQuestion } from '../questions/questions.domain';
 type ChunkSummary = BoardChunk;
@@ -30,7 +31,9 @@ const question = (chunkId: string, text: string): BoardQuestion => ({ chunk_id: 
 
 const decision = (chunkId: string): BoardDecision => ({ chunk_id: chunkId });
 
-const runner = (id: string, fields: Partial<RunnerRegistryView>): RunnerRegistryView => ({ runner_id: id, ...fields }) as RunnerRegistryView;
+const runner = (id: string, fields: Partial<GlanceRunner>): GlanceRunner => ({
+  runner_id: id, online: false, retired: false, connection: { kind: 'offline' }, ...fields,
+});
 
 describe('liveRunners', () => {
   it('drops retired runners and keeps the rest in order', () => {
@@ -40,9 +43,9 @@ describe('liveRunners', () => {
 
   it('drops a never-connected runner: added but never started, it is not down', () => {
     const rows = liveRunners([
-      runner('r1', { connection: 'online' }),
-      runner('r2', { connection: 'never_connected' }),
-      runner('r3', { connection: 'offline' }),
+      runner('r1', { connection: { kind: 'online' } }),
+      runner('r2', { connection: { kind: 'never_connected' } }),
+      runner('r3', { connection: { kind: 'offline' } }),
     ]);
     expect(rows.map((r) => r.runner_id)).toEqual(['r1', 'r3']);
   });
@@ -274,9 +277,9 @@ describe('glanceVitals', () => {
 
   it('counts neither up nor total a runner that has never connected', () => {
     const fleet = [
-      runner('r1', { online: true, connection: 'online' }),
-      runner('r2', { online: false, connection: 'offline' }),
-      runner('r3', { online: false, connection: 'never_connected' }),
+      runner('r1', { online: true, connection: { kind: 'online' } }),
+      runner('r2', { online: false, connection: { kind: 'offline' } }),
+      runner('r3', { online: false, connection: { kind: 'never_connected' } }),
     ];
     expect(glanceVitals(liveRunners(fleet), groups([])).runnersUpLabel).toBe('1/2');
   });

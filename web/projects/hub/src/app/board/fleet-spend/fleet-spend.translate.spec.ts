@@ -4,11 +4,15 @@ import { fleetSpendView } from 'fleet/testing';
 import { fromFleetSpendView } from './fleet-spend.translate';
 
 describe('fromFleetSpendView', () => {
-  it('carries the exact cost, the estimate and whether the cost is partial', () => {
+  it('carries cost and token usage', () => {
     expect(fromFleetSpendView(fleetSpendView({ cost_usd: 3, estimated_cost_usd: 0.25, cost_partial: true }))).toEqual({
       cost_usd: 3,
       estimated_cost_usd: 0.25,
       cost_partial: true,
+      input_tokens: 310000,
+      output_tokens: 120000,
+      cache_read_tokens: 9400000,
+      cache_create_tokens: 640000,
     });
   });
 

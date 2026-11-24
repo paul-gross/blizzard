@@ -14,6 +14,17 @@ export interface ProjectRunnerAssignment {
   readonly claimable: boolean;
 }
 
+export type GlanceConnection =
+  | { readonly kind: 'never_connected' | 'online' | 'offline' }
+  | { readonly kind: 'unknown'; readonly raw: string };
+
+export interface GlanceRunner {
+  readonly runner_id: string;
+  readonly online: boolean;
+  readonly retired: boolean;
+  readonly connection: GlanceConnection;
+}
+
 /** Live runners whose hub-resolved assignment can claim work for this project. */
 export function servingProjectRunners<Runner extends Pick<ProjectRunner, 'online' | 'projects'>>(
   projectId: string,

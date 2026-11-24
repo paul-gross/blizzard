@@ -21,7 +21,6 @@ import {
   formatSeenTag,
   injectNowSignal,
   hasCostFigure,
-  type FleetSpendView,
   type KitAsyncStateValue,
   type KitCountCell,
   KitCountStrip,
@@ -32,6 +31,7 @@ import {
 import { AppLink } from 'fleet/shell';
 
 import { FleetSpend } from '../fleet-spend/fleet-spend';
+import type { FleetSpend as FleetSpendData } from '../fleet-spend/fleet-spend.domain';
 import { NodeStrip } from '../node-strip/node-strip';
 import { showsNodeStrip } from '../node-strip/node-strip.model';
 import { boardDonePolicy, type BoardDonePolicy } from '../../core/board-done-policy.model';
@@ -102,11 +102,11 @@ export class GlanceView {
   readonly vitalsLoading = input(false);
   readonly list = input.required<GlanceListGroups>();
   readonly listState = input.required<KitAsyncStateValue>();
-  readonly spend = input<FleetSpendView | null>(null);
+  readonly spend = input<FleetSpendData | null>(null);
   readonly spendState = input.required<KitAsyncStateValue>();
 
   /** The fleet-wide spend over yesterday, `null` until it resolves — its row is withheld until then. */
-  readonly spendYesterday = input<FleetSpendView | null>(null);
+  readonly spendYesterday = input<FleetSpendData | null>(null);
 
   protected readonly loadingRows = [1, 3, 2, 1, 3];
 
