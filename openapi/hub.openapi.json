@@ -53900,7 +53900,7 @@
     },
     "/api/garden-proposals/{proposal_id}/accept": {
       "post": {
-        "description": "Accept the proposal. `mint_work_item` mints a linked hub item from `body` (or the proposal's own), wrapped in\nthe \"Related findings\" template when it names findings; false records the decline. Promotes nothing; a blank\nreason is stored as none. 404 unknown; 422 `body` or `urgency` without a mint, `urgency_unknown`/`urgency_retired`,\nor a blank minted title or body; 409 closed or a raced ingest; 503 the default graph retired.",
+        "description": "Accept the proposal. `mint_work_item` mints a linked hub item from `body` (or the proposal's own), wrapped in\nthe \"Related findings\" template when it names findings; false records the decline. Promotes nothing; a blank\nreason is stored as none. A closed proposal is refused 409 first, whatever the request states. 404 unknown; 422\n`body` or `urgency` without a mint, a minting accept's `urgency_unknown`/`urgency_retired`, or a blank minted title\nor body; 409 closed or a raced ingest; 503 the default graph retired.",
         "operationId": "accept_garden_proposal_api_garden_proposals__proposal_id__accept_post",
         "parameters": [
           {
