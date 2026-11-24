@@ -133,7 +133,9 @@ docket_marker.write_text('threaded')
 test.use({ isolation: 'fresh-tenant' });
 
 test('test_garden_routine_runs_end_to_end_on_all_six_paths', async ({ api, clock, repository, runnerHosts }) => {
-  test.setTimeout(240000);
+  // Eight sequential runs exercise repeated observations and both delivery-repair loops;
+  // allow for their worker and CLI startups under the full concurrent service suite.
+  test.setTimeout(600000);
   const target = await repository();
   const listed = await api.get<{ graph_id: string; name: string }[]>('/api/graphs');
   expect(listed.status).toBe(200);
