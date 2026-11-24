@@ -13,6 +13,7 @@ from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from starlette.requests import Request
@@ -20,7 +21,8 @@ from starlette.types import Scope
 
 from blizzard.foundation.events.stream import DEFAULT_KEEPALIVE_SECONDS
 from blizzard.hub.api.auth_session import TENANT_HEADER
-from blizzard.hub.api.events import RESERVED_COMMENT, Cursor, Stream, events_stream
+from blizzard.hub.api.events import RESERVED_COMMENT, Cursor, Stream, StreamReads, events_stream
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.tenancy import TenantId
@@ -41,15 +43,15 @@ class _FakeRequest(Request):
         return True
 
 
-def _services(broker: EventBroker) -> SimpleNamespace:
-    """The one field of a tenant's services the stream reads — its broker."""
-    return SimpleNamespace(events=broker)
+def _reads(broker: EventBroker) -> StreamReads:
+    """The stream's reads over ``broker``; with no ``?project=`` the registry is never read."""
+    return StreamReads(broker, cast(IReadRunnerRegistry, None))
 
 
 async def test_stream_endpoint_returns_an_sse_response() -> None:
-    # Direct call bypasses FastAPI's dependency resolution — the tenant's services (normally
+    # Direct call bypasses FastAPI's dependency resolution — the stream's reads (normally
     # resolved via `Depends`) are supplied directly here.
-    response = await events_stream(_FakeRequest(), _services(EventBroker()))  # pyright: ignore[reportArgumentType]  # only the broker field the stream reads
+    response = await events_stream(_FakeRequest(), _reads(EventBroker()))
     assert response.status_code == 200
     assert response.media_type == "text/event-stream"
     # The generator opens with the reserved comment so an EventSource connects cleanly.
@@ -76,7 +78,7 @@ async def test_stream_endpoint_binds_the_default_keepalive_cadence(monkeypatch: 
         return _capturing_stream
 
     monkeypatch.setattr("blizzard.hub.api.events.Stream", _capturing(real_stream))
-    await events_stream(_FakeRequest(), _services(EventBroker()))  # pyright: ignore[reportArgumentType]  # only the broker field the stream reads
+    await events_stream(_FakeRequest(), _reads(EventBroker()))
     assert bound["keepalive_seconds"] == DEFAULT_KEEPALIVE_SECONDS
 
 

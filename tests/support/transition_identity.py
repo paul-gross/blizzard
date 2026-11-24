@@ -64,18 +64,16 @@ from blizzard.hub.domain.graph.model import (
     IWriteGraphRepository,
 )
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
-from blizzard.hub.domain.observability.analytics.derivation import EventDerivationService
 from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents, IWriteTranscriptEvents
 from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
 from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
-from blizzard.hub.domain.observability.env_timeline import EnvTimelineReading, IReadEnvTimelineFacts
+from blizzard.hub.domain.observability.env_timeline import IReadEnvTimelineFacts
 from blizzard.hub.domain.observability.forge_status import IReadAnnotatedSources, IWriteAnnotatedSources
 from blizzard.hub.domain.observability.hub_events import HubEventLogService, IReadHubEventLog, IWriteHubEventLog
-from blizzard.hub.domain.observability.invariants import HubInvariantCheck, IHubInvariantChecker
+from blizzard.hub.domain.observability.invariants import IHubInvariantChecker
 from blizzard.hub.domain.observability.transcripts import (
     IReadTranscriptSegments,
     IWriteTranscriptSegments,
-    TranscriptIngestService,
 )
 from blizzard.hub.domain.operations.delete import IHubItemWithdrawals
 from blizzard.hub.domain.projects.bulk_resolve import IBulkProjectLookup
@@ -99,7 +97,6 @@ from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository, IWriteWorkItemRepository
 from blizzard.hub.events.broker import EventBroker
-from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
@@ -248,12 +245,6 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantServices.repository_records", services.repository_records, RepositoryRecordStore),
         ("TenantServices.forge_records", services.forge_records, ForgeRecordStore),
         ("TenantServices.credential_records", services.credential_records, CredentialRecordStore),
-        ("TenantServices.transcripts", services.transcripts, TranscriptSegmentStore),
-        ("TenantServices.transcript_ingest", services.transcript_ingest, TranscriptIngestService),
-        ("TenantServices.event_derivation_service", services.event_derivation_service, EventDerivationService),
-        ("TenantServices.analytics_events", services.analytics_events, AnalyticsEventQueryStore),
-        ("TenantServices.operational_analytics", services.operational_analytics, AnalyticsOperationalStore),
-        ("TenantServices.env_timeline", services.env_timeline, EnvTimelineReading),
         ("TenantServices.projects", services.projects, IReadProjectRepository),
         ("TenantServices.project_links", services.project_links, IReadProjectLinks),
         ("TenantServices.chunk_targets", services.chunk_targets, ChunkTargets),
@@ -297,17 +288,14 @@ def process_identity_violations(core: HubCore, services: HubServices) -> list[st
         ("HubCore.hub_scoped_reads", core.hub_scoped_reads, HubScopedReads),
         ("HubCore.hub_events", core.hub_events, HubEventLogStore),
         ("HubServices.hub_scoped_reads", services.hub_scoped_reads, HubScopedReads),
-        ("HubServices.hub_events", services.hub_events, HubEventLogStore),
         ("HubCore.hub_event_log", core.hub_event_log, HubEventLogService),
         ("HubServices.hub_event_log", services.hub_event_log, HubEventLogService),
-        ("HubServices.invariants", services.invariants, HubInvariantCheck),
         ("IReadHubEventLog", process.get(IReadHubEventLog), HubEventLogStore),
         ("IWriteHubEventLog", process.get(IWriteHubEventLog), HubEventLogStore),
         ("IHubInvariantChecker", process.get(IHubInvariantChecker), HubInvariants),
         ("HubActions.catalogue", process.get(HubActions).catalogue, HubActionCatalogue),
         ("HubServices.action_loop", services.action_loop, ActionLoop),
         ("HubServices.step_wake", services.step_wake, StepWake),
-        ("HubServices.event_brokers", services.event_brokers, TenantBrokers),
         ("HubServices.users", services.users, UserRepository),
         ("HubServices.sessions", services.sessions, SessionRepository),
         ("HubServices.identities", services.identities, IdentityRepository),

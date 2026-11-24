@@ -26,9 +26,7 @@ GROUPS = [
     (
         RUNNER,
         """
-GET /api/fleet/chunk-statuses
 GET /api/fleet/chunks/{chunk_id}/envelope
-GET /api/fleet/chunks/{chunk_id}/transcript-segments
 GET /api/fleet/questions/{question_id}
 POST /api/fleet/chunks/{chunk_id}/hub-advance
 """,
@@ -36,11 +34,13 @@ POST /api/fleet/chunks/{chunk_id}/hub-advance
     (
         RUNNER - {"blizzard.hub.api.deps.tenant_services", HUB},
         """
+GET /api/fleet/chunk-statuses
 GET /api/fleet/chunks/{chunk_id}
 GET /api/fleet/chunks/{chunk_id}/findings
 GET /api/fleet/chunks/{chunk_id}/findings/{finding_id}
 GET /api/fleet/chunks/{chunk_id}/garden/findings
 GET /api/fleet/chunks/{chunk_id}/garden/proposals/page
+GET /api/fleet/chunks/{chunk_id}/transcript-segments
 GET /api/fleet/chunks/{chunk_id}/work-items
 GET /api/fleet/scopes
 GET /api/fleet/summary
@@ -53,7 +53,7 @@ POST /api/fleet/queue/peek
 """,
     ),
     (
-        RUNNER | {"blizzard.hub.api.fleet.AnalyticsWindow.of"},
+        RUNNER - {"blizzard.hub.api.deps.tenant_services", HUB} | {"blizzard.hub.api.fleet.AnalyticsWindow.of"},
         """
 GET /api/fleet/chunks/{chunk_id}/analytics/counts/agent-types
 GET /api/fleet/chunks/{chunk_id}/analytics/counts/files
@@ -67,13 +67,13 @@ GET /api/fleet/chunks/{chunk_id}/analytics/spend/nodes
         FLEET_REQUEST,
         """
 GET /api/fleet/runners/{runner_id}/decisions
-POST /api/fleet/transcripts
 """,
     ),
     (
         FLEET_REQUEST - {"blizzard.hub.api.deps.tenant_services", HUB},
         """
 GET /api/fleet/runners/{runner_id}
+POST /api/fleet/transcripts
 POST /api/fleet/chunks/{chunk_id}/completions
 POST /api/fleet/chunks/{chunk_id}/decisions
 POST /api/fleet/chunks/{chunk_id}/release

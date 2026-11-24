@@ -43,7 +43,6 @@ from blizzard.hub.api.problems import (
     runner_identity_problem,
     runner_version_problem,
 )
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.execution.claim import (
     ClaimConflict,
@@ -61,7 +60,7 @@ from blizzard.hub.domain.execution.envelope import NoCurrentNode
 from blizzard.hub.domain.execution.fleet import RetireInterrupted, RetireOutcome
 from blizzard.hub.domain.execution.release import ReleaseRefusalKind, ReleaseRefused
 from blizzard.hub.domain.kernel.pagination import MalformedCursor
-from blizzard.hub.domain.observability.transcripts import LeaseSegmentsNotOwned
+from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments, LeaseSegmentsNotOwned
 from blizzard.hub.domain.operations.pause import ChunkNotPausable
 from blizzard.hub.domain.projects.model import ProjectRequired
 from blizzard.hub.domain.runners.host import HostNameTaken, HostRetired, RunnerAlreadyHosted
@@ -96,13 +95,12 @@ class NonterminalProblem(CommonProblemMembers[str, dict[str, str]]):
 
 
 def test_lease_segments_invariant_failure_remains_an_undeclared_http_error() -> None:
-    services = MagicMock()
+    transcripts = MagicMock()
     failure = RuntimeError("inconsistent lease")
-    services.transcripts.runner_id_for_lease.side_effect = failure
+    transcripts.runner_id_for_lease.side_effect = failure
+    handler = fleet.get_lease_transcript_segments.__dishka_orig_func__  # pyright: ignore[reportFunctionMemberAccess]
     with pytest.raises(HTTPException) as caught:
-        fleet.get_lease_transcript_segments(
-            "c", "n", 1, cast(TenantServices, services), cast(RunnerPrincipal, MagicMock())
-        )
+        handler("c", "n", 1, cast(IReadTranscriptSegments, transcripts), cast(RunnerPrincipal, MagicMock()))
     assert caught.value.status_code == 500
     assert caught.value.__cause__ is failure
     declarations = problem_declarations_by_status(

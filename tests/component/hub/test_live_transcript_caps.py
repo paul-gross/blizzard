@@ -8,7 +8,12 @@ from typing import Any
 import pytest
 
 from blizzard.foundation.settings_record.vocabulary import Change
-from blizzard.hub.domain.observability.transcripts import TranscriptCaps, TranscriptIngestResult, TranscriptSlice
+from blizzard.hub.domain.observability.transcripts import (
+    TranscriptCaps,
+    TranscriptIngestResult,
+    TranscriptIngestService,
+    TranscriptSlice,
+)
 from tests.support.hub_request_auth import ingest_chunk
 from tests.support.scaffolding import build_hub
 
@@ -20,7 +25,7 @@ def test_committed_caps_reach_next_ingest_but_not_in_flight_request(
     assert hub.app is not None
     settings = hub.app.state.hub_settings
     chunk = ingest_chunk(hub)
-    service = hub.services.transcript_ingest
+    service = hub.default_adapter(TranscriptIngestService)
     ingest = service.ingest
     entered, release = Event(), Event()
 

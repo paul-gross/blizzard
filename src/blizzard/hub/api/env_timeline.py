@@ -8,6 +8,7 @@ from datetime import datetime
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from blizzard.auth_core import Permission
@@ -19,16 +20,18 @@ from blizzard.hub.api import transcripts as transcripts_api
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_views import usage_total_view
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import QueryProject
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.observability.env_timeline import (
     EnvSegment,
     EnvTimeline,
+    EnvTimelineReading,
     PlacedSegment,
     StepDetail,
     StepNotFound,
 )
+from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments
 from blizzard.wire.env_timeline import (
     EnvTimelineBlockView,
     EnvTimelineChunkView,
@@ -139,9 +142,10 @@ def env_timeline_view(timeline: EnvTimeline) -> EnvTimelineView:
 
 
 @router.get("/env-timeline", response_model=EnvTimelineView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
+@inject_sync
 def env_timeline(
     since: Annotated[datetime, Query()],
-    services: Services,
+    timeline: FromDishka[EnvTimelineReading],
     project: QueryProject,
     until: Annotated[datetime | None, Query()] = None,
     latest: bool = False,
@@ -156,9 +160,9 @@ def env_timeline(
     ignored. Under ``?project=`` only that project's chunks are laid on the environments."""
     start = as_utc(since)
     if latest:
-        return env_timeline_view(services.env_timeline.read_latest(since=start, project=project))
+        return env_timeline_view(timeline.read_latest(since=start, project=project))
     end = as_utc(until) if until is not None else None
-    return env_timeline_view(services.env_timeline.read(since=start, until=end, project=project))
+    return env_timeline_view(timeline.read(since=start, until=end, project=project))
 
 
 def _placed(p: PlacedSegment) -> EnvTimelinePlacedStepView:
@@ -203,9 +207,11 @@ def step_view(detail: StepDetail) -> EnvTimelineStepView:
 @router.get(
     "/env-timeline/step", response_model=EnvTimelineStepView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
+@inject_sync
 def env_timeline_step(
     chunk_id: str,
-    services: Services,
+    records: FromDishka[IReadChunkRecordRepository],
+    timeline: FromDishka[EnvTimelineReading],
     lease_id: str | None = None,
     started_at: Annotated[datetime | None, Query()] = None,
 ) -> EnvTimelineStepView:
@@ -213,10 +219,10 @@ def env_timeline_step(
     ``started_at`` (a hub step, or one whose session the hub never heard of), else the chunk's newest: where it ran,
     every harness invocation and escalation inside it, their spend, the artifacts its node recorded, and the chunk's
     whole path across the environments around it. ``404`` when the chunk is unknown, or has no such step."""
-    if services.chunks.record.get(chunk_id) is None:
+    if records.get(chunk_id) is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     try:
-        detail = services.env_timeline.step(
+        detail = timeline.step(
             chunk_id=chunk_id,
             lease_id=lease_id,
             started_at=as_utc(started_at) if started_at is not None else None,
@@ -231,15 +237,22 @@ def env_timeline_step(
     response_model=LeaseTranscriptView,
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
-def env_timeline_step_transcript(chunk_id: str, node_id: str, epoch: int, services: Services) -> LeaseTranscriptView:
+@inject_sync
+def env_timeline_step_transcript(
+    chunk_id: str,
+    node_id: str,
+    epoch: int,
+    records: FromDishka[IReadChunkRecordRepository],
+    transcripts: FromDishka[IReadTranscriptSegments],
+) -> LeaseTranscriptView:
     """The transcript of the session that ran a node step of ``chunk_id`` — named by the step's ``node_id`` and
     ``epoch`` as the step read answers them: every turn the session's runner shipped, across each time the session
     was picked back up, with any part a later shipment replaced left out. ``truncated`` holds when some of it was
     lost. A session that has shipped nothing yet answers no turns; ``404`` when the chunk is unknown."""
-    if services.chunks.record.get(chunk_id) is None:
+    if records.get(chunk_id) is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     try:
-        runner_id = services.transcripts.runner_id_for_lease(chunk_id, node_id, epoch)
+        runner_id = transcripts.runner_id_for_lease(chunk_id, node_id, epoch)
     except RuntimeError as exc:
         # Two runners' segments under one fence: an integrity fault elsewhere, never the caller's.
         _log.error(
@@ -252,5 +265,5 @@ def env_timeline_step_transcript(chunk_id: str, node_id: str, epoch: int, servic
         raise HTTPException(
             status.HTTP_500_INTERNAL_SERVER_ERROR, "the session's transcript is in an inconsistent state"
         ) from exc
-    records = services.transcripts.records_for_lease(chunk_id, node_id, epoch, runner_id) if runner_id else []
-    return transcripts_api.lease_content_view(chunk_id, node_id, epoch, records)
+    stored = transcripts.records_for_lease(chunk_id, node_id, epoch, runner_id) if runner_id else []
+    return transcripts_api.lease_content_view(chunk_id, node_id, epoch, stored)

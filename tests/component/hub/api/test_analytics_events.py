@@ -11,6 +11,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.api.analytics import EventScopeFilters, ScopeFilters, ndjson_lines
 from blizzard.hub.domain.kernel.pagination import encode_cursor
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
+from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
 from tests.support.analytics_events_world import record_transcript, seeded_hub, tool_turn
 from tests.support.hub_request_auth import cookie, ingest_chunk, seed_enrolled
 from tests.support.scaffolding import build_hub, seed_session, seed_user
@@ -238,7 +239,7 @@ def test_the_ndjson_stream_carries_its_cursor_across_batches(tmp_path: Path) -> 
     hub, token, _chunk_id = seeded_hub(tmp_path)
     criteria = EventScopeFilters(ScopeFilters(None, None, None, None), None, None, None, None, None).criteria
 
-    body = b"".join(ndjson_lines(hub.services.analytics_events, criteria, batch_size=1)).decode()
+    body = b"".join(ndjson_lines(hub.default_adapter(IReadAnalyticsEventQueries), criteria, batch_size=1)).decode()
     lines = [json.loads(line) for line in body.splitlines()]
 
     whole = hub.client.get("/api/analytics/events", headers=cookie(token)).json()["events"]
@@ -265,7 +266,10 @@ def test_both_encodings_carry_each_stored_payload_verbatim_including_non_ascii(t
     assert push.status_code == 200, push.text
     hub.hub_services.event_derivation.sweep()
     criteria = EventScopeFilters(ScopeFilters(None, None, None, None), None, None, None, None, None).criteria
-    stored = [e.payload for e in hub.services.analytics_events.events(criteria, cursor=None, limit=100).events]
+    stored = [
+        e.payload
+        for e in hub.default_adapter(IReadAnalyticsEventQueries).events(criteria, cursor=None, limit=100).events
+    ]
     assert any("\\u" in text for text in stored)
 
     json_resp = hub.client.get("/api/analytics/events", headers=cookie(token))

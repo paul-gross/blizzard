@@ -5,29 +5,46 @@ not the chunk-wide newest."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from blizzard.hub.api.chunk_views import pause_view, usage_total_view
 from blizzard.hub.api.project_label_fields import project_label_fields
-from blizzard.hub.composition import TenantServices
+from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
+from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView
 
 
-def chunk_statuses(chunk_ids: list[str], services: TenantServices) -> list[ChunkStatusView]:
+@dataclass(frozen=True)
+class ChunkStatusReads:
+    """The tenant reads one batch status read takes: the chunks' facts, routes, decisions, records and projects."""
+
+    facts: IReadChunkFactsRepository
+    route: IReadChunkRouteRepository
+    decisions: IReadChunkDecisionsRepository
+    record: IReadChunkRecordRepository
+    projects: IReadProjectRepository
+
+
+def chunk_statuses(chunk_ids: list[str], reads: ChunkStatusReads) -> list[ChunkStatusView]:
     """One :class:`ChunkStatusView` per requested id, de-duplicated preserving order. An
     id unknown to (or ephemeral in) the store is silently omitted, never a 404 — a lazy
     tick read routinely races a chunk's own deletion/grouping."""
     ids = list(dict.fromkeys(chunk_ids))
     if not ids:
         return []
-    facts_by_id = services.chunks.facts.status_facts_for(ids)
-    routes_by_id = services.chunks.route.routes_for(ids)
+    facts_by_id = reads.facts.status_facts_for(ids)
+    routes_by_id = reads.route.routes_for(ids)
     visit_decisions = {
         chunk_id: decision
         for chunk_id, facts in facts_by_id.items()
         if (decision := facts.current_visit_decision()) is not None
     }
-    resolved_choices = services.chunks.decisions.resolved_choices(d.decision_id for d in visit_decisions.values())
-    project_by_id = {chunk_id: chunk.project_id for chunk_id, chunk in services.chunks.record.get_many(ids).items()}
-    projects = services.projects.get_many(sorted({p for p in project_by_id.values() if p is not None}))
+    resolved_choices = reads.decisions.resolved_choices(d.decision_id for d in visit_decisions.values())
+    project_by_id = {chunk_id: chunk.project_id for chunk_id, chunk in reads.record.get_many(ids).items()}
+    projects = reads.projects.get_many(sorted({p for p in project_by_id.values() if p is not None}))
 
     views: list[ChunkStatusView] = []
     for chunk_id in ids:

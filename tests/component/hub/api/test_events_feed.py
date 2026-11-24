@@ -11,6 +11,8 @@ from datetime import timedelta
 from pathlib import Path
 from typing import NoReturn
 
+import pytest
+
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -327,10 +329,11 @@ def test_chunk_filtered_escalations_do_not_read_other_open_chunks(tmp_path: Path
     assert len(_events(hub, severity="critical", limit=2)) == 2
 
 
-def test_noncritical_and_runner_filtered_events_skip_escalation_store(tmp_path: Path) -> None:
-    from dataclasses import replace
-
-    from tests.support.scaffolding import serve_default_tenant
+def test_noncritical_and_runner_filtered_events_skip_escalation_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from blizzard.hub.domain.chunk.ports.escalations import IReadChunkEscalationsRepository
+    from tests.support.scaffolding import resolve_default_tenant_with
 
     hub = build_hub(tmp_path)
 
@@ -338,9 +341,6 @@ def test_noncritical_and_runner_filtered_events_skip_escalation_store(tmp_path: 
         def list_open_escalations(self, **kwargs: object) -> NoReturn:
             raise AssertionError("escalation read should be skipped")
 
-    serve_default_tenant(
-        hub,
-        replace(hub.services, chunks=replace(hub.services.chunks, escalations=NoEscalations())),
-    )
+    resolve_default_tenant_with(hub, monkeypatch, {IReadChunkEscalationsRepository: NoEscalations()})
     assert _events(hub, severity="warning") == []
     assert _events(hub, runner_id="r1") == []

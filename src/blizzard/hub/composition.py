@@ -81,11 +81,8 @@ from blizzard.hub.domain.graph.model import IReadGraphBodies, IReadGraphReposito
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.observability.analytics.derivation import (
     EventDerivationReconciler,
-    EventDerivationService,
     TenantEventDerivation,
 )
-from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
-from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
 from blizzard.hub.domain.observability.egress.backfill import EgressBackfill
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import ExportPaths, export_paths
@@ -93,22 +90,16 @@ from blizzard.hub.domain.observability.egress.ports import IEgressWriter
 from blizzard.hub.domain.observability.egress.reset import EgressReset
 from blizzard.hub.domain.observability.egress.status import EgressStatusReader
 from blizzard.hub.domain.observability.egress.sweep import EgressSweep
-from blizzard.hub.domain.observability.env_timeline import EnvTimelineReading
 from blizzard.hub.domain.observability.forge_status import (
     FULL_PASS_FLOOR_INTERVALS,
     AnnotationReconciler,
     TenantAnnotation,
 )
-from blizzard.hub.domain.observability.hub_events import HubEventLogService, IReadHubEventLog
-from blizzard.hub.domain.observability.invariants import HubInvariantCheck
+from blizzard.hub.domain.observability.hub_events import HubEventLogService
 from blizzard.hub.domain.observability.tracing.replay import TraceReplay
 from blizzard.hub.domain.observability.tracing.repository import StepHydration
 from blizzard.hub.domain.observability.tracing.status import TraceStatusReader
 from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
-from blizzard.hub.domain.observability.transcripts import (
-    IReadTranscriptSegments,
-    TranscriptIngestService,
-)
 from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
@@ -129,7 +120,6 @@ from blizzard.hub.egress.factory import ConfiguredWriter, EgressUnavailable, bui
 from blizzard.hub.egress.space import free_bytes
 from blizzard.hub.egress.writer import EgressWriterSettings, mint_process_token
 from blizzard.hub.events.broker import EventBroker
-from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.commit_links import LandedCommitLinks
@@ -200,9 +190,6 @@ class TenantServices:
     graph_bodies: IReadGraphBodies
     #: Where each node name runs across the tenant's non-retired graphs — what a runner's gates are flagged against.
     node_executors: IReadNodeExecutors
-    #: The transcript lane's ingest policy — the write side; ``transcripts``
-    #: above is the same store's read Protocol.
-    transcript_ingest: TranscriptIngestService
     graph_mint: GraphMintService
     default_graph: DefaultGraphService
     #: The YAML binding of the config codec a graph definition is decoded and stored through.
@@ -228,14 +215,6 @@ class TenantServices:
     work_ref_label: WorkRefLabel
     #: The user read repository — every write still goes through ``auth``.
     users: IReadUserRepository
-    #: The transcript-segment read Protocol (``bzh:controller-read-only``).
-    transcripts: IReadTranscriptSegments
-    #: The event-derivation reconciler's own service — a scoped, bounded re-derive, apart from a full sweep pass.
-    event_derivation_service: EventDerivationService
-    #: The analytics event query Protocol, read-only (``bzh:controller-read-only``); no write repository backs it.
-    analytics_events: IReadAnalyticsEventQueries
-    #: The operational-datasets query Protocol, read-only; no write repository backs it.
-    operational_analytics: IReadOperationalAnalytics
     #: Secret metadata only — never a sealed row (``bzh:secret-write-only``).
     secret_catalog: ISecretCatalog
     #: The one writer of configured records — forges, work sources, repositories and secrets, each write with its change
@@ -263,9 +242,6 @@ class TenantServices:
     chunk_targets: ChunkTargets
     #: List and show urgencies in order, with the default marked and their open chunks counted.
     urgency_reading: UrgencyReading
-    #: Each errand's last run, read in one snapshot or in a caller's unit.
-    #: Every node step a routed chunk spent in a runner environment over a window.
-    env_timeline: EnvTimelineReading
     #: The finding read Protocol.
     findings: IReadFindingRepository
     #: A run's finding bucket — what it is shown and may cite.
@@ -291,10 +267,6 @@ class HubServices:
     step_wake: StepWake
     #: The hub's own occurrences — its exports', its startup — recorded in ``hub_event_log``, published to no stream.
     hub_event_log: HubEventLogService
-    #: Every tenant's live event broker — what ends a logged-out session's streams in every tenant.
-    event_brokers: TenantBrokers
-    #: The hub's own event log, read newest-first — by hub administrators alone.
-    hub_events: IReadHubEventLog
     #: Creates, renames and lists the hub's tenants.
     tenant_admin: TenantAdministration
     #: Deletes tenants — closes, drains and completes them.
@@ -338,8 +310,6 @@ class HubServices:
     auth_throttle: LiveIpThrottle | None
     #: The non-chunk auth/security fact log — ``login_failed``/``sso_refused``.
     auth_facts: AuthFactsService
-    #: The hub half of the invariant checker over every tenant, one run at a time — run by hub administrators alone.
-    invariants: HubInvariantCheck
     #: The transcript-event derivation sweep — one pass per hub, acting in each segment's tenant.
     event_derivation: EventDerivationReconciler
     #: The forge-status annotation sweep — one pass per hub, acting in each tenant over its own sources.
@@ -860,7 +830,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         graphs=graph_store,
         graph_bodies=graph_store,
         node_executors=graph_store,
-        transcript_ingest=tenant.get(TranscriptIngestService),
         graph_mint=graph_mint,
         default_graph=default_graph,
         graph_yaml=graph_yaml,
@@ -873,10 +842,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         clock=clock,
         work_sources=work_sources,
         users=tenant.get(IReadUserRepository),
-        transcripts=tenant.get(IReadTranscriptSegments),
-        event_derivation_service=tenant.get(EventDerivationService),
-        analytics_events=tenant.get(IReadAnalyticsEventQueries),
-        operational_analytics=tenant.get(IReadOperationalAnalytics),
         secret_catalog=stores.secrets,
         config_authoring=config_authoring,
         work_source_records=stores.work_source_records,
@@ -890,7 +855,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         project_links=stores.project_links,
         chunk_targets=chunk_targets,
         urgency_reading=tenant.get(UrgencyReading),
-        env_timeline=tenant.get(EnvTimelineReading),
         findings=finding_store,
         finding_bucket=finding_bucket,
     )
@@ -928,7 +892,6 @@ def build_services(
     action_loop = process.get(ActionLoop)
     step_wake = process.get(StepWake)
     store_connections = core.store_connections
-    brokers = process.get(TenantBrokers)
     color_pick = process.get(ColorPick)
 
     parts = TenantServiceParts(
@@ -1147,12 +1110,9 @@ def build_services(
         hub_scoped_reads=core.hub_scoped_reads,
         action_loop=action_loop,
         hub_event_log=hub_event_log,
-        event_brokers=brokers,
-        hub_events=hub_events,
         tenant_admin=tenant_admin,
         tenant_teardown=tenant_teardown,
         tenant_teardown_sweep=tenant_teardown_sweep,
-        invariants=process.get(HubInvariantCheck),
         clock=clock,
         close_drain=close_drain,
         cadence=cadence,

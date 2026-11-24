@@ -8,7 +8,11 @@ from pathlib import Path
 
 from sqlalchemy import Table, func
 
-from blizzard.hub.domain.observability.analytics.derivation import FORCED_FULL_PASS_FLOOR, ReDeriveScope
+from blizzard.hub.domain.observability.analytics.derivation import (
+    FORCED_FULL_PASS_FLOOR,
+    EventDerivationService,
+    ReDeriveScope,
+)
 from blizzard.hub.store import schema as s
 from tests.support.analytics_events_world import record_transcript, tool_turn
 from tests.support.hub_request_auth import ingest_chunk
@@ -29,7 +33,7 @@ def _hub_with_one_segment(tmp_path: Path) -> tuple[HubHarness, str]:
 def test_a_vanished_segment_is_not_counted(tmp_path: Path) -> None:
     hub, _chunk_id = _hub_with_one_segment(tmp_path)
 
-    outcome = hub.services.event_derivation_service.re_derive(
+    outcome = hub.default_adapter(EventDerivationService).re_derive(
         ReDeriveScope.of(segment_id="sg_missing", chunk_id=None), limit=10
     )
 
@@ -39,10 +43,10 @@ def test_a_vanished_segment_is_not_counted(tmp_path: Path) -> None:
 def test_a_stored_segment_is_counted(tmp_path: Path) -> None:
     hub, chunk_id = _hub_with_one_segment(tmp_path)
 
-    by_segment = hub.services.event_derivation_service.re_derive(
+    by_segment = hub.default_adapter(EventDerivationService).re_derive(
         ReDeriveScope.of(segment_id="sg_1", chunk_id=None), limit=10
     )
-    by_chunk = hub.services.event_derivation_service.re_derive(
+    by_chunk = hub.default_adapter(EventDerivationService).re_derive(
         ReDeriveScope.of(segment_id=None, chunk_id=chunk_id), limit=10
     )
 
@@ -76,7 +80,7 @@ def test_a_superseded_segment_is_refused_with_no_events_and_no_marker(tmp_path: 
     hub, chunk_id = _hub_with_one_segment(tmp_path)
     _push(hub, chunk_id, segment_id="sg_2", supersedes="sg_1")
 
-    outcome = hub.services.event_derivation_service.re_derive(ReDeriveScope(segment_id="sg_1"), limit=10)
+    outcome = hub.default_adapter(EventDerivationService).re_derive(ReDeriveScope(segment_id="sg_1"), limit=10)
 
     assert (outcome.derived, outcome.remaining, outcome.not_visible) == (0, 0, True)
     assert _count(hub, s.transcript_event_derivations) == 0
@@ -87,7 +91,7 @@ def test_a_non_final_segment_is_refused_with_no_events_and_no_marker(tmp_path: P
     hub, chunk_id = _hub_with_one_segment(tmp_path)
     _push(hub, chunk_id, segment_id="sg_open", final=False)
 
-    outcome = hub.services.event_derivation_service.re_derive(ReDeriveScope(segment_id="sg_open"), limit=10)
+    outcome = hub.default_adapter(EventDerivationService).re_derive(ReDeriveScope(segment_id="sg_open"), limit=10)
 
     assert (outcome.derived, outcome.not_visible) == (0, True)
     assert _count(hub, s.transcript_event_derivations) == 0
@@ -131,7 +135,7 @@ def test_a_scope_re_derive_excludes_an_unresolvable_pin_candidate_from_derived(t
     deleted = hub.client.request("DELETE", f"/api/chunks/{orphan_chunk}", json={"by": "test"})
     assert deleted.status_code == 202, deleted.text
 
-    service = hub.services.event_derivation_service
+    service = hub.default_adapter(EventDerivationService)
     assert {"sg_1", "sg_orphan"} <= set(service.candidate_segment_ids())
     outcome = service.re_derive(ReDeriveScope(), limit=10)
 

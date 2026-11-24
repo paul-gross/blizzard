@@ -129,6 +129,15 @@ NO_HUB_SERVICES = {
     ("GET", "/api/fleet/chunks/{chunk_id}/garden/findings"),
     ("GET", "/api/fleet/chunks/{chunk_id}/garden/proposals/page"),
     ("GET", "/api/fleet/scopes"),
+    ("GET", "/api/fleet/chunk-statuses"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/files"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/skills"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/agent-types"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/nodes"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/spend/nodes"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/spend/graphs"),
+    ("POST", "/api/fleet/transcripts"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/transcript-segments"),
 }
 DIRECT_DISPATCH: dict[tuple[str, str], dict[str, set[str]]] = {
     operation: {

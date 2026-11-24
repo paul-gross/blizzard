@@ -83,14 +83,6 @@ def test_each_tenant_key_is_one_instance_every_holder_shares(tmp_path: Path) -> 
     for each, adapter in ports.items():
         assert tenants.resolve(tenant, each) is held[adapter], each.__qualname__
 
-    services = hub.services
-    assert services.transcripts is held[TranscriptSegmentStore]
-    assert services.transcript_ingest is held[TranscriptIngestService]
-    assert services.event_derivation_service is held[EventDerivationService]
-    assert services.analytics_events is held[AnalyticsEventQueryStore]
-    assert services.operational_analytics is held[AnalyticsOperationalStore]
-    assert services.env_timeline is held[EnvTimelineReading]
-
     ingest = held[TranscriptIngestService]
     derivation = held[EventDerivationService]
     tenant_derivation = held[TenantEventDerivation]
@@ -143,9 +135,7 @@ def test_the_hub_event_log_and_invariant_check_are_each_one_process_instance_the
     assert event_log._events is process.get(HubEventLogStore)
     assert process.get(IReadHubEventLog) is process.get(IWriteHubEventLog) is process.get(HubEventLogStore)
     assert hub.core.hub_events is process.get(HubEventLogStore)
-    assert hub.hub_services.hub_events is process.get(HubEventLogStore)
 
-    assert hub.hub_services.invariants is check
     assert check._checker is process.get(IHubInvariantChecker) is process.get(HubInvariants)
 
 
@@ -170,4 +160,4 @@ def test_the_ingest_falls_back_to_the_boot_configs_transcript_caps(tmp_path: Pat
     hub = build_hub(tmp_path, transcript_caps=caps)
 
     assert hub.hub_services.process.resolver.get(TranscriptCaps) == caps
-    assert hub.services.transcript_ingest._caps == caps
+    assert hub.default_adapter(TranscriptIngestService)._caps == caps
