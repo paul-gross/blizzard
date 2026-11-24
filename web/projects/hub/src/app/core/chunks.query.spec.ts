@@ -75,6 +75,28 @@ describe('injectHubBoardChunksQuery', () => {
     expect(cached?.chunks[0]).not.toHaveProperty('laneStatus');
   });
 
+  it('preserves unknown statuses and server judgments in the observer and raw cache', async () => {
+    const future = {
+      ...chunk('ch_future'),
+      status: 'future_status' as ChunkSummary['status'],
+      terminal: true,
+      promotable: false,
+    };
+    stub = stubHubClient({
+      'GET /api/chunks': () => ({ chunks: [future], next_cursor: null, board_done_policy: null }),
+    });
+    const fixture = mount();
+    await settle(fixture);
+
+    const observed = fixture.componentInstance.query.data()?.chunks[0];
+    expect(observed?.laneStatus).toEqual({ kind: 'unknown', raw: 'future_status' });
+    expect(observed?.terminal).toBe(true);
+    expect(observed?.promotable).toBe(false);
+    const cached = TestBed.inject(QueryClient).getQueryData<BoardChunksRead>(boardChunksQueryOptions(null).queryKey);
+    expect(cached?.chunks[0]).toEqual(future);
+    expect(cached?.pages[0].chunks[0]).toEqual(future);
+  });
+
   it('drains every page of a multi-page response and concatenates them in order', async () => {
     let calls = 0;
     stub = stubHubClient({
