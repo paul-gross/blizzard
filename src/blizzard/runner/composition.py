@@ -2466,7 +2466,8 @@ def build_runner_transfer(
 
 def build_runner_removal(engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str) -> IRunnerRowRemoval:
     """The removal of ``runner_id``'s rows from the store ``engine`` opens, its connections bound to it."""
-    return RunnerRowRemovalStore(RunnerStoreConnections(engine, errors, runner_id))
+    store = RunnerStoreConnections(engine, errors, runner_id)
+    return RunnerRowRemovalStore(store, HostHostedRunnerStore(store), HostHubTokenStore(store))
 
 
 @dataclass(frozen=True)
@@ -2531,15 +2532,11 @@ class RunnerBoundStoreFiles:
                 workspace_ids=workspace_ids, bound_workspaces=bound_workspaces, ingest=ingest, hub_token=hub_token
             )
 
-    def remove_runner_rows(self, url: str, *, keep_counters: bool, drop_hub_token: bool = False) -> None:
+    def remove_runner_rows(self, url: str, *, keep_counters: bool, drop_host: bool = False) -> None:
         with _engine(url) as engine:
             build_runner_removal(engine, errors=self.files.errors, runner_id=self.runner_id).remove_runner_rows(
-                keep_counters=keep_counters
+                keep_counters=keep_counters, drop_host=drop_host
             )
-            if drop_hub_token:
-                host = build_host_stores(engine, errors=self.files.errors, clock=self.files.clock)
-                host.hub_tokens.drop(self.runner_id)
-                host.hosted_runners.drop(self.runner_id)
 
     def runner_view(self, url: str) -> RunnerStoreView:
         errors, clock = self.files.errors, self.files.clock

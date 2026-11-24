@@ -24,10 +24,10 @@ from blizzard.runner.hosting.model import (
 )
 from blizzard.runner.hosting.ports import IAdmissionHandle, IWriteAdmittedHosting, IWriteHostedRunnerRepository
 from blizzard.runner.store.internal.admission_handle import admission_of
-from blizzard.runner.store.internal.row_transfer import handle_of
+from blizzard.runner.store.internal.row_transfer import handle_of, removal_of
 from blizzard.runner.store.schema import hosted_runner_facts, hosted_runners
 from blizzard.runner.store.scoped import RunnerStoreConnections
-from blizzard.runner.transfer.rows import IRunnerTransferHandle, IWriteCarriedHosting
+from blizzard.runner.transfer.rows import IRunnerRemovalHandle, IRunnerTransferHandle, IWriteCarriedHosting
 
 _log = get_logger("blizzard.runner.store")
 
@@ -92,16 +92,16 @@ class HostHostedRunnerStore:
             _append_fact_locked(conn, runner_id, op, hosting)
         _log.info("hosted runner fact recorded", runner_id=runner_id, op=str(op), door=hosting.door)
 
-    def drop(self, runner_id: str) -> bool:
-        with self._store.begin() as conn:
-            if hosted_runners.name not in inspect(conn).get_table_names():
-                return False
-            conn.execute(hosted_runner_facts.delete().where(hosted_runner_facts.c.runner_id == runner_id))
+    def drop_removed_locked(self, handle: IRunnerRemovalHandle) -> bool:
+        removal = removal_of(handle)
+        conn = removal.conn
+        dropped = False
+        if hosted_runners.name in inspect(conn).get_table_names():
+            conn.execute(hosted_runner_facts.delete().where(hosted_runner_facts.c.runner_id == removal.runner_id))
             dropped = bool(
-                conn.execute(hosted_runners.delete().where(hosted_runners.c.runner_id == runner_id)).rowcount
+                conn.execute(hosted_runners.delete().where(hosted_runners.c.runner_id == removal.runner_id)).rowcount
             )
-        if dropped:
-            _log.info("hosted runner dropped", runner_id=runner_id)
+        _log.info("removed hosted runner dropped", runner_id=removal.runner_id, dropped=dropped)
         return dropped
 
 

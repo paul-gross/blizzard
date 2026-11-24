@@ -86,9 +86,10 @@ class IRunnerBoundStores(IRunnerBoundReads, Protocol):
         (:meth:`IRunnerTransfer.copy_runner`)."""
         ...
 
-    def remove_runner_rows(self, url: str, *, keep_counters: bool, drop_hub_token: bool = False) -> None:
+    def remove_runner_rows(self, url: str, *, keep_counters: bool, drop_host: bool = False) -> None:
         """Delete the runner's rows from the store at ``url``, its outbox counters too unless ``keep_counters``, and,
-        with ``drop_hub_token``, its sealed hub token and its hosting there, since it has left that host."""
+        with ``drop_host``, its sealed hub token and its hosting there, since it has left that host — all in one
+        transaction."""
         ...
 
 

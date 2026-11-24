@@ -20,6 +20,7 @@ from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.runner.composition import build_host_read_stores, build_runner_removal, build_runner_transfer
 from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.store.internal.host_hosted_runner_store import HostHostedRunnerStore
 from blizzard.runner.transfer.rows import HostIngest, WorkspacePromptConflict
 from blizzard.tools.invariants import runner_invariants
 from tests.support.config_inputs import init_host
@@ -343,3 +344,58 @@ def test_a_removal_deletes_from_the_runner_tables_a_store_has_and_skips_those_it
 
     for name in _RUNNER_TABLES - {"external_usage_samples"}:
         assert _rows(source, name, runner_id=_MOVING) == [], name
+
+
+_HOSTING_TABLES = ("hosted_runners", "hosted_runner_facts", "runner_hub_tokens")
+
+
+def _host_both_runners(engine: sa.Engine) -> None:
+    """Give ``engine`` a hosting and a hub token row for the moving runner and for another runner."""
+    shapes = reflect(engine)
+    with engine.begin() as conn:
+        for name in _HOSTING_TABLES:
+            conn.execute(sa.delete(shapes.tables[name]))
+    for runner_id in (_MOVING, _HERE):
+        seed_tables(engine, shapes, _HOSTING_TABLES, omit=frozenset({"id"}), values={"runner_id": runner_id})
+
+
+def _hosting_rows(engine: sa.Engine, runner_id: str) -> dict[str, list[dict[str, Any]]]:
+    return {name: _rows(engine, name, runner_id=runner_id) for name in _HOSTING_TABLES}
+
+
+def test_a_removal_with_the_host_drop_deletes_the_runners_hosting_and_token_beside_its_rows(
+    stores: tuple[sa.Engine, sa.Engine],
+) -> None:
+    _, source = stores
+    _host_both_runners(source)
+    other = _hosting_rows(source, _HERE)
+    assert all(_hosting_rows(source, _MOVING).values())
+
+    build_runner_removal(source, errors=_errors(), runner_id=_MOVING).remove_runner_rows(
+        keep_counters=False, drop_host=True
+    )
+
+    assert _hosting_rows(source, _MOVING) == {name: [] for name in _HOSTING_TABLES}
+    assert _hosting_rows(source, _HERE) == other
+    for name in _RUNNER_TABLES:
+        assert _rows(source, name, runner_id=_MOVING) == [], name
+
+
+def test_a_removal_that_fails_after_the_token_delete_leaves_every_row_in_place(
+    stores: tuple[sa.Engine, sa.Engine], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, source = stores
+    _host_both_runners(source)
+    before = _everything(source)
+
+    def fail(self: object, handle: object) -> bool:
+        raise RuntimeError("hosting delete failed")
+
+    monkeypatch.setattr(HostHostedRunnerStore, "drop_removed_locked", fail)
+
+    with pytest.raises(RuntimeError, match="hosting delete failed"):
+        build_runner_removal(source, errors=_errors(), runner_id=_MOVING).remove_runner_rows(
+            keep_counters=False, drop_host=True
+        )
+
+    assert _everything(source) == before

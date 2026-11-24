@@ -139,6 +139,22 @@ def test_a_park_on_a_closed_lease_is_not_open(tmp_path: Path):
     assert store.parked_lease_ids() == set()
 
 
+def test_an_ask_park_on_a_closed_lease_is_not_open(tmp_path: Path):
+    """A hub-terminal chunk closes its lease with the ask park never resumed — the closure closes the ask park
+    across every read that hands it out."""
+    store = _store(tmp_path)
+    store.record_ask(lease_id="lease_1", chunk_id="ch_1", question_id="q_1", question="?", options=[], asked_at=_NOW)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="q_1", parked_at=_NOW)
+    assert store.ask_parked_lease_ids() == {"lease_1"}
+    assert store.open_park("lease_1") is not None
+
+    _close_lease(store, "lease_1")
+
+    assert store.ask_parked_lease_ids() == set()
+    assert store.parked_lease_ids() == set()
+    assert store.open_park("lease_1") is None
+
+
 def test_a_later_lease_on_the_same_chunk_parking_afresh_is_open(tmp_path: Path):
     store = _store(tmp_path)
     store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW)

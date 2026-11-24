@@ -13,7 +13,7 @@ from typing import Any, cast
 
 from sqlalchemy import Column, Connection, Select, Table
 
-from blizzard.runner.transfer.rows import DanglingReference, IRunnerTransferHandle
+from blizzard.runner.transfer.rows import DanglingReference, IRunnerRemovalHandle, IRunnerTransferHandle
 
 #: The column a row names its workspace by, renamed when a copy moves a workspace to a new id.
 WORKSPACE_COLUMN = "workspace_id"
@@ -28,6 +28,19 @@ class TransferHandle:
     source: Connection
     destination: Connection
     issued: dict[str, dict[int, int]] = field(default_factory=lambda: dict[str, dict[int, int]]())
+
+
+@dataclass(frozen=True)
+class RemovalHandle:
+    """The concrete handle — the one source transaction of a removal."""
+
+    runner_id: str
+    conn: Connection
+
+
+def removal_of(handle: IRunnerRemovalHandle) -> RemovalHandle:
+    """Recover the removal from a domain-held handle; only the runner removal builds one."""
+    return cast(RemovalHandle, handle)
 
 
 def handle_of(handle: IRunnerTransferHandle) -> TransferHandle:

@@ -380,7 +380,7 @@ class RunnerIngest:
             # Its one runner is the whole store, which stays at the schema it ran: it is moved aside, not edited.
             moved = self.files.set_aside(source.store, now=self.clock.now())
         else:
-            runner.remove_runner_rows(self.files.store_url(source.store), keep_counters=False, drop_hub_token=True)
+            runner.remove_runner_rows(self.files.store_url(source.store), keep_counters=False, drop_host=True)
             moved = self._set_aside_emptied(source)
         _log.info("runner ingested", runner_id=runner_id, source=str(source.path), resumed=resuming)
         return IngestOutcome(runner_id, entry.name, resumed=resuming, set_aside=moved)

@@ -52,11 +52,6 @@ class IWriteHostedRunnerRepository(IReadHostedRunnerRepository, Protocol):
         one is held; whether it was recorded."""
         ...
 
-    def drop(self, runner_id: str) -> bool:
-        """Delete ``runner_id``'s hosted row and facts, for a runner that has left this host's store; whether it held
-        any."""
-        ...
-
 
 class IAdmissionHandle(Protocol):
     """One open admission — the write transaction its runner and host halves share. The domain-facing view declares

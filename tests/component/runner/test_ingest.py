@@ -180,11 +180,11 @@ def test_ingest_moves_a_colliding_runner_under_a_new_workspace_id_and_reads_the_
     removing = RunnerBoundStoreFiles.remove_runner_rows
     seen: list[str] = []
 
-    def remove(self: RunnerBoundStoreFiles, url: str, *, keep_counters: bool, drop_hub_token: bool = False) -> None:
+    def remove(self: RunnerBoundStoreFiles, url: str, *, keep_counters: bool, drop_host: bool = False) -> None:
         if url.endswith("there/data/host.db"):
             assert _source_store_bytes(hosts) == untouched, "the source was written before its removal"
             seen.append(self.runner_id)
-        removing(self, url, keep_counters=keep_counters, drop_hub_token=drop_hub_token)
+        removing(self, url, keep_counters=keep_counters, drop_host=drop_host)
 
     monkeypatch.setattr(RunnerBoundStoreFiles, "remove_runner_rows", remove)
 

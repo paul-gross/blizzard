@@ -19,6 +19,7 @@ from blizzard.runner.store import schema
 from blizzard.runner.store.internal.base import CARRIED_OUTBOX_TABLES, carry_outbox_rows
 from blizzard.runner.store.internal.row_transfer import (
     WORKSPACE_COLUMN,
+    RemovalHandle,
     TransferHandle,
     in_reference_order,
     references,
@@ -34,6 +35,8 @@ from blizzard.runner.transfer.rows import (
     IWriteCarriedHosting,
     IWriteCarriedHubTokenRepository,
     IWriteHostIngestRepository,
+    IWriteRemovedHostingRepository,
+    IWriteRemovedHubTokenRepository,
 )
 
 _log = get_logger("blizzard.runner.store")
@@ -140,12 +143,20 @@ def _issued_key(result: CursorResult[Any]) -> int:
 
 class RunnerRowRemovalStore:
     """Deletes the bound runner's rows from one store, from the runner-scoped tables that store has: a store behind the
-    schema's head lacks the tables a later revision added."""
+    schema's head lacks the tables a later revision added. With ``drop_host`` the runner's hub token and hosting go on
+    the same transaction, through the host members composition hands in."""
 
-    def __init__(self, store: RunnerStoreConnections) -> None:
+    def __init__(
+        self,
+        store: RunnerStoreConnections,
+        hosted: IWriteRemovedHostingRepository,
+        hub_tokens: IWriteRemovedHubTokenRepository,
+    ) -> None:
         self._store = store
+        self._hosted = hosted
+        self._hub_tokens = hub_tokens
 
-    def remove_runner_rows(self, *, keep_counters: bool) -> None:
+    def remove_runner_rows(self, *, keep_counters: bool, drop_host: bool = False) -> None:
         runner_id = self._store.bound_runner_id()
         kept: set[Table] = {schema.outbox_counters} if keep_counters else set()
         deleted = 0
@@ -154,6 +165,10 @@ class RunnerRowRemovalStore:
             for table in _RUNNER_TABLES:
                 if table not in kept and table.name in held:
                     deleted += conn.execute(self._store.delete(table)).rowcount
+            if drop_host:
+                handle = RemovalHandle(runner_id=runner_id, conn=conn)
+                self._hub_tokens.drop_removed_locked(handle)
+                self._hosted.drop_removed_locked(handle)
         _log.info("runner rows removed", runner_id=runner_id, rows=deleted, counters_kept=keep_counters)
 
 
