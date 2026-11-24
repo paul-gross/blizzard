@@ -84,7 +84,7 @@ def _open_segment(ctx: LoopContext, n: int, session: str, *, generations: int = 
             pid=generation,
             process_start_time=str(generation),
             session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
-            spawned_at=_NOW,
+            spawned_at=_NOW + timedelta(seconds=generation),
             spawn_cwd=f"/ws/{n}",
             transcripts_root=f"/root/{n}/{generation}",
         )
