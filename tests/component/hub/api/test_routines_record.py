@@ -13,7 +13,8 @@ import sqlalchemy as sa
 
 from blizzard.auth_core import Role
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.garden.scopes import ScopeSlug
+from blizzard.hub.domain.garden.routines import IReadRoutineScopeRepository
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeRegistry, ScopeSlug
 from blizzard.hub.store.schema import config_changes
 from tests.support.scaffolding import (
     HubHarness,
@@ -258,16 +259,18 @@ def test_a_slug_another_project_holds_resolves_within_the_routines_project(hub: 
     routine_id = _create(hub)["routine_id"]
     own = default_project(hub.engine)
     other = project_record(hub, seed_project(hub.engine, "other"))
-    theirs = hub.services.scope_registry.ensure(other, ScopeSlug.parse("web"), ChangeContext(actor="op", door=Door.API))
+    theirs = hub.default_adapter(ScopeRegistry).ensure(
+        other, ScopeSlug.parse("web"), ChangeContext(actor="op", door=Door.API)
+    )
 
     linked = hub.client.put(f"/api/routines/{routine_id}/scopes/web")
     edited = hub.client.patch(f"/api/routines/{routine_id}", json={"default_scope_slug": "web"})
 
     assert (linked.status_code, edited.status_code) == (404, 200), (linked.text, edited.text)
-    mine = hub.services.scopes.get(own, "web")
+    mine = hub.default_adapter(IReadScopeRepository).get(own, "web")
     assert mine is not None and mine.scope_id != theirs.scope_id
-    assert hub.services.routine_scopes.list_routines(mine.scope_id) == [routine_id]
-    assert hub.services.routine_scopes.list_routines(theirs.scope_id) == []
+    assert hub.default_adapter(IReadRoutineScopeRepository).list_routines(mine.scope_id) == [routine_id]
+    assert hub.default_adapter(IReadRoutineScopeRepository).list_routines(theirs.scope_id) == []
     with hub.engine.connect() as conn:
         kinds = config_changes.c.record_kind.in_(("routine", "scope"))
         rows = conn.execute(

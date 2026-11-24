@@ -26,6 +26,7 @@ from blizzard.hub.domain.config.credential_naming import CredentialId
 from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ForgeId
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceFields, WorkSourceId
+from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.forge.auth import ForgeScope, ScopedAuthorizations
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.rates import rate_dialect
@@ -103,7 +104,7 @@ def _registry_world(
         users=core.process.resolver.get(IReadUserRepository),
         work_item_store=stores.work_item_store,
         edits=stores.work_item_edits,
-        resolution=stores.garden_proposal_resolution,
+        resolution=stores.tenant.get(GardenProposalDeliveryResolution),
         budgets=ForgeBudgets(clock=clock, dialects=rate_dialect),
         close_forge_writes_enabled=close_forge_writes_enabled,
     )

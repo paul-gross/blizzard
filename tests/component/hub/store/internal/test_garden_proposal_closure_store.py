@@ -385,7 +385,7 @@ def _closure_service(hub: HubHarness, closures: IWriteGardenProposalClosureRepos
     graph = hub.services.default_graph.ensure_default(PACKAGED.default.doc, definition_yaml=PACKAGED.default.text)
     return GardenProposalClosureService(
         closures=closures,
-        items=hub.services.garden_proposal_closure.items,
+        items=hub.default_adapter(GardenProposalClosureService).items,
         default_graph=lambda: graph,
         clock=FixedClock(_NOW),
         transactions=HubTransactions(store),

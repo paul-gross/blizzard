@@ -30,6 +30,7 @@ from blizzard.hub.domain.config.credentials import CredentialDraft
 from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryId
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceFields, WorkSourceId
+from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal
 from blizzard.hub.forge.auth import ForgeScope, ScopedAuthorizations
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgets, ForgePriority
@@ -125,7 +126,7 @@ class _World:
             users=core.process.resolver.get(IReadUserRepository),
             work_item_store=self.stores.work_item_store,
             edits=self.stores.work_item_edits,
-            resolution=self.stores.garden_proposal_resolution,
+            resolution=self.stores.tenant.get(GardenProposalDeliveryResolution),
             budgets=self.budgets,
         )
 

@@ -18,9 +18,16 @@ from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome
-from blizzard.hub.domain.garden.routines import Routine, RoutineGraphUnresolvedError
+from blizzard.hub.domain.garden.routines import (
+    Routine,
+    RoutineAuthoring,
+    RoutineGraphUnresolvedError,
+    RoutineLifecycle,
+    RoutineScopeMembership,
+)
+from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
 from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, ScopeNotRelatedError, ScopeRetiredError
-from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope, ScopeLifecycle, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.graphs import PACKAGED, packaged_default_yaml
@@ -61,7 +68,7 @@ def _routine(
     harnesses: list[str] | None = None,
 ) -> tuple[Routine, Graph]:
     graph = _default_graph(hub)
-    routine = hub.services.routine_authoring.create(
+    routine = hub.default_adapter(RoutineAuthoring).create(
         ctx=_CTX,
         name=name,
         graph_name=graph.name,
@@ -75,7 +82,7 @@ def _routine(
 
 
 def _default_scope(hub: HubHarness, routine: Routine) -> Scope:
-    scope = hub.services.scopes.get(routine.project_id, routine.default_scope_slug)
+    scope = hub.default_adapter(IReadScopeRepository).get(routine.project_id, routine.default_scope_slug)
     assert scope is not None
     return scope
 
@@ -125,7 +132,7 @@ def test_the_minted_chunk_carries_a_resolvable_run_context(tmp_path: Path) -> No
 
     minted = hub.services.chunks.record.get(result.chunk_id)
     assert minted is not None
-    run = hub.services.run_context.for_chunk(minted)
+    run = hub.default_adapter(IReadRunContextRepository).for_chunk(minted)
     assert run is not None
     assert run.routine_name == "gardening"
     assert run.scope_slug == "blizzard"
@@ -187,7 +194,7 @@ def test_the_routines_harnesses_default_reaches_the_minted_chunk(tmp_path: Path)
 def test_a_scope_override_outside_the_routines_related_set_is_refused_never_minted(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
-    unrelated = hub.services.scope_registry.ensure(
+    unrelated = hub.default_adapter(ScopeRegistry).ensure(
         project_record(hub, routine.project_id), ScopeSlug.parse("unrelated"), _CTX
     )
 
@@ -204,10 +211,10 @@ def test_a_scope_override_outside_the_routines_related_set_is_refused_never_mint
 def test_a_scope_override_naming_a_related_scope_runs_against_it(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
-    related = hub.services.scope_registry.ensure(
+    related = hub.default_adapter(ScopeRegistry).ensure(
         project_record(hub, routine.project_id), ScopeSlug.parse("related"), _CTX
     )
-    hub.services.routine_scope_membership.link(routine, related, _CTX)
+    hub.default_adapter(RoutineScopeMembership).link(routine, related, _CTX)
 
     result = hub.services.routine_run.run(
         routine,
@@ -277,9 +284,9 @@ def test_a_note_lands_in_the_charge_as_a_this_run_section(tmp_path: Path) -> Non
 def test_a_retired_scope_is_refused_rather_than_defaulted(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
-    scope = hub.services.scopes.get(routine.project_id, "blizzard")
+    scope = hub.default_adapter(IReadScopeRepository).get(routine.project_id, "blizzard")
     assert scope is not None
-    hub.services.scope_lifecycle.retire(scope, _CTX, by="operator")
+    hub.default_adapter(ScopeLifecycle).retire(scope, _CTX, by="operator")
 
     with pytest.raises(ScopeRetiredError):
         hub.services.routine_run.run(
@@ -294,7 +301,7 @@ def test_a_retired_scope_is_refused_rather_than_defaulted(tmp_path: Path) -> Non
 def test_a_retired_routine_is_refused_and_enabling_it_lets_the_run_succeed(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
-    retired = hub.services.routine_lifecycle.retire(routine, _CTX, by="operator")
+    retired = hub.default_adapter(RoutineLifecycle).retire(routine, _CTX, by="operator")
 
     with pytest.raises(RoutineRetiredError):
         hub.services.routine_run.run(
@@ -306,7 +313,7 @@ def test_a_retired_routine_is_refused_and_enabling_it_lets_the_run_succeed(tmp_p
         )
     assert _work_item_count(hub) == 0
 
-    hub.services.routine_lifecycle.enable(retired, _CTX, by="operator")
+    hub.default_adapter(RoutineLifecycle).enable(retired, _CTX, by="operator")
     result = hub.services.routine_run.run(
         routine,
         scope=_default_scope(hub, routine),
@@ -379,7 +386,7 @@ def test_a_routine_whose_name_differs_from_its_slug_records_the_slug_as_lineage(
     assert minted_graph.status_code == 201, minted_graph.text
     graph = hub.services.graphs.get(minted_graph.json()["graph_id"])
     assert graph is not None
-    routine = hub.services.routine_authoring.create(
+    routine = hub.default_adapter(RoutineAuthoring).create(
         ctx=_CTX,
         slug="gardening",
         name="Garden Sweep",
@@ -395,7 +402,7 @@ def test_a_routine_whose_name_differs_from_its_slug_records_the_slug_as_lineage(
     assert result.item.routine_name == "gardening"
     minted = hub.services.chunks.record.get(result.chunk_id)
     assert minted is not None
-    run = hub.services.run_context.for_chunk(minted)
+    run = hub.default_adapter(IReadRunContextRepository).for_chunk(minted)
     assert run is not None and run.routine_name == "gardening"
     deliver = next(node for node in graph.nodes if node.name == "deliver")
     assert record_hub_asset(

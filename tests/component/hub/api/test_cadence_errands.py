@@ -18,8 +18,14 @@ from blizzard.hub.domain.cadence.errands import errands
 from blizzard.hub.domain.cadence.services import CadenceAttention
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.garden.routines import Routine
-from blizzard.hub.domain.garden.scopes import ScopeSlug
+from blizzard.hub.domain.garden.routines import (
+    IReadRoutineRepository,
+    IReadRoutineScopeRepository,
+    Routine,
+    RoutineAuthoring,
+    RoutineScopeMembership,
+)
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeRegistry, ScopeSlug
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
 from tests.support.scaffolding import HubHarness, build_hub, count_queries, default_project, project_record
@@ -37,12 +43,12 @@ def _routine(hub: HubHarness, slug: str, *linked: str) -> Routine:
         PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     project = project_record(hub, default_project(hub.engine))
-    routine = hub.services.routine_authoring.create(
+    routine = hub.default_adapter(RoutineAuthoring).create(
         project=project, ctx=_CTX, slug=slug, graph_name=graph.name, default_scope_slug=ScopeSlug.parse(slug)
     )
     for scope_slug in linked:
-        scope = hub.services.scope_registry.ensure(project, ScopeSlug.parse(scope_slug), _CTX)
-        routine = hub.services.routine_scope_membership.link(routine, scope, _CTX)
+        scope = hub.default_adapter(ScopeRegistry).ensure(project, ScopeSlug.parse(scope_slug), _CTX)
+        routine = hub.default_adapter(RoutineScopeMembership).link(routine, scope, _CTX)
     return routine
 
 
@@ -64,9 +70,9 @@ def _mint_all(hub: HubHarness, cadence_id: str) -> list[str]:
     cadence = hub.services.cadences.get(cadence_id)
     assert cadence is not None
     attention = CadenceAttention(
-        routines=hub.services.routines,
-        routine_scopes=hub.services.routine_scopes,
-        scopes=hub.services.scopes,
+        routines=hub.default_adapter(IReadRoutineRepository),
+        routine_scopes=hub.default_adapter(IReadRoutineScopeRepository),
+        scopes=hub.default_adapter(IReadScopeRepository),
         graphs=hub.services.graphs,
     )
     facts = attention.facts([cadence])[cadence.project_id]
@@ -141,7 +147,7 @@ def test_a_scope_attention_stops_one_errand_with_its_reason(hub: HubHarness) -> 
     _routine(hub, "sweep")
     cadence = _create(hub, chores=[{"key": "listed", "routine": "sweep", "scopes": ["sweep", "unlinked"]}])
     project = project_record(hub, default_project(hub.engine))
-    hub.services.scope_registry.ensure(project, ScopeSlug.parse("unlinked"), _CTX)
+    hub.default_adapter(ScopeRegistry).ensure(project, ScopeSlug.parse("unlinked"), _CTX)
 
     rows = _errands(hub, cadence["cadence_id"])
 
@@ -197,7 +203,7 @@ def test_a_minted_run_names_its_cadence_and_chore_and_a_hand_run_names_none(hub:
     routine = _routine(hub, "sweep")
     cadence = _create(hub, "nightly", name="Nightly", chores=[{"key": "plain", "routine": "sweep"}])
     [minted] = _mint_all(hub, cadence["cadence_id"])
-    scope = hub.services.scopes.get(routine.project_id, "sweep")
+    scope = hub.default_adapter(IReadScopeRepository).get(routine.project_id, "sweep")
     assert scope is not None
     hand = hub.services.routine_run.run(
         routine, scope=scope, mode=RunMode.FULL, note=None, author=WorkItemAuthor.user("u")

@@ -22,8 +22,8 @@ from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.garden.routines import Routine
-from blizzard.hub.domain.garden.scopes import ScopeSlug
+from blizzard.hub.domain.garden.routines import Routine, RoutineAuthoring
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.operations.queue import GroupService
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
@@ -55,7 +55,7 @@ def _default_graph(hub: HubHarness) -> Graph:
 
 def _routine(hub: HubHarness, *, name: str = "gardening", scope: str = "blizzard") -> Routine:
     graph = _default_graph(hub)
-    return hub.services.routine_authoring.create(
+    return hub.default_adapter(RoutineAuthoring).create(
         ctx=_CTX,
         name=name,
         graph_name=graph.name,
@@ -69,7 +69,7 @@ def _routine(hub: HubHarness, *, name: str = "gardening", scope: str = "blizzard
 def _run(hub: HubHarness, routine: Routine) -> str:
     """Mint a real run through `routine_run.run` — a genuine `work_item_runs` row
     joined through a genuine `chunk_work_refs`/`work_items` pointer, not hand-rolled."""
-    scope = hub.services.scopes.get(routine.project_id, routine.default_scope_slug)
+    scope = hub.default_adapter(IReadScopeRepository).get(routine.project_id, routine.default_scope_slug)
     assert scope is not None
     result = hub.services.routine_run.run(
         routine,

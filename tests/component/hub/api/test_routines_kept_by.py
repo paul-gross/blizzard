@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from blizzard.hub.domain.config.changes import ChangeContext, Door
+from blizzard.hub.domain.garden.routines import RoutineAuthoring
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
@@ -29,13 +30,17 @@ def _graph(hub: HubHarness) -> str:
 
 
 def _routine(hub: HubHarness, slug: str) -> str:
-    return hub.services.routine_authoring.create(
-        project=project_record(hub, default_project(hub.engine)),
-        ctx=_CTX,
-        slug=slug,
-        graph_name=_graph(hub),
-        default_scope_slug=ScopeSlug.parse("blizzard"),
-    ).routine_id
+    return (
+        hub.default_adapter(RoutineAuthoring)
+        .create(
+            project=project_record(hub, default_project(hub.engine)),
+            ctx=_CTX,
+            slug=slug,
+            graph_name=_graph(hub),
+            default_scope_slug=ScopeSlug.parse("blizzard"),
+        )
+        .routine_id
+    )
 
 
 def _cadence(hub: HubHarness, slug: str, chores: list[dict[str, Any]], **fields: Any) -> str:

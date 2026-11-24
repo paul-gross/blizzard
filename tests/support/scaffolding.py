@@ -2000,7 +2000,7 @@ def build_hub(
         default_stores.work_item_store,
         default_stores.work_item_edits,
         core.process.resolver.get(IReadUserRepository),
-        default_stores.garden_proposal_resolution,
+        default_stores.tenant.get(GardenProposalDeliveryResolution),
     )
     built_sources[RESERVED_HUB_SOURCE_NAME] = hub_source
     editors[RESERVED_HUB_SOURCE_NAME] = hub_source

@@ -20,6 +20,7 @@ from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_driver import StepWake
 from blizzard.hub.documents.codec import IConfigCodec
+from blizzard.hub.domain.cadence.services import CadenceReading
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ingest import IWorkItemProjectRead
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
@@ -104,11 +105,7 @@ from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
-from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
-from blizzard.hub.store.internal.routine_store import RoutineStore
-from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
@@ -191,12 +188,6 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantStores.hosts", stores.hosts, HostRegistryStore),
         ("TenantStores.work_item_store", stores.work_item_store, WorkItemStore),
         ("TenantStores.chunk_stores", stores.chunk_stores, ChunkStores),
-        ("TenantStores.garden_proposal_store", stores.garden_proposal_store, GardenProposalStore),
-        (
-            "TenantStores.garden_proposal_closure_store",
-            stores.garden_proposal_closure_store,
-            GardenProposalClosureStore,
-        ),
         ("TenantStores.secrets", stores.secrets, SecretStore),
         ("TenantStores.work_source_records", stores.work_source_records, WorkSourceRecordStore),
         ("TenantStores.repository_records", stores.repository_records, RepositoryRecordStore),
@@ -216,12 +207,8 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantServices.graphs", services.graphs, GraphStore),
         ("TenantServices.graph_bodies", services.graph_bodies, GraphStore),
         ("TenantServices.node_executors", services.node_executors, GraphStore),
-        ("TenantServices.scopes", services.scopes, ScopeStore),
-        ("TenantServices.routines", services.routines, RoutineStore),
-        ("TenantServices.routine_scopes", services.routine_scopes, RoutineScopeStore),
         ("TenantServices.cadences", services.cadences, CadenceStore),
-        ("TenantServices.run_context", services.run_context, RunContextStore),
-        ("TenantServices.garden_proposals", services.garden_proposals, GardenProposalStore),
+        ("TenantServices.cadence_reading", services.cadence_reading, CadenceReading),
         ("TenantServices.work_source_records", services.work_source_records, WorkSourceRecordStore),
         ("TenantServices.repository_records", services.repository_records, RepositoryRecordStore),
         ("TenantServices.forge_records", services.forge_records, ForgeRecordStore),

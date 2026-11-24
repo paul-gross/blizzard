@@ -14,7 +14,8 @@ import pytest
 from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.garden.scopes import ScopeSlug
+from blizzard.hub.domain.garden.routines import RoutineAuthoring
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
 from tests.support.scaffolding import HubHarness, build_hub, project_record
@@ -51,7 +52,7 @@ def _run(hub: HubHarness, project: str) -> str:
     """A routine run minted in ``project``, its chunk promoted."""
     resolved = hub.services.projects.resolve(project)
     assert resolved is not None
-    routine = hub.services.routine_authoring.create(
+    routine = hub.default_adapter(RoutineAuthoring).create(
         ctx=_CTX,
         name=f"{project}-sweep",
         graph_name=_graph_name(hub),
@@ -60,7 +61,7 @@ def _run(hub: HubHarness, project: str) -> str:
         default_effort=None,
         project=project_record(hub, resolved.project_id),
     )
-    scope = hub.services.scopes.get(routine.project_id, routine.default_scope_slug)
+    scope = hub.default_adapter(IReadScopeRepository).get(routine.project_id, routine.default_scope_slug)
     assert scope is not None
     result = hub.services.routine_run.run(
         routine, scope=scope, mode=RunMode.FULL, note=None, author=WorkItemAuthor.user("usr_1")

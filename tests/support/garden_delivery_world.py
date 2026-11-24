@@ -18,7 +18,7 @@ from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome, Gar
 from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
 from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
-from blizzard.hub.domain.garden.run_context import RunContext
+from blizzard.hub.domain.garden.run_context import IReadRunContextRepository, RunContext
 from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
@@ -155,7 +155,7 @@ def deliver(
     graph = hub.services.graphs.get(chunk.graph_id)
     node = graph.node_by_id(_NODE_ID) if graph is not None else None
     assert node is not None
-    run = hub.services.run_context.for_chunk(chunk)
+    run = hub.default_adapter(IReadRunContextRepository).for_chunk(chunk)
     assert run is not None, chunk_id
     try:
         outcome = garden_delivery_recorder(hub).record(

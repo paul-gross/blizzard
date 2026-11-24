@@ -19,8 +19,8 @@ from blizzard.hub.domain.cadence.model import (
     ChoreShape,
 )
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.garden.routines import Routine
-from blizzard.hub.domain.garden.scopes import ScopeSlug
+from blizzard.hub.domain.garden.routines import Routine, RoutineAuthoring
+from blizzard.hub.domain.garden.scopes import ScopeRegistry, ScopeSlug
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
 from tests.support.scaffolding import HubHarness, build_hub, count_queries, default_project, project_record
@@ -41,7 +41,7 @@ def _routine(hub: HubHarness, slug: str, scope: str) -> Routine:
     graph = hub.services.default_graph.ensure_default(
         PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
-    return hub.services.routine_authoring.create(
+    return hub.default_adapter(RoutineAuthoring).create(
         project=project_record(hub, _project(hub)),
         ctx=_CTX,
         slug=slug,
@@ -100,7 +100,7 @@ def test_retire_and_a_write_changing_nothing_never_ask_may_admit(hub: HubHarness
 def test_attention_names_what_stops_each_errand_and_a_retired_cadence_needs_none(hub: HubHarness) -> None:
     _routine(hub, "sweep", "blizzard")
     project = project_record(hub, _project(hub))
-    hub.services.scope_registry.ensure(project, ScopeSlug.parse("unlinked"), _CTX, description="")
+    hub.default_adapter(ScopeRegistry).ensure(project, ScopeSlug.parse("unlinked"), _CTX, description="")
     attended = _create(
         hub,
         _shape(

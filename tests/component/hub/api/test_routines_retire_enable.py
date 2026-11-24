@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TypedDict
 
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
+from blizzard.hub.domain.garden.proposals.closure import GardenProposalClosureService
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from tests.support.scaffolding import HubHarness, build_hub, default_project, hub_store_connections
@@ -221,7 +222,7 @@ def test_retiring_deletes_nothing_findings_and_proposals_stay_readable(tmp_path:
         findings=[finding.finding_id],
         at=_NOW,
     )
-    hub.services.garden_proposal_closure.pass_(proposal, reason="not needed", by="operator")
+    hub.default_adapter(GardenProposalClosureService).pass_(proposal, reason="not needed", by="operator")
 
     before_findings = hub.client.get("/api/findings").json()
     before_proposal = hub.client.get(f"/api/garden-proposals/{proposal.proposal_id}").json()

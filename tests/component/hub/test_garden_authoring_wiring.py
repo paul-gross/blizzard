@@ -1,6 +1,6 @@
 """The garden authoring registrations as the hub container holds them: within a tenant each store, port, formats
-instance and service is one instance, shared by every port alias, the services built over it and each retained bag
-field; across tenants the instances differ (component tier)."""
+instance and service is one instance, shared by every port alias and the services built over it; across tenants the
+instances differ (component tier)."""
 
 from __future__ import annotations
 
@@ -55,14 +55,11 @@ from tests.support.scaffolding import HubHarness, add_tenant, build_hub, default
 def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
     """Every holder of each garden authoring instance in ``tenant``, by what the instance is."""
     scope = hub.hub_services.process.tenants.open(tenant).resolver
-    stores = hub.open_stores(tenant.tenant)
-    services = hub.open_services(tenant.tenant)
     return {
         "scopes": [
             scope.get(ScopeStore),
             scope.get(IReadScopeRepository),
             scope.get(IWriteScopeRepository),
-            services.scopes,
             scope.get(ScopeRegistry)._scopes,
             scope.get(ScopeLifecycle)._scopes,
             scope.get(RoutineAuthoring)._scopes,
@@ -71,7 +68,6 @@ def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
             scope.get(RoutineStore),
             scope.get(IReadRoutineRepository),
             scope.get(IWriteRoutineRepository),
-            services.routines,
             scope.get(RoutineAuthoring)._routines,
             scope.get(RoutineLifecycle)._routines,
             scope.get(RoutineScopeMembership)._routines,
@@ -79,15 +75,12 @@ def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
         "routine scopes": [
             scope.get(RoutineScopeStore),
             scope.get(IReadRoutineScopeRepository),
-            services.routine_scopes,
             scope.get(RoutineScopeMembership)._routine_scopes,
         ],
         "proposals": [
             scope.get(GardenProposalStore),
             scope.get(IReadGardenProposalRepository),
             scope.get(IWriteGardenProposalRepository),
-            stores.garden_proposal_store,
-            services.garden_proposals,
             scope.get(GardenProposalAuthoring)._proposals,
             scope.get(RoutineGardenProposalReader)._proposals,
             scope.get(AnsweredFindingsReader)._proposals,
@@ -97,8 +90,6 @@ def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
             scope.get(GardenProposalClosureStore),
             scope.get(IReadGardenProposalClosureRepository),
             scope.get(IWriteGardenProposalClosureRepository),
-            stores.garden_proposal_closure_store,
-            services.garden_proposal_closures,
             scope.get(GardenProposalAuthoring)._closures,
             scope.get(GardenProposalClosureService)._closures,
             scope.get(RoutineGardenProposalReader)._closures,
@@ -115,7 +106,6 @@ def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
             scope.get(RunContextStore),
             scope.get(IReadRunContextRepository),
             scope.get(IWriteRunContextRepository),
-            services.run_context,
         ],
         "formats": [scope.get(GardenFormats), scope.get(IGardenFormats), scope.get(GardenStageCheck)._formats],
         "finding exits": [
@@ -123,21 +113,7 @@ def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
             scope.get(IFindingExitResolver),
             scope.get(GardenProposalDeliveryResolution)._exits,
         ],
-        "scope registry": [
-            scope.get(ScopeRegistry),
-            services.scope_registry,
-            scope.get(RoutineAuthoring)._scope_registry,
-        ],
-        "scope lifecycle": [scope.get(ScopeLifecycle), services.scope_lifecycle],
-        "routine authoring": [scope.get(RoutineAuthoring), services.routine_authoring],
-        "routine lifecycle": [scope.get(RoutineLifecycle), services.routine_lifecycle],
-        "routine membership": [scope.get(RoutineScopeMembership), services.routine_scope_membership],
-        "baselines": [scope.get(RoutineBaselineService), services.routine_baselines],
-        "answered findings": [scope.get(AnsweredFindingsReader), services.answered_findings],
-        "routine proposals": [scope.get(RoutineGardenProposalReader), services.routine_garden_proposals],
-        "proposal authoring": [scope.get(GardenProposalAuthoring), services.garden_proposal_authoring],
-        "proposal closure": [scope.get(GardenProposalClosureService), services.garden_proposal_closure],
-        "stage check": [scope.get(GardenStageCheck), services.garden_stage_check],
+        "scope registry": [scope.get(ScopeRegistry), scope.get(RoutineAuthoring)._scope_registry],
     }
 
 

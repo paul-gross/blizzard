@@ -86,7 +86,6 @@ from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.execution.apply import IHubStepWake
 from blizzard.hub.domain.garden.delivery.materialize import GardenDelivery
 from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
-from blizzard.hub.domain.garden.delivery.stage_check import GardenStageCheck
 from blizzard.hub.domain.garden.delivery.validation import ICommitResolver
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import (
@@ -94,31 +93,16 @@ from blizzard.hub.domain.garden.findings.model import (
 )
 from blizzard.hub.domain.garden.findings.trend import GardenTrendService
 from blizzard.hub.domain.garden.formats import IGardenFormats
-from blizzard.hub.domain.garden.proposals.closure import (
-    GardenProposalClosureService,
-    IReadGardenProposalClosureRepository,
-)
-from blizzard.hub.domain.garden.proposals.model import (
-    GardenProposalAuthoring,
-    IReadGardenProposalRepository,
-    RoutineGardenProposalReader,
-)
-from blizzard.hub.domain.garden.proposals.resolution import AnsweredFindingsReader, GardenProposalDeliveryResolution
 from blizzard.hub.domain.garden.review.materialize import ReviewFindingsMaterialize
 from blizzard.hub.domain.garden.review.service import ReviewFindingsRecorder
 from blizzard.hub.domain.garden.routines import (
     IReadRoutineRepository,
     IReadRoutineScopeRepository,
-    RoutineAuthoring,
-    RoutineLifecycle,
-    RoutineScopeMembership,
 )
-from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
-from blizzard.hub.domain.garden.runs.baselines import RoutineBaselineService
 from blizzard.hub.domain.garden.runs.history import GardenRunService
 from blizzard.hub.domain.garden.runs.run import RunService
 from blizzard.hub.domain.garden.runs.sweeps import GardenSweepsService
-from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
 from blizzard.hub.domain.graph.authoring import DefaultGraphService, GraphMintService
 from blizzard.hub.domain.graph.model import IReadGraphBodies, IReadGraphRepository, IReadNodeExecutors
@@ -212,7 +196,6 @@ from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationSt
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
-from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
@@ -306,13 +289,6 @@ class TenantServices:
     analytics_events: IReadAnalyticsEventQueries
     #: The operational-datasets query Protocol, read-only; no write repository backs it.
     operational_analytics: IReadOperationalAnalytics
-    #: The scope read Protocol — the same store instance as the two
-    #: services below's writes.
-    scopes: IReadScopeRepository
-    #: Mint-on-name and edit-description over a scope.
-    scope_registry: ScopeRegistry
-    #: The scope retire/enable brake.
-    scope_lifecycle: ScopeLifecycle
     #: Secret metadata only — never a sealed row (``bzh:secret-write-only``).
     secret_catalog: ISecretCatalog
     #: The one writer of configured records — forges, work sources, repositories and secrets, each write with its change
@@ -348,18 +324,6 @@ class TenantServices:
     chunk_targets: ChunkTargets
     #: List and show urgencies in order, with the default marked and their open chunks counted.
     urgency_reading: UrgencyReading
-    #: The routine read Protocol — the same store instance as
-    #: ``routine_authoring``'s writes.
-    routines: IReadRoutineRepository
-    #: The routine_scopes join's read Protocol — the declared many-to-many
-    #: a routine's own ``default_scope_slug`` is a member of.
-    routine_scopes: IReadRoutineScopeRepository
-    #: Link/unlink a routine's own `routine_scopes` set, refusing to unlink its default.
-    routine_scope_membership: RoutineScopeMembership
-    #: Create and edit a routine, minting its default scope on demand.
-    routine_authoring: RoutineAuthoring
-    #: The routine retire/enable brake.
-    routine_lifecycle: RoutineLifecycle
     #: The cadence read Protocol — the same store instance as ``cadence_authoring``'s writes.
     cadences: IReadCadenceRepository
     #: Create and edit a cadence, refusing an admission the writer may not make.
@@ -377,28 +341,10 @@ class TenantServices:
     cadence_mint: CadenceMint
     #: Mint and ingest a hub work item from a routine, in one act.
     routine_run: RunService
-    #: The per-scope delta baseline a routine has swept, and how much has landed since.
-    routine_baselines: RoutineBaselineService
     #: The finding read Protocol.
     findings: IReadFindingRepository
-    #: The garden-proposal read Protocol.
-    garden_proposals: IReadGardenProposalRepository
-    #: Create a garden proposal, rejecting an empty `findings` list.
-    garden_proposal_authoring: GardenProposalAuthoring
-    #: The garden-proposal-closure read Protocol.
-    garden_proposal_closures: IReadGardenProposalClosureRepository
-    #: Pass or accept a garden proposal, minting a linked hub work item by default.
-    garden_proposal_closure: GardenProposalClosureService
-    #: A routine's open garden proposals — closed ones filtered out.
-    routine_garden_proposals: RoutineGardenProposalReader
-    #: A run's identity — routine, scope, and mode; read-only (``bzh:controller-read-only``).
-    run_context: IReadRunContextRepository
-    #: The findings the accepted, minted garden proposals behind a chunk's work items answer, read per chunk.
-    answered_findings: AnsweredFindingsReader
     #: A run's finding bucket — what it is shown and may cite.
     finding_bucket: FindingBucketReader
-    #: Judges content offered for staging against the formats its chunk's graph owes the artifact's name.
-    garden_stage_check: GardenStageCheck
     #: A project's resolver of a cited commit, against the forge of a repository the project links.
     commit_resolver_for: Callable[[ProjectId], ICommitResolver]
     #: A routine's finding inflow-against-outflow over a window.
@@ -501,10 +447,7 @@ class TenantStores:
     work_item_store: WorkItemStore
     chunk_stores: ChunkStores
     finding_store: FindingStore
-    garden_proposal_store: GardenProposalStore
-    garden_proposal_closure_store: GardenProposalClosureStore
     work_item_edits: WorkItemEditService
-    garden_proposal_resolution: GardenProposalDeliveryResolution
     #: Sealed secret rows — composition-only, never a ``HubServices`` field.
     secrets: SecretStore
     #: Work-source records — composition-only write half; ``HubServices`` carries the read half.
@@ -552,8 +495,6 @@ def build_tenant_stores(tenant: Resolver, *, clock: IClock) -> TenantStores:
         work_item_store=tenant.get(WorkItemStore),
         chunk_stores=tenant.get(ChunkStores),
         finding_store=tenant.get(FindingStore),
-        garden_proposal_store=tenant.get(GardenProposalStore),
-        garden_proposal_closure_store=tenant.get(GardenProposalClosureStore),
         secrets=tenant.get(SecretStore),
         work_source_records=tenant.get(WorkSourceRecordStore),
         repository_records=tenant.get(RepositoryRecordStore),
@@ -572,7 +513,6 @@ def build_tenant_stores(tenant: Resolver, *, clock: IClock) -> TenantStores:
         urgencies=tenant.get(UrgencyStore),
         urgency_order=tenant.get(UrgencyOrderStore),
         work_item_edits=tenant.get(WorkItemEditService),
-        garden_proposal_resolution=tenant.get(GardenProposalDeliveryResolution),
         clock=clock,
     )
 
@@ -1003,8 +943,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     chunk_stores = stores.chunk_stores
     work_item_store = stores.work_item_store
     finding_store = stores.finding_store
-    garden_proposal_store = stores.garden_proposal_store
-    garden_proposal_closure_store = stores.garden_proposal_closure_store
     registry_store = tenant.get(IReadRunnerRegistry)
     host_store = tenant.get(IReadHostRegistry)
     chunk_facts = chunk_stores.facts
@@ -1048,6 +986,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     errand_runs_store = tenant.get(ErrandRunsStore)
     config_authoring = tenant.get(ConfigAuthoring)
     finding_set_store = tenant.get(FindingSetStore)
+    garden_proposal_store = tenant.get(GardenProposalStore)
     run_context_store = tenant.get(RunContextStore)
     garden_delivery_store = tenant.get(GardenDeliveryStore)
     review_findings_store = tenant.get(ReviewFindingsStore)
@@ -1188,9 +1127,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         event_derivation_service=event_derivation_service,
         analytics_events=analytics_event_queries,
         operational_analytics=operational_analytics,
-        scopes=scope_store,
-        scope_registry=tenant.get(ScopeRegistry),
-        scope_lifecycle=tenant.get(ScopeLifecycle),
         secret_catalog=stores.secrets,
         config_authoring=config_authoring,
         work_source_records=stores.work_source_records,
@@ -1225,11 +1161,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         project_links=stores.project_links,
         chunk_targets=chunk_targets,
         urgency_reading=tenant.get(UrgencyReading),
-        routines=routine_store,
-        routine_scopes=routine_scope_store,
-        routine_scope_membership=tenant.get(RoutineScopeMembership),
-        routine_authoring=tenant.get(RoutineAuthoring),
-        routine_lifecycle=tenant.get(RoutineLifecycle),
         cadences=cadence_store,
         cadence_authoring=CadenceAuthoring(cadences=cadence_store, urgencies=urgency_references, clock=clock),
         cadence_lifecycle=CadenceLifecycle(cadences=cadence_store, clock=clock),
@@ -1264,17 +1195,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             default=tenant_default,
             transactions=stores.transactions,
         ),
-        routine_baselines=tenant.get(RoutineBaselineService),
         findings=finding_store,
-        garden_proposals=garden_proposal_store,
-        garden_proposal_authoring=tenant.get(GardenProposalAuthoring),
-        garden_proposal_closures=garden_proposal_closure_store,
-        garden_proposal_closure=tenant.get(GardenProposalClosureService),
-        routine_garden_proposals=tenant.get(RoutineGardenProposalReader),
-        run_context=run_context_store,
-        answered_findings=tenant.get(AnsweredFindingsReader),
         finding_bucket=finding_bucket,
-        garden_stage_check=tenant.get(GardenStageCheck),
         commit_resolver_for=commit_resolver_for,
         garden_trend=GardenTrendService(repo=garden_trend_store),
         garden_sweeps=GardenSweepsService(

@@ -14,7 +14,7 @@ import pytest
 from blizzard.hub.domain.cadence.model import CadenceEdit
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
-from blizzard.hub.domain.garden.routines import RoutineEdit
+from blizzard.hub.domain.garden.routines import IReadRoutineRepository, RoutineAuthoring, RoutineEdit
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
@@ -218,7 +218,7 @@ def test_a_document_naming_a_retired_or_unknown_urgency_is_refused_at_the_entry(
 
 def test_an_export_applied_back_writes_nothing(hub: HubHarness) -> None:
     _urgency(hub, "urgent")
-    hub.services.routine_authoring.create(
+    hub.default_adapter(RoutineAuthoring).create(
         project=project_record(hub, _project(hub)),
         ctx=_CTX,
         slug="sweep",
@@ -241,13 +241,13 @@ def test_an_edit_read_before_a_retire_cleared_a_reference_it_leaves_is_refused_a
     _urgency(hub, "urgent")
     routine_id = _routine(hub, default_urgency="urgent").json()["routine_id"]
     cadence_id = _cadence(hub, {"key": "nightly", "routine": "sweep", "urgency": "urgent"}).json()["cadence_id"]
-    routine = hub.services.routines.get(routine_id)
+    routine = hub.default_adapter(IReadRoutineRepository).get(routine_id)
     cadence = hub.services.cadences.get(cadence_id)
     assert routine is not None and cadence is not None
 
     _retire(hub, "urgent")
 
     with pytest.raises(ConfigRevisionConflict):
-        hub.services.routine_authoring.edit(routine, RoutineEdit(name="renamed"), _CTX)
+        hub.default_adapter(RoutineAuthoring).edit(routine, RoutineEdit(name="renamed"), _CTX)
     with pytest.raises(ConfigRevisionConflict):
         hub.services.cadence_authoring.edit(cadence, CadenceEdit(name="renamed"), _CTX, may_admit=True)

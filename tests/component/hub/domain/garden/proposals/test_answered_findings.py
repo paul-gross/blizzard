@@ -13,6 +13,7 @@ from blizzard.foundation.garden_proposals import (
     GardenProposalOrigin,
 )
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
+from blizzard.hub.domain.garden.proposals.resolution import AnsweredFindingsReader
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -81,7 +82,7 @@ def _chunk(pointers: list[WorkRef]) -> Chunk:
 def test_statement_count_is_the_same_at_one_minted_ref_as_at_several(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     pointers = _seed_minted(hub, 4)
-    reader = hub.services.answered_findings
+    reader = hub.default_adapter(AnsweredFindingsReader)
 
     one = count_queries(hub.engine, lambda: reader.resolve_for_chunk(_chunk(pointers[:1])))
     several = count_queries(hub.engine, lambda: reader.resolve_for_chunk(_chunk(pointers)))
@@ -92,7 +93,7 @@ def test_statement_count_is_the_same_at_one_minted_ref_as_at_several(tmp_path: P
 def test_answers_the_union_once_each_and_nothing_for_an_unminted_chunk(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     pointers = _seed_minted(hub, 3)
-    reader = hub.services.answered_findings
+    reader = hub.default_adapter(AnsweredFindingsReader)
 
     answered = reader.resolve_for_chunk(_chunk(pointers))
 
