@@ -4129,7 +4129,7 @@ def _engine_opens_in(node: ast.AST, scope: tuple[str, ...], bindings: Mapping[st
 
 
 def _runner_engine_opens(src_root: Path) -> list[str]:
-    """Each engine open under ``runner/cli/`` and in ``runner/runtime.py``, as its allowlist key."""
+    """Each engine open under ``runner/cli/`` and in ``src/blizzard/runner/runtime.py``, as its allowlist key."""
     paths = [*sorted((src_root / "runner" / "cli").rglob("*.py")), src_root / "runner" / "runtime.py"]
     opens: list[str] = []
     for path in paths:
