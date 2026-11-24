@@ -55,7 +55,7 @@ jobs:
             '{blizzard: $blizzard, "blizzard-mock": $mock}' > proven-against/proven-against.json
           cat proven-against/proven-against.json
       - name: upload the proven-against record
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: proven-against
           path: proven-against/proven-against.json
@@ -71,14 +71,14 @@ jobs:
     outputs:
       version: ${{ steps.ver.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: "3.12"
       # Node builds the embedded Angular apps once the web workspace lands; until
       # then build-wheel.sh ships the committed placeholder assets (node-free).
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
@@ -132,7 +132,7 @@ jobs:
           ./scripts/export-requirements.sh "$VERSION" "$WHEEL" --extra postgres --no-project \
             > "dist/blizzard-${VERSION}-requirements-pg.txt"
       - name: upload dev wheel artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: blizzard-dev-wheel-${{ steps.ver.outputs.version }}
           path: |
@@ -164,7 +164,7 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # packaging/docker/Dockerfile does `COPY dist/blizzard-*.whl` and the `-pg`
       # requirements file — it installs them from the build context rather than
       # building one itself. The tag workflow's `build` job satisfies that by
@@ -173,7 +173,7 @@ jobs:
       # instead of building a second one. That also makes the image carry
       # byte-identical the wheel published for this commit.
       - name: fetch the dev wheel dev-build produced (the Dockerfile's build context)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: blizzard-dev-wheel-${{ needs.dev-build.outputs.version }}
           path: dist
@@ -198,11 +198,11 @@ jobs:
             echo "IMAGE_ANNOTATIONS_EOF"
           } >> "$GITHUB_OUTPUT"
       - name: set up QEMU (multi-arch emulation)
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
       - name: set up buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       - name: log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

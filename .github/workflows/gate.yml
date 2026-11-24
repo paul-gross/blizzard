@@ -28,12 +28,12 @@ jobs:
     name: ruff + pyright + structural gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
         with:
           version: 2026.9.2
           install: false
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: "3.12"
@@ -55,16 +55,16 @@ jobs:
     name: spec drift + change notes + flag lifecycle + dprint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # The change notes' `owed` range and the flag lifecycle's release tags may be arbitrarily far back.
           fetch-depth: 0
           persist-credentials: false
-      - uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@v4
         with:
           version: 2026.9.2
           install: false
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: "3.12"
@@ -128,10 +128,10 @@ jobs:
         shards: [6]
         shard: [1, 2, 3, 4, 5, 6]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: "3.12"
@@ -146,7 +146,7 @@ jobs:
         run: uv run pytest -n auto
       - name: keep the timing evidence (success only, the timing file alone)
         if: ${{ success() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: timings-gate-pytest-${{ matrix.shard }}
           path: timings-gate-pytest-${{ matrix.shard }}.json
@@ -160,10 +160,10 @@ jobs:
     if: ${{ !inputs.lint_only }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: "3.12"
@@ -193,10 +193,10 @@ jobs:
     if: ${{ !inputs.lint_only }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@v4
         with:
           version: 2026.9.2
           install: true
@@ -223,11 +223,11 @@ jobs:
     if: ${{ github.ref_type != 'tag' && !inputs.lint_only }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # The tags the supported releases resolve from, and the range's base, may be arbitrarily far back.
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: "3.12"
@@ -252,7 +252,7 @@ jobs:
     if: ${{ !inputs.lint_only }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # Declared interface (P5 frontend builder owns the Angular workspace; the
       # integrate step reconciles the exact path/script names): the workspace is
       # `web/` with `npm run lint` (eslint), `npm run test` (vitest), and
@@ -269,7 +269,7 @@ jobs:
             echo "::notice::Frontend workspace (web/) not scaffolded yet (P5 frontend builder) — eslint, vitest, and generated-client drift are PENDING and skipped."
           fi
       - if: steps.detect.outputs.present == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
@@ -313,13 +313,13 @@ jobs:
     if: ${{ !inputs.lint_only }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: "3.12"
       - run: uv sync
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
@@ -333,12 +333,12 @@ jobs:
     name: process-reference and change-history lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: install mise + vale
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v4
         with:
           version: 2026.9.2
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: "3.12"
