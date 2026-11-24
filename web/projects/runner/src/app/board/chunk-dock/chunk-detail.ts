@@ -12,6 +12,7 @@ import {
   KitErrorLine,
 } from 'fleet';
 
+import type { Escalation } from '../../core/escalation.domain';
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
 import { type ChunkRequeueVars, injectChunkRequeueMutation } from './chunk-requeue.mutations';
 import {
@@ -73,7 +74,7 @@ export class MachineDetail {
   readonly status = input<MachineChunkStatus | null>(null);
 
   /** The open escalation for this chunk, when there is one — carries the resume command. */
-  readonly escalation = input<runnerApi.EscalationView | null>(null);
+  readonly escalation = input<Escalation | null>(null);
 
   /** The chunk's newest attempt (the `leases` list's last entry) — the summary,
    * status, and escalation all render off it. */

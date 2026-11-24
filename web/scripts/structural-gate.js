@@ -997,10 +997,8 @@ const DOMAIN_BOUNDARY_EXEMPT = [
   'hub/src/app/admin/hub-settings',
   'hub/src/app/board',
   'hub/src/app/core',
-  'runner/src/app/asks',
   'runner/src/app/board',
   'runner/src/app/core',
-  'runner/src/app/events',
   'runner/src/app/runners',
 ];
 
@@ -1040,6 +1038,10 @@ const DOMAIN_BOUNDARY_STRICT_SCOPES = [
   'runner/src/app/core/host-registration',
   'runner/src/app/core/host-workspace',
   'runner/src/app/core/host-pools.model',
+  'runner/src/app/core/ask',
+  'runner/src/app/core/fact',
+  'runner/src/app/core/escalation',
+  'runner/src/app/core/panel-reads.model',
   'runner/src/app/shell/nav',
   'runner/src/app/shell/app',
   'runner/src/app/shell/app-scope-navigation',

@@ -1,5 +1,6 @@
-import type { runnerApi } from 'fleet/runner-shell';
-
+import type { Ask } from './ask.domain';
+import type { Escalation } from './escalation.domain';
+import type { Fact } from './fact.domain';
 import type { HostRunner } from './host-runner.domain';
 import type { Lease } from './lease.domain';
 import type { DashboardStatus } from './runner-status.domain';
@@ -19,8 +20,9 @@ export interface RunnerOwner {
 export type Owned<T> = T & { readonly owner: RunnerOwner; readonly projectSlug: string | null };
 
 export type PanelLease = Owned<Lease>;
-export type PanelFact = Owned<runnerApi.FactView>;
-export type PanelAsk = Owned<runnerApi.AskView>;
+export type PanelFact = Owned<Fact>;
+export type PanelAsk = Owned<Ask>;
+export type PanelEscalation = Owned<Escalation>;
 
 /** One runner's dashboard status, beside the runner it came from. */
 export interface RunnerDashboard {

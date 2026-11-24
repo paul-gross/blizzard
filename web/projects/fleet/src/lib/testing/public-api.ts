@@ -75,7 +75,7 @@ export { hostEnvironmentView, hostRegistrationView, servedProjectStatusView, sel
 export { runnerRegistryView, hostRegistryView, runnerBindingView, subscriptionUsageView } from './builders/fleet-runner-host.translate';
 export { projectView, sourceLinkView, repositoryLinkView, workSourceSummary, repositorySummary, secretView, memberView, forgeDetail, credentialSummary, credentialDocument, configChangeView, configChangesPage } from './builders/admin-config.translate';
 export { queuePeekEntry, backlogPeekEntry } from './builders/board-root-queue.translate';
-export { runnerLeaseView, runnerAskView, runnerFactView } from './builders/runner-core.translate';
+export { runnerLeaseView, runnerAskView, runnerFactView, runnerEscalationView } from './builders/runner-core.translate';
 export { gardenFindingDetailView, gardenFindingFactView, gardenProposalCountsRowView, gardenProposalCountsView, gardenTrendPeriodView, gardenTrendView, gardenScopeSweepView, gardenMeasurementReadingView, gardenSweepsView, gardenGraphSummaryView } from './builders/garden.translate';
 export { gardenProposalView, gardenProposalClosureView, gardenProposalAcceptResponse, gardenProposalsPageView, gardenEvidenceFindingView } from './builders/garden-proposal.translate';
 export { deliveredSetView, deliveredSetDeltaView, runEscalationView, runRowView, runDeltaView, routineRunResponse, routineBaselineView, gardenRoutineView, gardenScopeView, gardenProjectView } from './builders/garden-run.translate';

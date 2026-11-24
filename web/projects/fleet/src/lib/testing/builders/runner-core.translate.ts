@@ -1,4 +1,4 @@
-import type { AskView, FactView, LeaseView } from '../../api/runner';
+import type { AskView, EscalationView, FactView, LeaseView } from '../../api/runner';
 import { fixtureInstant } from './clock';
 
 /** A live lease on `ch_1`, heartbeating. */
@@ -62,6 +62,28 @@ export function runnerFactView(overrides: Partial<FactView> = {}): FactView {
     lease_id: null,
     created_at: fixtureInstant(-60),
     acked_at: null,
+    ...overrides,
+  };
+}
+
+/** An open escalation of lease `L-1` on `ch_1`, with no closure recorded. */
+export function runnerEscalationView(overrides: Partial<EscalationView> = {}): EscalationView {
+  return {
+    lease_id: 'L-1',
+    chunk_id: 'ch_1',
+    project_id: null,
+    node_id: 'build',
+    epoch: 1,
+    cause: null,
+    closed_at: fixtureInstant(-60),
+    closure: null,
+    harness_id: null,
+    harness_version: null,
+    model: null,
+    effort: null,
+    session_name: null,
+    resume_command: 'claude --resume s-1',
+    wrapped_takeover_command: null,
     ...overrides,
   };
 }

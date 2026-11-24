@@ -2,33 +2,35 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type runnerApi } from 'fleet';
-import { type RequestClientStub, hostRunnerView, runnerDashboardView, settle, stubRunnerClient } from 'fleet/testing';
+import { type RequestClientStub, hostRunnerView, runnerDashboardView, runnerFactView, settle, stubRunnerClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { FactLog } from './fact-log';
+
+/** One item as the runner's dashboard body carries it. */
+type Wire = ReturnType<typeof runnerFactView>;
 
 let stub: RequestClientStub | undefined;
 
 afterEach(() => stub?.restore());
 
 /** A serving runner on the host, as `GET /api/host/runners` lists it. */
-function hostRunner(runnerId: string, name: string): runnerApi.HostRunnerView {
+function hostRunner(runnerId: string, name: string) {
   return hostRunnerView({ runner_id: runnerId, name, bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }], max_agents: 4 });
 }
 
 /** A full `DashboardView` body, `facts.items` set to `facts` and every other
  * section its empty default — `FactLog` reads off each runner's shared
  * `/runners/<id>/api/dashboard` poll, not a `/api/facts` route of its own. */
-function dashboardBody(facts: readonly runnerApi.FactView[]): runnerApi.DashboardView {
+function dashboardBody(facts: readonly Wire[]) {
   return runnerDashboardView({ facts: { items: [...facts] } });
 }
 
 /** Render `FactLog` over a host serving `rn_1` (`r1`) with `facts` in its ledger, and — given
  * `otherFacts` — `rn_2` (`r2`) with those in its. */
 async function render(
-  facts: readonly runnerApi.FactView[],
-  otherFacts?: readonly runnerApi.FactView[],
+  facts: readonly Wire[],
+  otherFacts?: readonly Wire[],
 ): Promise<{ el: HTMLElement; fixture: ComponentFixture<FactLog> }> {
   const runners = [hostRunner('rn_1', 'r1'), ...(otherFacts ? [hostRunner('rn_2', 'r2')] : [])];
   stub = stubRunnerClient({

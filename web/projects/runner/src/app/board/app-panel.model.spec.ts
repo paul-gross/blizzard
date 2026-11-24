@@ -1,5 +1,4 @@
-import type { runnerApi } from 'fleet';
-
+import type { Escalation } from '../core/escalation.domain';
 import { type BoardLane, type MachineChunkRow } from '../core/chunk-rows.model';
 import type { MachineChunkStatus } from '../core/chunk-status';
 import type { PanelLease } from '../core/panel-reads.model';
@@ -42,7 +41,7 @@ function lease(overrides: Partial<PanelLease> = {}): PanelLease {
   };
 }
 
-function escalation(chunkId: string, runnerId: string): runnerApi.EscalationView & { owner: { runnerId: string } } {
+function escalation(chunkId: string, runnerId: string): Escalation & { owner: { runnerId: string } } {
   return {
     chunk_id: chunkId,
     closed_at: '2026-07-16T11:30:00.000Z',

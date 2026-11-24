@@ -1,7 +1,6 @@
 import { type Signal, computed, inject } from '@angular/core';
 import type { QueryObserverResult } from '@tanstack/angular-query-experimental';
 import { injectQueries } from '@tanstack/angular-query-experimental/inject-queries-experimental';
-import type { runnerApi } from 'fleet/runner-shell';
 
 import { injectHostRunnerDomainsQuery } from './host.query';
 import { runnerLeaseDomainsQueryOptions } from './leases.query';
@@ -11,7 +10,9 @@ import {
   attributedProject,
   mergeLeases,
   ownByProject,
+  type Owned,
   type PanelAsk,
+  type PanelEscalation,
   type PanelFact,
   type PanelLease,
   type PanelProject,
@@ -23,7 +24,12 @@ import {
   scopedOwners,
   servingOwners,
 } from './panel-reads.model';
-import { runnerDashboardQueryOptions, runnerDashboardStatusQueryOptions } from './status.query';
+import {
+  runnerAsksQueryOptions,
+  runnerDashboardStatusQueryOptions,
+  runnerEscalationsQueryOptions,
+  runnerFactsQueryOptions,
+} from './status.query';
 
 /**
  * The panel's reads across the host's runners. Every runner-scoped read fans out
@@ -142,19 +148,6 @@ export function injectPanelDashboards(scope: RunnerScope = 'scoped'): MergedRead
   };
 }
 
-/** Every covered runner's whole dashboard body, each beside its runner — the read the dashboard's item sections
- * merge from, under the same keys and cache as {@link injectPanelDashboards}. */
-function injectPanelDashboardBodies(): MergedRead<readonly { owner: RunnerOwner; dashboard: runnerApi.DashboardView }[]> {
-  const runners = injectPanelRunners();
-  const owners = runners.scoped;
-  const fanOut = injectFanOut(owners, runnerDashboardQueryOptions);
-  return {
-    data: computed(() => answers(owners(), fanOut()).map(({ owner, value }) => ({ owner, dashboard: value }))),
-    isPending: computed(() => runners.pending() || fanOut().anyPending),
-    isError: computed(() => fanOut().allFailed),
-  };
-}
-
 /** Each serving runner's projects by runner id, from its dashboard and its host bindings. */
 export function injectRunnerProjects(): Signal<RunnerProjects> {
   const runners = injectHostRunnerDomainsQuery();
@@ -208,39 +201,41 @@ export function injectPanelLeases(options: PanelLeasesOptions = {}): MergedRead<
   };
 }
 
-/** A dashboard section's items merged across the covered runners, attributed by their own
- * project and narrowed by the Project filter. */
-function injectDashboardItems<T extends { readonly project_id?: string | null }>(
-  section: (dashboard: runnerApi.DashboardView) => readonly T[],
-): MergedRead<readonly (T & { readonly owner: RunnerOwner; readonly projectSlug: string | null })[]> {
+/** A dashboard section's items, read through `options` across the covered runners under each runner's dashboard key,
+ * attributed by their own project and narrowed by the Project filter. */
+function injectDashboardItems<TBody, T extends { readonly project_id: string | null }>(
+  options: (runnerId: string) => FanOutOptions<TBody, readonly T[]>,
+): MergedRead<readonly Owned<T>[]> {
   const filters = inject(PanelFilters);
-  const dashboards = injectPanelDashboardBodies();
+  const runners = injectPanelRunners();
+  const owners = runners.scoped;
+  const fanOut = injectFanOut(owners, options);
   const projects = injectRunnerProjects();
   return {
     data: computed(() => {
       const byRunner = projects();
-      const items = dashboards
-        .data()
-        .flatMap(({ owner, dashboard }) => ownByProject(section(dashboard), owner, byRunner.get(owner.runnerId) ?? []));
+      const items = answers(owners(), fanOut()).flatMap(({ owner, value }) =>
+        ownByProject(value, owner, byRunner.get(owner.runnerId) ?? []),
+      );
       return inProject(items, filters.project());
     }),
-    isPending: dashboards.isPending,
-    isError: dashboards.isError,
+    isPending: computed(() => runners.pending() || fanOut().anyPending),
+    isError: computed(() => fanOut().allFailed),
   };
 }
 
 /** Every covered runner's newest facts, newest first. */
 export function injectPanelFacts(): MergedRead<readonly PanelFact[]> {
-  const items = injectDashboardItems((dashboard) => dashboard.facts?.items ?? []);
+  const items = injectDashboardItems(runnerFactsQueryOptions);
   return { ...items, data: computed(() => [...items.data()].sort((a, b) => b.created_at.localeCompare(a.created_at))) };
 }
 
 /** Every covered runner's open asks. */
 export function injectPanelAsks(): MergedRead<readonly PanelAsk[]> {
-  return injectDashboardItems((dashboard) => dashboard.asks?.items ?? []);
+  return injectDashboardItems(runnerAsksQueryOptions);
 }
 
 /** Every covered runner's open escalations. */
-export function injectPanelEscalations(): MergedRead<readonly (runnerApi.EscalationView & { readonly owner: RunnerOwner })[]> {
-  return injectDashboardItems((dashboard) => dashboard.escalations?.items ?? []);
+export function injectPanelEscalations(): MergedRead<readonly PanelEscalation[]> {
+  return injectDashboardItems(runnerEscalationsQueryOptions);
 }

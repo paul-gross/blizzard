@@ -1,8 +1,8 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { runnerApi } from 'fleet';
 import { vi } from 'vitest';
 
+import type { Fact } from '../core/fact.domain';
 import type { PanelFact, RunnerOwner } from '../core/panel-reads.model';
 import { FactLogView } from './fact-log-view';
 
@@ -10,7 +10,7 @@ const R1: RunnerOwner = { runnerId: 'rn_1', name: 'r1', label: 'r1' };
 const R2: RunnerOwner = { runnerId: 'rn_2', name: 'r2', label: 'r2' };
 
 /** Render `facts`, each read off `R1` unless it names its own owner. */
-async function render(facts: readonly (runnerApi.FactView & { readonly owner?: RunnerOwner })[]) {
+async function render(facts: readonly (Fact & { readonly owner?: RunnerOwner })[]) {
   const owned: PanelFact[] = facts.map((fact) => ({ ...fact, owner: fact.owner ?? R1, projectSlug: null }));
   await TestBed.configureTestingModule({
     imports: [FactLogView],

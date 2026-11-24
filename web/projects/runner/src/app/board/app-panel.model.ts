@@ -1,4 +1,4 @@
-import type { runnerApi } from 'fleet';
+import type { Escalation } from '../core/escalation.domain';
 
 import { BOARD_LANES, type MachineChunkRow } from '../core/chunk-rows.model';
 import type { MachineChunkStatus } from '../core/chunk-status';
@@ -33,10 +33,10 @@ export function chunkStatusFor(rows: readonly MachineChunkRow[], chunkId: string
 /** The chunk's open escalation on `runnerId`, the runner of its newest attempt, when one
  * exists — carries the resume command. */
 export function escalationFor(
-  escalations: readonly (runnerApi.EscalationView & { readonly owner: { readonly runnerId: string } })[],
+  escalations: readonly (Escalation & { readonly owner: { readonly runnerId: string } })[],
   runnerId: string | null,
   chunkId: string | null,
-): runnerApi.EscalationView | null {
+): Escalation | null {
   if (chunkId === null || runnerId === null) return null;
   return escalations.find((esc) => esc.chunk_id === chunkId && esc.owner.runnerId === runnerId) ?? null;
 }

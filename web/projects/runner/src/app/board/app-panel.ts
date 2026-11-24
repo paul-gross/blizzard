@@ -2,8 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
-import { asyncState, injectChunkUrlSelection, type runnerApi, ViewportService } from 'fleet';
+import { asyncState, injectChunkUrlSelection, ViewportService } from 'fleet';
 
+import type { Escalation } from '../core/escalation.domain';
 import { injectPanelAsks, injectPanelEscalations, injectPanelLeases, injectPanelProjects } from '../core/panel-reads';
 import type { PanelLease } from '../core/panel-reads.model';
 
@@ -138,7 +139,7 @@ export class LocalPanel {
   );
 
   /** The open escalation for the selected chunk, when one exists — carries the resume command. */
-  protected readonly selectedEscalation = computed<runnerApi.EscalationView | null>(() =>
+  protected readonly selectedEscalation = computed<Escalation | null>(() =>
     escalationFor(this.escalations.data(), this.selectedChunkLeases().at(-1)?.owner.runnerId ?? null, this.selectedChunkId()),
   );
 }
