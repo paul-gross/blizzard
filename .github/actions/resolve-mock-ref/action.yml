@@ -50,7 +50,7 @@ runs:
         fi
         sed 's/^/resolved blizzard-mock: /' "$GITHUB_OUTPUT" | tail -2
     - name: checkout blizzard-mock (the mock fleet + fixture scaffold)
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         repository: paul-gross/blizzard-mock
         path: ${{ inputs.path }}

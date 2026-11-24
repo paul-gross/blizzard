@@ -28,7 +28,7 @@ jobs:
       sha: ${{ steps.mock.outputs.sha }}
     steps:
       - name: checkout blizzard (the resolution action lives here)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: blizzard
           persist-credentials: false
@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: checkout blizzard
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: blizzard
           persist-credentials: false
@@ -50,7 +50,7 @@ jobs:
         uses: ./blizzard/.github/actions/resolve-mock-ref
         with:
           sha: ${{ needs.mock-ref.outputs.sha }}
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: "3.12"
@@ -59,7 +59,7 @@ jobs:
             uv.lock
             ../blizzard-mock/uv.lock
       - name: Node from mise.toml
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v4
         with:
           version: 2026.9.2
           install: true
@@ -79,7 +79,7 @@ jobs:
         run: echo "version=$(node --version)" >> "$GITHUB_OUTPUT"
       - name: cache the Playwright package's dependencies
         id: node-modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: blizzard/tests/node_modules
           key: playwright-node-modules-${{ runner.os }}-${{ steps.node.outputs.version }}-${{ hashFiles('blizzard/tests/package-lock.json') }}
@@ -94,7 +94,7 @@ jobs:
         run: cd blizzard && mise run playwright -- --project='service-*' --workers=4
       - name: keep the JSON report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: declared-report
           path: blizzard/tests/test-results/report.json
@@ -102,7 +102,7 @@ jobs:
           if-no-files-found: ignore
       - name: keep the failure evidence
         if: ${{ failure() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: declared-evidence
           path: |
@@ -118,7 +118,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: checkout blizzard
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: blizzard
           persist-credentials: false
@@ -126,7 +126,7 @@ jobs:
         uses: ./blizzard/.github/actions/resolve-mock-ref
         with:
           sha: ${{ needs.mock-ref.outputs.sha }}
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: "3.12"
@@ -135,7 +135,7 @@ jobs:
             uv.lock
             ../blizzard-mock/uv.lock
       - name: Node from mise.toml
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v4
         with:
           version: 2026.9.2
           install: true
@@ -155,7 +155,7 @@ jobs:
         run: echo "version=$(node --version)" >> "$GITHUB_OUTPUT"
       - name: cache the Playwright package's dependencies
         id: node-modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: blizzard/tests/node_modules
           key: playwright-node-modules-${{ runner.os }}-${{ steps.node.outputs.version }}-${{ hashFiles('blizzard/tests/package-lock.json') }}
@@ -171,7 +171,7 @@ jobs:
         run: cd blizzard && mise run playwright -- --project='service-*' --workers=4
       - name: keep the JSON report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: raised-report
           path: blizzard/tests/test-results/report.json
@@ -179,7 +179,7 @@ jobs:
           if-no-files-found: ignore
       - name: keep the failure evidence
         if: ${{ failure() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: raised-evidence
           path: |
@@ -195,22 +195,22 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           sparse-checkout: tests/harness/scripts/cross-check.ts
           sparse-checkout-cone-mode: false
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
       - name: fetch the declared run's report
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: declared-report
           path: reports/declared
         continue-on-error: true
       - name: fetch the raised run's report
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: raised-report
           path: reports/raised

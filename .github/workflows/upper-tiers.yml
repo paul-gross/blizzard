@@ -69,7 +69,7 @@ jobs:
       sha: ${{ steps.mock.outputs.sha }}
     steps:
       - name: checkout blizzard (the resolution action lives here)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: blizzard
           persist-credentials: false
@@ -90,7 +90,7 @@ jobs:
         shard: [1, 2, 3]
     steps:
       - name: checkout blizzard
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: blizzard
           persist-credentials: false
@@ -99,13 +99,13 @@ jobs:
         with:
           sha: ${{ needs.mock-ref.outputs.sha }}
       - name: Python for uv bootstrap
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install uv and restore its cache
         id: setup-uv
         continue-on-error: true
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
           version: "0.13.6"
           enable-cache: true
@@ -139,7 +139,7 @@ jobs:
         run: cd blizzard && uv run pytest -n auto tests/service/ -v
       - name: keep the timing evidence (success only, the timing file alone)
         if: ${{ success() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: timings-service-pytest-${{ matrix.shard }}
           path: blizzard/timings-service-pytest-${{ matrix.shard }}.json
@@ -162,7 +162,7 @@ jobs:
         shard: [1, 2, 3, 4, 5, 6]
     steps:
       - name: checkout blizzard
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: blizzard
           fetch-depth: 0
@@ -172,13 +172,13 @@ jobs:
         with:
           sha: ${{ needs.mock-ref.outputs.sha }}
       - name: Python for uv bootstrap
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install uv and restore its cache
         id: setup-uv
         continue-on-error: true
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
           version: "0.13.6"
           enable-cache: true
@@ -193,7 +193,7 @@ jobs:
       - name: Confirm uv is available
         run: uv --version
       - name: Node from mise.toml
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v4
         with:
           version: 2026.9.2
           install: true
@@ -214,7 +214,7 @@ jobs:
         run: echo "version=$(node --version)" >> "$GITHUB_OUTPUT"
       - name: cache the Playwright package's dependencies
         id: node-modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: blizzard/tests/node_modules
           key: playwright-node-modules-${{ runner.os }}-${{ steps.node.outputs.version }}-${{ hashFiles('blizzard/tests/package-lock.json') }}
@@ -224,7 +224,7 @@ jobs:
       - name: install Chromium for the harness specs that drive a page (Playwright)
         run: cd blizzard/tests && npx playwright install --with-deps chromium
       - name: cache the pinned collector for service traces
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.local/share/mise/installs/github-open-telemetry-opentelemetry-collector-releases
           key: otelcol-contrib-${{ runner.os }}-${{ hashFiles('blizzard/mise.toml') }}
@@ -247,7 +247,7 @@ jobs:
         run: cp blizzard/tests/test-results/report.json report-service-playwright-${{ matrix.shard }}.json
       - name: keep the timing evidence (success only, the timing file alone)
         if: ${{ success() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: timings-service-playwright-${{ matrix.shard }}
           path: report-service-playwright-${{ matrix.shard }}.json
@@ -255,7 +255,7 @@ jobs:
           if-no-files-found: ignore
       - name: keep the failure evidence
         if: ${{ failure() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: service-playwright-${{ matrix.shard }}
           path: |
@@ -285,7 +285,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: checkout blizzard
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: blizzard
           persist-credentials: false
@@ -293,7 +293,7 @@ jobs:
         uses: ./blizzard/.github/actions/resolve-mock-ref
         with:
           sha: ${{ needs.mock-ref.outputs.sha }}
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: "3.12"
@@ -329,7 +329,7 @@ jobs:
         run: cd blizzard && uv run pytest -n auto -m crash_sweep tests/crash/ -v
       - name: keep the timing evidence (success only, the timing file alone)
         if: ${{ success() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: timings-crash-sweep-${{ inputs.crash_sweep_ci == '1' && 'bounded' || 'full' }}
           path: blizzard/timings-crash-sweep-${{ inputs.crash_sweep_ci == '1' && 'bounded' || 'full' }}.json
@@ -343,7 +343,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: checkout blizzard
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: blizzard
           persist-credentials: false
@@ -351,7 +351,7 @@ jobs:
         uses: ./blizzard/.github/actions/resolve-mock-ref
         with:
           sha: ${{ needs.mock-ref.outputs.sha }}
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: "3.12"
@@ -360,7 +360,7 @@ jobs:
             uv.lock
             ../blizzard-mock/uv.lock
       - name: Node from mise.toml
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v4
         with:
           version: 2026.9.2
           install: true
@@ -380,7 +380,7 @@ jobs:
         run: echo "version=$(node --version)" >> "$GITHUB_OUTPUT"
       - name: cache the Playwright package's dependencies
         id: node-modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: blizzard/tests/node_modules
           key: playwright-node-modules-${{ runner.os }}-${{ steps.node.outputs.version }}-${{ hashFiles('blizzard/tests/package-lock.json') }}
@@ -404,7 +404,7 @@ jobs:
         run: cp blizzard/tests/test-results/report.json report-ui.json
       - name: keep the timing evidence (success only, the timing file alone)
         if: ${{ success() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: timings-ui
           path: report-ui.json
@@ -412,7 +412,7 @@ jobs:
           if-no-files-found: ignore
       - name: keep the failure evidence
         if: ${{ failure() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: ui
           path: |
@@ -429,7 +429,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: checkout blizzard
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: blizzard
           persist-credentials: false
@@ -437,7 +437,7 @@ jobs:
         uses: ./blizzard/.github/actions/resolve-mock-ref
         with:
           sha: ${{ needs.mock-ref.outputs.sha }}
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: "3.12"
@@ -446,7 +446,7 @@ jobs:
             uv.lock
             ../blizzard-mock/uv.lock
       - name: Node from mise.toml
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v4
         with:
           version: 2026.9.2
           install: true
@@ -466,7 +466,7 @@ jobs:
         run: echo "version=$(node --version)" >> "$GITHUB_OUTPUT"
       - name: cache the Playwright package's dependencies
         id: node-modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: blizzard/tests/node_modules
           key: playwright-node-modules-${{ runner.os }}-${{ steps.node.outputs.version }}-${{ hashFiles('blizzard/tests/package-lock.json') }}
@@ -484,7 +484,7 @@ jobs:
         run: cp blizzard/tests/test-results/report.json report-journey.json
       - name: keep the timing evidence (success only, the timing file alone)
         if: ${{ success() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: timings-journey
           path: report-journey.json
@@ -492,7 +492,7 @@ jobs:
           if-no-files-found: ignore
       - name: keep the failure evidence
         if: ${{ failure() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: journey
           path: |
@@ -507,14 +507,14 @@ jobs:
     name: hub image smoke (blizzard:image-smoke)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: "3.12"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
@@ -528,14 +528,14 @@ jobs:
     name: reference compose smoke (blizzard:compose-smoke)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: "3.12"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
