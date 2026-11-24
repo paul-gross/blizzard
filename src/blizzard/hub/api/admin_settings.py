@@ -27,6 +27,9 @@ from blizzard.hub.settings.footing import (
     require_settable,
     settable_declarations,
 )
+from blizzard.hub.settings.footing import (
+    export_document as export_settable_document,
+)
 from blizzard.hub.settings.model import IReadHubSettingsAdmin
 from blizzard.hub.settings.reader import HubSettingsReader
 from blizzard.hub.settings.service import HubSettingsAuthoring
@@ -218,13 +221,4 @@ def apply_document(
 @router.get("/export", response_model=SettingsExportDocument)
 @inject_sync
 def export_document(identity: Admin, reader: Reader, footing: Footing) -> SettingsExportDocument:
-    document: SettingsExportDocument = {}
-    for key, entry in reader.snapshot().entries.items():
-        declaration = footing.key_registry.key(key)
-        if declaration is not None and declaration.lifetime == Lifetime.PASS and not entry.at_default:
-            parts = key.split(".")
-            table = document
-            for part in parts[:-1]:
-                table = cast(dict[str, object], table.setdefault(part, {}))
-            table[parts[-1]] = thaw(entry.value)
-    return document
+    return export_settable_document(footing.key_registry, reader.snapshot().entries)
