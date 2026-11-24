@@ -160,8 +160,8 @@ def re_escalates(
     *,
     epoch: int,
     taken: EscalateChoice | None = None,
-    node: Node | None = None,
-    choice: str = "",
+    node: Node,
+    choice: str,
 ) -> bool:
     """Whether taking ``edge`` at ``epoch`` would only re-escalate — answered ``escalated`` with
     nothing written: it crosses graphs to the very target that still names no enabled graph the
@@ -182,8 +182,7 @@ def re_escalates(
         return False
     escalation = facts.open_escalation_at(epoch)
     return (
-        node is not None
-        and escalation is not None
+        escalation is not None
         and escalation.cause == EscalationCause.MIGRATION_TARGET_UNRESOLVABLE
         and escalation.detail == UnresolvableTarget.of(node, choice, edge).detail
     )
