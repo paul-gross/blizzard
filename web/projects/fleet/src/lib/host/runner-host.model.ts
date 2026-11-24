@@ -1,73 +1,8 @@
-import type * as runnerApi from '../api/runner';
 import type { RunnerSubscription, SampleMiss, KnownSampleMiss, RenewalResult, RenewalFailure, KnownRenewalFailure } from '../core/host.domain';
-import { compactRef } from '../core/compact-ref';
 import { openLookup } from '../core/open-lookup';
-import { ageMs, formatAge, formatHeldFor, formatRefreshedAgo, formatSeenTag } from '../core/when';
+import { ageMs, formatAge, formatRefreshedAgo, formatSeenTag } from '../core/when';
 import { type SubscriptionLine, subscriptionLine } from './subscription-blocks.model';
 import { classifySubscriptionFreshness, type SubscriptionPace, toPaceBars } from './subscription-pace.model';
-import type { EnvironmentRow, WorkspaceRow } from './workspace-rows.model';
-
-/**
- * `42m` since the binding fact — browser-clock decoration only
- * (`bzh:utc-instants` via `ageMs`): a skew-broken timestamp renders `—`, and an
- * unheld environment (no `held_since`) renders blank rather than `—`.
- */
-export function heldForLabel(heldSince: string | null | undefined, now: number): string {
-  if (heldSince == null) return '';
-  const age = ageMs(heldSince, now);
-  return age === null ? '—' : formatHeldFor(age);
-}
-
-/** Who holds a held environment — its runner's display name and the project of the chunk
- * holding it, `null` for an unheld one or one whose host names no runner. */
-function holderLabel(env: runnerApi.HostEnvironmentView, runnerName: (runnerId: string) => string): string | null {
-  if (env.runner_id == null) return null;
-  return [runnerName(env.runner_id), env.project].filter((part) => part != null && part !== '').join(' · ');
-}
-
-/** One {@link EnvironmentRow} per environment of a workspace, in wire order, aged against
- * `now` — `runnerName` resolves a holder's runner id to its display name. */
-export function runnerEnvironmentRows(
-  envs: readonly runnerApi.HostEnvironmentView[],
-  now: number,
-  runnerName: (runnerId: string) => string,
-): readonly EnvironmentRow[] {
-  return envs.map((env) => ({
-    environmentId: env.environment_id,
-    isHeld: env.held,
-    chunkRef: env.chunk_id == null ? '' : compactRef(env.chunk_id),
-    heldFor: heldForLabel(env.held_since, now),
-    holder: holderLabel(env, runnerName),
-  }));
-}
-
-/** The host's environments grouped by workspace, as the shared workspace table's rows —
- * one per declared workspace in `workspaces`' order, its capacity the workspace's own
- * `max_environments`. A group naming a workspace the declaration list does not carry
- * still renders, after the declared ones, with no capacity. */
-export function runnerWorkspaceRows(
-  workspaces: readonly runnerApi.HostWorkspaceView[],
-  groups: readonly runnerApi.HostWorkspaceEnvironmentsView[],
-  now: number,
-  runnerName: (runnerId: string) => string,
-): readonly WorkspaceRow[] {
-  const byId = new Map(groups.map((group) => [group.workspace_id, group.items]));
-  const declared = new Set(workspaces.map((ws) => ws.workspace_id));
-  const row = (workspaceId: string, capacity: number | null): WorkspaceRow => {
-    const environments = runnerEnvironmentRows(byId.get(workspaceId) ?? [], now, runnerName);
-    return {
-      workspaceId,
-      capacity,
-      inUse: environments.filter((env) => env.isHeld).length,
-      flag: null,
-      environments,
-    };
-  };
-  return [
-    ...workspaces.map((ws) => row(ws.workspace_id, ws.max_environments)),
-    ...groups.filter((group) => !declared.has(group.workspace_id)).map((group) => row(group.workspace_id, null)),
-  ];
-}
 
 /** Operator-facing text per miss reason — what to do about it, not the machine word. A reason
  * this build does not know reads raw. */

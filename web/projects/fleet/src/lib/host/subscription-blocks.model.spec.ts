@@ -1,4 +1,3 @@
-import { SampleMissReason } from '../api/hub';
 import { isLapsed, subscriptionLine } from './subscription-blocks.model';
 import type { SubscriptionPace } from './subscription-pace.model';
 
@@ -18,7 +17,7 @@ const pace = (fields: Partial<SubscriptionPace> = {}): SubscriptionPace => ({
 
 describe('isLapsed', () => {
   it('reads only a lapsed-credential condition as lapsed', () => {
-    expect(isLapsed(pace({ condition: SampleMissReason.CREDENTIAL_LAPSED }))).toBe(true);
+    expect(isLapsed(pace({ condition: 'credential_lapsed' }))).toBe(true);
     expect(isLapsed(pace())).toBe(false);
   });
 });
@@ -31,7 +30,7 @@ describe('subscriptionLine', () => {
   });
 
   it('reads a lapsed credential as lapsed, drawing no windows', () => {
-    const line = subscriptionLine(pace({ condition: SampleMissReason.CREDENTIAL_LAPSED }));
+    const line = subscriptionLine(pace({ condition: 'credential_lapsed' }));
     expect(line.state).toBe('lapsed');
     expect(line.windows).toEqual([]);
   });

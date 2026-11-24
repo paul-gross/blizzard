@@ -1,26 +1,15 @@
-import type * as runnerApi from '../api/runner';
 import type { RunnerSubscription } from '../core/host.domain';
-import { compactRef } from '../core/compact-ref';
 import {
   conditionLabel,
-  heldForLabel,
   MISS_REASON_TEXT,
   RENEWAL_FAILURE_TEXT,
   renewalLabel,
-  runnerEnvironmentRows,
   runnerSubscriptionLines,
   runnerSubscriptionPaces,
-  runnerWorkspaceRows,
   sampledAgoLabel,
 } from './runner-host.model';
 
 const NOW = Date.parse('2026-07-16T12:00:00.000Z');
-
-/** The environment facts an unheld environment reports as empty. */
-const UNHELD = { chunk_id: null, held: false, held_since: null, project: null, runner_id: null } satisfies Omit<
-  runnerApi.HostEnvironmentView,
-  'environment_id'
->;
 
 /** The subscription facts a never-attempted subscription reports as empty. */
 const UNREPORTED = {
@@ -36,102 +25,9 @@ const UNREPORTED = {
   condition: null,
 } satisfies Omit<RunnerSubscription, 'slug' | 'name' | 'provider'>;
 
-describe('heldForLabel', () => {
-  it('renders blank for an unheld environment', () => {
-    expect(heldForLabel(null, NOW)).toBe('');
-    expect(heldForLabel(undefined, NOW)).toBe('');
-  });
-
-  it('renders the held-for duration since the binding fact', () => {
-    expect(heldForLabel('2026-07-16T11:18:00.000Z', NOW)).toBe('42m');
-  });
-
-  it('renders an em dash for a skew-broken timestamp', () => {
-    expect(heldForLabel('2026-07-16T13:00:00.000Z', NOW)).toBe('—');
-    expect(heldForLabel('not-a-timestamp', NOW)).toBe('—');
-  });
-});
-
 /** Resolves the two runners these specs name to their display names. */
 const RUNNER_NAMES: Readonly<Record<string, string>> = { rn_1: 'r-claude', rn_2: 'r-chatgpt' };
 const runnerName = (runnerId: string): string => RUNNER_NAMES[runnerId] ?? runnerId;
-
-describe('runnerEnvironmentRows', () => {
-  it('maps a held and an unheld environment in wire order, naming the holder runner and project', () => {
-    const envs: runnerApi.HostEnvironmentView[] = [
-      {
-        environment_id: 'e1',
-        held: true,
-        chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-        held_since: '2026-07-16T11:59:18.000Z',
-        runner_id: 'rn_1',
-        project: 'blizzard',
-      },
-      { environment_id: 'e2', held: false, chunk_id: null, held_since: null, runner_id: null, project: null },
-    ];
-    expect(runnerEnvironmentRows(envs, NOW, runnerName)).toEqual([
-      {
-        environmentId: 'e1',
-        isHeld: true,
-        chunkRef: compactRef('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9'),
-        heldFor: '42s',
-        holder: 'r-claude · blizzard',
-      },
-      { environmentId: 'e2', isHeld: false, chunkRef: '', heldFor: '', holder: null },
-    ]);
-  });
-
-  it('reads an environment the host reports unheld as unheld', () => {
-    expect(runnerEnvironmentRows([{ ...UNHELD, environment_id: 'e3' }], NOW, runnerName)).toEqual([
-      { environmentId: 'e3', isHeld: false, chunkRef: '', heldFor: '', holder: null },
-    ]);
-  });
-
-  it('reads held alone: an environment reported unheld is free whatever chunk_id it carries', () => {
-    const [row] = runnerEnvironmentRows([{ ...UNHELD, environment_id: 'e5', chunk_id: 'ch_1' }], NOW, runnerName);
-
-    expect(row.isHeld).toBe(false);
-  });
-
-  it('names the runner alone when the holding chunk names no project', () => {
-    const [row] = runnerEnvironmentRows([{ ...UNHELD, environment_id: 'e4', held: true, chunk_id: 'ch_1', runner_id: 'rn_2' }], NOW, runnerName);
-    expect(row.holder).toBe('r-chatgpt');
-  });
-});
-
-describe('runnerWorkspaceRows', () => {
-  it('renders one row per declared workspace with its capacity and held count', () => {
-    const rows = runnerWorkspaceRows(
-      [
-        { workspace_id: 'ws-a', max_environments: 3, revision: null, settings: {}, state: 'active' },
-        { workspace_id: 'ws-b', max_environments: 1, revision: null, settings: {}, state: 'active' },
-      ],
-      [
-        {
-          workspace_id: 'ws-a',
-          items: [
-            { ...UNHELD, environment_id: 'e1', held: true, chunk_id: 'ch_1', held_since: '2026-07-16T11:59:18.000Z', runner_id: 'rn_1' },
-            { ...UNHELD, environment_id: 'e2', held: false },
-          ],
-        },
-      ],
-      NOW,
-      runnerName,
-    );
-    expect(rows.map((row) => [row.workspaceId, row.capacity, row.inUse])).toEqual([
-      ['ws-a', 3, 1],
-      ['ws-b', 1, 0],
-    ]);
-    expect(rows[0].environments.map((env) => env.environmentId)).toEqual(['e1', 'e2']);
-    expect(rows[1].environments).toEqual([]);
-  });
-
-  it('still renders an environment group whose workspace is not declared, with no capacity', () => {
-    const rows = runnerWorkspaceRows([], [{ workspace_id: 'ws-x', items: [{ ...UNHELD, environment_id: 'e9' }] }], NOW, runnerName);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ workspaceId: 'ws-x', capacity: null, inUse: 0 });
-  });
-});
 
 describe('sampledAgoLabel', () => {
   it('renders the age of the newest attempt', () => {

@@ -1,13 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 
 import { GateBadgeGroup } from './gate-badge-group';
+import { unenforceableGate } from './gate.builders';
 
 const meta: Meta<GateBadgeGroup> = {
   title: 'Host/Gate badges',
   component: GateBadgeGroup,
   args: { gates: ['build', 'deliver', 'unknown-node'], unenforceable: [
-    { node: 'deliver', reason: 'hub-executed' },
-    { node: 'unknown-node', reason: 'unknown-node' },
+    unenforceableGate(),
+    unenforceableGate({ node: 'unknown-node', reason: 'unknown-node' }),
   ] },
 };
 export default meta;

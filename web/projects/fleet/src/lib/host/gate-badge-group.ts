@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import type { UnenforceableGateView } from '../api/hub';
 import { KitBadge } from '../kit/kit-badge';
+import { type UnenforceableGate, unenforceableReasonLabel } from './gate.domain';
 
 /**
  * The runner registry's gate render — "Gates:" followed by one badge per node name the
@@ -24,11 +24,12 @@ export class GateBadgeGroup {
   readonly gates = input.required<readonly string[]>();
 
   /** The gates the hub reports as not enforceable, each with its reason; empty when every gate can park a chunk. */
-  readonly unenforceable = input<readonly UnenforceableGateView[]>([]);
+  readonly unenforceable = input<readonly UnenforceableGate[]>([]);
 
   /** The reason `gate` is not enforceable, or `null` when it is — shown raw when unrecognized. */
   protected reasonOf(gate: string): string | null {
-    return this.unenforceable().find((flag) => flag.node === gate)?.reason ?? null;
+    const flag = this.unenforceable().find((candidate) => candidate.node === gate);
+    return flag === undefined ? null : unenforceableReasonLabel(flag.reason);
   }
 
   /** Whether the list carries its own "Gates:" label — off where a surrounding fact grid
