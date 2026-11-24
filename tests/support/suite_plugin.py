@@ -6,11 +6,13 @@ from __future__ import annotations
 import fnmatch
 import json
 import os
+import shutil
+import stat
 import tempfile
 from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 import _pytest.tmpdir as pytest_tmpdir
 import pytest
@@ -72,25 +74,43 @@ SHARD_BY_FILE = "file"
 @pytest.fixture
 def short_host_runtime() -> Iterator[Path]:
     """A private, short-lived directory for test host sockets."""
-    with tempfile.TemporaryDirectory(prefix="s-") as runtime:
+    with tempfile.TemporaryDirectory(prefix="bz-sock-", dir="/tmp") as runtime:
         yield Path(runtime)
 
 
 @pytest.fixture
-def short_tmp_path(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Keep real host paths short, including in subprocesses, without replacing pytest's tmp_path finalizer."""
+def short_tmp_path(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> Iterator[None]:
+    """Keep subprocess sockets short and copy retained test artifacts into pytest's directory."""
     original = pytest_tmpdir._mk_tmp  # pyright: ignore[reportPrivateUsage]
     node: object = request.node  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]  # pytest leaves node untyped
-    with tempfile.TemporaryDirectory(prefix="t-") as directory:
+    with tempfile.TemporaryDirectory(prefix="bz-path-", dir="/tmp") as directory:
+        short = Path(directory) / "t"
+        target: Path | None = None
 
         def make_tmp(inner: pytest.FixtureRequest, factory: pytest.TempPathFactory) -> Path:
+            nonlocal target
             inner_node: object = inner.node  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]  # pytest leaves node untyped
             if inner_node is node:
-                return Path(directory)
+                target = original(inner, factory)
+                short.mkdir()
+                return short
             return original(inner, factory)
 
         monkeypatch.setattr(pytest_tmpdir, "_mk_tmp", make_tmp)
         yield
+        item = cast(pytest.Item, request.node)  # pyright: ignore[reportUnknownMemberType]
+        empty: dict[str, bool] = {}
+        result = item.stash.get(pytest_tmpdir.tmppath_result_key, empty)
+        policy = tmp_path_factory._retention_policy  # pyright: ignore[reportPrivateUsage]
+        retain = policy == "all" or (policy == "failed" and not result.get("call", True))
+        if target is not None and short.exists() and retain:
+
+            def ignore_sockets(root: str, names: list[str]) -> set[str]:
+                return {name for name in names if stat.S_ISSOCK((Path(root) / name).lstat().st_mode)}
+
+            shutil.copytree(short, target, dirs_exist_ok=True, symlinks=True, ignore=ignore_sockets)
 
 
 @pytest.fixture
