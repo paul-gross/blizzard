@@ -179,7 +179,11 @@ for (const scenario of ['merge_conflict', 'checks_pending'] as const) {
     expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
     await actionLeaseGate(host, chunk.chunk_id, workerCheckpoint, testHub, tenant);
     const detail = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body,
-      (row) => scenario === 'merge_conflict' ? row.bounces.length > 0 : row.pending !== null,
+      // A detail read can straddle the hub's atomic bounce/transition commit: seeing the
+      // bounce alone does not establish that this response also sees the destination.
+      (row) => scenario === 'merge_conflict'
+        ? row.bounces.length > 0 && row.current_node_name === 'build'
+        : row.pending !== null,
       { stallPasses: 80, progress: chunkProgress });
     await actionReadback(scenario, chunk.chunk_id, api, cli, testHub, tenant);
     actionPause(`Inspect the ${scenario} readback`);
