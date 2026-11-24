@@ -11,7 +11,6 @@ from datetime import datetime
 from blizzard.foundation.hub_event_types import ChunkChangeCause
 from blizzard.foundation.roles import dto
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.delivery.flow_driver import ITurnRunner
 from blizzard.hub.domain.cadence.mint import MintedErrand
 from blizzard.hub.domain.chunk.model import Chunk, ChunkChange, ChunkFacts
@@ -216,16 +215,16 @@ class AnnouncedTurns:
     escalation or migration the turn wrote, keyed and caused as the activity backfill keys and causes it; a keyless
     ``hub-advanced`` frame when the status moved with no new keyed fact; none for a turn that only waited."""
 
-    services: TenantServices
+    frames: ChunkFrameLoader
     turns: ITurnRunner
 
     async def take(self, turn: Turn, submission: Submission) -> None:
-        change = await asyncio.to_thread(ChunkChanged.before, self.services.chunk_frames, submission.chunk_id)
+        change = await asyncio.to_thread(ChunkChanged.before, self.frames, submission.chunk_id)
         await self.turns.take(turn, submission)
         await asyncio.to_thread(self._announce, change)
 
     def _announce(self, change: ChunkChanged) -> None:
-        state = ChunkFrameState.load(self.services.chunk_frames, change.chunk_id)
+        state = ChunkFrameState.load(self.frames, change.chunk_id)
         before = change.facts
         if before is not None:
             frames = new_keyed_frames(before, state.facts)

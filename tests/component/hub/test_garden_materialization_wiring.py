@@ -7,6 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from blizzard.hub.api.garden_formats import GardenFormats
+from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.garden.delivery.materialize import GardenDelivery, IWriteGardenDeliveryRepository
@@ -96,5 +97,5 @@ def test_the_materialization_instances_differ_across_tenants_but_the_formats(tmp
 def test_the_flow_executor_holds_the_containers_recorders(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
 
-    assert hub.services.turns._garden_delivery is hub.default_adapter(GardenDeliveryRecorder)
-    assert hub.services.turns._review_findings is hub.default_adapter(ReviewFindingsRecorder)
+    assert hub.default_adapter(TurnRunner)._garden_delivery is hub.default_adapter(GardenDeliveryRecorder)
+    assert hub.default_adapter(TurnRunner)._review_findings is hub.default_adapter(ReviewFindingsRecorder)

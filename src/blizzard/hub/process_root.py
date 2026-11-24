@@ -34,6 +34,7 @@ from blizzard.hub.domain.cadence import wiring as cadence_area
 from blizzard.hub.domain.chunk import wiring as chunk_area
 from blizzard.hub.domain.config import wiring as config_wiring
 from blizzard.hub.domain.config_apply import wiring as config_apply
+from blizzard.hub.domain.delivery import wiring as delivery_area
 from blizzard.hub.domain.execution import wiring as execution
 from blizzard.hub.domain.garden import wiring as garden_area
 from blizzard.hub.domain.garden.findings import wiring as findings
@@ -108,7 +109,9 @@ def register_hub(
     if store_backed:
         delivery.register(registry)
         chunk_operations = store.register_chunk_operations(registry)
-        register_legacy(registry, flows=chunk_operations.flows)
+        register_legacy(registry)
+        delivery.register_tenant(registry)
+        delivery_area.register(registry, flows=chunk_operations.flows)
         _register_chunk_operations(registry, chunk_operations)
         auth.register(registry)
         secrets.register(registry)
@@ -126,6 +129,8 @@ def register_hub(
         work_sources.register(registry)
     else:
         register_legacy_absent(registry)
+        delivery.register_tenant_absent(registry)
+        delivery_area.register_absent(registry)
         store.register_chunk_operations_absent(registry)
         chunk_area.register_absent(registry)
         operations_area.register_absent(registry)

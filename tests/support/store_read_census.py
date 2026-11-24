@@ -2932,12 +2932,18 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFlows, "visit_standing"): lambda w: w.hub.services.flows.visit_standing(
         w.flow_chunk, node_id=w.deliver_node_id, epoch=1
     ),
-    (IReadFlowViews, "flow_overviews"): lambda w: w.hub.services.flow_views.flow_overviews(),
-    (IReadFlowViews, "flow_overview"): lambda w: w.hub.services.flow_views.flow_overview(w.flow_id),
-    (IReadFlowViews, "record_page"): lambda w: w.hub.services.flow_views.record_page(w.flow_id, before=1000, limit=50),
-    (IReadFlowViews, "open_submissions_on"): lambda w: w.hub.services.flow_views.open_submissions_on([w.flow_id]),
-    (IReadFlowViews, "open_submissions_of"): lambda w: w.hub.services.flow_views.open_submissions_of([w.flow_chunk]),
-    (IReadFlowViews, "chunk_records"): lambda w: w.hub.services.flow_views.chunk_records([w.flow_chunk]),
+    (IReadFlowViews, "flow_overviews"): lambda w: w.hub.default_adapter(IReadFlowViews).flow_overviews(),
+    (IReadFlowViews, "flow_overview"): lambda w: w.hub.default_adapter(IReadFlowViews).flow_overview(w.flow_id),
+    (IReadFlowViews, "record_page"): lambda w: w.hub.default_adapter(IReadFlowViews).record_page(
+        w.flow_id, before=1000, limit=50
+    ),
+    (IReadFlowViews, "open_submissions_on"): lambda w: w.hub.default_adapter(IReadFlowViews).open_submissions_on(
+        [w.flow_id]
+    ),
+    (IReadFlowViews, "open_submissions_of"): lambda w: w.hub.default_adapter(IReadFlowViews).open_submissions_of(
+        [w.flow_chunk]
+    ),
+    (IReadFlowViews, "chunk_records"): lambda w: w.hub.default_adapter(IReadFlowViews).chunk_records([w.flow_chunk]),
     (IReadFlows, "queue_standing"): _queue_standing,
     (IReadChunkFlowSubmissions, "open_flow_submissions"): lambda w: FlowStore(
         w.store_connections, w.clock

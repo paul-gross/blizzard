@@ -24,7 +24,7 @@ from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.attributes import annotate
-from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
+from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
 from blizzard.hub.config import HubConfig
@@ -267,7 +267,7 @@ class TurnRunner:
         requirements: Mapping[str, Requirement] = ACTION_REQUIREMENTS,
         public_url: str | None = None,
         work_sources: IWorkSourceRegistry,
-        tracer: IPlatformTracer | None = None,
+        tracer: IPlatformTracer,
         build_bound_seconds: float = BUILD_BOUND_SECONDS,
         pass_config: Callable[[], HubConfig] | None = None,
     ) -> None:
@@ -295,7 +295,7 @@ class TurnRunner:
         self._requirements = requirements
         self._public_url = public_url
         self._work_sources = work_sources
-        self._tracer = tracer or NoopPlatformTracer()
+        self._tracer = tracer
         self._build_bound = build_bound_seconds
         self._pass_config = pass_config
 

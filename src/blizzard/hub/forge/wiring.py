@@ -24,6 +24,7 @@ from blizzard.hub.domain.garden.delivery.validation import IProjectCommitResolve
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.forge.auth import IForgeAuthorizations
 from blizzard.hub.forge.budget import ForgeBudgets
+from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.commit_check import COMMIT_CHECK_SECONDS, SeamCommitResolver
 from blizzard.hub.forge.commit_links import LandedCommitLinks
 from blizzard.hub.forge.internal.factory import (
@@ -127,7 +128,8 @@ def credential_readiness(
 
 
 def register_tenant(registry: Registry) -> None:
-    """Declare the tenant's forge seams, and the landed-commit read port over the one links instance."""
+    """Declare the tenant's forge seams, the landed-commit read port over the one links instance, and the drain of the
+    budgets' notices into the event log."""
     registry.factory(build_installation_tokens, lifetime=Lifetime.TENANT)
     registry.factory(forge_authorizations, lifetime=Lifetime.TENANT)
     registry.factory(forge_budgets, lifetime=Lifetime.TENANT)
@@ -138,6 +140,7 @@ def register_tenant(registry: Registry) -> None:
     links = registry.service(LandedCommitLinks, lifetime=Lifetime.TENANT)
     registry.alias(port(IReadLandedCommitLinks), links)
     registry.factory(credential_readiness, lifetime=Lifetime.TENANT)
+    registry.service(BudgetNoticeDrain, lifetime=Lifetime.TENANT)
 
 
 #: Every key :func:`register_tenant` declares, for the store-free graph to declare absent.
@@ -152,6 +155,7 @@ _TENANT_KEYS: tuple[type[Any], ...] = (
     LandedCommitLinks,
     IReadLandedCommitLinks,
     CredentialReadiness,
+    BudgetNoticeDrain,
 )
 
 

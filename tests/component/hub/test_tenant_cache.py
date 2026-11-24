@@ -238,7 +238,6 @@ def test_hub_scoped_reads_mark_every_statement_they_issue(tmp_path: Path) -> Non
 def _served(core: HubCore) -> HubServices:
     return build_services(
         core,
-        follow_latest_default=False,
         extractors=shipped_extractors(),
         cadences_on=lambda: False,
         announce_minted=announce_minted,

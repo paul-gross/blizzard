@@ -20,7 +20,9 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.delivery.flow_changes import publish_flow_facts
 from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores
+from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.delivery.ports.flows import IFlowChangePublisher
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
@@ -165,7 +167,7 @@ def test_a_landed_turn_publishes_one_frame_per_flow_fact_it_wrote(tmp_path: Path
 def test_a_lever_publishes_the_withdrawn_fact_of_each_waiting_submission(tmp_path: Path) -> None:
     hub = _hub(tmp_path)
     chunk_id = _chunk(hub, _WIDGET)
-    assert hub.services.flow_lines.reconcile(0).submitted == 1
+    assert hub.default_adapter(FlowLineReconciler).reconcile(0).submitted == 1
     since, after = hub.events.latest_id(), _newest_fact_id(hub)
 
     assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"}).status_code == 202
@@ -212,7 +214,7 @@ def test_a_lever_committed_after_the_reconcile_selected_a_visit_leaves_it_unsubm
         return submitted
 
     monkeypatch.setattr(FlowLineReconciler, "submit", lever_then_submit)
-    result = hub.services.flow_lines.reconcile(0)
+    result = hub.default_adapter(FlowLineReconciler).reconcile(0)
     publish_flow_facts(hub.services.events, result.written)
 
     assert pulled == [202]
@@ -270,7 +272,7 @@ def test_a_submission_reads_and_writes_on_the_token_its_chunk_lock_returned(
     ]:
         recording(owner, name)
 
-    assert hub.services.flow_lines.reconcile(0).submitted == 1
+    assert hub.default_adapter(FlowLineReconciler).reconcile(0).submitted == 1
 
     [(chunk_ids, token)] = locked
     assert chunk_ids == [chunk_id]
@@ -286,7 +288,7 @@ def test_a_submission_reads_and_writes_on_the_token_its_chunk_lock_returned(
 def test_a_lever_whose_write_rolled_back_publishes_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hub = _hub(tmp_path)
     chunk_id = _chunk(hub, _WIDGET)
-    assert hub.services.flow_lines.reconcile(0).submitted == 1
+    assert hub.default_adapter(FlowLineReconciler).reconcile(0).submitted == 1
     since, after = hub.events.latest_id(), _newest_fact_id(hub)
 
     def failing(*_args: Any, **_kwargs: Any) -> None:
@@ -321,7 +323,7 @@ def test_a_turn_end_that_rolled_back_publishes_no_frame_for_it(tmp_path: Path, m
 def _turning(hub: HubHarness, *repos: str) -> str:
     """A chunk whose turn is open with no task answering for it — taken past the driver, so nothing was published."""
     chunk_id = _chunk(hub, *repos)
-    lines = hub.services.flow_lines
+    lines = hub.default_adapter(FlowLineReconciler)
     assert lines.reconcile(0).submitted == 1
     assert len(lines.admit(0, hub.clock.now())) == 1
     return chunk_id
@@ -334,12 +336,10 @@ def test_the_sweep_publishes_the_facts_of_a_turn_it_ends_interrupted(tmp_path: P
     stores = FlowLineStores(
         corpus=hub.hub_services.hub_scoped_reads.corpus,
         tenants=lambda: hub.hub_services.tenants.open_tenants.every().keys(),
-        lines=lambda tenant: hub.open_services(tenant).flow_lines,
-        turns=lambda tenant: hub.open_services(tenant).turns,
-        publishers=lambda tenant: hub.open_services(tenant).events,
-        notices=lambda tenant: BudgetNoticeDrain(
-            hub.open_services(tenant).forge_budgets, hub.open_services(tenant).event_log
-        ),
+        lines=lambda tenant: hub.resolve(tenant, FlowLineReconciler),
+        turns=lambda tenant: hub.resolve(tenant, TurnRunner),
+        publishers=lambda tenant: hub.resolve(tenant, IFlowChangePublisher),
+        notices=lambda tenant: hub.resolve(tenant, BudgetNoticeDrain),
     )
     driver = FlowDriver(stores, hub.clock)
 
