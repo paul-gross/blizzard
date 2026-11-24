@@ -2,16 +2,17 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import { type Tone, type hubApi, toneColor } from 'fleet';
+import { type Tone, toneColor } from 'fleet';
 import { chunkDetail, settle, turnSegmentView } from 'fleet/testing';
 import type { LeaseTranscript } from './lease-transcript.query';
 import type { PlacedStep, StepRef } from './step.model';
 import type { EnvTimelineStepView } from './step.query';
+import type { EnvTimelineSegment, TimelineInvocation } from './timeline.domain';
 import { StepDrawerView } from './step-drawer-view';
 
 const NOW = Date.parse('2026-07-13T12:00:00Z');
 
-function placed(over: Partial<hubApi.EnvTimelineSegmentView> = {}, host: Partial<PlacedStep> = {}): PlacedStep {
+function placed(over: Partial<EnvTimelineSegment> = {}, host: Partial<PlacedStep> = {}): PlacedStep {
   return {
     environment_id: 'env_a',
     host_id: 'host_01',
@@ -25,7 +26,7 @@ function placed(over: Partial<hubApi.EnvTimelineSegmentView> = {}, host: Partial
       epoch: 1,
       escalation: null,
       escalation_open: false,
-      executor: 'runner',
+      executor: { kind: 'runner' },
       exit_choice: 'pass',
       failed: false,
       graph_id: 'gr_1',
@@ -94,7 +95,7 @@ describe('StepDrawerView', () => {
   });
 
   it('names a lease-less step by its node and badges it as a hub step', async () => {
-    const hub = placed({ executor: 'hub', lease_id: null, epoch: 4 });
+    const hub = placed({ executor: { kind: 'hub' }, lease_id: null, epoch: 4 });
     const { el } = await render({ view: stepView(hub, { journey: [hub] }) });
 
     expect(q(el, 'step-drawer-lease')?.textContent?.trim()).toBe('build');
@@ -115,7 +116,7 @@ describe('StepDrawerView', () => {
   });
 
   it('writes no internal term into any copy it shows an operator', async () => {
-    const hub = placed({ executor: 'hub', lease_id: null, epoch: 4, ended_at: null });
+    const hub = placed({ executor: { kind: 'hub' }, lease_id: null, epoch: 4, ended_at: null });
     const renders = [
       await render(),
       await render({ view: stepView(hub, { journey: [PLAN, hub] }), transcriptState: 'ready' }),
@@ -157,7 +158,7 @@ describe('StepDrawerView', () => {
   });
 
   it('names a runner step with no known session by its node, truthfully and with no hub badge', async () => {
-    const unheard = placed({ executor: 'runner', lease_id: null, epoch: null });
+    const unheard = placed({ executor: { kind: 'runner' }, lease_id: null, epoch: null });
     const { el } = await render({ view: stepView(unheard, { journey: [unheard] }), transcriptState: 'empty' });
 
     expect(q(el, 'step-drawer-lease')?.textContent?.trim()).toBe('build');
@@ -167,7 +168,7 @@ describe('StepDrawerView', () => {
   });
 
   it('names a forced-entry takeover session by its node, as one that took the chunk over, with no hub badge', async () => {
-    const takeover = placed({ executor: 'runner', lease_id: null, epoch: 3 });
+    const takeover = placed({ executor: { kind: 'runner' }, lease_id: null, epoch: 3 });
     const { el } = await render({ view: stepView(takeover, { journey: [takeover] }), transcriptState: 'ready', transcript: TRANSCRIPT([]) });
 
     expect(q(el, 'step-drawer-lease')?.textContent?.trim()).toBe('build');
@@ -223,8 +224,8 @@ describe('StepDrawerView', () => {
   });
 
   it('shows the model once the step has landed, a skeleton while it is pending', async () => {
-    const invocations: hubApi.EnvTimelineInvocationView[] = [
-      { kind: 'spawn', harness_id: 'claude-code', model: 'opus', input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 1, estimated_cost_usd: null, recorded_at: '2026-07-13T10:00:00Z' },
+    const invocations: TimelineInvocation[] = [
+      { kind: { kind: 'spawn' }, harness_id: 'claude-code', model: 'opus', input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 1, estimated_cost_usd: null, recorded_at: '2026-07-13T10:00:00Z' },
     ];
     const { el } = await render({ view: stepView(BUILD, { invocations }) });
     expect(el.querySelector('.model')?.textContent).toContain('claude-code · opus');
@@ -322,7 +323,7 @@ describe('StepDrawerView', () => {
     const section = (el: HTMLElement) => el.querySelector('.sd-transcript')!.textContent!;
 
     it('explains that a hub-side step has none', async () => {
-      const hub = placed({ executor: 'hub', lease_id: null, epoch: 4 });
+      const hub = placed({ executor: { kind: 'hub' }, lease_id: null, epoch: 4 });
       const { el } = await render({ view: stepView(hub, { journey: [hub] }), transcriptState: 'ready' });
 
       expect(section(el)).toContain('a hub-side step — no session, so no transcript');
@@ -379,7 +380,7 @@ describe('StepDrawerView', () => {
     });
 
     it('labels an executor the client does not list by its raw value and still reads its transcript', async () => {
-      const unlisted = placed({ executor: 'cloud' as hubApi.Executor, epoch: 2 });
+      const unlisted = placed({ executor: { kind: 'unknown', raw: 'cloud' }, epoch: 2 });
       const turns = [turnSegmentView({ index: 0 })];
       const { el } = await render({ view: stepView(unlisted, { journey: [unlisted] }), transcriptState: 'ready', transcript: TRANSCRIPT(turns) });
 
@@ -390,7 +391,7 @@ describe('StepDrawerView', () => {
     });
 
     it('labels neither a hub nor a null executor as unlisted', async () => {
-      const hub = placed({ executor: 'hub', lease_id: null, epoch: 4 });
+      const hub = placed({ executor: { kind: 'hub' }, lease_id: null, epoch: 4 });
       const unknown = placed({ executor: null, epoch: 2 });
       for (const step of [hub, unknown]) {
         const { el } = await render({ view: stepView(step, { journey: [step] }), transcriptState: 'ready', transcript: TRANSCRIPT([]) });

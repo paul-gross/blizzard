@@ -1,4 +1,3 @@
-import type { hubApi } from 'fleet';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -8,7 +7,6 @@ import {
   type LiveTimeline,
   NO_TIMELINE,
   catchUp,
-  expandTimeline,
   hubNow,
   mergeLatest,
   mergeWindow,
@@ -25,7 +23,7 @@ const seg = (start: string, end: string | null, overrides: Partial<EnvTimelineSe
   epoch: 1,
   escalation: null,
   escalation_open: false,
-  executor: 'runner',
+  executor: { kind: 'runner' },
   exit_choice: null,
   failed: false,
   graph_id: null,
@@ -76,70 +74,6 @@ describe('hubNow', () => {
   it('falls back before any answer', () => {
     expect(hubNow(undefined, 5)).toBe(5);
     expect(hubNow(NO_TIMELINE, 5)).toBe(5);
-  });
-});
-
-describe('expandTimeline', () => {
-  const block = (overrides: Partial<hubApi.EnvTimelineBlockView> = {}): hubApi.EnvTimelineBlockView => ({
-    chunk_id: 'ch_AAAA0001',
-    cost_estimated: false,
-    cost_usd: 1,
-    ended_at: at('10:10'),
-    epoch: 2,
-    escalation: null,
-    escalation_open: false,
-    executor: 'runner',
-    exit_choice: 'pass',
-    failed: false,
-    lease_id: 'lease_1',
-    node_id: 'nd_build',
-    runner_id: 'rn_1',
-    started_at: at('10:00'),
-    ...overrides,
-  });
-
-  const wire = (blocks: hubApi.EnvTimelineBlockView[]): hubApi.EnvTimelineView => ({
-    since: at('09:00'),
-    until: at('12:00'),
-    generated_at: at('11:00'),
-    chunks: { ch_AAAA0001: { title: 'Fix it', project_id: 'proj_1' } },
-    nodes: { nd_build: { graph_name: 'delivery', node_name: 'build' } },
-    runners: { rn_1: 'alpha' },
-    hosts: [
-      {
-        host_id: 'hs_1',
-        host_name: 'xps',
-        runner_names: ['alpha'],
-        workspaces: [{ workspace_id: 'ws1', environments: [{ environment_id: 'e1', blocks }] }],
-      },
-    ],
-  });
-
-  it('lays the chunk, node and runner names back onto each block', () => {
-    const out = expandTimeline(wire([block()]));
-    expect(out.hosts[0].workspaces[0].environments[0].segments).toEqual([
-      { ...block(), title: 'Fix it', project_id: 'proj_1', runner_name: 'alpha', graph_id: null, graph_name: 'delivery', node_name: 'build' },
-    ]);
-  });
-
-  it('keeps the window, the host and the environment ids', () => {
-    const out = expandTimeline(wire([block()]));
-    expect(out).toMatchObject({ since: at('09:00'), until: at('12:00'), generated_at: at('11:00') });
-    expect(out.hosts[0]).toMatchObject({ host_id: 'hs_1', host_name: 'xps', runner_names: ['alpha'] });
-    expect(out.hosts[0].workspaces[0].workspace_id).toBe('ws1');
-    expect(out.hosts[0].workspaces[0].environments[0].environment_id).toBe('e1');
-  });
-
-  it('falls back to the ids when a table lacks them', () => {
-    const [segment] = expandTimeline(wire([block({ chunk_id: 'ch_ZZZZ', node_id: 'nd_missing', runner_id: 'rn_missing' })])).hosts[0]
-      .workspaces[0].environments[0].segments;
-    expect(segment).toMatchObject({
-      title: null,
-      project_id: null,
-      graph_name: null,
-      node_name: 'nd_missing',
-      runner_name: 'rn_missing',
-    });
   });
 });
 

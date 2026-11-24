@@ -6,7 +6,7 @@ import { QueryClient } from '@tanstack/angular-query-experimental';
 import { type KitAsyncStateValue } from 'fleet';
 import { injectShowProjectColors } from '../../core/project-lens-colors';
 import { injectDomainBoardChunksQuery } from '../../core/chunks.query';
-import { injectProjectsQuery } from '../../core/projects.query';
+import { injectProjectDomainsQuery } from '../../core/projects.query';
 
 import { NO_TIMELINE, hubNow } from './env-timeline.model';
 import { injectHubClock } from './hub-clock';
@@ -76,7 +76,7 @@ export class TracksPanel {
 
   /** Under the all-projects lens each block wears its project's colour; under one project's lens, its runner's. */
   private readonly showProjectColors = injectShowProjectColors();
-  private readonly projects = injectProjectsQuery();
+  private readonly projects = injectProjectDomainsQuery();
   /** The board's own chunk list — already read for the board — for each running chunk's node strip. */
   private readonly boardChunks = injectDomainBoardChunksQuery();
   protected readonly progress = computed(() => progressByChunk(this.boardChunks.data()?.chunks));

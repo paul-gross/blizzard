@@ -8,7 +8,6 @@ import { vi } from 'vitest';
 
 import { FLEET_CLOCK, formatHeldFor, type hubApi } from 'fleet';
 import { assetArtifactView, chunkDetail, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
-import type { EnvTimelineStepView } from './step.query';
 import { StepDrawer } from './step-drawer';
 
 const BUILD: hubApi.EnvTimelinePlacedStepView = {
@@ -40,7 +39,7 @@ const BUILD: hubApi.EnvTimelinePlacedStepView = {
   },
 };
 
-const VIEW: EnvTimelineStepView = {
+const VIEW: hubApi.EnvTimelineStepView = {
   artifact_keys: [],
   escalations: [],
   generated_at: '2026-07-13T12:00:00Z',
@@ -85,7 +84,7 @@ describe('StepDrawer', () => {
 
   describe('an executor the client does not list', () => {
     const transcriptReads = () => stub.forRoute('/api/env-timeline/step/transcript', 'GET');
-    const unlistedStep = (epoch: number | null): EnvTimelineStepView => {
+    const unlistedStep = (epoch: number | null): hubApi.EnvTimelineStepView => {
       const step = { ...BUILD, segment: { ...BUILD.segment, executor: 'cloud' as hubApi.Executor, epoch } };
       return { ...VIEW, journey: [step], step };
     };

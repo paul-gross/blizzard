@@ -22,14 +22,13 @@ import {
   compactRef,
   formatAbsolute,
   hasDelivery,
-  hubApi,
 } from 'fleet';
 import { AppLink } from 'fleet/shell';
 
 import { ChunkArtifacts } from '../chunk-dock/chunk-artifacts';
 import type { LeaseTranscript } from './lease-transcript.query';
 import { type PlacedStep, type StepRef, hostLabel, stepHeld, stepRefOf } from './step.model';
-import type { EnvTimelineStepView } from './step.query';
+import type { EnvTimelineStep as EnvTimelineStepView } from './timeline.domain';
 import {
   type DrawerOrigin,
   type StepProject,
@@ -131,7 +130,6 @@ export class StepDrawerView {
 
   protected readonly transcriptSkeleton = TRANSCRIPT_SKELETON;
   /** The generated executor constant, for the template to compare a step's executor against. */
-  protected readonly Executor = hubApi.Executor;
   protected readonly ref = compactRef;
   protected readonly absolute = formatAbsolute;
   protected readonly host = hostLabel;

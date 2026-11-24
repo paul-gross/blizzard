@@ -3,7 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { commands, page } from 'vitest/browser';
 
-import type { hubApi } from 'fleet';
 import { settle, turnSegmentView } from 'fleet/testing';
 import type { PlacedStep } from './step.model';
 import type { EnvTimelineStepView } from './step.query';
@@ -45,7 +44,7 @@ const STEP: PlacedStep = {
     epoch: 2,
     escalation: null,
     escalation_open: false,
-    executor: 'a-newer-hub-executor' as hubApi.Executor,
+    executor: { kind: 'unknown', raw: 'a-newer-hub-executor' },
     exit_choice: 'pass',
     failed: false,
     graph_id: 'gr_1',

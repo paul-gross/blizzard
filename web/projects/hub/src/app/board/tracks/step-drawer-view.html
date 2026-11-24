@@ -160,7 +160,7 @@
               <span class="dim" data-testid="step-drawer-executor-unlisted">executor {{ raw }}</span>
             }
           </fleet-kit-section-head>
-          @if (s.executor === Executor.HUB) {
+          @if (s.executor?.kind === 'hub') {
             <div class="dim">a hub-side step — no session, so no transcript</div>
           } @else {
             <fleet-kit-async-state

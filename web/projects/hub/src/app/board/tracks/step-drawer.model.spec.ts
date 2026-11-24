@@ -1,6 +1,6 @@
 import { assetChunkArtifact } from 'fleet/testing';
 import type { ChunkArtifact, ChunkArtifactStore } from 'fleet';
-import type { ProjectView } from 'fleet';
+import type { Project } from '../../core/project.domain';
 import { describe, expect, it } from 'vitest';
 
 import type { EnvTimelineSegment, PlacedStep } from './step.model';
@@ -24,7 +24,7 @@ import {
 } from './step-drawer.model';
 
 /** An executor a newer hub sends that this client's vocabulary does not list. */
-const UNLISTED = 'cloud' as EnvTimelineSegment['executor'];
+const UNLISTED = { kind: 'unknown', raw: 'cloud' } as const;
 
 const at = (hhmm: string): string => `2026-07-01T${hhmm}:00Z`;
 
@@ -36,7 +36,7 @@ const seg = (start: string, end: string | null, overrides: Partial<EnvTimelineSe
   epoch: 1,
   escalation: null,
   escalation_open: false,
-  executor: 'runner',
+  executor: { kind: 'runner' },
   exit_choice: null,
   failed: false,
   graph_id: null,
@@ -69,7 +69,7 @@ const inv = (overrides: Partial<Invocation> = {}): Invocation => ({
   estimated_cost_usd: null,
   harness_id: null,
   input_tokens: 0,
-  kind: 'resume',
+  kind: { kind: 'resume' },
   model: null,
   output_tokens: 0,
   recorded_at: at('10:00'),
@@ -204,7 +204,7 @@ describe('neighbours', () => {
 
 describe('stepModel', () => {
   it('prefers the spawn invocation', () => {
-    const view = stepView([first], [inv({ harness_id: 'codex', model: 'gpt' }), inv({ kind: 'spawn', harness_id: 'claude', model: 'opus' })]);
+    const view = stepView([first], [inv({ harness_id: 'codex', model: 'gpt' }), inv({ kind: { kind: 'spawn' }, harness_id: 'claude', model: 'opus' })]);
     expect(stepModel(view)).toBe('claude · opus');
   });
 
@@ -320,15 +320,15 @@ describe('transcriptRefOf', () => {
 
   it('is null without a step, for a hub-side step, or without an epoch', () => {
     expect(transcriptRefOf(undefined)).toBeNull();
-    expect(transcriptRefOf(seg('10:00', null, { executor: 'hub', lease_id: null, epoch: 4 }))).toBeNull();
+    expect(transcriptRefOf(seg('10:00', null, { executor: { kind: 'hub' }, lease_id: null, epoch: 4 }))).toBeNull();
     expect(transcriptRefOf(seg('10:00', null, { epoch: null }))).toBeNull();
   });
 
   it.each([
-    ['runner', 'runner', true],
+    ['runner', { kind: 'runner' }, true],
     ['null', null, true],
     ['unlisted', UNLISTED, true],
-    ['hub', 'hub', false],
+    ['hub', { kind: 'hub' }, false],
   ] as const)('reads a %s step only with an epoch', (_, executor, reads) => {
     expect(transcriptRefOf(seg('10:00', null, { executor, epoch: 5 }))?.epoch ?? null).toBe(reads ? 5 : null);
     expect(transcriptRefOf(seg('10:00', null, { executor, epoch: null }))).toBeNull();
@@ -341,8 +341,8 @@ describe('unlistedExecutor', () => {
   });
 
   it('is null for a listed executor or none', () => {
-    expect(unlistedExecutor('runner')).toBeNull();
-    expect(unlistedExecutor('hub')).toBeNull();
+    expect(unlistedExecutor({ kind: 'runner' })).toBeNull();
+    expect(unlistedExecutor({ kind: 'hub' })).toBeNull();
     expect(unlistedExecutor(null)).toBeNull();
   });
 });
@@ -353,7 +353,7 @@ describe('stepIdentity', () => {
   });
 
   it('names a hub-side step by its node, and badges it', () => {
-    expect(stepIdentity(seg('10:00', null, { executor: 'hub', lease_id: null }))).toEqual({
+    expect(stepIdentity(seg('10:00', null, { executor: { kind: 'hub' }, lease_id: null }))).toEqual({
       label: 'build',
       title: 'no session of its own — a hub-side step',
       hub: true,
@@ -378,7 +378,7 @@ describe('stepIdentity', () => {
 });
 
 describe('projectOf', () => {
-  const project = (project_id: string, name: string, color: string): ProjectView => ({ project_id, name, color }) as ProjectView;
+  const project = (project_id: string, name: string, color: string): Pick<Project, 'project_id' | 'name' | 'color'> => ({ project_id, name, color });
   const projects = [project('proj_1', 'Blizzard', '#abcdef'), project('proj_2', 'Teal', 'teal')];
 
   it('names the project with its raw colour', () => {
