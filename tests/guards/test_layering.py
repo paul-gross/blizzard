@@ -4096,7 +4096,7 @@ def _registered_store_acquisitions(src_root: Path) -> list[str]:
 # The runner half of the gate: the stopped-host CLI and the runner's runtime module read the store through the
 # composition's readers, and open an engine of their own only at the sites below. The list may only shrink: a site
 # that no longer opens an engine fails the check until its entry is deleted. Keys are
-# "<path under src/blizzard>::<enclosing qualname>", compared as a multiset.
+# "<path under the blizzard package>::<enclosing qualname>", compared as a multiset.
 _RUNNER_STORE_WIRING_ALLOWED = (
     "runner/cli/host_records.py::_Host.write",
     "runner/cli/runners.py::add",
