@@ -10,7 +10,7 @@ import re
 import subprocess
 import sys
 import textwrap
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -4091,6 +4091,139 @@ def _registered_store_acquisitions(src_root: Path) -> list[str]:
                     owner = "a wiring module" if wiring else f"the registered {getattr(scope, 'name', '')}"
                     breaches.append(f"{relative}:{node.lineno} acquires a store inside {owner}")
     return breaches
+
+
+# The runner half of the gate: the stopped-host CLI and the runner's runtime module read the store through the
+# composition's readers, and open an engine of their own only at the sites below. The list may only shrink: a site
+# that no longer opens an engine fails the check until its entry is deleted. Keys are
+# "<path under src/blizzard>::<enclosing qualname>", compared as a multiset.
+_RUNNER_STORE_WIRING_ALLOWED = (
+    "runner/cli/host_records.py::_Host.write",
+    "runner/cli/runners.py::add",
+    "runner/cli/runners.py::retire",
+    "runner/cli/runtime.py::StoreHostedRunners.built",
+    "runner/cli/runtime.py::_check",
+    "runner/cli/runtime.py::_seed_entries",
+    "runner/cli/runtime.py::_stored_token",
+    "runner/cli/runtime.py::hosted_entries",
+    "runner/cli/runtime.py::read_host_stores",
+    "runner/cli/runtime.py::read_stores",
+    "runner/cli/runtime.py::seed_host",
+    "runner/cli/runtime.py::seed_host_records",
+    "runner/cli/runtime.py::seed_hosted_runners",
+    "runner/cli/store_guard.py::hosted_runner_ids",
+    "runner/cli/store_guard.py::named_runners",
+    "runner/cli/store_guard.py::retired_runner_ids",
+    "runner/cli/store_guard.py::store_hosted_runner_ids",
+    "runner/cli/store_guard.py::store_only_entries",
+    "runner/cli/token.py::_set_on_stopped_host",
+)
+
+
+def _engine_opens_in(node: ast.AST, scope: tuple[str, ...], bindings: Mapping[str, str]) -> list[str]:
+    """The qualname of the scope enclosing each engine open under ``node``."""
+    opens: list[str] = []
+    for child in ast.iter_child_nodes(node):
+        inner = scope
+        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            inner = (*scope, child.name)
+        if isinstance(child, ast.Call) and _wiring_target(child.func, bindings) in _ENGINE_OPEN_TARGETS:
+            opens.append(".".join(scope))
+        opens.extend(_engine_opens_in(child, inner, bindings))
+    return opens
+
+
+def _runner_engine_opens(src_root: Path) -> list[str]:
+    """Each engine open under ``runner/cli/`` and in ``runner/runtime.py``, as its allowlist key."""
+    paths = [*sorted((src_root / "runner" / "cli").rglob("*.py")), src_root / "runner" / "runtime.py"]
+    opens: list[str] = []
+    for path in paths:
+        if not path.exists():
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        relative = path.relative_to(src_root).as_posix()
+        opens.extend(
+            f"{relative}::{scope}" for scope in _engine_opens_in(tree, (), _wiring_bindings(path, src_root, tree))
+        )
+    return opens
+
+
+def _runner_store_wiring_breaches(src_root: Path, allowed: Iterable[str]) -> list[str]:
+    opens = Counter(_runner_engine_opens(src_root))
+    listed = Counter(allowed)
+    breaches = [
+        f"{key} opens an engine {count - listed[key]} time(s) more than the allowlist admits; read the store "
+        "through the composition's reader"
+        for key, count in sorted(opens.items())
+        if count > listed[key]
+    ]
+    breaches.extend(
+        f"{key} is allowlisted but opens no engine that often; delete its entry"
+        for key, count in sorted(listed.items())
+        if opens[key] < count
+    )
+    return breaches
+
+
+def test_runner_store_wiring_opens_engines_only_at_allowlisted_sites() -> None:
+    assert not (breaches := _runner_store_wiring_breaches(_SRC_DIR, _RUNNER_STORE_WIRING_ALLOWED)), breaches
+
+
+_RUNNER_OPEN = "from blizzard.foundation.store.engine import create_engine_from_url{alias}\n"
+
+
+@pytest.mark.parametrize(
+    "relative, source",
+    [
+        ("runner/cli/new.py", _RUNNER_OPEN.format(alias="") + "def f(c):\n    return create_engine_from_url(c)\n"),
+        (
+            "runner/cli/new.py",
+            _RUNNER_OPEN.format(alias=" as open_it") + "def f(c):\n    return open_it(c)\n",
+        ),
+        (
+            "runner/cli/new.py",
+            "from blizzard.foundation.store import engine\ndef f(c):\n    return engine.create_engine_from_url(c)\n",
+        ),
+        ("runner/cli/new.py", "import sqlalchemy\ndef f(c):\n    return sqlalchemy.create_engine(c)\n"),
+        ("runner/runtime.py", _RUNNER_OPEN.format(alias="") + "def f(c):\n    return create_engine_from_url(c)\n"),
+    ],
+)
+def test_runner_store_wiring_catches_an_open_at_an_unlisted_site(tmp_path: Path, relative: str, source: str) -> None:
+    src = tmp_path / "blizzard"
+    path = src / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(source)
+    assert _runner_store_wiring_breaches(src, [])
+
+
+def test_runner_store_wiring_catches_a_second_open_in_a_listed_function(tmp_path: Path) -> None:
+    src = tmp_path / "blizzard"
+    path = src / "runner/cli/new.py"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        _RUNNER_OPEN.format(alias="") + "def f(c):\n    create_engine_from_url(c)\n    create_engine_from_url(c)\n"
+    )
+    assert _runner_store_wiring_breaches(src, ["runner/cli/new.py::f"])
+
+
+def test_runner_store_wiring_catches_a_stale_allowlist_entry(tmp_path: Path) -> None:
+    src = tmp_path / "blizzard"
+    path = src / "runner/cli/new.py"
+    path.parent.mkdir(parents=True)
+    path.write_text("def f(c):\n    return c\n")
+    assert _runner_store_wiring_breaches(src, ["runner/cli/new.py::f"])
+
+
+def test_runner_store_wiring_passes_a_listed_site_and_other_modules(tmp_path: Path) -> None:
+    src = tmp_path / "blizzard"
+    listed = src / "runner/cli/new.py"
+    listed.parent.mkdir(parents=True)
+    listed.write_text(
+        _RUNNER_OPEN.format(alias="") + "class K:\n    def f(self, c):\n        create_engine_from_url(c)\n"
+    )
+    other = src / "runner/composition.py"
+    other.write_text(_RUNNER_OPEN.format(alias="") + "def f(c):\n    return create_engine_from_url(c)\n")
+    assert _runner_store_wiring_breaches(src, ["runner/cli/new.py::K.f"]) == []
 
 
 def test_hub_store_wiring_goes_through_composition() -> None:
