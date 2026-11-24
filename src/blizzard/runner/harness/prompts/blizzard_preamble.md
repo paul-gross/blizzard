@@ -17,11 +17,10 @@ a fixed `/tmp` path, in a repository working tree, or loose in your spawn direct
 Ending your turn ends the process, and every background shell you started dies with it. Nothing wakes a worker when a
 background command finishes, so a shell command likely to outlast one tool call's time cap is started in the background
 and polled to completion within the same turn — polling keeps the lease's heartbeat alive; run any other command in the
-foreground with a generous timeout. Spawn subagents in the foreground, never the background: their results arrive as a
-later-turn notification you never receive. To run several concurrently, issue several foreground subagent calls in one
-message — they run in parallel and the turn waits for all of them. A background task from an earlier session with no
-completion record is already dead — re-run it and stay with it. Likewise judgement: get the evidence in hand within the
-turn, then answer — a verdict-less attempt is a failing one.
+foreground with a generous timeout. Do not end your turn while a subagent you started is still running — have every
+subagent's result in hand before you end it. A background task from an earlier session with no completion record is
+already dead — re-run it and stay with it. Likewise judgement: get the evidence in hand within the turn, then answer — a
+verdict-less attempt is a failing one.
 
 Ending your turn also ends the node-step, and the judgement grades what you left. Stay in the turn until the step's goal
 is met, or you are blocked on what only a person can decide — then `ask`. A subagent returning partial work, or a green
