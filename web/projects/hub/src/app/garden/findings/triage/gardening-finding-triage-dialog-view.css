@@ -6,12 +6,6 @@
   --kit-dialog-width: 700px;
 }
 
-h2 {
-  margin: 0;
-  font-size: var(--fs-md);
-  color: var(--text);
-}
-
 /* The verb's consequence, stated above the note field it justifies — dimmer than the
    heading it sits under, since it is orienting text rather than a field label. */
 .blurb {

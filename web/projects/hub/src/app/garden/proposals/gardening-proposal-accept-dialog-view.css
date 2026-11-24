@@ -10,12 +10,6 @@
   --kit-dialog-width: 1120px;
 }
 
-h2 {
-  margin: 0;
-  font-size: var(--fs-md);
-  color: var(--text);
-}
-
 /* The fields stand at their own declared `rows`, not at a share of the panel's
    height: `.panel` above them carries a `min-height`/`max-height` pair but no
    `height`, so `.p-body`'s `flex: 1` never resolves to a definite height for a
