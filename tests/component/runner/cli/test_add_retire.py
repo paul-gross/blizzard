@@ -74,12 +74,7 @@ from tests.support.runner_fakes import (
 )
 from tests.support.runner_init_fakes import FakeInitHub, init_runner
 
-pytestmark = pytest.mark.usefixtures("short_tmp_path")
-
-
-@pytest.fixture
-def tmp_path(short_tmp_path: None, tmp_path: Path) -> Path:
-    return tmp_path
+pytestmark = pytest.mark.usefixtures("short_host_sockets")
 
 
 def _runner_names(root: Path) -> list[str]:

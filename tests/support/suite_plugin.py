@@ -4,17 +4,15 @@ the tier-marker refusal, store-revision retirement, sharding, the statement guar
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import json
 import os
-import shutil
-import stat
 import tempfile
 from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol
 
-import _pytest.tmpdir as pytest_tmpdir
 import pytest
 from _pytest.fixtures import SubRequest
 
@@ -79,55 +77,29 @@ def short_host_runtime() -> Iterator[Path]:
 
 
 @pytest.fixture
-def short_tmp_path(
-    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
-) -> Iterator[None]:
-    """Keep subprocess sockets short and copy retained test artifacts into pytest's directory."""
-    original = pytest_tmpdir._mk_tmp  # pyright: ignore[reportPrivateUsage]
-    node: object = request.node  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]  # pytest leaves node untyped
-    with tempfile.TemporaryDirectory(prefix="bz-path-", dir="/tmp") as directory:
-        short = Path(directory) / "t"
-        target: Path | None = None
-
-        def make_tmp(inner: pytest.FixtureRequest, factory: pytest.TempPathFactory) -> Path:
-            nonlocal target
-            inner_node: object = inner.node  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]  # pytest leaves node untyped
-            if inner_node is node:
-                target = original(inner, factory)
-                short.mkdir()
-                return short
-            return original(inner, factory)
-
-        monkeypatch.setattr(pytest_tmpdir, "_mk_tmp", make_tmp)
-        yield
-        item = cast(pytest.Item, request.node)  # pyright: ignore[reportUnknownMemberType]
-        empty: dict[str, bool] = {}
-        result = item.stash.get(pytest_tmpdir.tmppath_result_key, empty)
-        policy = tmp_path_factory._retention_policy  # pyright: ignore[reportPrivateUsage]
-        retain = policy == "all" or (policy == "failed" and not result.get("call", True))
-        if target is not None and short.exists() and retain:
-
-            def ignore_sockets(root: str, names: list[str]) -> set[str]:
-                return {name for name in names if stat.S_ISSOCK((Path(root) / name).lstat().st_mode)}
-
-            shutil.copytree(short, target, dirs_exist_ok=True, symlinks=True, ignore=ignore_sockets)
-
-
-@pytest.fixture
 def short_host_sockets(monkeypatch: pytest.MonkeyPatch, short_host_runtime: Path) -> None:
     """Keep each host's sockets short while its store and other files stay in the test directory."""
-    roots: dict[Path, Path] = {}
 
     def socket_for(layout: HostLayout, name: str) -> Path:
         root = layout.root.resolve()
-        if root not in roots:
-            directory = short_host_runtime / str(len(roots))
-            directory.mkdir()
-            roots[root] = directory
-        return roots[root] / name
+        key = hashlib.sha256(os.fsencode(root)).hexdigest()[:16]
+        directory = short_host_runtime / key
+        directory.mkdir(exist_ok=True)
+        return directory / name
 
     monkeypatch.setattr(HostLayout, "socket_path", property(lambda layout: socket_for(layout, "host.sock")))
     monkeypatch.setattr(HostLayout, "legacy_socket_path", property(lambda layout: socket_for(layout, "runner.sock")))
+
+
+@pytest.fixture
+def short_subprocess_sockets(
+    monkeypatch: pytest.MonkeyPatch, short_host_sockets: None, short_host_runtime: Path
+) -> None:
+    """Apply the same socket mapping to Python daemons spawned by a test."""
+    bootstrap = Path(__file__).parent / "socket_bootstrap"
+    inherited = os.environ.get("PYTHONPATH", "")
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(filter(None, (str(bootstrap), inherited))))
+    monkeypatch.setenv("BLIZZARD_TEST_SOCKET_DIR", str(short_host_runtime))
 
 
 #: The two trees the folder layout governs: each tests root and the package root its folders mirror.
