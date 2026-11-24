@@ -85,11 +85,14 @@ def pointer_key(origin_url: str | None, name: str) -> str:
     """The key commit pointers group by: ``repo_identity`` qualified by the origin's host.
 
     The host is lowercased with its port and userinfo dropped, so one repository's scp-style and
-    https origins give one key; the same ``owner/name`` on two forge hosts gives two. An origin
-    that names no host falls back to :func:`repo_identity`."""
+    https origins give one key; the same ``owner/name`` on two forge hosts gives two. The owner is
+    lowercased too, as forges resolve it case-insensitively. An origin that names no host falls back
+    to :func:`repo_identity`."""
     ref = RepoRef.parse(origin_url) if origin_url else None
     if ref is None:
         return name
     host = ref.host.lower().rpartition("@")[2]
     host = host.rpartition(":")[0] if re.search(r":\d*$", host) and not host.endswith("]") else host
-    return f"{host}/{ref.qualified}" if host else ref.qualified
+    owner, _, repo = ref.qualified.partition("/")
+    qualified = f"{owner.lower()}/{repo}" if repo else ref.qualified
+    return f"{host}/{qualified}" if host else qualified

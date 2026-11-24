@@ -41,6 +41,7 @@ from blizzard.foundation.platform_tracing.handle import (
 )
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
 from blizzard.foundation.roles import collaborator, domain_model
+from blizzard.foundation.runner_start_step import RunnerStartStep
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.sealing import ISecretCipher, SealedValue
 from blizzard.foundation.settings_record.vocabulary import Entry
@@ -131,7 +132,7 @@ from blizzard.runner.host_settings_reader import (
     HostSettingsSnapshot,
 )
 from blizzard.runner.hosting.ports import IHostRunnerHub, IRunnerAdmission
-from blizzard.runner.hosting.reconcile import RunnerStartFailure, RunnerStartFailures, RunnerStartStep, reconcile
+from blizzard.runner.hosting.reconcile import RunnerStartFailure, RunnerStartFailures, reconcile
 from blizzard.runner.hosting.retirement import HubNoticedRetirement, RetirementNotices
 from blizzard.runner.hosting.service import HostedRunnerService
 from blizzard.runner.hub.client import HostReport, HostReportedWorkspace, IHostHubClient

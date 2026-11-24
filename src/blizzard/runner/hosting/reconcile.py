@@ -6,9 +6,9 @@ from __future__ import annotations
 import threading
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
-from typing import Literal
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.runner_start_step import RunnerStartStep
 
 
 @domain_model
@@ -34,12 +34,6 @@ def reconcile(
     drain = tuple(sorted(runner_id for runner_id in running if runner_id in retired))
     forget = tuple(sorted(runner_id for runner_id in failed if runner_id not in start))
     return ReconcilePlan(start=start, drain=drain, forget_failures=forget)
-
-
-#: The startup step a runner start failed at, as a failed start and the panel name it.
-type RunnerStartStep = Literal[
-    "seed", "compose", "worker_shell", "tracing", "worker_scratch", "resume", "takeovers", "sessions", "serve"
-]
 
 
 @domain_model

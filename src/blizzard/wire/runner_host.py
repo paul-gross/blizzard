@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from blizzard.foundation.host_record_state import HostRecordState
 from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.host_runner_state import HostRunnerState
+from blizzard.foundation.runner_start_step import RunnerStartStep
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
@@ -39,7 +40,7 @@ class HostRunnerBindingView(BaseModel):
 class HostRunnerStartFailureView(BaseModel):
     """Why a runner's latest start failed: the startup step it stopped at and the error."""
 
-    step: str
+    step: Annotated[RunnerStartStep | Unrecognized, OPEN]
     error: str
 
 
