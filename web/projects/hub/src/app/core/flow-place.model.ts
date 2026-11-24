@@ -72,14 +72,12 @@ export interface FlowPlaceLine {
 /** How a chunk's place on one flow reads: its position in line when the hub says it holds one, else its state's label
  * (raw when this build does not know the state). */
 type BoardFlowPlace = ChunkDetailAggregate['flow_places'][number];
-type PlaceInput = Omit<BoardFlowPlace, 'state'> & { readonly state: BoardFlowPlace['state'] | string };
 
-function placeState(place: PlaceInput): string {
-  if (typeof place.state === 'string') return place.state;
+function placeState(place: BoardFlowPlace): string {
   return place.state.kind === 'unknown' ? place.state.raw : place.state.kind;
 }
 
-export function placeText(place: PlaceInput): string {
+export function placeText(place: BoardFlowPlace): string {
   const path = flowPath(place);
   if (placeInLine(place)) return `${ordinal(place.position)} on ${path}`;
   return `${placeStateLabel(placeState(place))} on ${path}`;
@@ -87,7 +85,7 @@ export function placeText(place: PlaceInput): string {
 
 /** Every place a chunk holds, one line per flow, in the order the hub lists them. */
 export function placeLines(
-  places: readonly PlaceInput[] | undefined,
+  places: readonly BoardFlowPlace[] | undefined,
 ): readonly FlowPlaceLine[] {
   return (places ?? []).map((place) => ({
     flowId: place.flow_id,

@@ -3,7 +3,7 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ChunkPage, ChunkGeneralTab, ChunkTranscriptsTab, type ChunkDetailAggregate, type hubApi, ViewportService } from 'fleet';
+import { ChunkPage, ChunkGeneralTab, ChunkTranscriptsTab, type ChunkDetailAggregate, ViewportService } from 'fleet';
 import {
   assetArtifactView,
   chunkDetail,
@@ -470,7 +470,7 @@ async function pumpUntil(fixture: ComponentFixture<unknown>, ready: () => boolea
 }
 
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
-const CHAIN_DETAIL: hubApi.ChunkDetail = chunkDetail({
+const CHAIN_DETAIL: ReturnType<typeof chunkDetail> = chunkDetail({
   chunk_id: CHUNK_ID,
   graph_id: 'gr_1',
   graph_name: 'default',
@@ -498,7 +498,7 @@ function mountInAppShell(root: HTMLElement): void {
 }
 
 /** A segment long enough to overflow the phone viewport. */
-function overflowingTurns(): hubApi.TurnSegmentViewOutput[] {
+function overflowingTurns(): ReturnType<typeof turnSegmentView>[] {
   return Array.from({ length: 60 }, (_, i) =>
     turnSegmentView({
       index: i,
@@ -516,7 +516,7 @@ function overflowingTurns(): hubApi.TurnSegmentViewOutput[] {
 type HubRoutes = Parameters<typeof stubHubClient>[0];
 
 /** The routes the composed chain reads — the operator, the chunk, its work items — plus the test's transcript routes. */
-function chainRoutes(detail: hubApi.ChunkDetail, extra: HubRoutes): HubRoutes {
+function chainRoutes(detail: ReturnType<typeof chunkDetail>, extra: HubRoutes): HubRoutes {
   return {
     'GET /api/me': () => OPERATOR_ME_RESPONSE,
     'GET /api/chunks/{chunk_id}': () => detail,
@@ -658,7 +658,7 @@ describe('chunk page Transcripts tab composed-chain layout shell sweep (web:shel
   });
 });
 
-const DRILLDOWN_DETAIL: hubApi.ChunkDetail = {
+const DRILLDOWN_DETAIL: ReturnType<typeof chunkDetail> = {
   ...CHAIN_DETAIL,
   history: [transitionView({
     choice_name: 'pass', epoch: 1, from_node_id: 'nd_build', from_node_name: 'build',

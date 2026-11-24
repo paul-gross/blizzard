@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type ChunkControl, type ChunkDetail as ChunkDetailModel, formatWhen, type hubApi } from 'fleet';
+import { type ChunkControl, formatWhen } from 'fleet';
 import {
   settle,
   OPERATOR_ME_RESPONSE,
@@ -22,6 +22,7 @@ import {
   workItemEntry,
 } from 'fleet/testing';
 import { ChunkDetail } from './chunk-detail';
+type ChunkDetailModel = ReturnType<typeof chunkDetail>;
 
 const ROUTED_DETAIL: ChunkDetailModel = chunkDetail({
   graph_name: null,
@@ -168,7 +169,7 @@ describe('ChunkDetail container', () => {
   let completeResponse: Refusal | null = null;
   let deleteResponse: Refusal | null = null;
   let answerResponse: Refusal | StubUndeclaredError | null = null;
-  let resolveResponse: Refusal | StubHttpError<409, hubApi.DecisionResolutionConflict> | null = null;
+  let resolveResponse: Refusal | StubHttpError<409, { decision_id: string; already_resolved_by: string | null; resolved_choice: string; resolved_at: string; detail: string }> | null = null;
   // Whether the chunk read for `ch_ask` has been answered yet, so a test can make the
   // post-answer re-read return the settled row the way the live hub would.
   let askAnswered = false;
@@ -193,7 +194,7 @@ describe('ChunkDetail container', () => {
       ch_deletable: () => (chunkDeleted ? stubError(404, { detail: 'unknown chunk' }) : DELETABLE_DETAIL),
       ch_ask: () => (askAnswered ? ASK_ANSWERED_DETAIL : ASK_DETAIL),
     };
-    const summary = (chunkId: string): hubApi.ChunkSummary => chunkSummary({ chunk_id: chunkId, graph_id: 'gr_1', status: 'running' });
+    const summary = (chunkId: string) => chunkSummary({ chunk_id: chunkId, graph_id: 'gr_1', status: 'running' });
     stub = stubHubClient({
       'GET /api/me': () => OPERATOR_ME_RESPONSE,
       'GET /api/chunks/{chunk_id}': (_request, { chunk_id }) =>

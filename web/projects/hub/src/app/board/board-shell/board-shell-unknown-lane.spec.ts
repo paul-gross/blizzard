@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { ChunkStatus, LaneStatus } from 'fleet';
+import type { LaneStatus } from 'fleet';
 import type { BoardChunk } from '../../core/chunks.model';
 import { boardChunk, boardCounts } from '../board.fixture';
 import { BoardShell } from './board-shell';
@@ -9,7 +9,7 @@ import { BoardShell } from './board-shell';
 /** A chunk whose status this build's generated vocabulary does not list, as a newer hub may send. */
 describe('BoardShell unknown status lane', () => {
   const chunk = (suffix: string, status: string, laneStatus: LaneStatus): BoardChunk =>
-    boardChunk({ chunk_id: `ch_01${suffix}`, graph_id: 'gr_1', status: status as ChunkStatus, laneStatus, current_node_id: 'nd_build' });
+    boardChunk({ chunk_id: `ch_01${suffix}`, graph_id: 'gr_1', status, laneStatus, current_node_id: 'nd_build' });
 
 
   const COUNTS = boardCounts({

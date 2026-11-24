@@ -1,4 +1,4 @@
-import type { LandedRepoView, PrView } from '../../api/hub';
+import type { ChunkLandedRepo, ChunkPr } from '../chunk-page/chunk-detail.model';
 import { compactRef } from '../../core/compact-ref';
 import type { Tone } from '../../kit';
 
@@ -155,8 +155,8 @@ export interface ChunkCardView {
   readonly showsDelivery?: boolean;
   readonly places?: readonly ChunkCardPlace[];
   readonly awaitingExternalMerge?: boolean;
-  readonly openPrs?: readonly PrView[];
-  readonly landedRepos?: readonly LandedRepoView[];
+  readonly openPrs?: readonly ChunkPr[];
+  readonly landedRepos?: readonly ChunkLandedRepo[];
   /** The chunk's spend, already formatted, or `null` for none to show. */
   readonly cost?: string | null;
   /** When a finished chunk finished, or `null` for one not finished. */

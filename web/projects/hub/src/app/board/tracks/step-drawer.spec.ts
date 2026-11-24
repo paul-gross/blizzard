@@ -6,48 +6,10 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 
 import { vi } from 'vitest';
 
-import { FLEET_CLOCK, formatHeldFor, type hubApi } from 'fleet';
+import { FLEET_CLOCK, formatHeldFor } from 'fleet';
 import { assetArtifactView, chunkDetail, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 import { StepDrawer } from './step-drawer';
-
-const BUILD: hubApi.EnvTimelinePlacedStepView = {
-  environment_id: 'env_a',
-  host_id: 'host_01',
-  host_name: 'xps',
-  workspace_id: 'ws_1',
-  segment: {
-    chunk_id: 'ch_01',
-    cost_estimated: false,
-    cost_usd: 0,
-    ended_at: '2026-07-13T10:30:00Z',
-    epoch: 1,
-    escalation: null,
-    escalation_open: false,
-    executor: 'runner',
-    exit_choice: 'pass',
-    failed: false,
-    graph_id: 'gr_1',
-    graph_name: 'delivery',
-    lease_id: 'lease_01',
-    node_id: 'nd_build',
-    node_name: 'build',
-    project_id: null,
-    runner_id: 'rn_01',
-    runner_name: 'runner-one',
-    started_at: '2026-07-13T10:00:00Z',
-    title: null,
-  },
-};
-
-const VIEW: hubApi.EnvTimelineStepView = {
-  artifact_keys: [],
-  escalations: [],
-  generated_at: '2026-07-13T12:00:00Z',
-  invocations: [],
-  spend: null,
-  journey: [BUILD],
-  step: BUILD,
-};
+import { BUILD, VIEW, unlistedStep } from './step-fixtures.translate';
 
 describe('StepDrawer', () => {
   let stub: RequestClientStub;
@@ -84,11 +46,6 @@ describe('StepDrawer', () => {
 
   describe('an executor the client does not list', () => {
     const transcriptReads = () => stub.forRoute('/api/env-timeline/step/transcript', 'GET');
-    const unlistedStep = (epoch: number | null): hubApi.EnvTimelineStepView => {
-      const step = { ...BUILD, segment: { ...BUILD.segment, executor: 'cloud' as hubApi.Executor, epoch } };
-      return { ...VIEW, journey: [step], step };
-    };
-
     it('reads its transcript when it carries an epoch', async () => {
       await mount('/board?chunk=ch_01&step=lease_01', () => unlistedStep(3));
 

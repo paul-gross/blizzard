@@ -2,8 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import type { ChunkDetail } from 'fleet';
-import { chunkControlStub, chunkDetail } from 'fleet/testing';
+import type { ChunkDetailAggregate as ChunkDetail } from 'fleet';
+import { chunkControlStub, domainChunkDetail as chunkDetail } from 'fleet/testing';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
 const ISSUE_DETAIL: ChunkDetail = chunkDetail({
@@ -11,7 +11,7 @@ const ISSUE_DETAIL: ChunkDetail = chunkDetail({
   current_node_name: null,
   chunk_id: 'ch_01issue00000000000000000000',
   graph_id: 'gr_1',
-  status: 'running',
+  status: { kind: 'running' },
   pausable: true,
   completable: true,
   current_node_id: 'nd_build',
@@ -33,7 +33,7 @@ const ROUTED_DETAIL: ChunkDetail = chunkDetail({
   current_node_name: null,
   chunk_id: 'ch_01routed000000000000000000',
   graph_id: 'gr_1',
-  status: 'running',
+  status: { kind: 'running' },
   pausable: true,
   completable: true,
   current_node_id: 'nd_build',
@@ -89,7 +89,7 @@ describe('ChunkDetailHeader', () => {
   it('names the chunk and its work item the way the board card does', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status.kind);
     fixture.componentRef.setInput('control', chunkControlStub());
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -119,7 +119,7 @@ describe('ChunkDetailHeader', () => {
 
   it('surfaces who paused a chunk in the header', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
-    const detail = pausedDetail('paused');
+    const detail = pausedDetail({ kind: 'paused' });
     fixture.componentRef.setInput('detail', detail);
     fixture.componentRef.setInput('renderedStatus', detail.status);
     fixture.componentRef.setInput('control', chunkControlStub());
@@ -134,7 +134,7 @@ describe('ChunkDetailHeader', () => {
   it('shows no chunk-pause-by when the chunk carries no open pause fact', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status.kind);
     fixture.componentRef.setInput('control', chunkControlStub());
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -145,7 +145,7 @@ describe('ChunkDetailHeader', () => {
   it('emits dismiss when the close button is activated', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status.kind);
     fixture.componentRef.setInput('control', chunkControlStub());
     let closed = false;
     fixture.componentInstance.dismiss.subscribe(() => (closed = true));
@@ -161,7 +161,7 @@ describe('ChunkDetailHeader', () => {
   it('draws the close and actions controls as glyphs, not text', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status.kind);
     fixture.componentRef.setInput('control', chunkControlStub());
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -183,7 +183,7 @@ describe('ChunkDetailHeader', () => {
   it('draws no ⋮ actions menu without a control port', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status.kind);
     await fixture.whenStable();
 
     expect(
@@ -196,7 +196,7 @@ describe('ChunkDetailHeader', () => {
   it('draws no close button when not closable', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status.kind);
     fixture.componentRef.setInput('closable', false);
     await fixture.whenStable();
 
@@ -212,7 +212,7 @@ describe('ChunkDetailHeader', () => {
   it('names no runner for a chunk with no live route', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status.kind);
     fixture.componentRef.setInput('control', chunkControlStub());
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -223,7 +223,7 @@ describe('ChunkDetailHeader', () => {
   it('names the routed runner as a plain fact on the identity line, no label', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status.kind);
     fixture.componentRef.setInput('control', chunkControlStub());
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -236,7 +236,7 @@ describe('ChunkDetailHeader', () => {
   it('titles the runner with the whole display name and the full runner id', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status.kind);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -275,13 +275,13 @@ describe('ChunkDetailHeader', () => {
     fixture.componentRef.setInput('control', chunkControlStub());
     await fixture.whenStable();
 
-    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status.kind);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(
       el.querySelector('[data-testid="detail-status"]')?.textContent?.trim(),
-    ).toBe(ROUTED_DETAIL.status);
+    ).toBe(ROUTED_DETAIL.status.kind);
   });
 
   it('names no dependency edge on the identity line — the Work item box owns them', async () => {
@@ -292,20 +292,20 @@ describe('ChunkDetailHeader', () => {
         prerequisites: [
           {
             chunk_id: 'ch_01prereq00000000000000aaa',
-            status: 'ready',
+            laneStatus: { kind: 'ready' },
             satisfied: false,
           },
         ],
         dependents: [
           {
             chunk_id: 'ch_01dependent0000000000ccc',
-            status: 'not_ready',
+            laneStatus: { kind: 'not_ready' },
             satisfied: false,
           },
         ],
       },
     });
-    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status.kind);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -326,7 +326,7 @@ describe('ChunkDetailHeader', () => {
       ...ISSUE_DETAIL,
       project_name: 'blizzard',
     });
-    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status.kind);
     fixture.componentRef.setInput('projectColor', 'teal');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -346,7 +346,7 @@ describe('ChunkDetailHeader', () => {
   it('names no project for a chunk carrying none', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status.kind);
     await fixture.whenStable();
 
     expect(
@@ -359,7 +359,7 @@ describe('ChunkDetailHeader', () => {
   it('names the runner host/runner where the app knows its host, in the fact and the action copy', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status.kind);
     fixture.componentRef.setInput('control', chunkControlStub());
     fixture.componentRef.setInput('runnerHosts', new Map([['rn_01', 'atlas']]));
     await fixture.whenStable();

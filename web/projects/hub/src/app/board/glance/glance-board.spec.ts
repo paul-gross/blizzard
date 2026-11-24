@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type ChunkSummary, FLEET_CLOCK } from 'fleet';
+import { FLEET_CLOCK } from 'fleet';
 import { RUNNER_HOST_NAMES } from 'fleet/shell';
 import {
   OPERATOR_ME_RESPONSE,
@@ -38,7 +38,7 @@ type HubRoutes = Parameters<typeof stubHubClient>[0];
  * picks a chunk for every lane, plus terminal chunks outside the rolling window
  * that the list leaves out.
  */
-const CHUNKS: ChunkSummary[] = [
+const CHUNKS = [
   chunkSummary({
     chunk_id: 'ch_01needshuman0000000000000000',
     graph_id: 'gr_1',
@@ -371,7 +371,7 @@ describe('GlanceBoard — one list and the vitals', () => {
 // A subscription-only fleet: no billed cost anywhere, only a runner-reported estimate —
 // the glance board's combined figure reads `~$0.07` on its own rather than a plain
 // billed $0.00.
-const ESTIMATE_CHUNKS: ChunkSummary[] = [
+const ESTIMATE_CHUNKS = [
   chunkSummary({
     chunk_id: 'ch_01estimaterun0000000000000',
     graph_id: 'gr_1',
