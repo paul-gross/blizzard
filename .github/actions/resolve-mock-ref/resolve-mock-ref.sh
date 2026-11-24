@@ -5,6 +5,7 @@
 #   a `v*` tag                              -> the mock's same-named tag (must exist)
 #   pull request into `release/X.Y`         -> the head branch on the mock, else `release/X.Y` (must exist)
 #   pull request into, or push to, master   -> the head branch on the mock, else `master`
+#   scheduled or dispatched run on master   -> the mock's `master`
 #   anything else                           -> fails; a run is never defaulted to `master`
 #
 # Reads the run's context from the environment — BASELINE, EVENT_NAME, REF (github.ref),
@@ -90,6 +91,10 @@ case "$event" in
   push)
     [ "$ref" = refs/heads/master ] || fail "a push to '$ref' matches no mock-ref rule"
     branch_or_fallback master
+    ;;
+  schedule | workflow_dispatch)
+    [ "$ref" = refs/heads/master ] || fail "a $event run on '$ref' matches no mock-ref rule"
+    branch_or_fallback master # HEAD_REF is empty for both events, so this is the mock's master or a clear failure
     ;;
   *) fail "event '$event' on '$ref' matches no mock-ref rule" ;;
 esac

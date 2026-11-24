@@ -9,6 +9,7 @@ import time
 
 from structlog.testing import capture_logs
 
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.loop.periodic_pass_driver import PeriodicPassDriver
 
@@ -34,6 +35,7 @@ def _driver(run_pass: _Counting | None = None, *, interval: float, jitter_second
         log=_LOG,
         interval=lambda: interval,
         jitter_seconds=jitter_seconds,
+        clock=SystemMonotonicClock(),
     )
 
 
@@ -66,6 +68,7 @@ def test_the_driver_stop_is_bounded_by_a_hung_pass() -> None:
         interval=lambda: 60,
         jitter_seconds=0,
         stop_timeout_seconds=0.2,
+        clock=SystemMonotonicClock(),
     )
     with capture_logs() as logs:
         driver.start()

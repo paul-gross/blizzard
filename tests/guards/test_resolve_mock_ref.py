@@ -97,6 +97,12 @@ def test_a_push_to_master_resolves_master(mock: dict[str, str]) -> None:
     assert out == {"ref": "master", "sha": mock["master"]}
 
 
+@pytest.mark.parametrize("event", ["schedule", "workflow_dispatch"])
+def test_a_scheduled_or_dispatched_run_on_master_resolves_master(mock: dict[str, str], event: str) -> None:
+    out = _outputs(_resolve(mock, EVENT_NAME=event, REF="refs/heads/master"))
+    assert out == {"ref": "master", "sha": mock["master"]}
+
+
 def test_a_baseline_resolves_to_the_mock_tag_of_that_name(mock: dict[str, str]) -> None:
     out = _outputs(_resolve(mock, BASELINE="v0.2.0", EVENT_NAME="push", REF="refs/heads/master"))
     assert out == {"ref": "v0.2.0", "sha": mock["release/0.2"]}
@@ -112,7 +118,8 @@ def test_a_baseline_the_mock_never_tagged_falls_back_to_master(mock: dict[str, s
     [
         {"EVENT_NAME": "push", "REF": "refs/heads/release/0.2"},
         {"EVENT_NAME": "pull_request", "BASE_REF": "develop", "HEAD_REF": "feat/x"},
-        {"EVENT_NAME": "workflow_dispatch", "REF": "refs/heads/master"},
+        {"EVENT_NAME": "workflow_dispatch", "REF": "refs/heads/feat/x"},
+        {"EVENT_NAME": "schedule", "REF": "refs/heads/release/0.2"},
     ],
 )
 def test_a_context_matching_no_row_fails_rather_than_defaulting_to_master(

@@ -9,7 +9,7 @@ from collections.abc import Callable
 
 import structlog
 
-from blizzard.foundation.clock import IMonotonicClock, SystemMonotonicClock
+from blizzard.foundation.clock import IMonotonicClock
 from blizzard.runner.loop.wake import IntervalWait, Wait, WakeSignal
 
 #: How long ``stop()`` waits for an in-flight pass: a hung pass must not hold shutdown.
@@ -33,13 +33,13 @@ class PeriodicPassDriver:
         jitter_seconds: float | None = None,
         stop_timeout_seconds: float = STOP_TIMEOUT_SECONDS,
         signal: WakeSignal | None = None,
-        clock: IMonotonicClock | None = None,
+        clock: IMonotonicClock,
         wait: Wait | None = None,
     ) -> None:
         self._run_pass = run_pass
         self._label = label
         self._log = log
-        self._clock = clock or SystemMonotonicClock()
+        self._clock = clock
         self._waits = IntervalWait(
             interval,
             signal=signal or WakeSignal(),

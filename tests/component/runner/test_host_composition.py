@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 
 import blizzard.runner.composition as composition
 import blizzard.runner.loop_wiring as loop_wiring
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.runner.cli.runtime import host_tick_driver
 from blizzard.runner.composition import HostProcess, RunnerProcess, add_runner, build_host_process
@@ -436,7 +437,10 @@ def test_one_runners_blocked_tick_delays_neither_the_other_runner_nor_the_host_t
     monkeypatch.setattr(loop_wiring, "tick", tick)
     renewal: Any = _CountingRenewal()
     host.host_tick = HostTick(credential_renewal=renewal)
-    drivers = [PeriodicDriver(config, interval=lambda: 0.01, process_graph=runner) for runner in (blocked, free)]
+    drivers = [
+        PeriodicDriver(config, interval=lambda: 0.01, process_graph=runner, clock=SystemMonotonicClock())
+        for runner in (blocked, free)
+    ]
     host_tick = host_tick_driver(host, interval=lambda: 0.01)
     assert not isinstance(renewal, CredentialRenewalPass)  # a counting double stands in for the renewal pass
     try:
