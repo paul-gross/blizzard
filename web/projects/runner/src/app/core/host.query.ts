@@ -127,6 +127,6 @@ export function injectHostRegistrationQuery() {
 
 /** {@link runnerNameResolver} over the host's live runner list. */
 export function injectRunnerNames(): Signal<(runnerId: string) => string> {
-  const runners = injectHostRunnersQuery();
+  const runners = injectHostRunnerDomainsQuery();
   return computed(() => runnerNameResolver(runners.data() ?? []));
 }

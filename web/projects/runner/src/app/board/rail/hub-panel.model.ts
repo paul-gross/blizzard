@@ -1,7 +1,8 @@
-import { type runnerApi, type Tone } from 'fleet';
+import type { Tone } from 'fleet';
 
 import type { RunnerDashboard } from '../../core/panel-reads.model';
 import { identityRefusal } from '../../core/runner-health.model';
+import type { FleetSummary } from '../../core/runner-status.domain';
 
 /** Something about one runner's link the operator has to act on. */
 export interface HubIssue {
@@ -29,7 +30,7 @@ export interface HubSummary {
 
 /** Folds every runner's dashboard into one {@link HubSummary}; `null` before any dashboard lands. */
 export function hubSummary(dashboards: readonly RunnerDashboard[]): HubSummary | null {
-  const statuses = dashboards.flatMap(({ owner, dashboard }) => (dashboard.runner?.hub ? [{ owner, status: dashboard.runner }] : []));
+  const statuses = dashboards.flatMap(({ owner, dashboard }) => (dashboard.runner ? [{ owner, status: dashboard.runner }] : []));
   if (statuses.length === 0) return null;
   const issues: HubIssue[] = [];
   for (const { owner, status } of statuses) {
@@ -40,7 +41,7 @@ export function hubSummary(dashboards: readonly RunnerDashboard[]): HubSummary |
     if (refusal) {
       issues.push({ key: `${owner.runnerId}:identity`, runner: owner.label, text: refusal.issue, title: refusal.title, tone: refusal.tone });
     }
-    for (const conflict of status.routing_conflicts ?? []) {
+    for (const conflict of status.routing_conflicts) {
       issues.push({
         key: `${owner.runnerId}:conflict:${conflict.project_id}`,
         runner: owner.label,
@@ -62,6 +63,6 @@ export function hubSummary(dashboards: readonly RunnerDashboard[]): HubSummary |
 }
 
 /** The fleet counts the first runner whose read carries them reports, `null` while none does. */
-export function latestFleetSummary(dashboards: readonly RunnerDashboard[]): runnerApi.FleetSummaryView | null {
+export function latestFleetSummary(dashboards: readonly RunnerDashboard[]): FleetSummary | null {
   return dashboards.find((entry) => entry.dashboard.fleet_summary != null)?.dashboard.fleet_summary ?? null;
 }

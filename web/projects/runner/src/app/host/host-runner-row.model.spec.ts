@@ -1,41 +1,32 @@
-import type { runnerApi } from 'fleet';
-
 import type { MachineChunkRow } from '../core/chunk-rows.model';
 import type { PanelLease, PanelProject } from '../core/panel-reads.model';
+import { hostRunner } from '../core/host-runner.builders';
+import type { HostRunner } from '../core/host-runner.domain';
+import { pauseState } from '../core/pause-state.builders';
+import { dashboardStatus, hubConnectivity, identityVerdict, runnerStatus } from '../core/runner-status.builders';
+import type { DashboardStatus, HarnessHealth, RunnerStatus } from '../core/runner-status.domain';
 import { type HostRunnerReads, hostRunnerRows } from './host-runner-row.model';
 
-const RUNNER = (overrides: Partial<runnerApi.HostRunnerView> = {}): runnerApi.HostRunnerView => ({
-  runner_id: 'rn_1',
-  name: 'r1',
-  state: 'serving',
-  served: true,
-  halted_reasons: [],
-  pause: { local: false, hub: false, effective: false, local_reason: null },
-  throttle: null,
-  bindings: [{ project: 'console', workspace_id: 'ws', agents: 4 }],
-  agents_in_use: 1,
-  max_agents: 4,
-  start_failure: null,
-  ...overrides,
-});
-
-const STATUS = (overrides: Partial<runnerApi.RunnerStatusView> = {}): runnerApi.RunnerStatusView =>
-  ({
-    runner_id: 'rn_1',
-    workspace_id: 'ws',
-    pause: { local: false, hub: false, effective: false, local_reason: null },
-    capacities: { used: 3, agents: 4, free: 1, bindings: [{ project: 'console', project_id: 'proj_c', workspace_id: 'ws', agents: 4, used: 3, free: 1 }] },
-    hub: { endpoint: 'http://hub', reachable: true, last_contact_at: '2026-07-16T11:59:00.000Z', buffer_depth: 0, hub_version: null, window: null },
-    last_tick_at: '2026-07-16T11:59:26.000Z',
-    gates: [],
+const RUNNER = (overrides: Partial<HostRunner> = {}): HostRunner =>
+  hostRunner({
+    pause: pauseState(),
+    bindings: [{ project: 'console', workspace_id: 'ws', agents: 4 }],
+    agents_in_use: 1,
+    max_agents: 4,
     ...overrides,
-  }) as runnerApi.RunnerStatusView;
+  });
 
-const DASHBOARD = (
-  runner: runnerApi.RunnerStatusView,
-  harness: runnerApi.HarnessHealthView[] = [],
-): runnerApi.DashboardView =>
-  ({ runner, harness_health: { items: harness } }) as unknown as runnerApi.DashboardView;
+const STATUS = (overrides: Partial<RunnerStatus> = {}): RunnerStatus =>
+  runnerStatus({
+    workspace_id: 'ws',
+    capacities: { used: 3, agents: 4, free: 1, bindings: [{ project: 'console', project_id: 'proj_c', workspace_id: 'ws', agents: 4, used: 3, free: 1 }] },
+    hub: hubConnectivity({ endpoint: 'http://hub', last_contact_at: '2026-07-16T11:59:00.000Z' }),
+    last_tick_at: '2026-07-16T11:59:26.000Z',
+    ...overrides,
+  });
+
+const DASHBOARD = (runner: RunnerStatus, harness: HarnessHealth[] = []): DashboardStatus =>
+  dashboardStatus({ runner, harness_health: harness });
 
 const CONSOLE: PanelProject = { slug: 'console', name: 'Console', entries: ['console', 'proj_c'], color: 'amber' };
 
@@ -59,7 +50,7 @@ function reads(overrides: Partial<HostRunnerReads> = {}): HostRunnerReads {
   return { dashboards: new Map(), projects: new Map(), subscriptions: [], chunks: [], chunksPending: false, ...overrides };
 }
 
-function one(runner: runnerApi.HostRunnerView, status?: runnerApi.RunnerStatusView, extra: Partial<HostRunnerReads> = {}) {
+function one(runner: HostRunner, status?: RunnerStatus, extra: Partial<HostRunnerReads> = {}) {
   return hostRunnerRows(
     [runner],
     reads({ dashboards: status ? new Map([['rn_1', DASHBOARD(status)]]) : new Map(), ...extra }),
@@ -70,7 +61,7 @@ describe('hostRunnerRows', () => {
   it('carries the hub gate verdict from the dashboard and tolerates an absent verdict', () => {
     const warning = { node: 'deliver', reason: 'hub-executed' as const };
     expect(one(RUNNER(), STATUS({ gates: ['deliver'], unenforceable_gates: [warning] })).unenforceableGates).toEqual([warning]);
-    expect(one(RUNNER(), STATUS({ unenforceable_gates: null })).unenforceableGates).toEqual([]);
+    expect(one(RUNNER(), STATUS({ unenforceable_gates: [] })).unenforceableGates).toEqual([]);
     expect(one(RUNNER()).unenforceableGates).toEqual([]);
   });
 
@@ -126,7 +117,7 @@ describe('hostRunnerRows', () => {
   it('reads a runner whose identity the hub refuses red, naming the refusal', () => {
     const row = one(
       RUNNER(),
-      STATUS({ identity: { state: 'refused', reason: 'token revoked', reset_command: 'set the token' } as runnerApi.IdentityVerdictView }),
+      STATUS({ identity: identityVerdict({ state: 'refused', reason: 'token revoked', reset_command: 'set the token' }) }),
     );
 
     expect(row.tone).toBe('red');
@@ -135,7 +126,7 @@ describe('hostRunnerRows', () => {
 
   it('reads a runner the hub\'s version window refuses red, with the hub\'s sentence naming the upgrade', () => {
     const reason = "runner 0.1.4 is older than this hub's oldest supported line, 0.2; upgrade the runner host to 0.2 or later, up to 0.3";
-    const row = one(RUNNER(), STATUS({ identity: { state: 'version_refused', reason } as runnerApi.IdentityVerdictView }));
+    const row = one(RUNNER(), STATUS({ identity: identityVerdict({ state: 'version_refused', reason }) }));
 
     expect(row.tone).toBe('red');
     expect(row.hub?.refusal).toEqual({ label: 'VERSION REFUSED', tone: 'needs', title: reason });
@@ -155,17 +146,17 @@ describe('hostRunnerRows', () => {
   });
 
   it('reads either brake amber, badging which side set it', () => {
-    const local = one(RUNNER(), STATUS({ pause: { local: true, hub: false, effective: true, local_reason: 'usage limit' } }));
+    const local = one(RUNNER(), STATUS({ pause: pauseState({ local: true, hub: false, effective: true, local_reason: 'usage limit' }) }));
     expect(local.tone).toBe('amber');
     expect(local.state).toEqual([{ label: 'PAUSED HERE', tone: 'idle', title: 'usage limit' }]);
 
-    const hub = one(RUNNER(), STATUS({ pause: { local: false, hub: true, effective: true, local_reason: null } }));
+    const hub = one(RUNNER(), STATUS({ pause: pauseState({ local: false, hub: true, effective: true, local_reason: null }) }));
     expect(hub.tone).toBe('amber');
     expect(hub.state).toEqual([{ label: 'HUB PAUSED', tone: 'waiting', title: 'Paused by the hub — no new claims' }]);
   });
 
   it('falls back to the host runner list brake before the dashboard lands', () => {
-    const row = one(RUNNER({ pause: { local: false, hub: true, effective: true, local_reason: null } }));
+    const row = one(RUNNER({ pause: pauseState({ local: false, hub: true, effective: true, local_reason: null }) }));
 
     expect(row.tone).toBe('amber');
     expect(row.state.map((badge) => badge.label)).toEqual(['HUB PAUSED']);
@@ -185,7 +176,7 @@ describe('hostRunnerRows', () => {
     expect(loading.state).toEqual([]);
     expect(loading.heldPending).toBe(true);
 
-    const paused = one(RUNNER(), STATUS({ pause: { local: false, hub: true, effective: true, local_reason: null } }), { chunksPending: true });
+    const paused = one(RUNNER(), STATUS({ pause: pauseState({ local: false, hub: true, effective: true, local_reason: null }) }), { chunksPending: true });
     expect(paused.state.map((badge) => badge.label)).toEqual(['HUB PAUSED']);
   });
 
@@ -249,8 +240,8 @@ describe('hostRunnerRows', () => {
       RUNNER(),
       STATUS({
         routing_conflicts: [{ project_id: 'proj_c', entries: ['console', 'proj_c'] }],
-        unmatched_bindings: [{ environment_id: 'e3', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9' }],
-      } as Partial<runnerApi.RunnerStatusView>),
+        unmatched_bindings: [{ environment_id: 'e3', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', held_since: '2026-07-16T11:00:00.000Z', workdir: '/ws/e3' }],
+      }),
     );
 
     expect(row.problems).toHaveLength(2);

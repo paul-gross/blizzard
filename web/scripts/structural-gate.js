@@ -1003,7 +1003,6 @@ const DOMAIN_BOUNDARY_EXEMPT = [
   'runner/src/app/events',
   'runner/src/app/host',
   'runner/src/app/runners',
-  'runner/src/app/shell',
 ];
 
 const DOMAIN_BOUNDARY_SUBKEYED = 'hub/src/app/admin';
@@ -1032,6 +1031,12 @@ const DOMAIN_BOUNDARY_STRICT_SCOPES = [
   'runner/src/app/core/lease.domain',
   'runner/src/app/core/lease.translate',
   'runner/src/app/core/lease.builders',
+  'runner/src/app/core/runner-status.domain',
+  'runner/src/app/core/runner-status.translate',
+  'runner/src/app/core/runner-status.builders',
+  'runner/src/app/core/throttle.domain',
+  'runner/src/app/core/throttle.translate',
+  'runner/src/app/core/throttle.builders',
   'runner/src/app/shell/nav',
   'runner/src/app/shell/app',
   'runner/src/app/shell/app-scope-navigation',

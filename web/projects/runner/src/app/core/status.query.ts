@@ -4,6 +4,7 @@ import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet/runner-sh
 
 import { floorClearMutationKey, localPauseMutationKey } from './mutation-keys';
 import { hostKey, runnerDashboardKey } from './query-keys';
+import { fromDashboardView } from './runner-status.translate';
 
 /**
  * One runner's whole status read, composed into one poll —
@@ -53,6 +54,20 @@ export function injectRunnerDashboardQuery(runnerId: () => string | null) {
   });
 }
 
+/** {@link runnerDashboardQueryOptions} read as its status sections (`DashboardStatus`) — the same key, cache
+ * and backstop, translated in the observer's `select`. */
+export function runnerDashboardStatusQueryOptions(runnerId: string) {
+  return { ...runnerDashboardQueryOptions(runnerId), select: fromDashboardView };
+}
+
+/** One runner's dashboard status ({@link runnerDashboardStatusQueryOptions}); held while `runnerId` gives `null`. */
+export function injectRunnerDashboardStatusQuery(runnerId: () => string | null) {
+  return injectQuery(() => {
+    const id = runnerId();
+    return { ...runnerDashboardStatusQueryOptions(id ?? ''), enabled: id !== null };
+  });
+}
+
 /** `injectLocalPauseMutation`'s variables — `paused` is the PATCH payload; `runnerId`
  * addresses the runner pausing itself, as its route's `runner_id`. */
 export interface LocalPauseVars {
@@ -75,14 +90,13 @@ export function injectLocalPauseMutation(runnerId: () => string) {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationKey: localPauseMutationKey(runnerId()),
-    mutationFn: async (vars: LocalPauseVars): Promise<runnerApi.RunnerControlView> => {
-      const { data, error } = await runnerApi.patchRunnerRunnersRunnerIdApiRunnerPatch({
+    mutationFn: async (vars: LocalPauseVars): Promise<void> => {
+      const { error } = await runnerApi.patchRunnerRunnersRunnerIdApiRunnerPatch({
         path: { runner_id: vars.runnerId },
         body: { paused: vars.paused },
         throwOnError: false,
       });
       if (error) throw error;
-      return data!;
     },
     onSettled: (_data, _error, vars) =>
       Promise.all([
@@ -110,7 +124,6 @@ export function injectFloorClearMutation(runnerId: () => string) {
             path: { slug: subscription }, body: {}, throwOnError: false,
           });
       if (result.error) throw result.error;
-      return result.data;
     },
     onSettled: (_data, _error, vars) => Promise.all([
       queryClient.invalidateQueries({ queryKey: hostKey }),

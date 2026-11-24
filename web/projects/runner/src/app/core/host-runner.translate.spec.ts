@@ -16,7 +16,11 @@ describe('fromHostRunnerView', () => {
       served: false,
       agents_in_use: 1,
       max_agents: 3,
-      pause: { local: false, hub: true, local_reason: null },
+      pause: { local: false, hub: true, effective: false, local_reason: null },
+      bindings: [],
+      halted_reasons: [],
+      start_failure: null,
+      throttle: null,
     });
   });
 
@@ -26,5 +30,30 @@ describe('fromHostRunnerView', () => {
 
   it('reads an absent pause as null', () => {
     expect(fromHostRunnerView(hostRunnerView({ pause: null })).pause).toBeNull();
+  });
+
+  it('carries served apart from state — a halted runner whose routes still answer', () => {
+    const runner = fromHostRunnerView(hostRunnerView({ state: 'halted', served: true, halted_reasons: ['hub refused its version'] }));
+    expect(runner.state).toBe('halted');
+    expect(runner.served).toBe(true);
+    expect(runner.halted_reasons).toEqual(['hub refused its version']);
+  });
+
+  it('carries its bindings, start failure and throttle', () => {
+    const runner = fromHostRunnerView(
+      hostRunnerView({
+        state: 'start_failed',
+        bindings: [{ project: 'blizzard', workspace_id: 'ws', agents: 2 }],
+        start_failure: { step: 'compose', error: 'boom' },
+      }),
+    );
+    expect(runner.bindings).toEqual([{ project: 'blizzard', workspace_id: 'ws', agents: 2 }]);
+    expect(runner.start_failure).toEqual({ step: 'compose', error: 'boom' });
+    expect(runner.throttle).toBeNull();
+  });
+
+  it('reads a start step this build cannot name as unknown, raw', () => {
+    const runner = fromHostRunnerView(hostRunnerView({ start_failure: { step: 'warmup' as never, error: 'boom' } }));
+    expect(runner.start_failure?.step).toEqual({ kind: 'unknown', raw: 'warmup' });
   });
 });

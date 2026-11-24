@@ -1,40 +1,34 @@
-import type { runnerApi } from 'fleet';
-
+import { hostRunner } from '../../core/host-runner.builders';
+import type { HostRunner } from '../../core/host-runner.domain';
+import { pauseState } from '../../core/pause-state.builders';
 import type { RunnerDashboard } from '../../core/panel-reads.model';
+import { dashboardStatus, hubConnectivity, runnerCapacities, runnerStatus } from '../../core/runner-status.builders';
+import type { RunnerCapacities, RunnerStatus } from '../../core/runner-status.domain';
 import { hostPanelRunners, runnersNamed, statusesByRunner } from './host-panel.model';
 
-function runner(overrides: Partial<runnerApi.HostRunnerView> = {}): runnerApi.HostRunnerView {
-  return {
-    runner_id: 'rn_1',
-    name: 'r1',
-    state: 'serving',
-    served: true,
-    halted_reasons: [],
-    pause: { local: false, hub: false, effective: false, local_reason: null },
-    throttle: null,
+function runner(overrides: Partial<HostRunner> = {}): HostRunner {
+  return hostRunner({
+    pause: pauseState(),
     bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
     agents_in_use: 1,
     max_agents: 4,
-    start_failure: null,
     ...overrides,
-  };
+  });
 }
 
-function capacities(bindings: { project: string; workspace_id: string; used: number }[]): runnerApi.CapacitiesView {
-  return {
+function capacities(bindings: { project: string; workspace_id: string; used: number }[]): RunnerCapacities {
+  return runnerCapacities({
     used: bindings.reduce((sum, binding) => sum + binding.used, 0),
     agents: 4,
     free: 4 - bindings.reduce((sum, binding) => sum + binding.used, 0),
     bindings: bindings.map((binding) => ({ ...binding, project_id: `proj_${binding.project}`, agents: 4, free: 4 - binding.used })),
-  };
+  });
 }
 
-const NO_STATUSES = new Map<string, runnerApi.RunnerStatusView>();
+const NO_STATUSES = new Map<string, RunnerStatus>();
 
-/** A runner status carrying only the reads the rail takes. */
-function status(overrides: Partial<runnerApi.RunnerStatusView> = {}): runnerApi.RunnerStatusView {
-  return { hub: { reachable: true }, ...overrides } as runnerApi.RunnerStatusView;
-}
+/** A runner status reaching its hub, unpaused. */
+const status = runnerStatus;
 
 describe('hostPanelRunners', () => {
   describe('light and brakes', () => {
@@ -47,12 +41,12 @@ describe('hostPanelRunners', () => {
     });
 
     it("lights a runner red when its status says the hub is unreachable", () => {
-      const [only] = hostPanelRunners([runner()], new Map([['rn_1', status({ hub: { reachable: false } as runnerApi.RunnerStatusView['hub'] })]]));
+      const [only] = hostPanelRunners([runner()], new Map([['rn_1', status({ hub: hubConnectivity({ reachable: false }) })]]));
       expect(only.tone).toBe('red');
     });
 
     it("takes the pause off the runner's own status over the host's report", () => {
-      const paused = status({ pause: { local: true, hub: false, effective: true, local_reason: null } });
+      const paused = status({ pause: pauseState({ local: true, hub: false, effective: true, local_reason: null }) });
       const [only] = hostPanelRunners([runner()], new Map([['rn_1', paused]]));
       expect(only.tone).toBe('amber');
       expect(only.localPause).toBe('Paused here — no new claims');
@@ -60,7 +54,7 @@ describe('hostPanelRunners', () => {
 
     it('lights a runner its own brake holds amber, worded with its reason', () => {
       const [only] = hostPanelRunners(
-        [runner({ pause: { local: true, hub: false, effective: true, local_reason: 'OpenCode is not installed' } })],
+        [runner({ pause: pauseState({ local: true, hub: false, effective: true, local_reason: 'OpenCode is not installed' }) })],
         NO_STATUSES,
       );
       expect(only.tone).toBe('amber');
@@ -68,12 +62,12 @@ describe('hostPanelRunners', () => {
     });
 
     it('words its own brake without a reason as no new claims', () => {
-      const [only] = hostPanelRunners([runner({ pause: { local: true, hub: false, effective: true, local_reason: null } })], NO_STATUSES);
+      const [only] = hostPanelRunners([runner({ pause: pauseState({ local: true, hub: false, effective: true, local_reason: null }) })], NO_STATUSES);
       expect(only.localPause).toBe('Paused here — no new claims');
     });
 
     it("lights a runner the hub's brake holds amber, its own brake off", () => {
-      const [only] = hostPanelRunners([runner({ pause: { local: false, hub: true, effective: true, local_reason: null } })], NO_STATUSES);
+      const [only] = hostPanelRunners([runner({ pause: pauseState({ local: false, hub: true, effective: true, local_reason: null }) })], NO_STATUSES);
       expect(only.tone).toBe('amber');
       expect(only.hubPaused).toBe(true);
       expect(only.localPause).toBeNull();
@@ -86,7 +80,7 @@ describe('hostPanelRunners', () => {
             runner_id: null,
             state: 'halted',
             halted_reasons: ['the hub refuses its token'],
-            pause: { local: true, hub: true, effective: true, local_reason: 'x' },
+            pause: pauseState({ local: true, hub: true, effective: true, local_reason: 'x' }),
           }),
         ],
         NO_STATUSES,
@@ -217,9 +211,9 @@ describe('statusesByRunner', () => {
   it("keys each runner's own status by its id", () => {
     const first = status({ capacities: capacities([{ project: 'p', workspace_id: 'ws', used: 1 }]) });
     const second = status({ capacities: capacities([]) });
-    const dashboard = (runnerId: string, runnerStatus: runnerApi.RunnerStatusView): RunnerDashboard => ({
+    const dashboard = (runnerId: string, runner: RunnerStatus): RunnerDashboard => ({
       owner: { runnerId, name: runnerId, label: runnerId },
-      dashboard: { runner: runnerStatus } as runnerApi.DashboardView,
+      dashboard: dashboardStatus({ runner }),
     });
 
     const byRunner = statusesByRunner([dashboard('rn_1', first), dashboard('rn_2', second)]);

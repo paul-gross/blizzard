@@ -86,7 +86,7 @@ describe('two runners on one host', () => {
     const host = fixture.componentInstance;
 
     // Each merged item carries the runner it was read off, and its body is that runner's.
-    expect(host.dashboards.data().map(({ owner, dashboard }) => [owner.runnerId, dashboard.runner.runner_id])).toEqual([
+    expect(host.dashboards.data().map(({ owner, dashboard }) => [owner.runnerId, dashboard.runner?.runner_id])).toEqual([
       ['rn_1', 'rn_1'],
       ['rn_2', 'rn_2'],
     ]);

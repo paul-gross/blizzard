@@ -1,10 +1,11 @@
 import { compactRef, type runnerApi, type SlotBarSlot } from 'fleet/runner-shell';
 
+import type { HostRunner } from './host-runner.domain';
 import { type PanelProject, slugForEntry } from './panel-reads.model';
 
 /** A runner id's display name off the host's runner list — the id itself for one the list
  * does not (yet) name. */
-export function runnerNameResolver(runners: readonly runnerApi.HostRunnerView[]): (runnerId: string) => string {
+export function runnerNameResolver(runners: readonly Pick<HostRunner, 'runner_id' | 'name'>[]): (runnerId: string) => string {
   const names = new Map(runners.flatMap((runner) => (runner.runner_id === null ? [] : [[runner.runner_id, runner.name] as const])));
   return (runnerId) => names.get(runnerId) ?? runnerId;
 }
@@ -124,7 +125,7 @@ export function runnerFocus<T>(
 export interface HostPoolReads {
   readonly workspaces: readonly runnerApi.HostWorkspaceView[];
   readonly groups: readonly runnerApi.HostWorkspaceEnvironmentsView[];
-  readonly runners: readonly runnerApi.HostRunnerView[];
+  readonly runners: readonly Pick<HostRunner, 'runner_id' | 'name'>[];
   readonly projects: readonly PanelProject[];
 }
 

@@ -3,7 +3,7 @@ import type { QueryObserverResult } from '@tanstack/angular-query-experimental';
 import { injectQueries } from '@tanstack/angular-query-experimental/inject-queries-experimental';
 import type { runnerApi } from 'fleet/runner-shell';
 
-import { injectHostRunnersQuery } from './host.query';
+import { injectHostRunnerDomainsQuery } from './host.query';
 import { runnerLeaseDomainsQueryOptions } from './leases.query';
 import { PanelFilters } from './panel-filters';
 import {
@@ -23,7 +23,7 @@ import {
   scopedOwners,
   servingOwners,
 } from './panel-reads.model';
-import { runnerDashboardQueryOptions } from './status.query';
+import { runnerDashboardQueryOptions, runnerDashboardStatusQueryOptions } from './status.query';
 
 /**
  * The panel's reads across the host's runners. Every runner-scoped read fans out
@@ -59,7 +59,7 @@ export interface PanelRunners {
 /** The host's serving runners. */
 export function injectPanelRunners(): PanelRunners {
   const filters = inject(PanelFilters);
-  const runners = injectHostRunnersQuery();
+  const runners = injectHostRunnerDomainsQuery();
   const all = computed(() => servingOwners(runners.data() ?? []));
   return {
     all,
@@ -130,10 +130,23 @@ function answers<T>(owners: readonly RunnerOwner[], fanOut: FanOut<T>): { owner:
   });
 }
 
-/** Every covered runner's dashboard, each beside its runner. */
+/** Every covered runner's dashboard status, each beside its runner. */
 export function injectPanelDashboards(scope: RunnerScope = 'scoped'): MergedRead<readonly RunnerDashboard[]> {
   const runners = injectPanelRunners();
   const owners = scope === 'all' ? runners.all : runners.scoped;
+  const fanOut = injectFanOut(owners, runnerDashboardStatusQueryOptions);
+  return {
+    data: computed(() => answers(owners(), fanOut()).map(({ owner, value }) => ({ owner, dashboard: value }))),
+    isPending: computed(() => runners.pending() || fanOut().anyPending),
+    isError: computed(() => fanOut().allFailed),
+  };
+}
+
+/** Every covered runner's whole dashboard body, each beside its runner — the read the dashboard's item sections
+ * merge from, under the same keys and cache as {@link injectPanelDashboards}. */
+function injectPanelDashboardBodies(): MergedRead<readonly { owner: RunnerOwner; dashboard: runnerApi.DashboardView }[]> {
+  const runners = injectPanelRunners();
+  const owners = runners.scoped;
   const fanOut = injectFanOut(owners, runnerDashboardQueryOptions);
   return {
     data: computed(() => answers(owners(), fanOut()).map(({ owner, value }) => ({ owner, dashboard: value }))),
@@ -144,7 +157,7 @@ export function injectPanelDashboards(scope: RunnerScope = 'scoped'): MergedRead
 
 /** Each serving runner's projects by runner id, from its dashboard and its host bindings. */
 export function injectRunnerProjects(): Signal<RunnerProjects> {
-  const runners = injectHostRunnersQuery();
+  const runners = injectHostRunnerDomainsQuery();
   const dashboards = injectPanelDashboards('all');
   return computed(() => {
     const hosted = runners.data() ?? [];
@@ -201,7 +214,7 @@ function injectDashboardItems<T extends { readonly project_id?: string | null }>
   section: (dashboard: runnerApi.DashboardView) => readonly T[],
 ): MergedRead<readonly (T & { readonly owner: RunnerOwner; readonly projectSlug: string | null })[]> {
   const filters = inject(PanelFilters);
-  const dashboards = injectPanelDashboards();
+  const dashboards = injectPanelDashboardBodies();
   const projects = injectRunnerProjects();
   return {
     data: computed(() => {

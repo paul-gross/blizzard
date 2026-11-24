@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { KitAsyncState, KitButton, KitConfirmDialog, type KitAsyncStateValue, type runnerApi, KitErrorLine, KitFactList, type KitFact } from 'fleet';
+import { KitAsyncState, KitButton, KitConfirmDialog, type KitAsyncStateValue, KitErrorLine, KitFactList, type KitFact } from 'fleet';
 
+import type { Throttle } from '../core/throttle.domain';
 import { throttleLines, throttleSummary } from '../core/throttle.model';
 
 @Component({
@@ -10,7 +11,7 @@ import { throttleLines, throttleSummary } from '../core/throttle.model';
   templateUrl: './throttle-view.html',
 })
 export class ThrottleView {
-  readonly throttle = input<runnerApi.ThrottleStatusView | null>(null);
+  readonly throttle = input<Throttle | null>(null);
   readonly state = input.required<KitAsyncStateValue>();
   readonly pending = input(false);
   readonly error = input<string | null>(null);

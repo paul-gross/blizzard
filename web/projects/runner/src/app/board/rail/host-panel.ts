@@ -5,7 +5,7 @@ import { PanelFilters } from '../../core/panel-filters';
 import { injectPanelDashboards, injectPanelProjects } from '../../core/panel-reads';
 import {
   injectHostEnvironmentsQuery,
-  injectHostRunnersQuery,
+  injectHostRunnerDomainsQuery,
   injectHostSubscriptionsQuery,
   injectHostWorkspacesQuery,
 } from '../../core/host.query';
@@ -31,7 +31,7 @@ import { HostPanelView } from './host-panel-view';
 })
 export class HostPanel {
   private readonly subscriptionsQuery = injectHostSubscriptionsQuery();
-  protected readonly runnersQuery = injectHostRunnersQuery();
+  protected readonly runnersQuery = injectHostRunnerDomainsQuery();
   private readonly workspacesQuery = injectHostWorkspacesQuery();
   private readonly environmentsQuery = injectHostEnvironmentsQuery();
   private readonly filters = inject(PanelFilters);

@@ -15,7 +15,7 @@ import { hostPoolsFor, runnerFocus, runnerNameResolver } from '../core/host-pool
 import {
   injectHostEnvironmentsQuery,
   injectHostRegistrationQuery,
-  injectHostRunnersQuery,
+  injectHostRunnerDomainsQuery,
   injectHostSubscriptionsQuery,
   injectHostWorkspacesQuery,
 } from '../core/host.query';
@@ -60,7 +60,7 @@ import { HostTitle } from './host-title';
 export class HostPage {
   private readonly filters = inject(PanelFilters);
   private readonly registrationQuery = injectHostRegistrationQuery();
-  protected readonly runnersQuery = injectHostRunnersQuery();
+  protected readonly runnersQuery = injectHostRunnerDomainsQuery();
   private readonly subscriptionsQuery = injectHostSubscriptionsQuery();
   private readonly workspacesQuery = injectHostWorkspacesQuery();
   private readonly environmentsQuery = injectHostEnvironmentsQuery();

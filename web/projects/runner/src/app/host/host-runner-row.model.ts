@@ -1,9 +1,11 @@
-import { type BeaconTone, compactRef, harnessName, type runnerApi, type Tone } from 'fleet';
+import { type BeaconTone, compactRef, harnessName, type RunnerSubscription, type Tone, type UnenforceableGate } from 'fleet';
 
 import type { MachineChunkRow } from '../core/chunk-rows.model';
+import type { HostRunner } from '../core/host-runner.domain';
 import type { PanelProject } from '../core/panel-reads.model';
 import { slugForEntry } from '../core/panel-reads.model';
 import { hubLink, identityRefusal, runnerLight } from '../core/runner-health.model';
+import type { DashboardStatus, HarnessHealth, IdentityVerdict, RunnerCapacities, RunnerStatus } from '../core/runner-status.domain';
 import { throttleLines, throttleSummary, type ThrottleLine } from '../core/throttle.model';
 
 /** One binding of a runner: the project it serves in one workspace, and its agents in use of those it declares. */
@@ -80,7 +82,7 @@ export interface HostRunnerRow {
   readonly spends: readonly string[];
   readonly harnesses: readonly HostRunnerHarness[];
   readonly gates: readonly string[];
-  readonly unenforceableGates: readonly runnerApi.UnenforceableGateView[];
+  readonly unenforceableGates: readonly UnenforceableGate[];
   readonly throttle: { readonly summary: string; readonly lines: readonly ThrottleLine[] } | null;
   readonly hub: HostRunnerHub | null;
   /** What the runner cannot act on — entries naming one project twice, environments held under no binding. */
@@ -92,19 +94,19 @@ export interface HostRunnerRow {
 }
 
 /** The identity refusal as a badge on the runner's hub line; `null` while the identity checks out or goes unchecked. */
-function refusal(identity: runnerApi.IdentityVerdictView | null | undefined): HostRunnerBadge | null {
+function refusal(identity: IdentityVerdict | null | undefined): HostRunnerBadge | null {
   const found = identityRefusal(identity);
   return found && { label: found.label, tone: found.tone, title: found.title };
 }
 
 /** The runner's bindings, the host's declaration joined to the runner's own slot accounting and its projects' names. */
 function bindings(
-  runner: runnerApi.HostRunnerView,
-  capacities: runnerApi.CapacitiesView | undefined,
+  runner: HostRunner,
+  capacities: RunnerCapacities | undefined,
   projects: readonly PanelProject[],
 ): readonly HostRunnerBinding[] {
   return runner.bindings.map((binding) => {
-    const used = capacities?.bindings?.find(
+    const used = capacities?.bindings.find(
       (capacity) => capacity.project === binding.project && capacity.workspace_id === binding.workspace_id,
     )?.used;
     const slug = slugForEntry(projects, binding.project);
@@ -120,19 +122,19 @@ function bindings(
   });
 }
 
-function harnesses(health: readonly runnerApi.HarnessHealthView[]): readonly HostRunnerHarness[] {
+function harnesses(health: readonly HarnessHealth[]): readonly HostRunnerHarness[] {
   return health.map((harness) => ({
     harnessId: harness.harness_id,
     name: harnessName(harness.harness_id),
-    version: harness.version ?? null,
+    version: harness.version,
     available: harness.available,
-    admitted: harness.admitted_range ?? null,
-    cause: harness.cause ?? null,
-    degradations: harness.degradations ?? [],
+    admitted: harness.admitted_range,
+    cause: harness.cause,
+    degradations: harness.degradations,
   }));
 }
 
-function problems(status: runnerApi.RunnerStatusView | undefined): readonly string[] {
+function problems(status: RunnerStatus | null | undefined): readonly string[] {
   return [
     ...(status?.routing_conflicts ?? []).map(
       (conflict) => `${conflict.entries.join(', ')} all name ${conflict.project_id} — claiming nothing until one is removed`,
@@ -144,14 +146,16 @@ function problems(status: runnerApi.RunnerStatusView | undefined): readonly stri
 }
 
 function stateBadges(
-  runner: runnerApi.HostRunnerView,
-  status: runnerApi.RunnerStatusView | undefined,
+  runner: HostRunner,
+  status: RunnerStatus | null | undefined,
   held: number | null,
 ): readonly HostRunnerBadge[] {
   if (runner.state === 'starting') return [{ label: 'STARTING', tone: 'idle', title: 'Added — the host starts it at its next tick' }];
   if (runner.state === 'start_failed') {
     const failure = runner.start_failure;
-    const title = failure ? `${failure.step}: ${failure.error}` : runner.halted_reasons.join('; ') || null;
+    const title = failure
+      ? `${typeof failure.step === 'string' ? failure.step : failure.step.raw}: ${failure.error}`
+      : runner.halted_reasons.join('; ') || null;
     return [{ label: 'START FAILED', tone: 'needs', title }];
   }
   if (runner.state === 'retired') return [{ label: 'RETIRED', tone: 'idle', title: null }];
@@ -172,7 +176,7 @@ function stateBadges(
 }
 
 /** "Claude Code · 24 agents · 7 busy". */
-function summary(runner: runnerApi.HostRunnerView, health: readonly HostRunnerHarness[]): string | null {
+function summary(runner: HostRunner, health: readonly HostRunnerHarness[]): string | null {
   const parts = health.map((harness) => harness.name);
   const agents = runner.max_agents;
   if (agents > 0) parts.push(`${agents} ${agents === 1 ? 'agent' : 'agents'}`, `${runner.agents_in_use} busy`);
@@ -181,9 +185,9 @@ function summary(runner: runnerApi.HostRunnerView, health: readonly HostRunnerHa
 
 /** The reads one {@link HostRunnerRow} folds, each keyed by runner id. */
 export interface HostRunnerReads {
-  readonly dashboards: ReadonlyMap<string, runnerApi.DashboardView>;
+  readonly dashboards: ReadonlyMap<string, DashboardStatus>;
   readonly projects: ReadonlyMap<string, readonly PanelProject[]>;
-  readonly subscriptions: readonly import('fleet').RunnerSubscription[];
+  readonly subscriptions: readonly RunnerSubscription[];
   /** Every chunk across the runners, as the board folds them. */
   readonly chunks: readonly MachineChunkRow[];
   /** Whether the chunks are still loading, so no runner claims it holds none. */
@@ -191,13 +195,13 @@ export interface HostRunnerReads {
 }
 
 /** One {@link HostRunnerRow} per runner the host serves or holds halted, in wire order. */
-export function hostRunnerRows(runners: readonly runnerApi.HostRunnerView[], reads: HostRunnerReads): readonly HostRunnerRow[] {
+export function hostRunnerRows(runners: readonly HostRunner[], reads: HostRunnerReads): readonly HostRunnerRow[] {
   return runners.map((runner, index) => {
     const id = runner.runner_id;
     const dashboard = id === null ? undefined : reads.dashboards.get(id);
     const status = dashboard?.runner;
     const throttle = status?.throttle ?? runner.throttle;
-    const health = harnesses(dashboard?.harness_health?.items ?? []);
+    const health = harnesses(dashboard?.harness_health ?? []);
     const held = reads.chunks
       .filter((chunk) => chunk.lease.owner.runnerId === id && chunk.lane !== 'done')
       .map((chunk) => ({
@@ -228,9 +232,9 @@ export function hostRunnerRows(runners: readonly runnerApi.HostRunnerView[], rea
             endpoint: status.hub.endpoint,
             reachable: status.hub.reachable,
             link: hubLink(status.hub.reachable ? 1 : 0, 1),
-            lastContactAt: status.hub.last_contact_at ?? null,
+            lastContactAt: status.hub.last_contact_at,
             buffered: status.hub.buffer_depth,
-            hubVersion: status.hub.hub_version ?? null,
+            hubVersion: status.hub.hub_version,
             window: status.hub.window ? `admits ${status.hub.window.floor} – ${status.hub.window.ceiling}` : null,
             refusal: refusal(status.identity),
           }

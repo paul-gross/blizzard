@@ -1,10 +1,10 @@
-import type { runnerApi } from 'fleet';
+import type { HostRunner } from '../core/host-runner.domain';
 
 /** The exact set a floor clear affects, from the host's declaration and runner list. */
 export function floorClearScope(
   subscription: string | null,
   runnerId: string,
-  runners: readonly runnerApi.HostRunnerView[],
+  runners: readonly Pick<HostRunner, 'runner_id' | 'name'>[],
   subscriptions: readonly Pick<import('fleet').RunnerSubscription, 'slug' | 'spenders'>[],
 ): string | null {
   const names = new Map(runners.filter((runner) => runner.runner_id !== null).map((runner) => [runner.runner_id, runner.name]));
