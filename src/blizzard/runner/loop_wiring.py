@@ -16,7 +16,7 @@ from typing import Protocol, TypeVar, cast
 
 import httpx2
 
-from blizzard.foundation.clock import IClock, IMonotonicClock, SystemMonotonicClock
+from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.foundation.roles import collaborator
@@ -746,7 +746,7 @@ class PeriodicDriver:
         process_graph: RunnerProcess,
         stepper: RunnerStepper | None = None,
         signal: WakeSignal | None = None,
-        clock: IMonotonicClock | None = None,
+        clock: IMonotonicClock,
         wait: Wait | None = None,
     ) -> None:
         # Wired eagerly on the constructing (``host``) thread so a missing prompt file
@@ -754,7 +754,7 @@ class PeriodicDriver:
         self._owned = stepper is None
         self._stepper = stepper or RunnerStepper(config, process_graph=process_graph)
         self._wiring = self._stepper.wiring
-        self._clock = clock or SystemMonotonicClock()
+        self._clock = clock
         self._waits = IntervalWait(
             interval, signal=signal or WakeSignal(), clock=self._clock, log=_log, label="reconciliation loop", wait=wait
         )

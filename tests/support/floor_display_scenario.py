@@ -24,6 +24,7 @@ import httpx2
 import uvicorn
 
 import blizzard.runner.composition as composition
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli.runtime import host_tick_driver
@@ -177,7 +178,10 @@ def main() -> None:
                     return ticks
 
                 check("before")
-                drivers = [PeriodicDriver(r.config, interval=lambda: 8, process_graph=r) for r in host.runners]
+                drivers = [
+                    PeriodicDriver(r.config, interval=lambda: 8, process_graph=r, clock=SystemMonotonicClock())
+                    for r in host.runners
+                ]
                 host_driver = host_tick_driver(host, interval=lambda: 8)
                 started: list[PeriodicDriver] = []
                 host_started = False

@@ -212,17 +212,20 @@ _CLOCK_COMPOSITION_ROOTS: dict[Path, str] = {
 }
 
 
+_CONCRETE_CLOCKS = frozenset({"SystemClock", "SystemMonotonicClock"})
+
+
 def _system_clock_construction_lines(path: Path) -> list[int]:
     tree = ast.parse(path.read_text(), filename=str(path))
     lines: list[int] = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "SystemClock":
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in _CONCRETE_CLOCKS:
             lines.append(node.lineno)
     return lines
 
 
 def test_system_clock_is_constructed_only_at_a_composition_root() -> None:
-    """bzh:injected-clock / bzh:dependency-injection: ``SystemClock()`` is concrete wiring
+    """bzh:injected-clock / bzh:dependency-injection: ``SystemClock()`` and ``SystemMonotonicClock()`` are concrete wiring
     — it may be constructed only at a declared composition root, never inside
     a collaborator it is handed down to."""
     violations: list[str] = []
@@ -231,7 +234,7 @@ def test_system_clock_is_constructed_only_at_a_composition_root() -> None:
             continue
         for lineno in _system_clock_construction_lines(path):
             violations.append(f"{path.relative_to(_REPO_ROOT)}:{lineno}")
-    assert not violations, f"L — SystemClock() may be constructed only at a composition root: {violations}"
+    assert not violations, f"L — a concrete clock may be constructed only at a composition root: {violations}"
 
 
 #: The one module that may register a production clock with the hub's registry; registering one constructs it, so

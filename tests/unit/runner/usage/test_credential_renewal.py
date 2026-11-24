@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.clock import FixedClock, SystemMonotonicClock
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -212,6 +212,7 @@ def test_a_renewal_blocked_on_its_driver_never_delays_a_concurrent_tick(tmp_path
         interval=lambda: 60,
         jitter_seconds=0,
         stop_timeout_seconds=0.2,
+        clock=SystemMonotonicClock(),
     )
     ctx = make_context(
         store,
