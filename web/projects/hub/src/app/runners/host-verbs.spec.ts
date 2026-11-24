@@ -8,7 +8,6 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { vi } from 'vitest';
 
-import { type MeResponse } from 'fleet';
 import {
   OPERATOR_ME_RESPONSE,
   type RequestClientStub,
@@ -17,15 +16,16 @@ import {
   settle,
   stubError,
   stubHubClient,
+  meResponse,
 } from 'fleet/testing';
 import { FleetPage } from './fleet-page';
 import { hubHostsKey, hubRunnersKey } from '../core/query-keys';
 
 /** The operator's identity with `runner:retire` — the permission the host verbs need. */
-const RETIRE_ME: MeResponse = {
+const RETIRE_ME = meResponse({
   ...OPERATOR_ME_RESPONSE,
   permissions: [...OPERATOR_ME_RESPONSE.permissions, 'runner:retire' as const],
-};
+});
 
 const NOW = new Date().toISOString();
 const runner = (id: string, host_id: string | null = null) =>
@@ -47,7 +47,7 @@ const TOKEN = 'bzh_host_secret_token';
 
 type Routes = Parameters<typeof stubHubClient>[0];
 
-function routes(over: Routes = {}, me: MeResponse = RETIRE_ME): Routes {
+function routes(over: Routes = {}, me: typeof RETIRE_ME = RETIRE_ME): Routes {
   return {
     'GET /api/me': () => me,
     'GET /api/runners': () => RUNNERS,

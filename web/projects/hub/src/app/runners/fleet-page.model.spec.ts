@@ -1,4 +1,4 @@
-import { RunnerConnection, type WorkspaceRow } from 'fleet';
+import type { WorkspaceRow } from 'fleet';
 
 import { firstFleetId, fleetList, resolveSelection } from './fleet-page.model';
 import type { HostCard, HostGroups } from './host-rows.model';
@@ -9,7 +9,7 @@ function card(id: string, over: Partial<HostCard> = {}): HostCard {
     hostId: id,
     hostName: `box-${id}`,
     online: true,
-    connection: RunnerConnection.ONLINE,
+    connection: 'online',
     reportLabel: 'reported 3s ago',
     workspaces: [],
     subscriptionPaces: [],
@@ -31,7 +31,7 @@ function row(id: string, agents: number | null = null, inUse: number[] = []): Ru
     runner_id: id,
     runner_name: `name-${id}`,
     online: true,
-    connection: RunnerConnection.ONLINE,
+    connection: 'online',
     agents,
     bindingLines: inUse.map((agentsInUse) => ({ project: 'p', workspaceId: 'ws', unreported: false, agentsInUse })),
   } as unknown as RunnerRow;
@@ -60,7 +60,7 @@ describe('fleetList', () => {
     const list = fleetList({
       cards: [
         { card: card('hs_UP', { online: true }), rows: [] },
-        { card: card('hs_NEW', { online: false, connection: RunnerConnection.NEVER_CONNECTED }), rows: [] },
+        { card: card('hs_NEW', { online: false, connection: 'never_connected' }), rows: [] },
       ],
       hostless: [{ ...row('rn_SOLO0001'), hub_paused: true }],
     });

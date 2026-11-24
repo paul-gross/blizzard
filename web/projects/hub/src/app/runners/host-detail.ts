@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, type TemplateRef, computed, input, output, viewChild } from '@angular/core';
 
-import { KitAsyncState, KitBadge, KitBeacon, type KitFact, KitFactList, KitPanel, RunnerConnection, SubscriptionPaceGroup } from 'fleet';
+import { KitAsyncState, KitBadge, KitBeacon, type KitFact, KitFactList, KitPanel, SubscriptionPaceGroup } from 'fleet';
 import { HostOriginFact } from './host-origin-fact';
 import type { HostOrigin } from './host-origin.model';
 import { FleetRunnerRow } from './fleet-runner-row';
@@ -65,7 +65,7 @@ export class HostDetail {
    * the Last report fact still states its instant. */
   protected readonly reportText = computed(() => {
     const card = this.detail().card;
-    if (card.connection === RunnerConnection.NEVER_CONNECTED) return 'never reported';
+    if (card.connection === 'never_connected') return 'never reported';
     return card.reportedAgo;
   });
 

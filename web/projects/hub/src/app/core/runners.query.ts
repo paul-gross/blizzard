@@ -1,4 +1,4 @@
-import { toProjectRunner } from './runners.translate';
+import { toHubRunner, toProjectRunner } from './runners.translate';
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import {
@@ -46,5 +46,15 @@ export function injectProjectRunnersQuery(
   return injectQuery(() => ({
     ...HubRunnersQueryOptions(includeRetired),
     select: (rows: RunnerRegistryView[]) => rows.map(toProjectRunner),
+  }));
+}
+
+/** Domain projection of the registry over the same cached wire read. */
+export function injectHubRunnerDomainsQuery(
+  includeRetired: () => boolean = () => false,
+) {
+  return injectQuery(() => ({
+    ...HubRunnersQueryOptions(includeRetired),
+    select: (rows: RunnerRegistryView[]) => rows.map(toHubRunner),
   }));
 }

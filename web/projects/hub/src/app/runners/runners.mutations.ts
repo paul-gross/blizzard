@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { type RunnerRegistryView, pauseRunnerApiRunnersRunnerIdPausePost, resumeRunnerApiRunnersRunnerIdResumePost } from 'fleet';
+import { pauseRunnerApiRunnersRunnerIdPausePost, resumeRunnerApiRunnersRunnerIdResumePost } from 'fleet';
 import { runnerPauseMutationKey } from '../core/mutation-keys';
 import { hubRunnersKey } from '../core/query-keys';
 
@@ -21,15 +21,14 @@ export function injectRunnerPauseMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationKey: runnerPauseMutationKey,
-    mutationFn: async (vars: RunnerPauseVars): Promise<RunnerRegistryView> => {
+    mutationFn: async (vars: RunnerPauseVars): Promise<void> => {
       const call = vars.paused ? pauseRunnerApiRunnersRunnerIdPausePost : resumeRunnerApiRunnersRunnerIdResumePost;
-      const { data, error } = await call({
+      const { error } = await call({
         path: { runner_id: vars.runnerId },
         body: { by: 'operator' },
         throwOnError: false,
       });
       if (error) throw error;
-      return data!;
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: hubRunnersKey }),
   }));

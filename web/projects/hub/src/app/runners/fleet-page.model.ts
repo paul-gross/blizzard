@@ -1,4 +1,5 @@
 import { type KitFact, compactRef, formatAbsolute } from 'fleet';
+import { vocabularyWord } from '../core/runners.domain';
 
 import { busyAgents, declaredAgents, type HeldChunk, type HostCard, type HostGroups } from './host-rows.model';
 import { type ConnectionLight, hostLight, runnerLight } from './connection-status.model';
@@ -32,7 +33,7 @@ export function fleetList(groups: HostGroups<RunnerRow>): FleetList {
       id: card.hostId,
       name: card.hostName,
       online: card.online,
-      connection: typeof card.connection === 'string' ? card.connection : card.connection.raw,
+      connection: vocabularyWord(card.connection),
       light: hostLight(card.online, card.connection),
       agents: declaredAgents(rows),
       ref: compactRef(card.hostId),
@@ -41,7 +42,7 @@ export function fleetList(groups: HostGroups<RunnerRow>): FleetList {
       id: row.runner_id,
       name: row.runner_name,
       online: row.online,
-      connection: row.connection,
+      connection: vocabularyWord(row.connection),
       light: runnerLight(row),
       agents: declaredAgents([row]),
       ref: compactRef(row.runner_id),

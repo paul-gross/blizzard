@@ -1,27 +1,30 @@
-import { type HostRegistryView, type RunnerRegistryView } from 'fleet';
-import type { ChunkSummary } from 'fleet/shell';
+import type { HostFact } from 'fleet';
+import type { HubRunner } from '../core/runners.domain';
+import { hubRunner } from '../core/runners.builders';
+import { runnerClaimChunk } from './runner-claims.builders';
+import type { RunnerClaimChunk } from './runner-claims.domain';
 
 import { bindingLines, foldHostCards, groupHostRows, subscriptionName } from './host-rows.model';
 
 const NOW = Date.parse('2026-07-16T12:00:00.000Z');
 const SEEN = '2026-07-16T11:59:48.000Z';
 
-function runner(id: string, over: Partial<RunnerRegistryView> = {}): RunnerRegistryView {
-  return { runner_id: id, runner_name: `${id}-name`, projects: [], ...over } as unknown as RunnerRegistryView;
+function runner(id: string, over: Partial<HubRunner> = {}): HubRunner {
+  return hubRunner({ runner_id: id, runner_name: `${id}-name`, ...over });
 }
 
-function chunk(id: string, runnerId: string | null, project: { id?: string; slug?: string }, envs = 1, workspaceId = 'ws-1'): ChunkSummary {
-  return {
+function chunk(id: string, runnerId: string | null, project: { id?: string; slug?: string }, envs = 1, workspaceId = 'ws-1'): RunnerClaimChunk {
+  return runnerClaimChunk({
     chunk_id: id,
     runner_id: runnerId,
     workspace_id: workspaceId,
     project_id: project.id ?? null,
     project_slug: project.slug ?? null,
     environment_count: envs,
-  } as unknown as ChunkSummary;
+  });
 }
 
-function host(id: string, over: Partial<HostRegistryView> = {}): HostRegistryView {
+function host(id: string, over: Partial<HostFact> = {}): HostFact {
   return {
     host_id: id,
     host_name: `${id}-name`,
@@ -32,7 +35,7 @@ function host(id: string, over: Partial<HostRegistryView> = {}): HostRegistryVie
     subscription_usage: [],
     subscriptions: [],
     ...over,
-  } as unknown as HostRegistryView;
+  } as unknown as HostFact;
 }
 
 const SERVING = [
@@ -137,7 +140,7 @@ describe('bindingLines', () => {
 });
 
 describe('subscriptionName', () => {
-  const hosts = new Map([['h1', host('h1', { subscriptions: [{ slug: 'anthropic', name: 'Anthropic Max', provider: 'claude' }] })]]);
+  const hosts = new Map([['h1', host('h1', { subscriptions: [{ slug: 'anthropic', name: 'Anthropic Max' }] })]]);
 
   it("resolves the slug's name from the runner's host roster, falling back to the slug", () => {
     expect(subscriptionName(runner('rA', { host_id: 'h1', subscription: 'anthropic' }), hosts)).toBe('Anthropic Max');

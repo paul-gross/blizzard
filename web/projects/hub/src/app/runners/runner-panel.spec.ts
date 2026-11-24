@@ -13,20 +13,20 @@ import {
   runnerRegistryView,
   settle,
   stubHubClient,
+  meResponse,
 } from 'fleet/testing';
-import { type MeResponse, type RunnerRegistryView } from 'fleet';
 import { RunnerPanel } from './runner-panel';
 
 /** Every permission a runner action could be gated on — the rail must still offer none. */
-const ALL_PERMISSIONS_ME: MeResponse = {
+const ALL_PERMISSIONS_ME = meResponse({
   ...OPERATOR_ME_RESPONSE,
   permissions: [...OPERATOR_ME_RESPONSE.permissions, 'runner:pause' as const, 'runner:retire' as const],
-};
+});
 
 const NOW = new Date().toISOString();
 // One runner per pause state: none, the fleet's brake, the runner's own, and both
 // (they are separate concepts and the strip must say which).
-const runner = (id: string, over: Partial<RunnerRegistryView> = {}) =>
+const runner = (id: string, over: Partial<Parameters<typeof runnerRegistryView>[0]> = {}) =>
   runnerRegistryView({ runner_id: id, registered_at: NOW, last_seen_at: NOW, ...over });
 const CEILING_REASON = 'spend ceiling $5.00 reached over the trailing 24h (spend $7.00)';
 const RUNNERS = {

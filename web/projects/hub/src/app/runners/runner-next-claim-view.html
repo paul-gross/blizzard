@@ -23,7 +23,7 @@
       ({{ statuses()[prereq] ?? 'status unavailable' }})
     }
     @if (entry.prerequisite_count > 1) { and {{ entry.prerequisite_count - 1 }} more }
-  } @else if (entry.reason === 'ineligible') { · ineligible (missing harness or model, or graph unavailable) } @else { · {{ entry.reason }} }
+  } @else if (entry.reason === 'ineligible') { · ineligible (missing harness or model, or graph unavailable) } @else { · {{ reasonWord(entry.reason) }} }
 </ng-template>
 
 <ng-template #urgencyDisplay let-ref>

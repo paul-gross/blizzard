@@ -1,4 +1,5 @@
-import { RunnerConnection, type RunnerRegistryView } from 'fleet';
+import { runnerCapability } from '../core/runners.builders';
+import type { HubRunner } from '../core/runners.domain';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -7,7 +8,7 @@ import type { HostCard } from './host-rows.model';
 import type { RunnerRow } from './runner-rows.model';
 import { RunnerPanelView } from './runner-view';
 
-const REGISTRY: RunnerRegistryView = {
+const REGISTRY: HubRunner = {
   agents: null,
   runner_id: '',
   runner_name: '',
@@ -15,7 +16,7 @@ const REGISTRY: RunnerRegistryView = {
   added_by: null,
   bindings: null,
   capabilities: [],
-  connection: RunnerConnection.NEVER_CONNECTED,
+  connection: 'never_connected',
   declining: [],
   env_capacity: null,
   gates: [],
@@ -193,7 +194,7 @@ describe('RunnerPanelView', () => {
           env_capacity: 4,
           used: 2,
           gates: ['build'],
-          capabilities: [{ harness_id: 'claude', version: '1', tiers: [], default: true, available: true }],
+          capabilities: [runnerCapability({ harness_id: 'claude', version: '1', tiers: [], default: true, available: true })],
           bindingLines: [binding(1)],
         }),
       ],

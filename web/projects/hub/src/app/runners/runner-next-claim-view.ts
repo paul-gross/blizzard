@@ -1,9 +1,10 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { compactRef, type hubApi, KitAccordionGroup, KitAccordionSection, KitAsyncState, KitUrgencyPill, type KitAsyncStateValue, type Urgency } from 'fleet';
+import { compactRef, KitAccordionGroup, KitAccordionSection, KitAsyncState, KitUrgencyPill, type KitAsyncStateValue, type Urgency, type UrgencyReference } from 'fleet';
 import { AppLink } from 'fleet/shell';
 import { nextClaimSummary } from './runner-next-claim.model';
+import { type NextClaim, passReasonWord } from './runner-next-claim.domain';
 @Component({
   selector: 'app-runner-next-claim-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -14,7 +15,7 @@ import { nextClaimSummary } from './runner-next-claim.model';
 })
 export class RunnerNextClaimView {
   readonly runnerId = input.required<string>();
-  readonly data = input<hubApi.NextClaimResponse | null>(null);
+  readonly data = input<NextClaim | null>(null);
   readonly state = input.required<KitAsyncStateValue>();
   readonly urgencies = input<readonly Urgency[]>([]);
   readonly urgencyIconUrls = input<Readonly<Record<string, string | undefined>>>({});
@@ -22,7 +23,8 @@ export class RunnerNextClaimView {
   protected readonly expanded = signal(false);
   protected readonly compact = compactRef;
   protected readonly summary = nextClaimSummary;
-  protected urgency(ref: hubApi.UrgencyRef | null): Urgency | null {
-    return this.urgencies().find((item) => item.id === ref?.urgency_id) ?? null;
+  protected readonly reasonWord = passReasonWord;
+  protected urgency(ref: UrgencyReference | null): Urgency | null {
+    return this.urgencies().find((item) => item.id === ref?.id) ?? null;
   }
 }

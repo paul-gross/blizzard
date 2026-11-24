@@ -1,4 +1,4 @@
-import { RunnerConnection, type RunnerRegistryView } from 'fleet';
+import type { HubRunner } from '../core/runners.domain';
 import { chunkDetail } from 'fleet/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { provideZonelessChangeDetection } from '@angular/core';
@@ -13,7 +13,7 @@ import type { HostCard } from './host-rows.model';
 import type { RunnerRow } from './runner-rows.model';
 import { hubRunnerNextClaimKey, hubUrgenciesKey, hubChunkKey } from '../core/query-keys';
 
-const REGISTRY: RunnerRegistryView = {
+const REGISTRY: HubRunner = {
   agents: null,
   runner_id: '',
   runner_name: '',
@@ -21,7 +21,7 @@ const REGISTRY: RunnerRegistryView = {
   added_by: null,
   bindings: null,
   capabilities: [],
-  connection: RunnerConnection.NEVER_CONNECTED,
+  connection: 'never_connected',
   declining: [],
   env_capacity: null,
   gates: [],
@@ -105,7 +105,7 @@ const CARD: HostCard = {
   hostId: 'hs_1',
   hostName: 'build-box-with-a-long-hostname',
   online: true,
-  connection: RunnerConnection.ONLINE,
+  connection: 'online',
   reportLabel: 'seen 4s ago',
   url: HOST_URL,
   urls: ['https://other.example.internal:8443', HOST_URL, `http://${window.location.hostname}:8080`],

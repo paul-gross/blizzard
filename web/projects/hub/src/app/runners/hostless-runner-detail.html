@@ -9,7 +9,7 @@
   }}</fleet-kit-badge>
   <span class="sep" aria-hidden="true">·</span>
   <span class="report" data-testid="fleet-detail-report" [title]="seenLabel(detail().row)">{{
-    detail().row.connection === connection.NEVER_CONNECTED ? 'stands alone' : ageTag(detail().row) + ' · stands alone'
+    detail().row.connection === 'never_connected' ? 'stands alone' : ageTag(detail().row) + ' · stands alone'
   }}</span>
 </div>
 <fleet-kit-panel class="sec" label="Workspace" [count]="slotsLabel()" [bodyScroll]="false" data-testid="fleet-runner-workspace">

@@ -1,4 +1,4 @@
-import { RunnerConnection, type RunnerRegistryView } from 'fleet';
+import type { HubRunner } from '../core/runners.domain';
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { NavigationStart, provideRouter, Router } from '@angular/router';
@@ -7,7 +7,7 @@ import { commands, page } from 'vitest/browser';
 import type { RunnerRow } from './runner-rows.model';
 import { RunnerPanelView } from './runner-view';
 
-const REGISTRY: RunnerRegistryView = {
+const REGISTRY: HubRunner = {
   agents: null,
   runner_id: '',
   runner_name: '',
@@ -15,7 +15,7 @@ const REGISTRY: RunnerRegistryView = {
   added_by: null,
   bindings: null,
   capabilities: [],
-  connection: RunnerConnection.NEVER_CONNECTED,
+  connection: 'never_connected',
   declining: [],
   env_capacity: null,
   gates: [],

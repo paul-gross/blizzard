@@ -2,12 +2,13 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
-import { KitAsyncState, type KitAsyncStateValue, KitButton, KitGlyph, KitPanel, KitSkeleton, KitSlotBar, RunnerConnection, SubscriptionBlocks, KitErrorLine } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitButton, KitGlyph, KitPanel, KitSkeleton, KitSlotBar, SubscriptionBlocks, KitErrorLine } from 'fleet';
 import { AppLink } from 'fleet/shell';
 import { groupHostRows, type HostCard } from './host-rows.model';
 import { railVm } from './runner-rail.model';
 import { localPauseHint, runnerSeenLabel, runnerSeenTag, runnerToggleHint, type RunnerRow } from './runner-rows.model';
 import { StatusLight } from './status-light';
+import { vocabularyWord } from '../core/runners.domain';
 
 /**
  * The board rail's runner panel — the presentational half, most important first: a pace line per
@@ -62,6 +63,6 @@ export class RunnerPanelView {
 
   protected readonly seenTag = runnerSeenTag;
 
-  /** The wire's connection vocabulary, for the row's connection classes. */
-  protected readonly connection = RunnerConnection;
+  /** A connection as its row's data attribute names it. */
+  protected readonly connectionWord = vocabularyWord;
 }

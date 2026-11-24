@@ -4,7 +4,6 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
-import { type MeResponse, type RunnerRegistryView } from 'fleet';
 import {
   OPERATOR_ME_RESPONSE,
   type RequestClientStub,
@@ -14,25 +13,26 @@ import {
   settle,
   stubError,
   stubHubClient,
+  meResponse,
 } from 'fleet/testing';
 
 import { RunnersPage } from './runners-page';
 
 /** An admin's `/api/me` — `runner:retire` too, so a host verb would render anywhere it is offered. */
-const ADMIN_ME: MeResponse = {
+const ADMIN_ME = meResponse({
   ...OPERATOR_ME_RESPONSE,
   permissions: [...OPERATOR_ME_RESPONSE.permissions, 'runner:retire' as const],
-};
+});
 /** A `contributor`'s `/api/me` — every day-to-day operating permission, but not
  * the admin-tier `runner:pause`. */
-const CONTRIBUTOR_ME: MeResponse = {
+const CONTRIBUTOR_ME = meResponse({
   ...OPERATOR_ME_RESPONSE,
   role: 'contributor',
   permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'runner:pause' && p !== 'graph:edit' && p !== 'user:manage'),
-};
+});
 
 const NOW = new Date().toISOString();
-const runner = (id: string, over: Partial<RunnerRegistryView> = {}) =>
+const runner = (id: string, over: Partial<Parameters<typeof runnerRegistryView>[0]> = {}) =>
   runnerRegistryView({ runner_id: id, registered_at: NOW, last_seen_at: NOW, ...over });
 const RUNNERS = {
   runners: [runner('rn_online', { host_id: 'hs_h1', env_capacity: 4 }), runner('rn_paused', { hub_paused: true })],
@@ -60,7 +60,7 @@ type Routes = Parameters<typeof stubHubClient>[0];
 describe('RunnersPage (mobile Fleet screen)', () => {
   let stub: RequestClientStub;
 
-  async function open(url: string, me: MeResponse = OPERATOR_ME_RESPONSE, over: Routes = {}) {
+  async function open(url: string, me: typeof OPERATOR_ME_RESPONSE = OPERATOR_ME_RESPONSE, over: Routes = {}) {
     stub = stubHubClient({
       'GET /api/me': () => me,
       'GET /api/runners': () => RUNNERS,
