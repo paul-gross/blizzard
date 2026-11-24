@@ -2619,7 +2619,7 @@ export type HostRunnerStartFailureView = {
     /**
      * Step
      */
-    step: string;
+    step: 'seed' | 'compose' | 'worker_shell' | 'tracing' | 'worker_scratch' | 'resume' | 'takeovers' | 'sessions' | 'serve';
 };
 
 /**
