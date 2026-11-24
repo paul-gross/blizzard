@@ -47,8 +47,13 @@ from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository, IWr
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.chunk.ports.usage import IReadChunkUsageRepository, IWriteChunkUsageRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, IWriteChunkWorkRefsRepository
+from blizzard.hub.domain.garden.delivery.materialize import (
+    IReadGardenDeliveryRepository,
+    IWriteGardenDeliveryRepository,
+)
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository, IWriteFindingRepository
+from blizzard.hub.domain.garden.review.materialize import IReadReviewFindingsRepository, IWriteReviewFindingsRepository
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
 from blizzard.hub.domain.graph.authoring import DefaultGraphService, GraphMintService
 from blizzard.hub.domain.graph.model import (
@@ -94,6 +99,7 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
+from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.graph_store import GraphStore
@@ -105,6 +111,7 @@ from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
+from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
@@ -129,6 +136,8 @@ ADAPTER_PORTS: Mapping[type[Any], tuple[type[Any], ...]] = {
     WorkItemStore: (IReadWorkItemRepository, IWriteWorkItemRepository, IHubItemWithdrawals, IWorkItemProjectRead),
     ChunkStores: (),
     GardenProposalStore: (),
+    GardenDeliveryStore: (IReadGardenDeliveryRepository, IWriteGardenDeliveryRepository),
+    ReviewFindingsStore: (IReadReviewFindingsRepository, IWriteReviewFindingsRepository),
     GardenProposalClosureStore: (),
     SecretStore: (),
     WorkSourceRecordStore: (),

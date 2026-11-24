@@ -5,14 +5,14 @@ replay, validate, and materialize (blizzard-product:/delivered/garden/machinery.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome, GardenDelivery, delivery_replay_outcome
 from blizzard.hub.domain.garden.delivery.validation import (
     GardenDeliveryRejected,
-    ICommitResolver,
+    IProjectCommitResolvers,
     commits_to_resolve,
     parse_artifacts,
     resolve_commits,
@@ -43,13 +43,13 @@ class GardenDeliveryRecorder:
         buckets: FindingBucketReader,
         materialize: GardenDelivery,
         formats: IGardenFormats,
-        resolve_commit_for: Callable[[ProjectId], ICommitResolver] | None,
+        commit_resolvers: IProjectCommitResolvers,
     ) -> None:
         self._artifacts = artifacts
         self._buckets = buckets
         self._materialize = materialize
         self._formats = formats
-        self._resolve_commit_for = resolve_commit_for
+        self._commit_resolvers = commit_resolvers
 
     def record(
         self,
@@ -81,7 +81,7 @@ class GardenDeliveryRecorder:
         # repository the run's project links.
         resolutions = resolve_commits(
             commits_to_resolve(parsed.deltas, run=run),
-            self._resolve_commit_for(ProjectId(run.project_id)) if self._resolve_commit_for else None,
+            self._commit_resolvers.for_project(ProjectId(run.project_id)),
         )
         for _ in range(GUARD_ATTEMPTS):
             validated = validate_delivery(

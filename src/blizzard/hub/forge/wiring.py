@@ -20,6 +20,7 @@ from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.config.secrets import ISecretReader
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
+from blizzard.hub.domain.garden.delivery.validation import IProjectCommitResolvers
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.forge.auth import IForgeAuthorizations
 from blizzard.hub.forge.budget import ForgeBudgets
@@ -132,7 +133,8 @@ def register_tenant(registry: Registry) -> None:
     registry.factory(forge_budgets, lifetime=Lifetime.TENANT)
     registry.service(WriteLocks, lifetime=Lifetime.TENANT)
     registry.factory(forge_registry, lifetime=Lifetime.TENANT)
-    registry.factory(commit_resolver, lifetime=Lifetime.TENANT)
+    resolver = registry.factory(commit_resolver, lifetime=Lifetime.TENANT)
+    registry.alias(port(IProjectCommitResolvers), resolver)
     links = registry.service(LandedCommitLinks, lifetime=Lifetime.TENANT)
     registry.alias(port(IReadLandedCommitLinks), links)
     registry.factory(credential_readiness, lifetime=Lifetime.TENANT)
@@ -146,6 +148,7 @@ _TENANT_KEYS: tuple[type[Any], ...] = (
     WriteLocks,
     ForgeRegistry,
     SeamCommitResolver,
+    IProjectCommitResolvers,
     LandedCommitLinks,
     IReadLandedCommitLinks,
     CredentialReadiness,

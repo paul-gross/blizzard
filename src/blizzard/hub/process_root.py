@@ -139,6 +139,7 @@ def register_hub(
         store.register_urgency_absent(registry)
         urgency_area.register_absent(registry)
         store.register_garden_authoring_absent(registry)
+        store.register_garden_materialization_absent(registry)
         garden_area.register_absent(registry)
         cadence_area.register_absent(registry)
         store.register_config_absent(registry)
@@ -197,6 +198,7 @@ def _register_garden(registry: LegacyRegistry, *, formats: Ref[GardenFormats]) -
     """The garden authoring adapters, and the garden area's ports and services over them and the API edge's artifact
     formats."""
     refs = store.register_garden_authoring(registry)
+    materialization = store.register_garden_materialization(registry)
     garden_area.register(
         registry,
         scopes=refs.scopes,
@@ -206,6 +208,8 @@ def _register_garden(registry: LegacyRegistry, *, formats: Ref[GardenFormats]) -
         proposals=refs.proposals,
         closures=refs.closures,
         finding_sets=refs.finding_sets,
+        deliveries=materialization.delivery,
+        review_findings=materialization.review_findings,
         formats=formats,
     )
 

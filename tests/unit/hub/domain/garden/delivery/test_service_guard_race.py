@@ -102,9 +102,20 @@ def _recorder(
         buckets=cast(Any, buckets),
         materialize=cast(GardenDelivery, materialize),
         formats=cast(Any, _Formats()),
-        resolve_commit_for=resolver_for if with_resolver else None,
+        commit_resolvers=cast(Any, _Resolvers(resolver_for if with_resolver else _no_resolver)),
     )
     return recorder, buckets, materialize
+
+
+def _no_resolver(_project_id: str) -> None:
+    return None
+
+
+class _Resolvers:
+    """A stand-in :class:`IProjectCommitResolvers` answering through ``resolver_for``."""
+
+    def __init__(self, resolver_for: Any) -> None:
+        self.for_project = resolver_for
 
 
 def _record(recorder: GardenDeliveryRecorder) -> DeliveryOutcome:

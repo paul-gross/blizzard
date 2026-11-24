@@ -25,6 +25,7 @@ from blizzard.hub.domain.garden.formats import (
 from blizzard.hub.domain.garden.proposals.model import GardenProposalBlankFieldError, require_text
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.kernel.garden_delivery_fault import GardenDeliveryFault
+from blizzard.hub.domain.projects.model import ProjectId
 
 # Lowercase hex, 7-40 characters — a well-formed commit sha's shape. Says nothing about
 # whether the commit actually exists; that is `ICommitResolver`'s question.
@@ -66,6 +67,12 @@ class ICommitResolver(Protocol):
     `None` when it is not, degrading that commit to a well-formedness check."""
 
     def __call__(self, repo: str, commit: str, /) -> CommitResolution | None: ...
+
+
+class IProjectCommitResolvers(Protocol):
+    """A project's :class:`ICommitResolver`, the one its linked repository answers through."""
+
+    def for_project(self, project_id: ProjectId, /) -> ICommitResolver: ...
 
 
 # What resolving the commits a delivery cites produced, keyed `(repo, sha)`: a key absent was never asked,

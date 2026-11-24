@@ -12,25 +12,18 @@ from typing import Literal
 from sqlalchemy import insert, select
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
-from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome, GardenDelivery
+from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome
 from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
 from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
-from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository, RunContext
 from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
-from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
-from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
-from blizzard.hub.store.transactions import HubTransactions
 from tests.support.hub_node_artifacts import record_hub_asset
 from tests.support.scaffolding import (
     HubHarness,
-    chunk_stores,
     default_project,
     hub_scoped,
     hub_store_connections,
@@ -122,23 +115,8 @@ class Delivered:
 
 
 def garden_delivery_recorder(hub: HubHarness) -> GardenDeliveryRecorder:
-    """The recorder a ``garden-deliver`` pass records through, over the hub's own store."""
-    connections = hub_store_connections(hub.engine)
-    return GardenDeliveryRecorder(
-        artifacts=chunk_stores(hub.engine, hub.clock).artifacts,
-        buckets=FindingBucketReader(FindingStore(connections)),
-        materialize=GardenDelivery(
-            delivery=GardenDeliveryStore(connections),
-            findings=FindingStore(connections),
-            finding_sets=FindingSetStore(connections),
-            proposals=GardenProposalStore(connections),
-            facts=chunk_stores(hub.engine, hub.clock).facts,
-            transactions=HubTransactions(connections),
-            clock=hub.clock,
-        ),
-        formats=GardenFormats(),
-        resolve_commit_for=None,
-    )
+    """The recorder a ``garden-deliver`` pass records through: the default tenant's own."""
+    return hub.default_adapter(GardenDeliveryRecorder)
 
 
 def deliver(
