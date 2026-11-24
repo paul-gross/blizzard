@@ -10,13 +10,14 @@ from __future__ import annotations
 from typing import Any, cast
 
 from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
-from blizzard.hub.api.chunk_events import announce_minted
+from blizzard.hub.api.chunk_events import AnnouncedTurns, announce_minted
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.chunk_views import ChunkViewReads
 from blizzard.hub.api.flow_places import FlowLineReads
 from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.api.queue import QueueReads
 from blizzard.hub.api.version_window import HubVersionWindow
+from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.domain.cadence.sweep import MintAnnouncement
 from blizzard.hub.domain.garden.proposals.closure import DefaultGraphEnsurer
 from blizzard.hub.domain.graph.authoring import DefaultGraphService
@@ -25,6 +26,9 @@ from blizzard.hub.tenancy import STORE_UNAVAILABLE
 
 #: The tenant records the edge registers by class.
 _TENANT_RECORDS: tuple[type[Any], ...] = (ChunkFrameLoader, FlowLineReads, ChunkViewReads, QueueReads)
+
+#: Every tenant key the edge declares, for the store-free graph to declare absent.
+_TENANT_KEYS: tuple[type[Any], ...] = (*_TENANT_RECORDS, AnnouncedTurns)
 
 
 def default_graph_ensurer(default_graph: DefaultGraphService, packaged: PackagedDefaultGraph) -> DefaultGraphEnsurer:
@@ -37,13 +41,19 @@ def mint_announcement(frames: ChunkFrameLoader) -> MintAnnouncement:
     return lambda minted: announce_minted(frames, minted)
 
 
+def announced_turns(frames: ChunkFrameLoader, turns: TurnRunner) -> AnnouncedTurns:
+    """The tenant's turns, each announcing the chunk frames of the move it routed."""
+    return AnnouncedTurns(frames=frames, turns=turns)
+
+
 def register(registry: Registry) -> Ref[GardenFormats]:
-    """Declare the tenant's chunk-frame loader and the edge's read records, once per tenant, the default graph a
-    garden closure mints against, the announcement a cadence mint publishes, and the packaged default graph and the
-    garden artifact formats once per process, handing back the formats' ``Ref``, which the garden area's port
-    aliases."""
+    """Declare the tenant's chunk-frame loader, the edge's read records and announced turns, once per tenant, the
+    default graph a garden closure mints against, the announcement a cadence mint publishes, and the packaged default
+    graph and the garden artifact formats once per process, handing back the formats' ``Ref``, which the garden area's
+    port aliases."""
     for record in _TENANT_RECORDS:
         registry.service(record, lifetime=Lifetime.TENANT)
+    registry.factory(announced_turns, lifetime=Lifetime.TENANT)
     registry.factory(default_graph_ensurer, lifetime=Lifetime.TENANT)
     registry.factory(mint_announcement, lifetime=Lifetime.TENANT)
     registry.factory(packaged_default_graph, lifetime=Lifetime.PROCESS)
@@ -52,7 +62,7 @@ def register(registry: Registry) -> Ref[GardenFormats]:
 
 def register_absent(registry: Registry) -> None:
     """Declare the tenant records absent, for the store-free graph."""
-    for missing in _TENANT_RECORDS:
+    for missing in _TENANT_KEYS:
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
     registry.absent(port(cast("type[Any]", MintAnnouncement)), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
     registry.absent(port(PackagedDefaultGraph), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)

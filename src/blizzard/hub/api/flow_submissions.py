@@ -6,6 +6,7 @@ from __future__ import annotations
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Query
 
 from blizzard.auth_core import Permission
@@ -14,9 +15,10 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems, problems_chunks
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.delivery.flows import SubmissionRecord
+from blizzard.hub.domain.delivery.ports.flows import IReadFlows
 from blizzard.wire.flow_submissions import (
     CapturedLandingTermsView,
     ChunkFlowSubmissionsView,
@@ -63,13 +65,16 @@ def _view(record: SubmissionRecord) -> FlowSubmissionView:
     response_model=ChunkFlowSubmissionsView,
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
-def list_flow_submissions(chunk_id: str, services: Services) -> ChunkFlowSubmissionsView:
+@inject_sync
+def list_flow_submissions(
+    chunk_id: str, records: FromDishka[IReadChunkRecordRepository], flows: FromDishka[IReadFlows]
+) -> ChunkFlowSubmissionsView:
     """Every submission of the chunk's visits, open or closed, in arrival order. Unpaged: the read is bounded by one
     chunk's visits — a submission per hub-node visit generation."""
-    if services.chunks.record.get(chunk_id) is None:
+    if records.get(chunk_id) is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     return ChunkFlowSubmissionsView(
-        chunk_id=chunk_id, items=[_view(record) for record in services.flows.submissions_of(chunk_id)]
+        chunk_id=chunk_id, items=[_view(record) for record in flows.submissions_of(chunk_id)]
     )
 
 
@@ -78,17 +83,18 @@ def list_flow_submissions(chunk_id: str, services: Services) -> ChunkFlowSubmiss
     response_model=SubmissionTurnsPage,
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
+@inject_sync
 def list_submission_turns(
     chunk_id: str,
     submission_id: str,
-    services: Services,
+    flows: FromDishka[IReadFlows],
     before: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> SubmissionTurnsPage:
     """Turns of one submission, newest ID first; includes turns holding no flows."""
-    if not services.flows.submission_belongs_to(submission_id, chunk_id):
+    if not flows.submission_belongs_to(submission_id, chunk_id):
         raise ProblemHTTPException(partial(problems_chunks.submission_not_found_problem, "unknown submission"))
-    rows = services.flows.turns_page(submission_id, before=before, limit=limit + 1)
+    rows = flows.turns_page(submission_id, before=before, limit=limit + 1)
     page = rows[:limit]
     return SubmissionTurnsPage(
         items=[

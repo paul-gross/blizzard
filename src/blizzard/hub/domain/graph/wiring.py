@@ -12,12 +12,13 @@ from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.domain.graph.model import (
     IReadGraphBodies,
     IReadGraphRepository,
+    IReadManyGraphs,
     IReadNodeExecutors,
     IWriteGraphRepository,
 )
 from blizzard.hub.tenancy import STORE_UNAVAILABLE
 
-_PORTS = (IReadGraphRepository, IWriteGraphRepository, IReadGraphBodies, IReadNodeExecutors)
+_PORTS = (IReadGraphRepository, IReadManyGraphs, IWriteGraphRepository, IReadGraphBodies, IReadNodeExecutors)
 _SERVICES = (GraphMintService, DefaultGraphService, GraphLifecycleService)
 
 

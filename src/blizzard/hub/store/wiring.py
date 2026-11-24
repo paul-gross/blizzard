@@ -20,6 +20,7 @@ from blizzard.foundation.roles import adapter_model
 from blizzard.hub.auth.invitations import IInvitationTokenReads
 from blizzard.hub.auth.service import InvitationWriters
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus
 from blizzard.hub.domain.observability.egress.repository import IReadUsageCorpus
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
@@ -316,6 +317,7 @@ _PROCESS_SERVICES: tuple[type[Any], ...] = (
 _PROCESS_KEYS: tuple[type[Any], ...] = (
     HubScopedReads,
     IReadUsageCorpus,
+    IReadFlowLinesCorpus,
     IInvitationTokenReads,
     HubEventLogStore,
     *_PROCESS_SERVICES,
@@ -324,6 +326,11 @@ _PROCESS_KEYS: tuple[type[Any], ...] = (
 
 def usage_corpus(reads: HubScopedReads) -> IReadUsageCorpus:
     """The hub-scoped reads' usage corpus, as its port."""
+    return reads.corpus
+
+
+def flow_lines_corpus(reads: HubScopedReads) -> IReadFlowLinesCorpus:
+    """The hub-scoped reads' flow-line change probe, as its port."""
     return reads.corpus
 
 
@@ -342,6 +349,7 @@ def register_process(registry: Registry) -> Ref[HubEventLogStore]:
     bridge's ``IReadHubEventLog`` aliases."""
     registry.factory(build_hub_scoped_reads, lifetime=Lifetime.PROCESS)
     registry.factory(usage_corpus, lifetime=Lifetime.PROCESS)
+    registry.factory(flow_lines_corpus, lifetime=Lifetime.PROCESS)
     registry.factory(invitation_token_reads, lifetime=Lifetime.PROCESS)
     registry.factory(invitation_writers, lifetime=Lifetime.PROCESS)
     hub_events = registry.service(HubEventLogStore, lifetime=Lifetime.PROCESS)

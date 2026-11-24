@@ -27,8 +27,7 @@ from blizzard.foundation.flags import (
 )
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
-from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
-from blizzard.foundation.registry.interface import Lifetime, Ref, port
+from blizzard.foundation.registry.interface import Lifetime, port
 from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import Resolver
 from blizzard.foundation.roles import collaborator
@@ -36,6 +35,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
+from blizzard.hub.api.chunk_events import AnnouncedTurns
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.auth.facts import AuthFactsService
@@ -55,15 +55,11 @@ from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE, ActionPassDriver, PassBound
 from blizzard.hub.delivery.action_registry import HubActions, build_hub_actions
 from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores, ITurnRunner, StepWake
-from blizzard.hub.delivery.flow_turn import TurnRunner
-from blizzard.hub.delivery.hub_node import HubNodeRouter
 from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.cadence.sweep import CadenceSweep, TenantCadence
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
-from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import IReadConfigChanges
@@ -72,16 +68,13 @@ from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.config.secrets import ISecretCatalog
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
-from blizzard.hub.domain.delivery.lines import FlowLineFactory
-from blizzard.hub.domain.delivery.ports.flows import IReadFlows, IReadFlowViews
+from blizzard.hub.domain.delivery.ports.flows import IFlowChangePublisher, IReadFlowLinesCorpus, IReadFlows
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.execution.apply import IHubStepWake
-from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import (
     IReadFindingRepository,
 )
-from blizzard.hub.domain.garden.review.service import ReviewFindingsRecorder
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
 from blizzard.hub.domain.graph.authoring import DefaultGraphService, GraphMintService
 from blizzard.hub.domain.graph.model import IReadGraphBodies, IReadGraphRepository, IReadNodeExecutors
@@ -121,7 +114,7 @@ from blizzard.hub.domain.observability.transcripts import (
 from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
-from blizzard.hub.domain.projects.targets import ChunkTargetCapture, ChunkTargets
+from blizzard.hub.domain.projects.targets import ChunkTargets
 from blizzard.hub.domain.runners.host import IReadHostRegistry
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.domain.sweeps.locks import SweepLocks
@@ -165,7 +158,7 @@ from blizzard.hub.store.internal.credential_referrers import CredentialReferrers
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.env_timeline_store import EnvTimelineStore
 from blizzard.hub.store.internal.finding_store import FindingStore
-from blizzard.hub.store.internal.flow_store import FlowStore, tenant_flows
+from blizzard.hub.store.internal.flow_store import tenant_flows
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
@@ -179,7 +172,6 @@ from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
-from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
@@ -271,14 +263,6 @@ class TenantServices:
     commit_links: IReadLandedCommitLinks
     #: Each branch's delivery line and the visits submitted to it (the read half).
     flows: IReadFlows
-    #: What the surfaces read of the tenant's flows and the newest of their records.
-    flow_views: IReadFlowViews
-    #: Builds a flow line from its submissions, so a surface judges a place as the driver judges a turn.
-    flow_line_factory: FlowLineFactory
-    #: Converges the tenant's flow lines on where its chunks stand — driven by the hosted hub's flow driver alone.
-    flow_lines: FlowLineReconciler
-    #: Answers for each turn the flow driver starts in this tenant.
-    turns: TurnRunner
     #: The configuration change log.
     config_changes: IReadConfigChanges
     #: Stored projects (the read half).
@@ -401,8 +385,6 @@ class TenantStores:
     forge_records: ForgeRecordStore
     #: Credential records — composition-only write half; ``TenantServices`` carries the read half.
     credential_records: CredentialRecordStore
-    #: Each branch's delivery line — composition-only write half; ``TenantServices`` carries the read half.
-    flows: FlowStore
     #: Which active configured records name each secret, across every referring kind.
     secret_referrers: SecretReferrersStore
     forge_referrers: ForgeReferrersStore
@@ -443,7 +425,6 @@ def build_tenant_stores(tenant: Resolver, *, clock: IClock) -> TenantStores:
         repository_records=tenant.get(RepositoryRecordStore),
         forge_records=tenant.get(ForgeRecordStore),
         credential_records=tenant.get(CredentialRecordStore),
-        flows=tenant.get(FlowStore),
         secret_referrers=tenant.get(SecretReferrersStore),
         forge_referrers=tenant.get(ForgeReferrersStore),
         credential_referrers=tenant.get(CredentialReferrersStore),
@@ -699,20 +680,19 @@ def step_wake_leaf() -> StepWake:
     return StepWake()
 
 
-def flow_line_factory_leaf(
-    facts: IReadChunkFactsRepository, record: IReadChunkRecordRepository, graphs: GraphStore
-) -> FlowLineFactory:
-    """The tenant's flow-line builder, a legacy leaf the flow execution area owns until it adopts it."""
-    return FlowLineFactory(facts=facts, record=record, graphs=graphs)
+def action_pass_driver_leaf(loop: ActionLoop, config: HubConfigSource) -> ActionPassDriver:
+    """Takes every tenant's action passes on the one loop, each bound by the live config's pass seconds past the
+    default grace — a legacy leaf the hub lifecycle owns until it adopts it."""
+    return ActionPassDriver(loop, lambda: PassBound(config.current().action_pass_seconds, ACTION_PASS_GRACE))
 
 
-def register_legacy(registry: LegacyRegistry, *, flows: Ref[FlowStore]) -> None:
+def register_legacy(registry: LegacyRegistry) -> None:
     """Declare the store's adapters and the legacy bridge's leaves, each built as the legacy builder built it: the
     process services a request's admission reads before its tenant is known, and the transitional ports and leaves of
-    the areas not yet adopted — invitation writes, flow reads and the flow-line builder. The flow reads alias the flow
-    store the root hands in."""
+    the areas not yet adopted — invitation writes and the action pass driver."""
     registry.leaf(open_tenants_leaf, lifetime=Lifetime.PROCESS)
     registry.leaf(action_loop_leaf, lifetime=Lifetime.PROCESS)
+    registry.leaf(action_pass_driver_leaf, lifetime=Lifetime.PROCESS)
     step_wake = registry.leaf(step_wake_leaf, lifetime=Lifetime.PROCESS)
     # The wake a completion's apply names by the domain's own Protocol.
     registry.alias(port(IHubStepWake), step_wake)
@@ -722,19 +702,12 @@ def register_legacy(registry: LegacyRegistry, *, flows: Ref[FlowStore]) -> None:
     registry.alias(port(IHubTransactions), tenant.of(HubTransactions))
     # The reads a chunk-changed frame is enriched from.
     registry.alias(port(IWriteInvitationRepository), tenant.of(InvitationStore))
-    # The flow reads a chunk's flow places are rendered from, until the flow execution area adopts them.
-    registry.alias(port(IReadFlows), flows)
-    registry.alias(port(IReadFlowViews), flows)
-    registry.leaf(flow_line_factory_leaf, lifetime=Lifetime.TENANT)
 
 
 #: The transitional tenant ports and leaves :func:`register_legacy` declares, for the store-free graph.
 _LEGACY_TENANT_KEYS: tuple[type[Any], ...] = (
     IHubTransactions,
     IWriteInvitationRepository,
-    IReadFlows,
-    IReadFlowViews,
-    FlowLineFactory,
 )
 
 
@@ -743,6 +716,7 @@ def register_legacy_absent(registry: LegacyRegistry) -> None:
     for missing in (
         OpenTenants,
         ActionLoop,
+        ActionPassDriver,
         StepWake,
         IHubStepWake,
         IReadHubEventLog,
@@ -835,13 +809,8 @@ class TenantServiceParts:
 
     clock: IClock
     public_url: str | None
-    follow_latest_default: bool
     transcript_caps: TranscriptCaps | None
-    platform_tracer: IPlatformTracer | None
     extractors: Sequence[ITurnEventExtractor]
-    action_passes: ActionPassDriver
-    #: The config a turn binds: the settings graph's resolution, or the boot config without one.
-    pass_config: Callable[[], HubConfig]
     step_wake: StepWake
 
 
@@ -850,8 +819,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     the tenant's broker. Every configured adapter is the tenant scope's instance."""
     clock = parts.clock
     tenant = stores.tenant
-    actions = tenant.get(HubActions)
-    catalogue = tenant.get(HubActionCatalogue)
     graph_yaml = tenant.get(IConfigCodec)
     chunk_stores = stores.chunk_stores
     finding_store = stores.finding_store
@@ -891,60 +858,10 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     graph_mint = tenant.get(GraphMintService)
     default_graph = tenant.get(DefaultGraphService)
     config_authoring = tenant.get(ConfigAuthoring)
-    run_context_store = tenant.get(RunContextStore)
     finding_bucket = tenant.get(FindingBucketReader)
     commit_links = tenant.get(LandedCommitLinks)
     chunk_targets = tenant.get(ChunkTargets)
-    chunk_target_capture = tenant.get(ChunkTargetCapture)
-    hub_router = HubNodeRouter(
-        artifacts=chunk_artifacts,
-        hub_exec=chunk_hub_exec,
-        escalations=chunk_escalations,
-        record=chunk_record,
-        transactions=stores.transactions,
-        events=event_log,
-        clock=clock,
-        repositories=stores.repository_records,
-        forge_records=stores.forge_records,
-        links=stores.project_links,
-        targets=chunk_targets,
-        projects=stores.projects,
-        work_sources=work_sources,
-        movement=chunk_movement,
-        decisions=chunk_decisions,
-        graphs=graph_store,
-        facts=chunk_facts,
-        follow_latest_default=parts.follow_latest_default,
-    )
-    turns = TurnRunner(
-        flows=stores.flows,
-        facts=chunk_facts,
-        record=chunk_record,
-        graphs=graph_store,
-        artifacts=chunk_artifacts,
-        transactions=stores.transactions,
-        router=hub_router,
-        events=event_log,
-        publisher=events,
-        clock=clock,
-        repositories=stores.repository_records,
-        forge_records=stores.forge_records,
-        links=stores.project_links,
-        targets=chunk_targets,
-        projects=stores.projects,
-        actions=actions,
-        passes=parts.action_passes,
-        forges=forges,
-        review_findings=tenant.get(ReviewFindingsRecorder),
-        garden_delivery=tenant.get(GardenDeliveryRecorder),
-        run_context=run_context_store,
-        tracer=parts.platform_tracer,
-        public_url=parts.public_url,
-        work_sources=work_sources,
-        pass_config=parts.pass_config,
-    )
     work_ref_label: WorkRefLabel = tenant.get(WorkRefLabel)
-    flow_line_factory = tenant.get(FlowLineFactory)
     services = TenantServices(
         forges=forges,
         forge_budgets=forge_budgets,
@@ -1000,28 +917,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         forge_records=stores.forge_records,
         credential_records=stores.credential_records,
         commit_links=commit_links,
-        flows=stores.flows,
-        flow_views=stores.flows,
-        flow_line_factory=flow_line_factory,
-        flow_lines=FlowLineReconciler(
-            flows=stores.flows,
-            facts=chunk_facts,
-            record=chunk_record,
-            graphs=graph_store,
-            artifacts=chunk_artifacts,
-            repositories=stores.repository_records,
-            forge_records=stores.forge_records,
-            projects=stores.projects,
-            links=stores.project_links,
-            targets=chunk_targets,
-            capture=chunk_target_capture,
-            catalogue=catalogue,
-            refusals=hub_router,
-            transactions=stores.transactions,
-            lines=flow_line_factory,
-            clock=clock,
-        ),
-        turns=turns,
+        flows=tenant.get(IReadFlows),
         config_changes=stores.config_changes,
         projects=stores.projects,
         project_links=stores.project_links,
@@ -1060,19 +956,17 @@ def build_services(
     core: HubCore,
     *,
     public_url: str | None = None,
-    follow_latest_default: bool,
     transcript_caps: TranscriptCaps | None = None,
     trace_exporter: ITraceExporter | None = None,
     tracing_settings: TracingSettings | None = None,
     egress_path_key: bytes | None = None,
     extractors: Sequence[ITurnEventExtractor],
-    action_pass_grace: timedelta = ACTION_PASS_GRACE,
     cadences_on: Callable[[], bool],
 ) -> HubServices:
     """Construct the hub-level services over the shared :class:`HubCore`, its tenant cache serving each tenant's
     (:func:`build_tenant_services`). Each sweep or export is one pass per hub, acting on a row through its tenant's
-    services; live config is read through the container's :class:`HubConfigSource`. A pass is let go
-    ``action_pass_grace`` past its live bound; ``cadences_on`` answers whether a cadence pass may mint."""
+    services; live config is read through the container's :class:`HubConfigSource`. ``cadences_on`` answers
+    whether a cadence pass may mint."""
     clock = core.clock
     process = core.process.resolver
     config_source = process.get(HubConfigSource)
@@ -1082,18 +976,11 @@ def build_services(
     brokers = process.get(TenantBrokers)
     color_pick = process.get(ColorPick)
 
-    def action_bound(seconds: float) -> PassBound:
-        return PassBound(seconds, action_pass_grace)
-
     parts = TenantServiceParts(
         clock=clock,
         public_url=public_url,
-        follow_latest_default=follow_latest_default,
         transcript_caps=transcript_caps,
-        platform_tracer=process.get(IPlatformTracer),
         extractors=extractors,
-        action_passes=ActionPassDriver(action_loop, lambda: action_bound(config_source.current().action_pass_seconds)),
-        pass_config=config_source.resolved,
         step_wake=step_wake,
     )
     core.tenants.serve(TenantServing(build=lambda stores, events: build_tenant_services(stores, parts, events=events)))
@@ -1360,31 +1247,38 @@ def build_hub_invariants(connections: HubStoreConnections, clock: IClock) -> Hub
     return HubInvariants(connections, tenant_reads, clock)
 
 
-def build_flow_driver(
-    services: HubServices,
-    announce: Callable[[TenantServices, ITurnRunner], ITurnRunner] = lambda _services, turns: turns,
-) -> FlowDriver:
-    """The hosted hub's flow driver, over every open tenant's lines and turns — each tenant's turns wrapped by
-    ``announce`` — bound to ``services``' step wake. Built by ``build_hosted_app`` alone, never by
-    :func:`build_services`, so no CLI or test build over a live hub's store takes that hub's turns."""
+def build_flow_driver(process: HubProcess) -> FlowDriver:
+    """The hosted hub's flow driver, over every open tenant's lines and turns, bound to the process's step wake. Each
+    :class:`FlowLineStores` callable is a named accessor resolving one type from the row's tenant scope — the very
+    instance a request beneath that tenant resolves — so the driver holds typed callables and no resolver. Built by
+    ``build_hosted_app`` alone, never by :func:`build_services`, so no CLI or test build over a live hub's store takes
+    that hub's turns."""
+    resolver = process.resolver
+    open_tenants = resolver.get(OpenTenants)
+    tenants = process.tenants
+
+    def reconciler_of(tenant: TenantId) -> FlowLineReconciler:
+        return tenants.resolve(StoreScope(tenant), FlowLineReconciler)
+
+    def turns_of(tenant: TenantId) -> ITurnRunner:
+        return tenants.resolve(StoreScope(tenant), AnnouncedTurns)
+
+    def notices_of(tenant: TenantId) -> BudgetNoticeDrain:
+        return tenants.resolve(StoreScope(tenant), BudgetNoticeDrain)
+
+    def publisher_of(tenant: TenantId) -> IFlowChangePublisher:
+        return tenants.resolve(StoreScope(tenant), IFlowChangePublisher)
+
     driver = FlowDriver(
         FlowLineStores(
-            corpus=services.hub_scoped_reads.corpus,
-            tenants=lambda: services.tenants.open_tenants.every().keys(),
-            lines=lambda tenant: services.tenants.open_services(StoreScope(tenant)).flow_lines,
-            turns=lambda tenant: _announced(services.tenants.open_services(StoreScope(tenant)), announce),
-            notices=lambda tenant: _notices(services.tenants.open_services(StoreScope(tenant))),
-            publishers=lambda tenant: services.tenants.open_services(StoreScope(tenant)).events,
+            corpus=resolver.get(IReadFlowLinesCorpus),
+            tenants=lambda: open_tenants.every().keys(),
+            lines=reconciler_of,
+            turns=turns_of,
+            notices=notices_of,
+            publishers=publisher_of,
         ),
-        services.clock,
+        resolver.get(IClock),
     )
-    services.step_wake.bind(driver)
+    resolver.get(StepWake).bind(driver)
     return driver
-
-
-def _notices(tenant: TenantServices) -> BudgetNoticeDrain:
-    return BudgetNoticeDrain(tenant.forge_budgets, tenant.event_log)
-
-
-def _announced(tenant: TenantServices, announce: Callable[[TenantServices, ITurnRunner], ITurnRunner]) -> ITurnRunner:
-    return announce(tenant, tenant.turns)
