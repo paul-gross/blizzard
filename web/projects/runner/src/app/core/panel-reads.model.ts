@@ -1,5 +1,6 @@
 import type { runnerApi } from 'fleet/runner-shell';
 
+import type { Lease } from './lease.domain';
 import { isLiveLease } from './worker-session';
 
 /** The runner a merged item came from — what its actions and links target. */
@@ -15,7 +16,7 @@ export interface RunnerOwner {
  * (`null` where no project can be told). */
 export type Owned<T> = T & { readonly owner: RunnerOwner; readonly projectSlug: string | null };
 
-export type PanelLease = Owned<runnerApi.LeaseView>;
+export type PanelLease = Owned<Lease>;
 export type PanelFact = Owned<runnerApi.FactView>;
 export type PanelAsk = Owned<runnerApi.AskView>;
 

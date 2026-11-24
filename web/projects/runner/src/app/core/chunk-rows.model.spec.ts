@@ -1,39 +1,22 @@
-import { runnerApi } from 'fleet';
-
 import { BOARD_LANES, boardLane, machineChunkRows } from './chunk-rows.model';
+import { lease as buildLease } from './lease.builders';
 import type { PanelLease, PanelProject } from './panel-reads.model';
 
 const OWNER = { runnerId: 'rn_1', name: 'r1', label: 'r1' };
 
 function lease(overrides: Partial<PanelLease> = {}): PanelLease {
   return {
-    host_settings_revision: null,
-    runner_settings_revision: null,
-    lease_id: 'lease_1',
-    chunk_id: 'ch_1',
-    graph_id: 'gr_1',
-    node_id: 'nd_build',
-    node_name: 'build',
-    epoch: 1,
-    session_id: 'sess-1',
-    pid: 1,
-    environment_id: 'e1',
-    workdir: '/ws/e1',
-    created_at: '2026-07-16T11:00:00.000Z',
-    last_heartbeat_at: '2026-07-16T11:59:00.000Z',
-    state: 'running',
-    liveness: 'live',
-    display_status: 'running',
-    closure_healthy: false,
-    closed_at: null,
-    closure_reason: null,
-    stale_after_seconds: 3600,
-    resolved_model: null,
-    resolved_effort: null,
-    harness_version: null,
-    git_commits: [],
-    harness_id: null,
-    project_id: null,
+    ...buildLease({
+      lease_id: 'lease_1',
+      session_id: 'sess-1',
+      pid: 1,
+      environment_id: 'e1',
+      workdir: '/ws/e1',
+      created_at: '2026-07-16T11:00:00.000Z',
+      last_heartbeat_at: '2026-07-16T11:59:00.000Z',
+      closure_healthy: false,
+      stale_after_seconds: 3600,
+    }),
     owner: OWNER,
     projectSlug: null,
     ...overrides,
@@ -120,7 +103,7 @@ describe('machineChunkRows', () => {
         state: 'closed',
         liveness: 'ended',
         display_status: 'closed',
-        closure_reason: runnerApi.LeaseClosureReason.TRANSITIONED,
+        closure_reason: 'transitioned',
         closure_healthy: true,
       }),
     ]);

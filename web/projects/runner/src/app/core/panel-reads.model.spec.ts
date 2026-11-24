@@ -19,6 +19,7 @@ import {
   servingOwners,
   slugForEntry,
 } from './panel-reads.model';
+import type { Lease } from './lease.domain';
 
 const R1: RunnerOwner = { runnerId: 'rn_1', name: 'r1', label: 'r1' };
 const R2: RunnerOwner = { runnerId: 'rn_2', name: 'r2', label: 'r2' };
@@ -58,7 +59,7 @@ function project(slug: string, overrides: Partial<PanelProject> = {}): PanelProj
   return { slug, name: slug, entries: [slug], color: null, ...overrides };
 }
 
-function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView {
+function lease(overrides: Partial<Lease> = {}): Lease {
   return {
     lease_id: 'L-1',
     chunk_id: 'ch_1',
@@ -84,10 +85,10 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     state: 'running',
     liveness: 'live',
     ...overrides,
-  } as runnerApi.LeaseView;
+  } as Lease;
 }
 
-function panelLease(overrides: Partial<runnerApi.LeaseView>, owner: RunnerOwner, projectSlug: string | null): PanelLease {
+function panelLease(overrides: Partial<Lease>, owner: RunnerOwner, projectSlug: string | null): PanelLease {
   return { ...lease(overrides), owner, projectSlug };
 }
 
@@ -248,7 +249,7 @@ describe('mergeLeases', () => {
     const merged = mergeLeases([
       [
         panelLease({ lease_id: 'closed', state: 'closed', liveness: 'ended', created_at: '2026-07-16T12:00:00+00:00' }, R1, null),
-        panelLease({ lease_id: 'unknown', liveness: 'mystery' as runnerApi.LeaseLiveness, created_at: '2026-07-16T09:00:00+00:00' }, R1, null),
+        panelLease({ lease_id: 'unknown', liveness: 'unknown', created_at: '2026-07-16T09:00:00+00:00' }, R1, null),
       ],
     ]);
 

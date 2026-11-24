@@ -1,10 +1,10 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { runnerApi } from 'fleet';
 import { commands, page, userEvent } from 'vitest/browser';
 
 import { MachineDetailHeader } from './machine-detail-header';
+import type { Lease } from '../../core/lease.domain';
 
 /**
  * The machine detail dock header's own half of `web:shell-sweep` covers its ⋯ menu's
@@ -47,7 +47,7 @@ function tokenColor(token: string): string {
 const RUNNER = 'a-long-runner-identity-that-wraps-under-a-narrow-column';
 
 /** The chunk's live worker, holding an environment with a long name. */
-const WORKER: runnerApi.LeaseView = {
+const WORKER: Lease = {
   host_settings_revision: null,
   runner_settings_revision: null,
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',

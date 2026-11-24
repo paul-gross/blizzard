@@ -3,8 +3,9 @@ import { TestBed } from '@angular/core/testing';
 import type { runnerApi } from 'fleet';
 
 import { MachineDetailView } from './chunk-detail-view';
+import type { Lease } from '../../core/lease.domain';
 
-const LEASE: runnerApi.LeaseView = {
+const LEASE: Lease = {
   host_settings_revision: null,
   runner_settings_revision: null,
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNNEW1',
@@ -34,7 +35,7 @@ const LEASE: runnerApi.LeaseView = {
   project_id: null,
 };
 
-async function render(overrides: Partial<{ lease: runnerApi.LeaseView | null; escalation: runnerApi.EscalationView | null }> = {}) {
+async function render(overrides: Partial<{ lease: Lease | null; escalation: runnerApi.EscalationView | null }> = {}) {
   await TestBed.configureTestingModule({
     imports: [MachineDetailView],
     providers: [provideZonelessChangeDetection()],

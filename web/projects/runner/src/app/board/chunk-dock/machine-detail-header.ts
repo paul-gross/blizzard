@@ -19,6 +19,7 @@ import {
   WorkRefLink,
 } from 'fleet';
 
+import type { Lease } from '../../core/lease.domain';
 import { sessionEnding } from '../../core/worker-session';
 import { WorkerLine } from '../../runners/worker-line';
 
@@ -65,10 +66,10 @@ export class MachineDetailHeader {
   readonly projectName = input<string | null>(null);
 
   /** The chunk's newest lease — its worker while live, else the session that ended last. */
-  readonly lease = input<runnerApi.LeaseView | null>(null);
+  readonly lease = input<Lease | null>(null);
 
   /** The live worker, or `null` once the newest session ended. */
-  readonly worker = input<runnerApi.LeaseView | null>(null);
+  readonly worker = input<Lease | null>(null);
 
   protected readonly drawerStatusLabel = computed(() =>
     this.lease()?.display_status === 'waiting-ask' ? 'Waiting on human' : this.statusLabel(),

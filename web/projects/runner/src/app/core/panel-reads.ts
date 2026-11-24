@@ -4,7 +4,7 @@ import { injectQueries } from '@tanstack/angular-query-experimental/inject-queri
 import type { runnerApi } from 'fleet/runner-shell';
 
 import { injectHostRunnersQuery } from './host.query';
-import { runnerLeasesQueryOptions } from './leases.query';
+import { runnerLeaseDomainsQueryOptions } from './leases.query';
 import { PanelFilters } from './panel-filters';
 import {
   inProject,
@@ -82,21 +82,33 @@ interface FanOut<T> {
   readonly allFailed: boolean;
 }
 
+/** One runner's query options as the fan-out reads them — an options' own `select`, where it has one, projects
+ * the cached body before the fan-out tags it. */
+interface FanOutOptions<TBody, T> {
+  readonly queryKey: readonly unknown[];
+  readonly queryFn: () => Promise<TBody>;
+  readonly refetchInterval: number;
+  readonly select?: (body: TBody) => T;
+}
+
 /**
- * One query per runner in `owners`, built from `options` — each answer tagged with its
- * runner through the observer's own `select`, so the cache keeps the plain body every
- * other reader of the key shares, and a combined result never pairs an answer with the
- * wrong runner while the runner list changes under it.
+ * One query per runner in `owners`, built from `options` — each answer projected by the
+ * options' own `select` and tagged with its runner through the observer's `select`, so the
+ * cache keeps the plain body every other reader of the key shares, and a combined result
+ * never pairs an answer with the wrong runner while the runner list changes under it.
  */
-function injectFanOut<T>(
+function injectFanOut<TBody, T = TBody>(
   owners: Signal<readonly RunnerOwner[]>,
-  options: (runnerId: string) => { queryKey: readonly unknown[]; queryFn: () => Promise<T>; refetchInterval: number },
+  options: (runnerId: string) => FanOutOptions<TBody, T>,
 ): Signal<FanOut<T>> {
   return injectQueries(() => ({
-    queries: owners().map((owner) => ({
-      ...options(owner.runnerId),
-      select: (value: T): Tagged<T> => ({ runnerId: owner.runnerId, value }),
-    })),
+    queries: owners().map((owner) => {
+      const { select, ...read } = options(owner.runnerId);
+      return {
+        ...read,
+        select: (body: TBody): Tagged<T> => ({ runnerId: owner.runnerId, value: select ? select(body) : (body as unknown as T) }),
+      };
+    }),
     // `combine` is handed the observers' plain results; the experimental typing names them
     // signal proxies, so the results are read as what they are.
     combine: (results) => {
@@ -165,7 +177,7 @@ export function injectPanelLeases(options: PanelLeasesOptions = {}): MergedRead<
   const filters = inject(PanelFilters);
   const runners = injectPanelRunners();
   const owners = options.scope === 'all' ? runners.all : runners.scoped;
-  const fanOut = injectFanOut(owners, runnerLeasesQueryOptions);
+  const fanOut = injectFanOut(owners, runnerLeaseDomainsQueryOptions);
   const projects = injectRunnerProjects();
   const all = computed(() => {
     const byRunner = projects();

@@ -1,8 +1,8 @@
-import type { runnerApi } from 'fleet';
 
 import { deriveMachineChunkStatus } from './chunk-status';
+import type { Lease } from './lease.domain';
 
-function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView {
+function lease(overrides: Partial<Lease> = {}): Lease {
   return {
     host_settings_revision: null,
     runner_settings_revision: null,

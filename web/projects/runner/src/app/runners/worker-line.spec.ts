@@ -1,10 +1,10 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { runnerApi } from 'fleet';
 
 import { WorkerLine } from './worker-line';
+import type { Lease } from '../core/lease.domain';
 
-const LEASE: runnerApi.LeaseView = {
+const LEASE: Lease = {
   host_settings_revision: null,
   runner_settings_revision: null,
   lease_id: 'lease_1', chunk_id: 'ch_1', graph_id: 'gr_1', node_id: 'nd_build', node_name: 'build',

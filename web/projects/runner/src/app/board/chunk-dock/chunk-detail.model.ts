@@ -1,5 +1,6 @@
-import { ageMs, compactRef, type DaemonTarget, formatAge, runnerClient, type runnerApi } from 'fleet';
+import { ageMs, compactRef, type DaemonTarget, formatAge, runnerClient } from 'fleet';
 
+import type { Lease } from '../../core/lease.domain';
 import type { PanelLease } from '../../core/panel-reads.model';
 import { hasEnded, isLiveLease } from '../../core/worker-session';
 
@@ -14,7 +15,7 @@ export function liveWorker(newest: PanelLease | null): PanelLease | null {
 }
 
 /** The lease's compact ref, or blank when nothing is selected. */
-export function leaseRefLabel(lease: runnerApi.LeaseView | null): string {
+export function leaseRefLabel(lease: Lease | null): string {
   return lease ? compactRef(lease.lease_id) : '';
 }
 
@@ -23,7 +24,7 @@ export function leaseRefLabel(lease: runnerApi.LeaseView | null): string {
  * lease has ended — decoration only; the server-derived state carries liveness
  * (`bzh:utc-instants`).
  */
-export function heartbeatLabel(lease: runnerApi.LeaseView | null, now: number): string {
+export function heartbeatLabel(lease: Lease | null, now: number): string {
   if (!lease || hasEnded(lease)) return '—';
   const age = ageMs(lease.last_heartbeat_at, now);
   return age === null ? '—' : formatAge(age);

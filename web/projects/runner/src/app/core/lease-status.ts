@@ -1,4 +1,6 @@
-import { type Tone, runnerApi, unlisted } from 'fleet';
+import { type Tone, unlisted } from 'fleet';
+
+import type { Lease } from './lease.domain';
 
 import { sessionEnding } from './worker-session';
 
@@ -11,14 +13,17 @@ export interface LeaseStatus {
 }
 
 /**
- * The lease-state → label/tone map over the wire's server-derived `state` and
+ * The lease-state → label/tone map over the lease's server-derived `state` and
  * `closure_healthy`; a state this build does not know reads raw. The worker line renders it directly;
  * `deriveMachineChunkStatus` (`chunk-status.ts`) falls through to it once no
  * chunk-level human fact outranks the lease. It lives in the kernel because both the
  * `runners` and `board` units read it and `runners` may not import `board`.
  */
-export function deriveLeaseStatus(lease: runnerApi.LeaseView): LeaseStatus {
-  switch (lease.state) {
+export function deriveLeaseStatus(lease: Lease): LeaseStatus {
+  const state = lease.state;
+  // A state this build does not know reads raw, in the inert tone.
+  if (typeof state !== 'string') return { label: state.raw.toUpperCase(), tone: 'idle' };
+  switch (state) {
     case 'running':
       return { label: 'RUNNING', tone: 'running' };
     case 'stale':
@@ -38,7 +43,6 @@ export function deriveLeaseStatus(lease: runnerApi.LeaseView): LeaseStatus {
         ? { label: 'COMPLETED', tone: 'done' }
         : { label: `ENDED · ${(sessionEnding(lease) ?? 'unknown').toUpperCase()}`, tone: 'idle' };
     default:
-      // A state this build does not know reads raw, in the inert tone.
-      return { label: unlisted(lease.state).toUpperCase(), tone: 'idle' };
+      return { label: unlisted(state).toUpperCase(), tone: 'idle' };
   }
 }

@@ -1,4 +1,4 @@
-import { compactRef, runnerClient, type runnerApi } from 'fleet';
+import { compactRef, runnerClient } from 'fleet';
 
 import type { PanelLease } from '../../core/panel-reads.model';
 import {
@@ -12,10 +12,11 @@ import {
   runnerTarget,
   withRequeueFeedback,
 } from './chunk-detail.model';
+import type { Lease } from '../../core/lease.domain';
 
 const NOW = Date.parse('2026-07-16T12:00:00.000Z');
 
-function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView {
+function lease(overrides: Partial<Lease> = {}): Lease {
   return {
     host_settings_revision: null,
     runner_settings_revision: null,
@@ -48,7 +49,7 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
   };
 }
 
-function panelLease(overrides: Partial<runnerApi.LeaseView> = {}): PanelLease {
+function panelLease(overrides: Partial<Lease> = {}): PanelLease {
   return { ...lease(overrides), owner: { runnerId: 'rn_1', name: 'r1', label: 'r1' }, projectSlug: null };
 }
 
@@ -99,7 +100,7 @@ describe('heartbeatLabel', () => {
     expect(heartbeatLabel(null, NOW)).toBe('—');
     expect(heartbeatLabel(lease({ state: 'closed', liveness: 'ended' }), NOW)).toBe('—');
     expect(heartbeatLabel(lease({ state: 'exited', liveness: 'ended' }), NOW)).toBe('—');
-    expect(heartbeatLabel(lease({ liveness: 'mystery' as runnerApi.LeaseLiveness }), NOW)).toBe('-34s');
+    expect(heartbeatLabel(lease({ liveness: 'unknown' }), NOW)).toBe('-34s');
   });
 
   it('renders an em dash before the first beat or past the skew bound', () => {
