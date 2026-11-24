@@ -3,6 +3,7 @@ import { injectQuery } from '@tanstack/angular-query-experimental';
 import { type DecisionView, listDecisionsApiDecisionsGet, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 import { hubDecisionsKey, lensedKey } from '../../core/query-keys';
 import { injectProjectFilter } from '../../core/project-filter';
+import { fromBoardDecision } from './gates.translate';
 
 /**
  * Hub `GET /api/decisions` read — every open (unresolved) gate across the fleet,
@@ -14,11 +15,8 @@ import { injectProjectFilter } from '../../core/project-filter';
  *
  * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/hub/src/app/core/live/hub-live-updates.ts`).
  */
-export function injectHubDecisionsQuery() {
-  const projectFilter = injectProjectFilter();
-  return injectQuery(() => {
-    const project = projectFilter();
-    return {
+function decisionsQueryOptions(project: string | null) {
+  return {
       queryKey: lensedKey(hubDecisionsKey, project),
       queryFn: async (): Promise<DecisionView[]> => {
         const { data, error } = await listDecisionsApiDecisionsGet({
@@ -29,6 +27,18 @@ export function injectHubDecisionsQuery() {
         return data?.decisions ?? [];
       },
       refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
-    };
-  });
+  };
+}
+
+export function injectHubDecisionsQuery() {
+  const projectFilter = injectProjectFilter();
+  return injectQuery(() => decisionsQueryOptions(projectFilter()));
+}
+
+export function injectBoardDecisionsQuery() {
+  const projectFilter = injectProjectFilter();
+  return injectQuery(() => ({
+    ...decisionsQueryOptions(projectFilter()),
+    select: (decisions: DecisionView[]) => decisions.map(fromBoardDecision),
+  }));
 }

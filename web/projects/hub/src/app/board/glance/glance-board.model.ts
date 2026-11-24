@@ -1,6 +1,8 @@
-import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, blockedLabel, domainChunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type LaneStatus, type UrgencyReference, type DecisionView, type QuestionView, type RunnerRegistryView, type WorkItemsView, workLines } from 'fleet';
+import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, blockedLabel, domainChunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type LaneStatus, type UrgencyReference, type RunnerRegistryView, type WorkItemsView, workLines } from 'fleet';
 import type { BoardChunk } from '../../core/chunks.model';
 import type { GraphProgressNode } from '../../core/chunks.domain';
+import type { BoardQuestion } from '../questions/questions.domain';
+import type { BoardDecision } from '../gates/gates.domain';
 
 import type { RowWork, Vitals } from './glance-view';
 
@@ -84,8 +86,8 @@ function byRank<T extends { readonly chunkId: string }>(rows: T[], order: readon
  * hub's queue, BACKLOG by its backlog. */
 export function glanceListGroups(
   chunks: readonly BoardChunk[],
-  questions: readonly QuestionView[],
-  decisions: readonly DecisionView[],
+  questions: readonly BoardQuestion[],
+  decisions: readonly BoardDecision[],
   readyOrder: readonly { readonly chunk_id: string }[],
   backlogOrder: readonly { readonly chunk_id: string }[],
   runnerHosts: ReadonlyMap<string, string>,

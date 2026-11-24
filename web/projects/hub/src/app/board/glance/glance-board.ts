@@ -14,8 +14,8 @@ import { injectHubBacklogQuery, injectHubQueueQuery } from '../queue/queue.query
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectProjectDomainsQuery } from '../../core/projects.query';
 import { orderedChunkIds } from '../board-page.model';
-import { injectHubQuestionsQuery } from '../questions/questions.query';
-import { injectHubDecisionsQuery } from '../gates/gates.query';
+import { injectBoardQuestionsQuery } from '../questions/questions.query';
+import { injectBoardDecisionsQuery } from '../gates/gates.query';
 import { injectHubRunnersQuery } from '../../core/runners.query';
 import { injectBoardWorkItemsQuery } from '../../core/work-items/board-work-items.query';
 
@@ -44,8 +44,8 @@ export class GlanceBoard {
   private readonly canReorder = computed(() => hasPermission(this.meQuery.data(), 'queue:reorder'));
   /** The backlog's hub order — only readable with `queue:reorder`; without it the backlog keeps the chunk read's order. */
   private readonly backlogQuery = injectHubBacklogQuery(this.canReorder);
-  private readonly questionsQuery = injectHubQuestionsQuery();
-  private readonly decisionsQuery = injectHubDecisionsQuery();
+  private readonly questionsQuery = injectBoardQuestionsQuery();
+  private readonly decisionsQuery = injectBoardDecisionsQuery();
   private readonly runnersQuery = injectHubRunnersQuery();
   private readonly runnerHosts = injectRunnerHostNames();
   private readonly projectsQuery = injectProjectDomainsQuery();

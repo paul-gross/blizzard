@@ -2,7 +2,9 @@ import { boardChunk } from '../board.fixture';
 import type { BoardChunk } from '../../core/chunks.model';
 import type { LaneStatus } from 'fleet';
 type KnownLaneStatus = Exclude<LaneStatus['kind'], 'unknown'>;
-import { type DecisionView, type QuestionView, type RunnerRegistryView, type WorkItemsView } from 'fleet';
+import { type RunnerRegistryView, type WorkItemsView } from 'fleet';
+import type { BoardDecision } from '../gates/gates.domain';
+import type { BoardQuestion } from '../questions/questions.domain';
 type ChunkSummary = BoardChunk;
 import { describe, expect, it, vi } from 'vitest';
 
@@ -24,9 +26,9 @@ const chunk = (id: string, status: KnownLaneStatus, fields: Partial<BoardChunk> 
   ...fields,
 }));
 
-const question = (chunkId: string, text: string): QuestionView => ({ chunk_id: chunkId, question: text }) as QuestionView;
+const question = (chunkId: string, text: string): BoardQuestion => ({ chunk_id: chunkId, question: text });
 
-const decision = (chunkId: string): DecisionView => ({ chunk_id: chunkId }) as DecisionView;
+const decision = (chunkId: string): BoardDecision => ({ chunk_id: chunkId });
 
 const runner = (id: string, fields: Partial<RunnerRegistryView>): RunnerRegistryView => ({ runner_id: id, ...fields }) as RunnerRegistryView;
 
@@ -50,8 +52,8 @@ describe('liveRunners', () => {
 const groups = (
   chunks: readonly BoardChunk[],
   fields: {
-    questions?: readonly QuestionView[];
-    decisions?: readonly DecisionView[];
+    questions?: readonly BoardQuestion[];
+    decisions?: readonly BoardDecision[];
     readyOrder?: readonly string[];
     backlogOrder?: readonly string[];
     hosts?: ReadonlyMap<string, string>;

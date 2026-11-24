@@ -20,7 +20,7 @@ import { StepDrawer } from './tracks/step-drawer';
 import { ActivityPanel } from './activity/activity-panel';
 import { QuestionsPanel } from './questions/questions-panel';
 import { GatesPanel } from './gates/gates-panel';
-import { injectHubDecisionsQuery } from './gates/gates.query';
+import { injectBoardDecisionsQuery } from './gates/gates.query';
 import { RunnerPanel } from '../runners/runner-panel';
 import { FleetSpendPanel } from './fleet-spend/fleet-spend-panel';
 import { chunkDeleteMutationKey, demoteChunkMutationKey, promoteChunkMutationKey, repositionBacklogMutationKey, repositionQueueMutationKey } from '../core/mutation-keys';
@@ -89,7 +89,7 @@ export class BoardPage {
   private readonly chunksQuery = injectDomainBoardChunksQuery();
   private readonly countsQuery = injectHubChunkCountsQuery();
   private readonly queueQuery = injectHubQueueQuery();
-  private readonly decisionsQuery = injectHubDecisionsQuery();
+  private readonly decisionsQuery = injectBoardDecisionsQuery();
   private readonly repositionQueue = injectRepositionQueueMutation((error) =>
     this.actionError.set(errorMessage(error, 'Reorder failed.')),
   );

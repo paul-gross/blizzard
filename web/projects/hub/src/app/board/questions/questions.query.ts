@@ -3,6 +3,7 @@ import { injectQuery } from '@tanstack/angular-query-experimental';
 import { type QuestionView, listOpenQuestionsApiQuestionsGet, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 import { hubQuestionsKey, lensedKey } from '../../core/query-keys';
 import { injectProjectFilter } from '../../core/project-filter';
+import { fromBoardQuestion } from './questions.translate';
 
 /**
  * Hub `GET /api/questions` read — every open (unanswered) question across the
@@ -15,11 +16,8 @@ import { injectProjectFilter } from '../../core/project-filter';
  *
  * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/hub/src/app/core/live/hub-live-updates.ts`).
  */
-export function injectHubQuestionsQuery() {
-  const projectFilter = injectProjectFilter();
-  return injectQuery(() => {
-    const project = projectFilter();
-    return {
+function questionsQueryOptions(project: string | null) {
+  return {
       queryKey: lensedKey(hubQuestionsKey, project),
       queryFn: async (): Promise<QuestionView[]> => {
         const { data, error } = await listOpenQuestionsApiQuestionsGet({
@@ -30,6 +28,18 @@ export function injectHubQuestionsQuery() {
         return data ?? [];
       },
       refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
-    };
-  });
+  };
+}
+
+export function injectHubQuestionsQuery() {
+  const projectFilter = injectProjectFilter();
+  return injectQuery(() => questionsQueryOptions(projectFilter()));
+}
+
+export function injectBoardQuestionsQuery() {
+  const projectFilter = injectProjectFilter();
+  return injectQuery(() => ({
+    ...questionsQueryOptions(projectFilter()),
+    select: (questions: QuestionView[]) => questions.map(fromBoardQuestion),
+  }));
 }
