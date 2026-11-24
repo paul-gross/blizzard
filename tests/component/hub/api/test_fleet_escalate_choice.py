@@ -317,7 +317,7 @@ def test_a_failing_artifact_insert_leaves_no_escalation_and_no_artifacts(
     def boom(*_args: Any, **_kwargs: Any) -> int:
         raise RuntimeError("rollback")
 
-    monkeypatch.setattr(chunk_escalations_store, "next_artifact_seq", boom)
+    monkeypatch.setattr(chunk_escalations_store, "insert_artifacts", boom)
     with pytest.raises(RuntimeError, match="rollback"):
         chunk.hub.client.post(
             f"/api/fleet/chunks/{chunk.chunk_id}/completions",
