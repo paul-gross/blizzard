@@ -1,10 +1,24 @@
 import type * as hubApi from '../api/hub';
 import type * as runnerApi from '../api/runner';
+import { unlisted } from '../core/open-lookup';
 import type { TranscriptSidechain, TranscriptTool, TranscriptTurn } from './transcript-turn';
 
 type WireTurn = hubApi.TurnSegmentViewOutput | runnerApi.TurnSegmentView;
 type WireTool = hubApi.ToolCallSegmentView | runnerApi.ToolCallSegmentView;
 type WireSidechain = hubApi.SidechainSegmentViewOutput | runnerApi.SidechainSegmentView;
+
+function translateKind(kind: WireTurn['kind']): { kind: 'env' | 'asst' | 'tool' | 'thinking' | 'sidechain' } | { kind: 'unknown'; rawKind: string } {
+  switch (kind) {
+    case 'env':
+    case 'asst':
+    case 'tool':
+    case 'thinking':
+    case 'sidechain':
+      return { kind };
+    default:
+      return { kind: 'unknown', rawKind: unlisted(kind) };
+  }
+}
 
 function translateTool(tool: WireTool): TranscriptTool {
   return {
@@ -33,7 +47,7 @@ function translateSidechain(sidechain: WireSidechain): TranscriptSidechain {
 export function translateTranscriptTurn(turn: WireTurn): TranscriptTurn {
   return {
     index: turn.index,
-    kind: turn.kind,
+    ...translateKind(turn.kind),
     text: turn.text,
     timestamp: turn.timestamp,
     thinking_redacted: turn.thinking_redacted,

@@ -35,7 +35,7 @@ export const UnknownKind: Story = {
   args: {
     turns: [
       turnSegmentView({ index: 0, kind: 'asst', text: 'A declared assistant turn.' }),
-      turnSegmentView({ index: 1, kind: 'novel' as never, text: 'A turn of a kind this board does not know.' }),
+      turnSegmentView({ index: 1, kind: 'unknown', rawKind: 'novel', text: 'A turn of a kind this board does not know.' }),
     ],
   },
 };

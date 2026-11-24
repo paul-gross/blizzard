@@ -28,16 +28,17 @@ export function sidechainSegmentView(overrides: Partial<TranscriptSidechain> = {
 
 /** One assistant turn of prose. */
 export function turnSegmentView(overrides: Partial<TranscriptTurn> = {}): TranscriptTurn {
+  const { kind = 'asst', rawKind, ...fields } = overrides;
   return {
     index: 0,
-    kind: 'asst',
     text: 'I will start by reading the work item.',
     timestamp: '2026-01-15T11:58:00.000Z',
     thinking_redacted: false,
     truncated: false,
     tool: null,
     sidechain: null,
-    ...overrides,
+    ...fields,
+    ...(kind === 'unknown' ? { kind, rawKind: rawKind ?? 'unknown' } : { kind }),
   };
 }
 

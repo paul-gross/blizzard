@@ -278,7 +278,9 @@ describe('injectChunkTranscriptSegmentQuery — plane-generic (D5)', () => {
       TestBed.configureTestingModule({ imports: [Host], providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())] });
       const fixture = TestBed.createComponent(Host);
       await settle(fixture);
-      expect(fixture.componentInstance.query.data()).toEqual(content);
+      expect(fixture.componentInstance.query.data()).toEqual({
+        ...content, turns: [{ ...turn, kind: 'unknown', rawKind: 'future' }],
+      });
       expect(fixture.componentInstance.query.data()?.turns[0]).not.toBe(turn);
     },
   );

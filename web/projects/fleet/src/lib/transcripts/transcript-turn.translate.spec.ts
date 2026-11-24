@@ -9,6 +9,10 @@ function turn(overrides: Partial<TurnSegmentViewOutput> = {}): TurnSegmentViewOu
 }
 
 describe('translateTranscriptTurn', () => {
+  it.each(['env', 'asst', 'tool', 'thinking', 'sidechain'] as const)('preserves the known %s kind', (kind) => {
+    expect(translateTranscriptTurn(turn({ kind })).kind).toBe(kind);
+  });
+
   it('preserves nested turns, tool patches and partial sidechain metadata', () => {
     const source = turn({
       kind: 'tool',
@@ -23,6 +27,16 @@ describe('translateTranscriptTurn', () => {
 
   it('preserves empty and unlisted turns', () => {
     const source = turn({ kind: 'future' as TurnSegmentViewOutput['kind'] });
-    expect(translateTranscriptTurn(source)).toEqual(source);
+    expect(translateTranscriptTurn(source)).toEqual({ ...source, kind: 'unknown', rawKind: 'future' });
+  });
+
+  it('translates unknown kinds in nested sidechains', () => {
+    const nested = turn({ kind: 'new-child' as TurnSegmentViewOutput['kind'] });
+    const source = turn({ kind: 'sidechain', sidechain: {
+      agent_id: null, agent_type: null, link: 'unlinked', turns: [nested],
+    } });
+    expect(translateTranscriptTurn(source).sidechain?.turns[0]).toEqual({
+      ...nested, kind: 'unknown', rawKind: 'new-child',
+    });
   });
 });

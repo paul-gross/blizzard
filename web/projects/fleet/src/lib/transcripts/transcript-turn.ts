@@ -20,10 +20,11 @@ export interface TranscriptSidechain {
   turns: TranscriptTurn[];
 }
 
-/** A normalized turn. Unknown kinds remain visible to the viewer. */
+/** A normalized turn. Unknown kinds retain their original spelling. */
 export interface TranscriptTurn {
   index: number;
-  kind: string;
+  kind: 'env' | 'asst' | 'tool' | 'thinking' | 'sidechain' | 'unknown';
+  rawKind?: string;
   text: string;
   timestamp: string | null;
   thinking_redacted: boolean;
