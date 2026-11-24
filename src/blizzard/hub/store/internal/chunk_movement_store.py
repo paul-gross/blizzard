@@ -32,9 +32,9 @@ from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
     fence,
     graph_id_of,
+    insert_artifacts,
     is_landing_marker,
     latest_epoch,
-    next_artifact_seq,
     next_route_seq,
     record_epoch_owner,
 )
@@ -140,23 +140,7 @@ class ChunkMovementStore:
                 recorded_at=at,
             )
         )
-        for row in artifacts:
-            conn.execute(
-                self._store.insert(s.artifacts).values(
-                    artifact_id=row.artifact_id,
-                    chunk_id=row.chunk_id,
-                    node_id=row.node_id,
-                    node_name=row.node_name,
-                    epoch=row.epoch,
-                    name=row.name,
-                    kind=row.kind.value,
-                    data=row.data,
-                    repo=row.repo,
-                    forge=row.forge,
-                    produced_at=at,
-                    seq=next_artifact_seq(conn, row.chunk_id),
-                )
-            )
+        insert_artifacts(conn, chunk_id, artifacts, at=at)
         if to_node_id == RESERVED_TERMINAL or any(is_landing_marker(row.name, row.data) for row in artifacts):
             return TransitionWrite(enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision))
         return TransitionWrite()
@@ -272,23 +256,7 @@ class ChunkMovementStore:
                     chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
                 )
             )
-        for row in artifacts:
-            conn.execute(
-                self._store.insert(s.artifacts).values(
-                    artifact_id=row.artifact_id,
-                    chunk_id=row.chunk_id,
-                    node_id=row.node_id,
-                    node_name=row.node_name,
-                    epoch=row.epoch,
-                    name=row.name,
-                    kind=row.kind.value,
-                    data=row.data,
-                    repo=row.repo,
-                    forge=row.forge,
-                    produced_at=at,
-                    seq=next_artifact_seq(conn, row.chunk_id),
-                )
-            )
+        insert_artifacts(conn, chunk_id, artifacts, at=at)
         if any(is_landing_marker(row.name, row.data) for row in artifacts):
             return MigrationWrite(
                 resolved_migration_id, enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)

@@ -29,8 +29,8 @@ from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
     ephemeral_ids_select,
     fence,
+    insert_artifacts,
     is_landing_marker,
-    next_artifact_seq,
     record_hub_lease,
 )
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
@@ -53,7 +53,7 @@ class ChunkEscalationsStore:
         """Every open escalation fleet-wide, each decided by ``ChunkFacts.open_escalation``
         (#293) — the rule's one implementation, never a second derivation from raw rows."""
         candidates = list(self.newest_escalation_per_chunk(project, chunk_id))
-        facts_by_id = self._facts.load_facts_for(candidates)
+        facts_by_id = self._facts.status_facts_for(candidates)
         return [
             EscalationOpen(
                 chunk_id=chunk_id,
@@ -101,23 +101,7 @@ class ChunkEscalationsStore:
             )
         )
         key = result.inserted_primary_key
-        for row in artifacts:
-            conn.execute(
-                self._store.insert(s.artifacts).values(
-                    artifact_id=row.artifact_id,
-                    chunk_id=row.chunk_id,
-                    node_id=row.node_id,
-                    node_name=row.node_name,
-                    epoch=row.epoch,
-                    name=row.name,
-                    kind=row.kind.value,
-                    data=row.data,
-                    repo=row.repo,
-                    forge=row.forge,
-                    produced_at=at,
-                    seq=next_artifact_seq(conn, row.chunk_id),
-                )
-            )
+        insert_artifacts(conn, chunk_id, artifacts, at=at)
         escalation_id = int(key[0]) if key is not None else 0
         if close_decision is not None and any(is_landing_marker(row.name, row.data) for row in artifacts):
             return EscalationWrite(
