@@ -23,6 +23,7 @@ from blizzard.hub.app import Sweep
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.observability.egress.boot import EgressBoot
 from blizzard.hub.domain.observability.egress.config import EgressConfig
+from blizzard.hub.domain.observability.egress.event_rows import export_paths
 from blizzard.hub.domain.observability.egress.ports import (
     DatasetSchema,
     EgressBatch,
@@ -37,7 +38,7 @@ from blizzard.hub.domain.observability.egress.ports import (
 from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, EventsPosition, UsagePosition
 from blizzard.hub.domain.observability.egress.reset import plan_reset
 from blizzard.hub.domain.observability.egress.rows import ExportedInvocation, ExportedStep
-from blizzard.hub.domain.observability.egress.schema import INVOCATIONS_SCHEMA, STEPS_SCHEMA
+from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
 from blizzard.hub.domain.observability.hub_events import HubEventKind
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.repository import ClosingCandidates, IReadTraceSteps, TraceCheckpoint
@@ -1041,6 +1042,41 @@ def test_live_settings_apply_on_next_sweep_without_reanchoring(tmp_path: Path) -
     sweep.sweep()
     assert egress_store(hub).newest_cursor(STEPS_SCHEMA.name) == first
     assert egress_store(hub).newest_cursor(INVOCATIONS_SCHEMA.name) is not None
+
+
+def test_a_live_edit_that_drops_events_for_want_of_a_key_records_one_rejection(tmp_path: Path) -> None:
+    from blizzard.hub.domain.observability.egress.boot import EgressPathKey
+    from blizzard.hub.domain.observability.egress.sweep import EgressSweep
+    from tests.support.hub_event_rows import hub_event_log_of
+
+    hub, _ = egress_hub(tmp_path)
+    boot = EgressBoot(replace(SETTLED, file_paths="hashed", datasets=(STEPS_SCHEMA.name,)), EgressPathKey())
+    live = boot.config
+    exported = lambda: export_paths(live, None)  # noqa: E731
+    corpus = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
+    sweep = EgressSweep(
+        steps=trace_store(hub),
+        egress=egress_store(hub),
+        event_reads=corpus,
+        paths=None,
+        writer=InMemoryEgressWriter(),
+        events=hub_event_log_of(hub.engine),
+        clock=hub.clock,
+        config=lambda: exported().config,
+        missing_key=lambda: exported().missing_key_env,
+        announced_missing_key=boot.missing_path_key(),
+    )
+    sweep.sweep()
+    assert kinds(hub) == []
+
+    live = replace(live, datasets=(STEPS_SCHEMA.name, EVENTS_SCHEMA.name))
+    for _ in range(2):
+        hub.clock.advance(timedelta(seconds=1))
+        sweep.sweep()
+
+    assert kinds(hub) == ["egress-config-rejected"]
+    [row] = hub_event_rows(hub.engine)
+    assert hub_event_detail(row) == {"setting": "egress.path_key_env", "value": live.path_key_env}
 
 
 def test_writer_rebuilt_only_for_file_and_space_settings() -> None:

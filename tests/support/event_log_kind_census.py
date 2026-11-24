@@ -113,7 +113,10 @@ HUB_EVENT_KIND_CENSUS: dict[str, tuple[str, ...]] = {
     "trace-config-rejected": ("hub/app.py:announce_rejected_tracing",),
     "egress-write-failed": ("hub/domain/observability/egress/sweep.py:EgressSweep._failed",),
     "egress-write-recovered": ("hub/domain/observability/egress/sweep.py:EgressSweep._recovered",),
-    "egress-config-rejected": ("hub/app.py:announce_rejected_egress",),
+    "egress-config-rejected": (
+        "hub/app.py:announce_rejected_egress",
+        "hub/domain/observability/egress/sweep.py:EgressSweep._note_missing_key",
+    ),
     "egress-cursor-reset": ("hub/domain/observability/egress/reset.py:EgressReset.reset",),
     "hub-started": ("hub/app.py:_announce_started",),
     "hub-migrated": ("hub/runtime.py:Runtime.init", "hub/runtime.py:Runtime.migrate"),

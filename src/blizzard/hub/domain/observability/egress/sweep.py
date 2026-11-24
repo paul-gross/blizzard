@@ -26,7 +26,7 @@ from blizzard.hub.domain.observability.egress.assembly import (
     plan_steps_pass,
 )
 from blizzard.hub.domain.observability.egress.config import EgressConfig
-from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
+from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy, missing_key_reason
 from blizzard.hub.domain.observability.egress.events_window import derivations_by_marker, events_rows, position_of, take
 from blizzard.hub.domain.observability.egress.ports import (
     DatasetSchema,
@@ -85,6 +85,8 @@ class EgressSweep:
         clock: IClock,
         config: EgressConfig | Callable[[], EgressConfig],
         writer_for: Callable[[EgressConfig], IEgressWriter] | None = None,
+        missing_key: Callable[[], str | None] | None = None,
+        announced_missing_key: str | None = None,
     ) -> None:
         initial = config() if callable(config) else config
         if EVENTS_SCHEMA.name in initial.datasets and paths is None:
@@ -98,6 +100,10 @@ class EgressSweep:
         self._writer = writer
         self._events = events
         self._clock = clock
+        # The unset key variable the live config last left the events dataset off for; ``announced_missing_key`` is
+        # the one boot already recorded, so a restart does not announce it twice.
+        self._missing_key = missing_key
+        self._noted_missing_key = announced_missing_key
         # A restart mid-outage must not announce the same failure again.
         self._latch = OutageLatch(
             timedelta(seconds=initial.sweep_seconds), lambda: egress.newest_egress_latch() == _FAILED
@@ -106,6 +112,7 @@ class EgressSweep:
     def sweep(self) -> None:
         """Run one pass."""
         config = self._config()
+        self._note_missing_key()
         self._latch.set_base(timedelta(seconds=config.sweep_seconds))
         now = self._clock.now()
         if not self._latch.is_due(now):
@@ -136,6 +143,20 @@ class EgressSweep:
         # A pass that placed nothing proves nothing about the directory.
         if wrote:
             self._recovered()
+
+    def _note_missing_key(self) -> None:
+        """Records ``egress-config-rejected`` once each time a live config edit leaves a hashing file path policy
+        without its key, so the events dataset goes off."""
+        if self._missing_key is None:
+            return
+        variable = self._missing_key()
+        if variable is not None and self._noted_missing_key is None:
+            self._record(
+                "egress-config-rejected",
+                f"fact egress: {missing_key_reason(variable)}",
+                {"setting": "egress.path_key_env", "value": variable},
+            )
+        self._noted_missing_key = variable
 
     def _dataset_pass(
         self, dataset: str, cursor: EgressCheckpoint, egress_pass: EgressPass, until: datetime

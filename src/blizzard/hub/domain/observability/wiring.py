@@ -269,6 +269,8 @@ def egress_sweep(
         clock=clock,
         config=lambda: exported().config,
         writer_for=configured.for_config,
+        missing_key=lambda: exported().missing_key_env,
+        announced_missing_key=boot.missing_path_key(),
     )
 
 
