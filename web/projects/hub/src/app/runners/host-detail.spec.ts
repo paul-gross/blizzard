@@ -10,19 +10,20 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { RunnerConnection, type WorkspaceRow } from 'fleet';
+import type { WorkspaceRow } from 'fleet';
 import { stubHubClient, type RequestClientStub } from 'fleet/testing';
 import { type HostDetailVm, resolveSelection } from './fleet-page.model';
 import { HostDetail } from './host-detail';
 import type { HostCard } from './host-rows.model';
 import type { RunnerRow } from './runner-rows.model';
+import { hubRunner } from '../core/runners.builders';
 
 function card(over: Partial<HostCard> = {}): HostCard {
   return {
     hostId: 'hs_AAAA1111',
     hostName: 'atlas',
     online: true,
-    connection: RunnerConnection.ONLINE,
+    connection: 'online',
     reportLabel: 'seen 4s ago',
     workspaces: [],
     subscriptionPaces: [],
@@ -41,22 +42,17 @@ function card(over: Partial<HostCard> = {}): HostCard {
 
 function row(id: string, agents: number, agentsInUse: number): RunnerRow {
   return {
-    runner_id: id,
-    runner_name: `name-${id}`,
-    online: true,
-    connection: RunnerConnection.ONLINE,
+    ...hubRunner({ runner_id: id, runner_name: `name-${id}`, agents }),
     claims: [],
+    used: 0,
+    nowMs: 0,
     served: [],
     unresolved: [],
     unassigned: false,
-    capabilities: [],
-    gates: [],
-    subscription_unrostered: false,
     subscriptionPaces: [],
     subscriptionName: null,
-    agents,
     bindingLines: [{ project: 'p', workspaceId: 'ws_a', unreported: false, agentsInUse }],
-  } as unknown as RunnerRow;
+  };
 }
 
 function vm(c: HostCard, rows: readonly RunnerRow[] = []): HostDetailVm {
@@ -105,7 +101,7 @@ describe('HostDetail', () => {
   });
 
   it('says never reported only for a never-connected host, and states no age it cannot read', async () => {
-    const never = await render(vm(card({ online: false, connection: RunnerConnection.NEVER_CONNECTED, reportedAgo: null })));
+    const never = await render(vm(card({ online: false, connection: 'never_connected', reportedAgo: null })));
     expect(text(never, 'fleet-detail-state')).toBe('NEVER CONNECTED');
     expect(text(never, 'fleet-detail-report')).toBe('never reported');
 

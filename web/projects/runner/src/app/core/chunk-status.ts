@@ -1,5 +1,6 @@
-import type { Tone, runnerApi } from 'fleet';
+import type { Tone } from 'fleet';
 
+import type { Lease } from './lease.domain';
 import { deriveLeaseStatus } from './lease-status';
 
 /**
@@ -20,12 +21,12 @@ export interface MachineChunkStatus {
 }
 
 /**
- * The wire's `display_status` → label/tone map. The runner folds an open takeover
+ * The lease's `display_status` → label/tone map. The runner folds an open takeover
  * (a human is in the session *now*), then an escalation (blocked on a human), then an
  * open ask (waiting on one) over the lease's own state; a lease-state status falls
  * through to {@link deriveLeaseStatus}.
  */
-export function deriveMachineChunkStatus(lease: runnerApi.LeaseView): MachineChunkStatus {
+export function deriveMachineChunkStatus(lease: Lease): MachineChunkStatus {
   switch (lease.display_status) {
     case 'human-in-session':
       return { label: 'HUMAN IN SESSION', tone: 'takeover' };

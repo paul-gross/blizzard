@@ -1,7 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type runnerApi } from 'fleet';
 import { harnessHealthView, type RequestClientStub, runnerDashboardView, selfTestView, settle, stubError, stubRunnerClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
@@ -11,7 +10,7 @@ import { SELFTEST_POLL_MS } from './selftest.query';
 const DASHBOARD = runnerDashboardView({
   harness_health: { items: [harnessHealthView({ harness_id: 'mock' }), harnessHealthView({ harness_id: 'claude_code' })] },
 });
-const CHECKS: runnerApi.SelfTestCheckView[] = [
+const CHECKS = [
   { name: 'spawn', passed: true, detail: 'spawned' },
   { name: 'resume', passed: false, detail: 'no session' },
 ];

@@ -8,3 +8,5 @@ export { type SubscriptionLine, subscriptionLine } from './subscription-blocks.m
 export { GateBadgeGroup } from './gate-badge-group';
 
 export type { HostFact, SubscriptionUsage, RunnerSubscription } from '../core/host.domain';
+export type { HostConnection, UnknownHostValue } from '../core/host.domain';
+export type { UnenforceableGate } from './gate.domain';

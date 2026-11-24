@@ -1,34 +1,31 @@
-import type { runnerApi } from 'fleet';
-
 import type { RunnerDashboard } from '../../core/panel-reads.model';
+import { pauseState } from '../../core/pause-state.builders';
+import { dashboardStatus, hubConnectivity, identityVerdict, runnerStatus } from '../../core/runner-status.builders';
+import type { FleetSummary, IdentityVerdict, KnownIdentityState, RunnerStatus } from '../../core/runner-status.domain';
 import { hubSummary, latestFleetSummary } from './hub-panel.model';
-
-type RunnerStatus = runnerApi.DashboardView['runner'];
 
 function entry(
   runnerId: string,
   runner: Partial<Omit<RunnerStatus, 'hub'>> & { hub?: Partial<RunnerStatus['hub']> } = {},
-  fleet: runnerApi.FleetSummaryView | null = null,
+  fleet: FleetSummary | null = null,
 ): RunnerDashboard {
   const { hub, ...rest } = runner;
   return {
     owner: { runnerId, name: runnerId.replace('rn_', 'r'), label: runnerId.replace('rn_', 'r') },
-    dashboard: {
+    dashboard: dashboardStatus({
       fleet_summary: fleet,
-      runner: {
+      runner: runnerStatus({
         runner_id: runnerId,
         workspace_id: 'ws',
-        pause: { local: false, hub: false, effective: false },
-        capacities: { used: 0, bindings: [] },
-        hub: { endpoint: 'http://hub.example', reachable: true, last_contact_at: null, buffer_depth: 0, ...hub },
-        last_tick_at: null,
+        pause: pauseState(),
+        hub: hubConnectivity({ endpoint: 'http://hub.example', ...hub }),
         ...rest,
-      },
-    } as runnerApi.DashboardView,
+      }),
+    }),
   };
 }
 
-const FLEET = (ready: number): runnerApi.FleetSummaryView => ({ ready, running: 2, waiting: 1, needs: 0 });
+const FLEET = (ready: number): FleetSummary => ({ ready, running: 2, waiting: 1, needs: 0 });
 
 describe('hubSummary', () => {
   it('is null before any dashboard lands', () => {
@@ -64,8 +61,13 @@ describe('hubSummary', () => {
   });
 
   it('words each identity problem for the operator, the remedy on hover', () => {
-    const identity = (state: string, extra: Partial<runnerApi.IdentityVerdictView> = {}) =>
-      ({ state, store_runner_id: null, token_runner_id: null, checked_at: null, reset_command: 'reset it', reason: null, ...extra }) as runnerApi.IdentityVerdictView;
+    const KNOWN: readonly string[] = ['unchecked', 'matched', 'mismatched', 'refused', 'not_held', 'tenant_differs', 'version_refused'];
+    const identity = (state: string, extra: Partial<IdentityVerdict> = {}) =>
+      identityVerdict({
+        state: KNOWN.includes(state) ? (state as KnownIdentityState) : { kind: 'unknown', raw: state },
+        reset_command: 'reset it',
+        ...extra,
+      });
     const summary = hubSummary([
       entry('rn_1', { identity: identity('mismatched', { token_runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3' }) }),
       entry('rn_2', { identity: identity('refused', { reason: 'token revoked' }) }),

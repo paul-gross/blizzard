@@ -1,5 +1,3 @@
-import type { runnerApi } from 'fleet';
-
 import {
   anyHubReachable,
   attributedProject,
@@ -19,46 +17,48 @@ import {
   servingOwners,
   slugForEntry,
 } from './panel-reads.model';
+import { hostRunner as buildHostRunner } from './host-runner.builders';
+import type { HostRunner, HostRunnerBinding } from './host-runner.domain';
+import type { Lease } from './lease.domain';
+import { pauseState } from './pause-state.builders';
+import { dashboardStatus, hubConnectivity, runnerStatus } from './runner-status.builders';
+import type { DashboardStatus, ServedProjectStatus } from './runner-status.domain';
 
 const R1: RunnerOwner = { runnerId: 'rn_1', name: 'r1', label: 'r1' };
 const R2: RunnerOwner = { runnerId: 'rn_2', name: 'r2', label: 'r2' };
 
-function hostRunner(overrides: Partial<runnerApi.HostRunnerView> = {}): runnerApi.HostRunnerView {
-  return {
-    runner_id: 'rn_1',
-    name: 'r1',
-    state: 'serving',
-    served: true,
-    halted_reasons: [],
-    pause: { local: false, hub: false, effective: false, local_reason: null },
-    throttle: null,
-    bindings: [],
-    agents_in_use: 0,
-    max_agents: 4,
-    start_failure: null,
-    ...overrides,
-  };
+function hostRunner(overrides: Partial<HostRunner> = {}): HostRunner {
+  return buildHostRunner({ pause: pauseState(), max_agents: 4, ...overrides });
 }
 
-function binding(project: string): runnerApi.HostRunnerBindingView {
+function binding(project: string): HostRunnerBinding {
   return { project, workspace_id: 'ws', agents: 4 };
 }
 
 /** A dashboard carrying only `runner.served_projects` and `runner.hub` — what the project and hub folds read. */
-function dashboard(
-  served: readonly Partial<runnerApi.ServedProjectStatusView>[] = [],
-  reachable = true,
-): runnerApi.DashboardView {
-  return {
-    runner: { served_projects: served.map((s) => ({ resolved: true, entry: '', ...s })), hub: { reachable } },
-  } as unknown as runnerApi.DashboardView;
+function dashboard(served: readonly Partial<ServedProjectStatus>[] = [], reachable = true): DashboardStatus {
+  return dashboardStatus({
+    runner: runnerStatus({
+      served_projects: served.map((s) => ({
+        entry: '',
+        project_id: null,
+        slug: null,
+        name: null,
+        color: null,
+        resolved: true,
+        answered: true,
+        ...s,
+      })),
+      hub: hubConnectivity({ reachable }),
+    }),
+  });
 }
 
 function project(slug: string, overrides: Partial<PanelProject> = {}): PanelProject {
   return { slug, name: slug, entries: [slug], color: null, ...overrides };
 }
 
-function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView {
+function lease(overrides: Partial<Lease> = {}): Lease {
   return {
     lease_id: 'L-1',
     chunk_id: 'ch_1',
@@ -84,10 +84,10 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     state: 'running',
     liveness: 'live',
     ...overrides,
-  } as runnerApi.LeaseView;
+  } as Lease;
 }
 
-function panelLease(overrides: Partial<runnerApi.LeaseView>, owner: RunnerOwner, projectSlug: string | null): PanelLease {
+function panelLease(overrides: Partial<Lease>, owner: RunnerOwner, projectSlug: string | null): PanelLease {
   return { ...lease(overrides), owner, projectSlug };
 }
 
@@ -248,7 +248,7 @@ describe('mergeLeases', () => {
     const merged = mergeLeases([
       [
         panelLease({ lease_id: 'closed', state: 'closed', liveness: 'ended', created_at: '2026-07-16T12:00:00+00:00' }, R1, null),
-        panelLease({ lease_id: 'unknown', liveness: 'mystery' as runnerApi.LeaseLiveness, created_at: '2026-07-16T09:00:00+00:00' }, R1, null),
+        panelLease({ lease_id: 'unknown', liveness: 'unknown', created_at: '2026-07-16T09:00:00+00:00' }, R1, null),
       ],
     ]);
 
@@ -332,8 +332,8 @@ describe('anyHubReachable', () => {
 
   it('reads a malformed body — no runner, or no hub — as not reaching it', () => {
     const malformed: RunnerDashboard[] = [
-      { owner: R1, dashboard: {} as runnerApi.DashboardView },
-      { owner: R2, dashboard: { runner: {} } as unknown as runnerApi.DashboardView },
+      { owner: R1, dashboard: dashboardStatus({ runner: null }) },
+      { owner: R2, dashboard: dashboardStatus({ runner: null }) },
     ];
     expect(anyHubReachable(malformed)).toBe(false);
   });

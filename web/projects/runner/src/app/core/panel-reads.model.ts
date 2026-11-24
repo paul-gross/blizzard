@@ -1,5 +1,9 @@
-import type { runnerApi } from 'fleet/runner-shell';
-
+import type { Ask } from './ask.domain';
+import type { Escalation } from './escalation.domain';
+import type { Fact } from './fact.domain';
+import type { HostRunner } from './host-runner.domain';
+import type { Lease } from './lease.domain';
+import type { DashboardStatus } from './runner-status.domain';
 import { isLiveLease } from './worker-session';
 
 /** The runner a merged item came from — what its actions and links target. */
@@ -15,14 +19,15 @@ export interface RunnerOwner {
  * (`null` where no project can be told). */
 export type Owned<T> = T & { readonly owner: RunnerOwner; readonly projectSlug: string | null };
 
-export type PanelLease = Owned<runnerApi.LeaseView>;
-export type PanelFact = Owned<runnerApi.FactView>;
-export type PanelAsk = Owned<runnerApi.AskView>;
+export type PanelLease = Owned<Lease>;
+export type PanelFact = Owned<Fact>;
+export type PanelAsk = Owned<Ask>;
+export type PanelEscalation = Owned<Escalation>;
 
-/** One runner's dashboard, beside the runner it came from. */
+/** One runner's dashboard status, beside the runner it came from. */
 export interface RunnerDashboard {
   readonly owner: RunnerOwner;
-  readonly dashboard: runnerApi.DashboardView;
+  readonly dashboard: DashboardStatus;
 }
 
 /** A project the host serves. `entries` are the binding entries and project ids that name
@@ -55,7 +60,7 @@ export type RunnerProjects = ReadonlyMap<string, readonly PanelProject[]>;
 
 /** The runners on the host whose routes answer and that have an id to read under, in wire order — each labeled by its bare name, since
  * every runner the panel shows runs on the one host it is served from. */
-export function servingOwners(runners: readonly runnerApi.HostRunnerView[]): readonly RunnerOwner[] {
+export function servingOwners(runners: readonly HostRunner[]): readonly RunnerOwner[] {
   return runners.flatMap((runner) =>
     runner.served && runner.runner_id !== null
       ? [{ runnerId: runner.runner_id, name: runner.name, label: runner.name }]
@@ -74,8 +79,8 @@ export function scopedOwners(owners: readonly RunnerOwner[], name: string | null
  * the runner reports no other name for it.
  */
 export function runnerProjects(
-  dashboard: runnerApi.DashboardView | undefined,
-  runner: runnerApi.HostRunnerView | undefined,
+  dashboard: DashboardStatus | undefined,
+  runner: HostRunner | undefined,
 ): readonly PanelProject[] {
   const projects = new Map<string, { slug: string; name: string; entries: Set<string>; color: string | null }>();
   const covered = new Set<string>();
@@ -151,11 +156,11 @@ export function inProject<T extends { readonly projectSlug: string | null }>(ite
 }
 
 /** Each runner's dashboard by runner id. */
-export function dashboardsByRunner(dashboards: readonly RunnerDashboard[]): ReadonlyMap<string, runnerApi.DashboardView> {
+export function dashboardsByRunner(dashboards: readonly RunnerDashboard[]): ReadonlyMap<string, DashboardStatus> {
   return new Map(dashboards.map((entry) => [entry.owner.runnerId, entry.dashboard] as const));
 }
 
 /** Whether any of `dashboards` reports its runner reaching its hub — a malformed body reads as not reaching it. */
 export function anyHubReachable(dashboards: readonly RunnerDashboard[]): boolean {
-  return dashboards.some(({ dashboard }) => dashboard.runner?.hub?.reachable ?? false);
+  return dashboards.some(({ dashboard }) => dashboard.runner?.hub.reachable ?? false);
 }

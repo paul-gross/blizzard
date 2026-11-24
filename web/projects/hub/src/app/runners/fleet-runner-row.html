@@ -5,7 +5,7 @@
   [class.offline]="!row().online"
   [class.paused]="row().hub_paused"
   [attr.data-runner]="row().runner_id"
-  [attr.data-connection]="row().connection"
+  [attr.data-connection]="connectionWord()"
   [attr.data-hub-paused]="row().hub_paused"
 >
   <div class="r1">
@@ -95,7 +95,7 @@
     @if (standing(); as badge) {
       <fleet-kit-badge
         data-testid="fleet-runner-version-standing"
-        [attr.data-standing]="row().version_standing"
+        [attr.data-standing]="standingWord()"
         [tone]="badge.tone"
         variant="soft"
         >{{ badge.label }}</fleet-kit-badge

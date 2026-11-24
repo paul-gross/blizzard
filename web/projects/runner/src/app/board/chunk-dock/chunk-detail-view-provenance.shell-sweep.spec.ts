@@ -1,9 +1,11 @@
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { KitPanel, type runnerApi } from 'fleet';
+import { KitPanel } from 'fleet';
+import type { Escalation } from '../../core/escalation.domain';
 import { commands, page } from 'vitest/browser';
 
 import { MachineDetailView } from './chunk-detail-view';
+import type { Lease } from '../../core/lease.domain';
 
 /**
  * The escalation resume box's harness-provenance badge, the tooled half
@@ -16,7 +18,7 @@ import { MachineDetailView } from './chunk-detail-view';
  * needs `--browsers=ChromiumHeadless`, not jsdom — run it via `npm run shell-sweep`
  * (`web/scripts/shell-sweep.js`).
  */
-const LEASE: runnerApi.LeaseView = {
+const LEASE: Lease = {
   host_settings_revision: null,
   runner_settings_revision: null,
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNNEW1',
@@ -46,7 +48,7 @@ const LEASE: runnerApi.LeaseView = {
   project_id: null,
 };
 
-const ESCALATION: runnerApi.EscalationView = {
+const ESCALATION: Escalation = {
   chunk_id: LEASE.chunk_id,
   lease_id: LEASE.lease_id,
   node_id: LEASE.node_id,

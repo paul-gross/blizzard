@@ -1,17 +1,17 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
-import type { runnerApi } from 'fleet';
 import { fn } from 'storybook/test';
 
 import { ThrottleView } from './throttle-view';
+import type { Throttle } from '../core/throttle.domain';
 
-const open: runnerApi.ThrottleStatusView = {
+const open: Throttle = {
   state: 'admitting', declining: [],
   floor: { subscription: 'anthropic', admits: true, hold: null, clear: null },
   levers: [{ name: 'pace', setting: '7d, lead 5 points', reading: '40% spent, 50% elapsed', admits: true, until: null }],
   on_decline: 'hold', on_usage_limit: 'release',
 };
 
-const held: runnerApi.ThrottleStatusView = {
+const held: Throttle = {
   ...open, state: 'declining', declining: ['floor'],
   floor: { ...open.floor, admits: false, hold: {
     kind: 'usage limit', harness_id: 'claude_code', window: '5h', expected_reset: '2026-10-22T14:00:00Z',
@@ -19,7 +19,7 @@ const held: runnerApi.ThrottleStatusView = {
   } },
 };
 
-const pacing: runnerApi.ThrottleStatusView = {
+const pacing: Throttle = {
   ...open, state: 'declining', declining: ['pace'],
   levers: [{
     name: 'pace', setting: '7d, lead 5 points', reading: '7d: 86% spent, 71% elapsed, lead 5',

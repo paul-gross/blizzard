@@ -1,4 +1,7 @@
-import { type BeaconTone, compactRef, type runnerApi, type Tone, unlisted } from 'fleet';
+import { type BeaconTone, compactRef, type Tone, unlisted } from 'fleet';
+
+import type { HostRunner } from './host-runner.domain';
+import type { IdentityVerdict, RunnerStatus } from './runner-status.domain';
 
 /** Why the hub will not take a runner's work, from its identity verdict, worded once for every surface that shows it. */
 export interface IdentityRefusal {
@@ -14,9 +17,11 @@ export interface IdentityRefusal {
 
 /** The identity verdict's refusal, `null` while it checks out or goes unchecked. A state this build does not know
  * reads raw, in `idle` (`bzh:frontend-open-vocabulary`). */
-export function identityRefusal(identity: runnerApi.IdentityVerdictView | null | undefined): IdentityRefusal | null {
+export function identityRefusal(identity: IdentityVerdict | null | undefined): IdentityRefusal | null {
   if (!identity) return null;
-  switch (identity.state) {
+  const state = identity.state;
+  if (typeof state !== 'string') return { label: state.raw, issue: state.raw, title: identity.reason, tone: 'idle' };
+  switch (state) {
     case 'unchecked':
     case 'matched':
       return null;
@@ -41,21 +46,21 @@ export function identityRefusal(identity: runnerApi.IdentityVerdictView | null |
     case 'version_refused':
       return { label: 'VERSION REFUSED', issue: 'the hub refuses its version', title: identity.reason ?? null, tone: 'needs' };
     default: {
-      const raw = unlisted(identity.state);
+      const raw = unlisted(state);
       return { label: raw, issue: raw, title: identity.reason ?? null, tone: 'idle' };
     }
   }
 }
 
 /** One runner's light, read the same on every surface: red for a halted runner, an unreachable hub, or a known
- * identity refusal; amber while either brake holds it; else green. `status` is the runner's own read, `undefined`
- * until it lands, when its pause falls back to the host's report. */
-export function runnerLight(runner: runnerApi.HostRunnerView, status: runnerApi.RunnerStatusView | undefined): BeaconTone {
+ * identity refusal; amber while the runner reads itself held (its pause's `effective`); else green. `status` is the
+ * runner's own read, `undefined` until it lands, when its pause falls back to the host's report. */
+export function runnerLight(runner: Pick<HostRunner, 'state' | 'pause'>, status: RunnerStatus | null | undefined): BeaconTone {
   if (runner.state !== 'serving') return 'red';
   if (status && !status.hub.reachable) return 'red';
   if (identityRefusal(status?.identity)?.tone === 'needs') return 'red';
   const pause = status?.pause ?? runner.pause;
-  return pause?.local || pause?.hub ? 'amber' : 'green';
+  return pause?.effective ? 'amber' : 'green';
 }
 
 /** The runners' hub link folded to one badge: all reachable is `done`, none is `stale`, some is `waiting`. */

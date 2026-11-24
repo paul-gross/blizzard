@@ -1,11 +1,11 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { runnerApi } from 'fleet';
 import { vi } from 'vitest';
 
 import { ThrottleView } from './throttle-view';
+import type { Throttle } from '../core/throttle.domain';
 
-const THROTTLE: runnerApi.ThrottleStatusView = {
+const THROTTLE: Throttle = {
   state: 'declining', declining: ['floor'],
   floor: { subscription: 'anthropic', admits: false, clear: null, hold: {
     kind: 'usage limit', harness_id: 'claude_code', window: null, expected_reset: '2026-10-22T14:00:00Z',

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { KitBadge, KitFactList, KitPanel, KitSlotBar, RunnerConnection, SubscriptionPaceGroup } from 'fleet';
+import { KitBadge, KitFactList, KitPanel, KitSlotBar, SubscriptionPaceGroup } from 'fleet';
 import type { RunnerDetailVm } from './fleet-page.model';
 import { FleetRunnerRow } from './fleet-runner-row';
 import { runnerLight, runnerTitleState } from './connection-status.model';
@@ -29,7 +29,6 @@ export class HostlessRunnerDetail {
 
   readonly togglePause = output<RunnerRow>();
 
-  protected readonly connection = RunnerConnection;
   protected readonly seenLabel = runnerSeenLabel;
   protected readonly ageTag = runnerSeenTag;
 

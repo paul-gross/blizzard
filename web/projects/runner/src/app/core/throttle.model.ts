@@ -1,4 +1,6 @@
-import { formatAbsolute, type runnerApi } from 'fleet';
+import { formatAbsolute } from 'fleet';
+
+import type { Throttle, ThrottleLever } from './throttle.domain';
 
 const displayInstant = (instant: string): string => formatAbsolute(instant) || instant;
 
@@ -7,17 +9,13 @@ export interface ThrottleLine {
   readonly text: string;
 }
 
-function leverLine(lever: runnerApi.ThrottleStatusView['levers'][number]): ThrottleLine {
-  const name = typeof lever['name'] === 'string' ? lever['name'] : 'Lever';
-  const setting = typeof lever['setting'] === 'string' ? lever['setting'] : '';
-  const reading = typeof lever['reading'] === 'string' ? lever['reading'] : '';
-  const until = typeof lever['until'] === 'string' ? ` · until ${displayInstant(lever['until'])}` : '';
-  const admits = lever['admits'] === true ? 'yes' : lever['admits'] === false ? 'no' : 'unknown';
-  return { label: name, text: [setting, reading].filter(Boolean).join(' · ') + ` · ${admits}${until}` };
+function leverLine(lever: ThrottleLever): ThrottleLine {
+  const until = lever.until === null ? '' : ` · until ${displayInstant(lever.until)}`;
+  return { label: lever.name, text: [lever.setting, lever.reading].filter(Boolean).join(' · ') + ` · ${lever.admits ? 'yes' : 'no'}${until}` };
 }
 
 /** Shared words for the machine panel and the host's read-only runner row. */
-export function throttleLines(throttle: runnerApi.ThrottleStatusView): readonly ThrottleLine[] {
+export function throttleLines(throttle: Throttle): readonly ThrottleLine[] {
   const floor = throttle.floor;
   const owner = floor.subscription ?? 'this runner';
   const hold = floor.hold;
@@ -33,10 +31,10 @@ export function throttleLines(throttle: runnerApi.ThrottleStatusView): readonly 
   ];
 }
 
-export function throttleSummary(throttle: runnerApi.ThrottleStatusView): string {
+export function throttleSummary(throttle: Throttle): string {
   const first = throttle.declining[0];
-  const lever = throttle.levers.find((l) => l['name'] === first && l['admits'] === false);
-  const until = lever && typeof lever['until'] === 'string' ? lever['until'] : null;
+  const lever = throttle.levers.find((l) => l.name === first && !l.admits);
+  const until = lever?.until ?? null;
   const reset = first === 'floor' ? throttle.floor.hold?.expected_reset : until;
   return `${throttle.state}${first ? ` — ${first}${reset ? `, ${first === 'floor' ? 'resets' : 'until'} ${displayInstant(reset)}` : ''}` : ''}`;
 }

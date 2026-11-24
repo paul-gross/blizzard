@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { FleetWhen, KitBadge, type runnerApi, domainStatusTone, toneColor } from 'fleet';
+import { FleetWhen, KitBadge, domainStatusTone, toneColor } from 'fleet';
 
 import type { hubLink } from '../../core/runner-health.model';
+import type { FleetSummary } from '../../core/runner-status.domain';
 import type { HubSummary } from './hub-panel.model';
 
 @Component({
@@ -14,7 +15,7 @@ import type { HubSummary } from './hub-panel.model';
 export class HubPanelView {
   readonly summary = input.required<HubSummary | null>();
   readonly link = input.required<ReturnType<typeof hubLink>>();
-  readonly fleet = input.required<runnerApi.FleetSummaryView | null>();
+  readonly fleet = input.required<FleetSummary | null>();
   readonly fleetStale = input.required<boolean>();
 
   protected readonly issueColor = toneColor;

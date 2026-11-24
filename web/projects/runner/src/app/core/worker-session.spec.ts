@@ -1,8 +1,8 @@
-import type { runnerApi } from 'fleet';
 
 import { hasEnded, isLiveLease, sessionEnding } from './worker-session';
+import type { Lease } from './lease.domain';
 
-function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView {
+function lease(overrides: Partial<Lease> = {}): Lease {
   return {
     lease_id: 'L-1',
     chunk_id: 'ch_1',
@@ -28,15 +28,15 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     state: 'running',
     liveness: 'live',
     ...overrides,
-  } as runnerApi.LeaseView;
+  } as Lease;
 }
 
 describe('sessionEnding', () => {
   it('words a published closure reason, and shows an unknown one as itself', () => {
     const closed = { state: 'closed', liveness: 'ended' } as const;
     expect(sessionEnding(lease({ ...closed, closure_reason: 'preempted' }))).toBe('restarted');
-    expect(sessionEnding(lease({ ...closed, closure_reason: 'mystery' }))).toBe('mystery');
-    expect(sessionEnding(lease({ ...closed, closure_reason: 'constructor' }))).toBe('constructor');
+    expect(sessionEnding(lease({ ...closed, closure_reason: { kind: 'unknown', raw: 'mystery' } }))).toBe('mystery');
+    expect(sessionEnding(lease({ ...closed, closure_reason: { kind: 'unknown', raw: 'constructor' } }))).toBe('constructor');
   });
 
   it('is null while live and exited once its worker exited', () => {
@@ -45,7 +45,7 @@ describe('sessionEnding', () => {
   });
 
   it('is null for a liveness this build does not recognize', () => {
-    expect(sessionEnding(lease({ state: 'exited', liveness: 'mystery' as runnerApi.LeaseLiveness }))).toBeNull();
+    expect(sessionEnding(lease({ state: 'exited', liveness: 'unknown' }))).toBeNull();
   });
 });
 
@@ -53,7 +53,7 @@ describe('hasEnded / isLiveLease', () => {
   it('ends a lease only on a positive ended reading', () => {
     expect([hasEnded(lease()), isLiveLease(lease())]).toEqual([false, true]);
     expect([hasEnded(lease({ liveness: 'ended' })), isLiveLease(lease({ liveness: 'ended' }))]).toEqual([true, false]);
-    const unknown = lease({ liveness: 'mystery' as runnerApi.LeaseLiveness });
+    const unknown = lease({ liveness: 'unknown' });
     expect([hasEnded(unknown), isLiveLease(unknown)]).toEqual([false, true]);
   });
 });

@@ -1,14 +1,14 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { UnenforceableGateView } from '../api/hub';
-
 import { GateBadgeGroup } from './gate-badge-group';
+import { unenforceableGate } from './gate.builders';
+import type { UnenforceableGate } from './gate.domain';
 
 async function render(
   gates: readonly string[],
   labelled = true,
-  unenforceable: readonly UnenforceableGateView[] = [],
+  unenforceable: readonly UnenforceableGate[] = [],
 ): Promise<HTMLElement> {
   const fixture = TestBed.createComponent(GateBadgeGroup);
   fixture.componentRef.setInput('gates', gates);
@@ -62,7 +62,7 @@ describe('GateBadgeGroup', () => {
     ['hub-executed', 'deliver'],
     ['unknown-node', 'no-such-node'],
   ] as const)('marks a gate the hub reports %s as not enforceable, in the visible text', async (reason, node) => {
-    const el = await render(['build', node], true, [{ node, reason }]);
+    const el = await render(['build', node], true, [unenforceableGate({ node, reason })]);
 
     const flagged = el.querySelector(`[data-gate="${node}"]`)!;
     expect(flagged.getAttribute('data-unenforceable')).toBe(reason);
@@ -70,7 +70,7 @@ describe('GateBadgeGroup', () => {
   });
 
   it('renders an enforceable gate with no marker', async () => {
-    const el = await render(['build', 'deliver'], true, [{ node: 'deliver', reason: 'hub-executed' }]);
+    const el = await render(['build', 'deliver'], true, [unenforceableGate()]);
 
     const plain = el.querySelector('[data-gate="build"]')!;
     expect(plain.hasAttribute('data-unenforceable')).toBe(false);
@@ -79,8 +79,8 @@ describe('GateBadgeGroup', () => {
   });
 
   it('renders an unrecognized reason raw', async () => {
-    const reason = 'some-future-reason' as UnenforceableGateView['reason'];
-    const el = await render(['x'], true, [{ node: 'x', reason }]);
+    const reason = { kind: 'unknown', raw: 'some-future-reason' } as const;
+    const el = await render(['x'], true, [unenforceableGate({ node: 'x', reason })]);
 
     expect(el.querySelector('[data-testid="runner-gate-unenforceable"]')?.textContent?.trim()).toBe(
       'not enforceable: some-future-reason',

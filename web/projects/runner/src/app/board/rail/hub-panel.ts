@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, effect, signal } from '@angular/core';
-import { asyncState, KitAsyncState, type runnerApi } from 'fleet';
+import { asyncState, KitAsyncState } from 'fleet';
 
 import { injectPanelDashboards } from '../../core/panel-reads';
 import { hubLink } from '../../core/runner-health.model';
+import type { FleetSummary } from '../../core/runner-status.domain';
 import { hubSummary, latestFleetSummary } from './hub-panel.model';
 import { HubPanelView } from './hub-panel-view';
 
@@ -34,11 +35,11 @@ export class HubPanel {
     return hubLink(hub?.reachable ?? 0, hub?.total ?? 0);
   });
 
-  private readonly currentFleet = computed<runnerApi.FleetSummaryView | null>(
+  private readonly currentFleet = computed<FleetSummary | null>(
     () => latestFleetSummary(this.dashboards.data()),
   );
 
-  private readonly latchedFleet = signal<runnerApi.FleetSummaryView | null>(null);
+  private readonly latchedFleet = signal<FleetSummary | null>(null);
   private readonly latchFleet = effect(() => {
     const fleet = this.currentFleet();
     if (fleet !== null) this.latchedFleet.set(fleet);

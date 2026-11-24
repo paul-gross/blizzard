@@ -4,10 +4,10 @@ import { asyncState, asyncStateOf, injectNowSignal, KitAsyncState, runnerSubscri
 import { PanelFilters } from '../../core/panel-filters';
 import { injectPanelDashboards, injectPanelProjects } from '../../core/panel-reads';
 import {
-  injectHostEnvironmentsQuery,
-  injectHostRunnersQuery,
+  injectHostEnvironmentDomainsQuery,
+  injectHostRunnerDomainsQuery,
   injectHostSubscriptionsQuery,
-  injectHostWorkspacesQuery,
+  injectHostWorkspaceDomainsQuery,
 } from '../../core/host.query';
 import { type HostPanelPool, hostPoolsFor, runnerFocus } from '../../core/host-pools.model';
 import { hostPanelRunners, type HostPanelRunner, runnersNamed, statusesByRunner } from './host-panel.model';
@@ -31,9 +31,9 @@ import { HostPanelView } from './host-panel-view';
 })
 export class HostPanel {
   private readonly subscriptionsQuery = injectHostSubscriptionsQuery();
-  protected readonly runnersQuery = injectHostRunnersQuery();
-  private readonly workspacesQuery = injectHostWorkspacesQuery();
-  private readonly environmentsQuery = injectHostEnvironmentsQuery();
+  protected readonly runnersQuery = injectHostRunnerDomainsQuery();
+  private readonly workspacesQuery = injectHostWorkspaceDomainsQuery();
+  private readonly environmentsQuery = injectHostEnvironmentDomainsQuery();
   private readonly filters = inject(PanelFilters);
   private readonly projects = injectPanelProjects();
   private readonly dashboards = injectPanelDashboards('all');

@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 import {
+  type ChunkPause,
+  type ChunkWorkRef,
   type DaemonTarget,
   errorMessage,
   injectChunkDetailQuery,
@@ -8,10 +10,10 @@ import {
   isPendingFor,
   KitPanel,
   KitPanelHeader,
-  type runnerApi,
   KitErrorLine,
 } from 'fleet';
 
+import type { Escalation } from '../../core/escalation.domain';
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
 import { type ChunkRequeueVars, injectChunkRequeueMutation } from './chunk-requeue.mutations';
 import {
@@ -73,7 +75,7 @@ export class MachineDetail {
   readonly status = input<MachineChunkStatus | null>(null);
 
   /** The open escalation for this chunk, when there is one — carries the resume command. */
-  readonly escalation = input<runnerApi.EscalationView | null>(null);
+  readonly escalation = input<Escalation | null>(null);
 
   /** The chunk's newest attempt (the `leases` list's last entry) — the summary,
    * status, and escalation all render off it. */
@@ -103,14 +105,14 @@ export class MachineDetail {
   );
 
   /** The chunk's work refs, for the header — mirrors the hub header's own `pointers`. */
-  protected readonly workRefs = computed<readonly runnerApi.WorkRefView[]>(
+  protected readonly workRefs = computed<readonly ChunkWorkRef[]>(
     () => this.detailQuery.data()?.work_refs ?? [],
   );
 
   /** The chunk's open operator pause, if any — read off the fresh
    * `ChunkDetail.pause`, never the machine-derived {@link status}, which folds
    * in facts the hub aggregate does not carry (mirrors the hub header's own `pause`). */
-  protected readonly pause = computed<runnerApi.PauseView | null>(() => this.detailQuery.data()?.pause ?? null);
+  protected readonly pause = computed<ChunkPause | null>(() => this.detailQuery.data()?.pause ?? null);
 
   /** Whether an **unpaused** chunk may be paused — the fresh `ChunkDetail.pausable`, so the
    * header never offers a control the server would answer with a 409. An unresolved read

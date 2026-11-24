@@ -2,8 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type runnerApi } from 'fleet';
 import {
+  hostRunnerView,
   hubConnectivityView,
   type RequestClientStub,
   runnerDashboardView,
@@ -15,7 +15,13 @@ import {
 
 import { HubPanel } from './hub-panel';
 
-function hostRunner(runnerId: string, name: string): runnerApi.HostRunnerView {
+
+/** The wire bodies the stubbed transport answers, shaped by their fixture builders. */
+type HostRunnerBody = ReturnType<typeof hostRunnerView>;
+type DashboardBody = ReturnType<typeof runnerDashboardView>;
+type FleetSummaryBody = NonNullable<DashboardBody['fleet_summary']>;
+
+function hostRunner(runnerId: string, name: string): HostRunnerBody {
   return {
     runner_id: runnerId,
     name,
@@ -31,7 +37,7 @@ function hostRunner(runnerId: string, name: string): runnerApi.HostRunnerView {
   };
 }
 
-function dashboard(hub: Partial<runnerApi.HubConnectivityView>, fleet: runnerApi.FleetSummaryView | null): runnerApi.DashboardView {
+function dashboard(hub: Parameters<typeof hubConnectivityView>[0], fleet: FleetSummaryBody | null): DashboardBody {
   return runnerDashboardView({
     fleet_summary: fleet,
     runner: runnerStatusView({
@@ -42,7 +48,7 @@ function dashboard(hub: Partial<runnerApi.HubConnectivityView>, fleet: runnerApi
   });
 }
 
-const FLEET: runnerApi.FleetSummaryView = { ready: 3, running: 5, waiting: 1, needs: 2 };
+const FLEET: FleetSummaryBody = { ready: 3, running: 5, waiting: 1, needs: 2 };
 
 let stub: RequestClientStub;
 
@@ -51,8 +57,8 @@ afterEach(() => stub.restore());
 /** Mounts the hub panel over the host's runners, answering each runner's dashboard off `dashboards` (by runner id),
  * read afresh on every request so a refetch sees a swapped answer. */
 async function render(
-  runners: readonly runnerApi.HostRunnerView[],
-  dashboards: Record<string, runnerApi.DashboardView>,
+  runners: readonly HostRunnerBody[],
+  dashboards: Record<string, DashboardBody>,
 ): Promise<{ fixture: ComponentFixture<HubPanel>; el: HTMLElement }> {
   stub = stubRunnerClient({
     'GET /api/host/runners': () => ({ items: [...runners] }),
@@ -115,7 +121,7 @@ describe('HubPanel', () => {
   });
 
   it('dims the fleet strip to its last-known counts once the hub stops answering', async () => {
-    const dashboards: Record<string, runnerApi.DashboardView> = { rn_1: dashboard({}, FLEET) };
+    const dashboards: Record<string, DashboardBody> = { rn_1: dashboard({}, FLEET) };
     const { fixture, el } = await render([hostRunner('rn_1', 'r1')], dashboards);
     expect(text(el, 'fleet-running')).toBe('5running');
 

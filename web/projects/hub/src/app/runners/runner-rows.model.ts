@@ -1,11 +1,6 @@
 import {
   type LaneStatus,
-  DeclaredLever,
   type HostFact,
-  RunnerConnection,
-  type RunnerDecliningView,
-  type RunnerRegistryView,
-  RunnerVersionStanding,
   type SubscriptionPace,
   compactRef,
   formatSeenAgo,
@@ -15,10 +10,15 @@ import {
   type Tone,
   unlisted,
 } from 'fleet';
-import type { ChunkSummary } from 'fleet/shell';
-import type { BoardChunk } from '../core/chunks.model';
-
-import { isUnassigned, servedProjects, unresolvedEntries } from '../core/project-serving';
+import {
+  type HubRunner,
+  type RunnerDeclining,
+  isUnassigned,
+  servedProjects,
+  unresolvedEntries,
+  vocabularyWord,
+} from '../core/runners.domain';
+import type { RunnerClaimChunk } from './runner-claims.domain';
 import { type BindingLine, bindingLines, subscriptionName } from './host-rows.model';
 
 /** One claim line under a registry row: the chunk a runner holds, where it sits, and
@@ -38,14 +38,14 @@ export interface ClaimLine {
  * the browser's, so it defers to the shared skew-tolerant `formatSeenAgo` (`when.ts`).
  */
 export function runnerSeenLabel(row: RunnerRow): string {
-  if (row.connection === RunnerConnection.NEVER_CONNECTED) return 'never connected';
+  if (row.connection === 'never_connected') return 'never connected';
   return formatSeenAgo(row.last_seen_at, row.online, row.nowMs);
 }
 
 /** A row's liveness as the board rail's dense tag — "[12s]", or "[never]" for a runner that
  * never connected; {@link runnerSeenLabel} stays the words, for its tooltip. */
 export function runnerSeenTag(row: RunnerRow): string {
-  if (row.connection === RunnerConnection.NEVER_CONNECTED) return '[never]';
+  if (row.connection === 'never_connected') return '[never]';
   return formatSeenTag(row.last_seen_at, row.nowMs);
 }
 
@@ -60,17 +60,17 @@ export interface VersionStandingBadge {
  * `unversioned`, or `refused (<reason>)`; `null` for a runner the hub has not judged yet. The hub
  * decides the standing; this only words it.
  */
-export function versionStandingBadge(row: RunnerRegistryView): VersionStandingBadge | null {
-  const standing = row.version_standing ?? null;
+export function versionStandingBadge(row: HubRunner): VersionStandingBadge | null {
+  const standing = row.version_standing;
+  if (standing === null) return null;
+  if (typeof standing !== 'string') return { label: standing.raw, tone: 'idle' };
   switch (standing) {
-    case RunnerVersionStanding.IN_WINDOW:
+    case 'in_window':
       return { label: 'in window', tone: 'running' };
-    case RunnerVersionStanding.UNVERSIONED:
+    case 'unversioned':
       return { label: 'unversioned', tone: 'idle' };
-    case RunnerVersionStanding.REFUSED:
-      return { label: row.version_refusal ? `refused (${row.version_refusal})` : 'refused', tone: 'needs' };
-    case null:
-      return null;
+    case 'refused':
+      return { label: row.version_refusal ? `refused (${vocabularyWord(row.version_refusal)})` : 'refused', tone: 'needs' };
     default:
       return { label: unlisted(standing), tone: 'idle' };
   }
@@ -79,7 +79,7 @@ export function versionStandingBadge(row: RunnerRegistryView): VersionStandingBa
 /** A registry row: the runner plus its claims and subscription pace groups, pre-folded
  * so a presentational view needs no second read to render them. `used` is the slot
  * bar's numerator — environments held by this runner's live routes. */
-export interface RunnerRow extends RunnerRegistryView {
+export interface RunnerRow extends HubRunner {
   readonly claims: readonly ClaimLine[];
   readonly used: number;
   readonly subscriptionPaces: readonly SubscriptionPace[];
@@ -112,20 +112,20 @@ export function localPauseHint(row: RunnerRow): string {
  * expected reset; any other lever — and any lever this board has no wording for — falls to the generic
  * `declining — <lever>: <detail>` form, its `until` after. The instant is the one the runner named, formatted here
  * (`bzh:frontend-formatters`). */
-export function decliningLabel(reason: RunnerDecliningView, nowMs: number): string {
+export function decliningLabel(reason: RunnerDeclining, nowMs: number): string {
   const when = reason.until == null ? null : formatWhen(reason.until, new Date(nowMs));
-  if (reason.lever_kind === DeclaredLever.FLOOR) {
+  if (reason.lever_kind === 'floor') {
     const waiting = reason.subscription == null ? 'waiting' : `waiting on ${reason.subscription}`;
     return `${waiting} — ${reason.detail}${when ? `, resets ${when}` : ''}`;
   }
-  return `declining — ${reason.lever_kind}: ${reason.detail}${when ? `, until ${when}` : ''}`;
+  return `declining — ${vocabularyWord(reason.lever_kind)}: ${reason.detail}${when ? `, until ${when}` : ''}`;
 }
 
 /** The labels of every throttle holding `row` back, in the gate's order — empty unless the runner is online with no brake,
  * since a brake already says why it is idle and an offline runner reports nothing current. */
 export function decliningLabels(row: RunnerRow): readonly string[] {
   if (!row.online || row.hub_paused || row.locally_paused) return [];
-  return (row.declining ?? []).map((reason) => decliningLabel(reason, row.nowMs));
+  return row.declining.map((reason) => decliningLabel(reason, row.nowMs));
 }
 
 /** Why resuming at the hub may not start a runner: its own brake is not the hub's to
@@ -142,7 +142,7 @@ export function runnerToggleHint(row: RunnerRow): string {
  *
  * No status filter by design: `ChunkSummary.runner_id` is already in-progress-only
  * (see its own docs), so `runner_id` set *is* "currently holds a route on". */
-function claimsByRunner(chunks: readonly BoardChunk[]): Map<string, ClaimLine[]> {
+function claimsByRunner(chunks: readonly RunnerClaimChunk[]): Map<string, ClaimLine[]> {
   const grouped = new Map<string, ClaimLine[]>();
   for (const chunk of chunks) {
     if (!chunk.runner_id) continue;
@@ -163,11 +163,11 @@ function claimsByRunner(chunks: readonly BoardChunk[]): Map<string, ClaimLine[]>
  * counts them all, so a runner working one 3-env chunk reads as using 3 slots, not 1.
  * Environments are exclusively leased and a runner's chunks are distinct, so a plain
  * sum needs no dedup. Unfiltered by status for the same reason {@link claimsByRunner} is. */
-function usedByRunner(chunks: readonly ChunkSummary[]): Map<string, number> {
+function usedByRunner(chunks: readonly RunnerClaimChunk[]): Map<string, number> {
   const used = new Map<string, number>();
   for (const chunk of chunks) {
     if (!chunk.runner_id) continue;
-    used.set(chunk.runner_id, (used.get(chunk.runner_id) ?? 0) + (chunk.environment_count ?? 0));
+    used.set(chunk.runner_id, (used.get(chunk.runner_id) ?? 0) + chunk.environment_count);
   }
   return used;
 }
@@ -176,8 +176,8 @@ function usedByRunner(chunks: readonly ChunkSummary[]): Map<string, number> {
  * folded on, every time-relative field read against the one `nowMs`; `hosts` is the roster
  * each runner's subscription name resolves from. */
 export function foldRunnerRows(
-  runners: readonly RunnerRegistryView[],
-  chunks: readonly BoardChunk[],
+  runners: readonly HubRunner[],
+  chunks: readonly RunnerClaimChunk[],
   nowMs: number,
   hosts: readonly HostFact[] = [],
 ): readonly RunnerRow[] {
@@ -188,7 +188,7 @@ export function foldRunnerRows(
     ...runner,
     claims: claims.get(runner.runner_id) ?? [],
     used: used.get(runner.runner_id) ?? 0,
-    subscriptionPaces: hubSubscriptionPaces(runner.subscriptions ?? [], nowMs),
+    subscriptionPaces: hubSubscriptionPaces(runner.subscriptions, nowMs),
     served: servedNames(runner),
     unassigned: isUnassigned(runner),
     unresolved: unresolvedEntries(runner),
@@ -199,7 +199,7 @@ export function foldRunnerRows(
 }
 
 /** The display name of each resolved project in `runner`'s declaration — its name, else its slug. */
-function servedNames(runner: RunnerRegistryView): readonly string[] {
+function servedNames(runner: HubRunner): readonly string[] {
   return servedProjects(runner)
     .filter((served) => served.project_id != null)
     .map((served) => served.name ?? served.slug ?? served.entry);
@@ -210,7 +210,7 @@ function servedNames(runner: RunnerRegistryView): readonly string[] {
  * declaration resolves to the lensed project (matched by its current slug, which the lens holds), and the unassigned
  * ones, which serve no project and so wait on every project alike.
  */
-export function lensRunners<Runner extends RunnerRegistryView>(runners: readonly Runner[], slug: string | null): readonly Runner[] {
+export function lensRunners<Runner extends HubRunner>(runners: readonly Runner[], slug: string | null): readonly Runner[] {
   if (slug === null) return runners;
   return runners.filter(
     (runner) =>

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { type RunnerCapability, harnessName, KitAsyncState, KitBadge, type Tone } from 'fleet';
+import { harnessName, KitAsyncState, KitBadge, type Tone } from 'fleet';
+import type { RunnerCapabilityFact } from '../core/runners.domain';
 
 /**
  * The runner registry's per-capability render — one distinct, labelled
@@ -20,19 +21,19 @@ import { type RunnerCapability, harnessName, KitAsyncState, KitBadge, type Tone 
 })
 export class CapabilityBadgeGroup {
   /** Every capability this runner reported, in registration order. */
-  readonly capabilities = input.required<readonly RunnerCapability[]>();
+  readonly capabilities = input.required<readonly RunnerCapabilityFact[]>();
   protected readonly harnessName = harnessName;
 
   /** `done` (green) for an available binding, `needs` (red) for one whose own health
    * check failed — the same tone ladder the claim-status badges already use, so
    * availability reads with the board's existing green/red vocabulary rather than a
    * capability-local one. */
-  protected toneFor(capability: RunnerCapability): Tone {
+  protected toneFor(capability: RunnerCapabilityFact): Tone {
     return capability.available ? 'done' : 'needs';
   }
 
   /** Names harness and availability for the badge's accessible label. */
-  protected ariaLabel(capability: RunnerCapability): string {
+  protected ariaLabel(capability: RunnerCapabilityFact): string {
     const availability = capability.available ? 'available' : 'unavailable';
     return `${harnessName(capability.harness_id)}, ${availability}`;
   }

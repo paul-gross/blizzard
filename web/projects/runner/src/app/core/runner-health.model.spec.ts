@@ -1,27 +1,22 @@
-import type { runnerApi } from 'fleet';
-
+import { hostRunner } from './host-runner.builders';
+import { pauseState } from './pause-state.builders';
 import { hubLink, identityRefusal, runnerLight } from './runner-health.model';
+import { hubConnectivity, identityVerdict, runnerStatus } from './runner-status.builders';
+import type { IdentityVerdict, KnownIdentityState, RunnerStatus } from './runner-status.domain';
 
-const VERDICT = (state: string, extra: Partial<runnerApi.IdentityVerdictView> = {}): runnerApi.IdentityVerdictView =>
-  ({ state, store_runner_id: null, token_runner_id: null, checked_at: null, reset_command: 'reset it', reason: 'why', ...extra }) as runnerApi.IdentityVerdictView;
+const KNOWN: readonly string[] = ['unchecked', 'matched', 'mismatched', 'refused', 'not_held', 'tenant_differs', 'version_refused'];
 
-const RUNNER = (overrides: Partial<runnerApi.HostRunnerView> = {}): runnerApi.HostRunnerView => ({
-  runner_id: 'rn_1',
-  name: 'r1',
-  state: 'serving',
-  served: true,
-  halted_reasons: [],
-  pause: { local: false, hub: false, effective: false, local_reason: null },
-  throttle: null,
-  bindings: [],
-  agents_in_use: 0,
-  max_agents: 4,
-  start_failure: null,
-  ...overrides,
-});
+const VERDICT = (state: string, extra: Partial<IdentityVerdict> = {}): IdentityVerdict =>
+  identityVerdict({
+    state: KNOWN.includes(state) ? (state as KnownIdentityState) : { kind: 'unknown', raw: state },
+    reset_command: 'reset it',
+    reason: 'why',
+    ...extra,
+  });
 
-const STATUS = (overrides: Record<string, unknown> = {}): runnerApi.RunnerStatusView =>
-  ({ hub: { reachable: true }, identity: VERDICT('matched'), ...overrides }) as unknown as runnerApi.RunnerStatusView;
+const RUNNER = hostRunner;
+
+const STATUS = (overrides: Partial<RunnerStatus> = {}): RunnerStatus => runnerStatus({ identity: VERDICT('matched'), ...overrides });
 
 describe('identityRefusal', () => {
   it('is null while the identity checks out, goes unchecked, or is absent', () => {
@@ -61,7 +56,7 @@ describe('runnerLight', () => {
   });
 
   it('is red once the hub is unreachable', () => {
-    expect(runnerLight(RUNNER(), STATUS({ hub: { reachable: false } }))).toBe('red');
+    expect(runnerLight(RUNNER(), STATUS({ hub: hubConnectivity({ reachable: false }) }))).toBe('red');
   });
 
   it('is red for a known identity refusal', () => {
@@ -73,11 +68,17 @@ describe('runnerLight', () => {
   });
 
   it('is amber while either brake holds the runner, off its status first and the host report otherwise', () => {
-    const held = (local: boolean, hub: boolean) => ({ local, hub, effective: local || hub, local_reason: null });
+    const held = (local: boolean, hub: boolean) => pauseState({ local, hub });
     expect(runnerLight(RUNNER({ pause: held(true, false) }), undefined)).toBe('amber');
     expect(runnerLight(RUNNER({ pause: held(false, true) }), undefined)).toBe('amber');
     expect(runnerLight(RUNNER(), STATUS({ pause: held(true, false) }))).toBe('amber');
     expect(runnerLight(RUNNER({ pause: held(true, false) }), STATUS({ pause: held(false, false) }))).toBe('green');
+  });
+
+  it('reads amber from effective, not from the two brakes', () => {
+    expect(runnerLight(RUNNER(), STATUS({ pause: pauseState({ local: false, hub: false, effective: true }) }))).toBe('amber');
+    expect(runnerLight(RUNNER(), STATUS({ pause: pauseState({ local: true, hub: true, effective: false }) }))).toBe('green');
+    expect(runnerLight(RUNNER({ pause: pauseState({ local: true, effective: false }) }), undefined)).toBe('green');
   });
 
   it('is green when healthy, before or after its status lands', () => {

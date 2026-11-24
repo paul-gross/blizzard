@@ -35,7 +35,7 @@ describe('runnerFilterChoices', () => {
 
   it('marks a runner braked here with the pause glyph, its reason only in the title', () => {
     const choice = runnerFilterChoices([
-      runner('r1', { pause: { local: true, hub: false, local_reason: 'usage limit' } }),
+      runner('r1', { pause: { local: true, hub: false, effective: true, local_reason: 'usage limit' } }),
     ])[1];
 
     expect(choice.brake).toBe('pause');
@@ -46,8 +46,8 @@ describe('runnerFilterChoices', () => {
 
   it('marks a runner braked by the hub with the stop glyph, as it does one braked by both', () => {
     const [, byHub, byBoth] = runnerFilterChoices([
-      runner('r1', { pause: { local: false, hub: true, local_reason: null } }),
-      runner('r2', { pause: { local: true, hub: true, local_reason: null } }),
+      runner('r1', { pause: { local: false, hub: true, effective: true, local_reason: null } }),
+      runner('r2', { pause: { local: true, hub: true, effective: true, local_reason: null } }),
     ]);
 
     expect(byHub.brake).toBe('stop');
@@ -62,7 +62,7 @@ describe('runnerFilterChoices', () => {
         runner_id: null,
         served: false,
         state: 'halted',
-        pause: { local: true, hub: false, local_reason: null },
+        pause: { local: true, hub: false, effective: true, local_reason: null },
       }),
     ])[1];
 
@@ -140,16 +140,16 @@ describe('projectFilterChoices', () => {
 describe('brakeLabel', () => {
   it('reads null while neither brake is set', () => {
     expect(brakeLabel(null)).toBeNull();
-    expect(brakeLabel({ local: false, hub: false, local_reason: null })).toBeNull();
+    expect(brakeLabel({ local: false, hub: false, effective: false, local_reason: null })).toBeNull();
   });
 
   it('names which side set the brake', () => {
-    expect(brakeLabel({ local: true, hub: false, local_reason: null })).toBe('paused');
-    expect(brakeLabel({ local: false, hub: true, local_reason: null })).toBe('paused by hub');
-    expect(brakeLabel({ local: true, hub: true, local_reason: null })).toBe('paused here and by hub');
+    expect(brakeLabel({ local: true, hub: false, effective: true, local_reason: null })).toBe('paused');
+    expect(brakeLabel({ local: false, hub: true, effective: true, local_reason: null })).toBe('paused by hub');
+    expect(brakeLabel({ local: true, hub: true, effective: true, local_reason: null })).toBe('paused here and by hub');
   });
 
   it('carries the local brake reason', () => {
-    expect(brakeLabel({ local: true, hub: false, local_reason: 'usage limit' })).toBe('paused: usage limit');
+    expect(brakeLabel({ local: true, hub: false, effective: true, local_reason: 'usage limit' })).toBe('paused: usage limit');
   });
 });

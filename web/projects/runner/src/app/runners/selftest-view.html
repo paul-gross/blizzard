@@ -5,7 +5,7 @@
         <span class="selftest-head">
           <span class="harness">{{ harnessName(row.harness) }}</span>
           @if (row.run; as run) {
-            <fleet-kit-badge variant="pill" [tone]="tone(run.status)" data-testid="selftest-status">{{ run.status }}</fleet-kit-badge>
+            <fleet-kit-badge variant="pill" [tone]="tone(run.status)" data-testid="selftest-status">{{ statusLabel(run.status) }}</fleet-kit-badge>
           }
           <fleet-kit-button [testid]="'run-selftest-' + row.harness" [disabled]="row.busy" (click)="runSelftest.emit(row.harness)">Run selftest</fleet-kit-button>
         </span>

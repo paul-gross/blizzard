@@ -1,8 +1,8 @@
-import type { runnerApi } from 'fleet';
 
 import { deriveLeaseStatus } from './lease-status';
+import type { Lease } from './lease.domain';
 
-function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView {
+function lease(overrides: Partial<Lease> = {}): Lease {
   return {
     host_settings_revision: null,
     runner_settings_revision: null,
@@ -61,6 +61,6 @@ describe('deriveLeaseStatus', () => {
   });
 
   it('reads a state this build does not know raw, in the inert tone', () => {
-    expect(deriveLeaseStatus(lease({ state: 'draining' as runnerApi.LeaseView['state'] }))).toEqual({ label: 'DRAINING', tone: 'idle' });
+    expect(deriveLeaseStatus(lease({ state: { kind: 'unknown', raw: 'draining' } }))).toEqual({ label: 'DRAINING', tone: 'idle' });
   });
 });

@@ -1,13 +1,13 @@
-import type { runnerApi } from 'fleet';
 
 import { throttleLines, throttleSummary } from './throttle.model';
+import type { Throttle } from './throttle.domain';
 
 const reset = new Date(2026, 9, 22, 14, 0, 0).toISOString();
 const grace = new Date(2026, 9, 22, 15, 0, 0).toISOString();
 const until = new Date(2026, 9, 22, 16, 0, 0).toISOString();
 const cleared = new Date(2026, 9, 22, 9, 14, 0).toISOString();
 
-const throttle: runnerApi.ThrottleStatusView = {
+const throttle: Throttle = {
   state: 'declining', declining: ['floor'],
   floor: { subscription: 'anthropic', admits: false, clear: null, hold: {
     kind: 'usage limit', harness_id: 'claude_code', window: '5h', expected_reset: reset,
@@ -26,19 +26,19 @@ describe('throttle words', () => {
   });
 
   it('names a declining lever and when it expects to admit', () => {
-    const pacing = { ...throttle, declining: ['pace'] } satisfies runnerApi.ThrottleStatusView;
+    const pacing = { ...throttle, declining: ['pace'] } satisfies Throttle;
     expect(throttleSummary(pacing)).toBe('declining — pace, until 2026/10/22 16:00:00');
   });
 
   it('names an unshared floor and a hand clear', () => {
     const open = { ...throttle, state: 'admitting', declining: [], floor: {
       subscription: null, admits: true, hold: null, clear: { by: 'paul', cleared_at: cleared },
-    } } satisfies runnerApi.ThrottleStatusView;
+    } } satisfies Throttle;
     expect(throttleSummary(open)).toBe('admitting');
     expect(throttleLines(open)[0].text).toContain('this runner: open — cleared by paul at 2026/10/22 09:14:00');
   });
   it('keeps unparseable instants visible in lines and summaries', () => {
-    const invalid = { ...throttle, floor: { ...throttle.floor, hold: { ...throttle.floor.hold!, expected_reset: 'bad reset', grace_opens_at: 'bad grace' } }, levers: [{ name: 'pace', setting: '', reading: '', admits: false, until: 'bad until' }] } satisfies runnerApi.ThrottleStatusView;
+    const invalid = { ...throttle, floor: { ...throttle.floor, hold: { ...throttle.floor.hold!, expected_reset: 'bad reset', grace_opens_at: 'bad grace' } }, levers: [{ name: 'pace', setting: '', reading: '', admits: false, until: 'bad until' }] } satisfies Throttle;
     expect(throttleLines(invalid)[0].text).toContain('resets bad reset · awaiting fresh sample, opens bad grace');
     expect(throttleLines(invalid)[1].text).toContain('until bad until');
     expect(throttleSummary(invalid)).toContain('resets bad reset');

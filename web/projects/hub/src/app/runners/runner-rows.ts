@@ -1,12 +1,11 @@
 import { computed } from '@angular/core';
-import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type KitAsyncStateValue, injectNowSignal, asyncStateOf, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
-import { boardChunksQueryOptions } from '../core/chunks.query';
+import { type KitAsyncStateValue, injectNowSignal, asyncStateOf } from 'fleet';
 import { foldRunnerRows, lensRunners, type RunnerRow } from './runner-rows.model';
 import { foldHostCards, type HostCard } from './host-rows.model';
 import { injectHostFactsQuery } from '../core/hosts.query';
-import { injectHubRunnersQuery } from '../core/runners.query';
+import { injectHubRunnerDomainsQuery } from '../core/runners.query';
+import { injectRunnerClaimsQuery } from './runner-claims.query';
 import { injectProjectFilter } from '../core/project-filter';
 
 /**
@@ -35,12 +34,9 @@ export function injectRunnerRows(includeRetired: () => boolean = () => false): {
   readonly chunksState: () => KitAsyncStateValue;
   readonly chunksError: () => boolean;
 } {
-  const runnersQuery = injectHubRunnersQuery(includeRetired);
+  const runnersQuery = injectHubRunnerDomainsQuery(includeRetired);
   const hostsQuery = injectHostFactsQuery(includeRetired);
-  const chunksQuery = injectQuery(() => ({
-    ...boardChunksQueryOptions(null),
-    refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
-  }));
+  const chunksQuery = injectRunnerClaimsQuery();
   const projectFilter = injectProjectFilter();
 
 
@@ -53,7 +49,7 @@ export function injectRunnerRows(includeRetired: () => boolean = () => false): {
    * bindings folded on; recomputes on {@link now} so elapsed bars keep advancing between
    * `runner-changed` pushes. */
   const allRows = computed<readonly RunnerRow[]>(() =>
-    foldRunnerRows(runnersQuery.data() ?? [], chunksQuery.data()?.chunks ?? [], now(), hostsQuery.data() ?? []),
+    foldRunnerRows(runnersQuery.data() ?? [], chunksQuery.data() ?? [], now(), hostsQuery.data() ?? []),
   );
 
   const rows = computed<readonly RunnerRow[]>(() => lensRunners(allRows(), projectFilter()));
@@ -63,7 +59,7 @@ export function injectRunnerRows(includeRetired: () => boolean = () => false): {
       hostsQuery.data() ?? [],
       allRows(),
       projectFilter() === null ? null : rows(),
-      chunksQuery.data()?.chunks ?? [],
+      chunksQuery.data() ?? [],
       now(),
     ),
   );

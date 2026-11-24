@@ -1,15 +1,15 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { runnerApi } from 'fleet';
 import { vi } from 'vitest';
 
 import { MachineDetailHeader } from './machine-detail-header';
+import type { Lease } from '../../core/lease.domain';
 
 const REF = Date.parse('2026-07-16T12:00:00.000Z');
 
 /** A closed lease: no live worker, ended at `closedAt`. */
-function endedLease(closedAt: string): runnerApi.LeaseView {
+function endedLease(closedAt: string): Lease {
   return {
     host_settings_revision: null,
     runner_settings_revision: null,
@@ -38,7 +38,7 @@ function endedLease(closedAt: string): runnerApi.LeaseView {
     git_commits: [],
     harness_id: null,
     project_id: null,
-  } as runnerApi.LeaseView;
+  } as Lease;
 }
 
 async function noWorkerNote(closedAt: string): Promise<string> {

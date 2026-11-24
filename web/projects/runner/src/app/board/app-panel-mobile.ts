@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { type KitAsyncStateValue, KitBackBar, KitButton, type runnerApi } from 'fleet';
+import { type KitAsyncStateValue, KitBackBar, KitButton } from 'fleet';
 
+import type { Escalation } from '../core/escalation.domain';
 import { type BoardLayout, ChunkBoard } from './chunk-list/chunk-board';
 import { MachineDetail } from './chunk-dock/chunk-detail';
 import type { MachineChunkStatus } from '../core/chunk-status';
@@ -66,7 +67,7 @@ export class LocalPanelMobile {
   readonly selectedStatus = input<MachineChunkStatus | null>(null);
 
   /** The selected chunk's open escalation, when there is one. */
-  readonly selectedEscalation = input<runnerApi.EscalationView | null>(null);
+  readonly selectedEscalation = input<Escalation | null>(null);
 
   /** Emitted with the layout the Board/List switch was set to. */
   readonly layoutChange = output<BoardLayout>();

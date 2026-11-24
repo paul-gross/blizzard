@@ -1,5 +1,6 @@
-import { compactRef, type runnerApi } from 'fleet';
+import { compactRef } from 'fleet';
 
+import type { Ask } from '../core/ask.domain';
 import type { PanelAsk, RunnerOwner } from '../core/panel-reads.model';
 import { askedForLabel, askRows } from './app-asks.model';
 
@@ -8,7 +9,7 @@ const NOW = Date.parse('2026-07-16T12:00:00.000Z');
 const R1: RunnerOwner = { runnerId: 'rn_1', name: 'r1', label: 'r1' };
 const R2: RunnerOwner = { runnerId: 'rn_2', name: 'r2', label: 'r2' };
 
-function ask(overrides: Partial<runnerApi.AskView> = {}, owner: RunnerOwner = R1): PanelAsk {
+function ask(overrides: Partial<Ask> = {}, owner: RunnerOwner = R1): PanelAsk {
   return {
     owner,
     projectSlug: 'p',

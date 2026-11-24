@@ -1,4 +1,5 @@
-import { RunnerConnection, type RunnerRegistryView } from 'fleet';
+import { runnerCapability } from '../core/runners.builders';
+import type { HubRunner } from '../core/runners.domain';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -6,7 +7,7 @@ import { provideRouter } from '@angular/router';
 import type { RunnerRow } from './runner-rows.model';
 import { FleetRunnerRow } from './fleet-runner-row';
 
-const REGISTRY: RunnerRegistryView = {
+const REGISTRY: HubRunner = {
   agents: null,
   runner_id: '',
   runner_name: '',
@@ -14,7 +15,7 @@ const REGISTRY: RunnerRegistryView = {
   added_by: null,
   bindings: null,
   capabilities: [],
-  connection: RunnerConnection.NEVER_CONNECTED,
+  connection: 'never_connected',
   declining: [],
   env_capacity: null,
   gates: [],
@@ -160,7 +161,7 @@ describe('FleetRunnerRow', () => {
     const { el } = await render(
       row('rn_sum', {
         agents: 3,
-        capabilities: [{ harness_id: 'claude-code', available: true }],
+        capabilities: [runnerCapability({ harness_id: 'claude-code', available: true })],
         bindingLines: [{ project: 'Blizzard', workspaceId: 'ws_a', agentsInUse: 1, unreported: false }],
       }),
       { hosted: true },
@@ -208,8 +209,8 @@ describe('FleetRunnerRow', () => {
     const { el } = await render(
       row('rn_caps', {
         capabilities: [
-          { harness_id: 'claude', version: '1.2.3', tiers: ['sonnet'], default: true, available: true },
-          { harness_id: 'codex', version: '4.5.6', tiers: [], default: false, available: false },
+          runnerCapability({ harness_id: 'claude', version: '1.2.3', tiers: ['sonnet'], default: true, available: true }),
+          runnerCapability({ harness_id: 'codex', version: '4.5.6', tiers: [], default: false, available: false }),
         ],
         gates: ['build', 'review'],
       }),

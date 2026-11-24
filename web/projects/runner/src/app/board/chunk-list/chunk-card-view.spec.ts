@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ChunkCard, type runnerApi } from 'fleet';
-import { workItemEntry } from 'fleet/testing';
+import { ChunkCard, type WorkItem } from 'fleet';
+import { workItem } from 'fleet/testing';
 
 import { type MachineChunkRow, machineChunkRows } from '../../core/chunk-rows.model';
 import type { PanelLease } from '../../core/panel-reads.model';
@@ -60,13 +60,13 @@ function rowOf(overrides: Partial<PanelLease> = {}): MachineChunkRow {
 })
 class RunnerCardHost {
   readonly row = input.required<MachineChunkRow>();
-  readonly linkedItems = input<readonly runnerApi.WorkItemEntry[]>([]);
+  readonly linkedItems = input<readonly WorkItem[]>([]);
   readonly selected = input(false);
   readonly emitted: string[] = [];
   protected readonly view = computed(() => machineChunkCardView(this.row(), this.linkedItems()));
 }
 
-async function render(inputs: Partial<{ row: MachineChunkRow; linkedItems: readonly runnerApi.WorkItemEntry[]; selected: boolean }> = {}) {
+async function render(inputs: Partial<{ row: MachineChunkRow; linkedItems: readonly WorkItem[]; selected: boolean }> = {}) {
   await TestBed.configureTestingModule({
     imports: [RunnerCardHost],
     providers: [provideZonelessChangeDetection()],
@@ -155,7 +155,7 @@ describe('the fleet card, filled by the runner', () => {
   it('renders one line per linked item, its label over its title', async () => {
     const { el } = await render({
       linkedItems: [
-        workItemEntry({
+        workItem({
           source: 'blizzard',
           ref: '61',
           label: 'blizzard#61',

@@ -9,9 +9,10 @@ import {
   KitErrorLine,
   type KitFact,
   KitFactList,
-  type runnerApi,
 } from 'fleet';
 
+import type { Escalation } from '../../core/escalation.domain';
+import type { Lease } from '../../core/lease.domain';
 import { HeartbeatFreshness } from '../../runners/heartbeat-freshness';
 
 /**
@@ -36,11 +37,11 @@ export class MachineDetailView {
 
   /** The chunk's newest attempt, or `null` when nothing is selected — the rest
    * state renders in its place. */
-  readonly lease = input<runnerApi.LeaseView | null>(null);
+  readonly lease = input<Lease | null>(null);
 
   /** The open escalation for this chunk, when there is one — carries the wrapped takeover
    * command (primary when present) and the raw resume command (the fallback). */
-  readonly escalation = input<runnerApi.EscalationView | null>(null);
+  readonly escalation = input<Escalation | null>(null);
 
   /** `-34s` shorthand, or `—` before the first beat / past the skew bound. */
   readonly heartbeatLabel = input('—');
@@ -64,7 +65,7 @@ export class MachineDetailView {
    * workdir/heartbeat rows need the `<ng-template>`s this template declares for them
    * (`KitFactList`'s own templated-row contract). */
   protected factRows(
-    l: runnerApi.LeaseView,
+    l: Lease,
     workdirValue: TemplateRef<unknown>,
     heartbeatValue: TemplateRef<unknown>,
   ): readonly KitFact[] {

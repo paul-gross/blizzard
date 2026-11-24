@@ -4,6 +4,10 @@ import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet/runner-sh
 
 import { floorClearMutationKey, localPauseMutationKey } from './mutation-keys';
 import { hostKey, runnerDashboardKey } from './query-keys';
+import { fromAskView } from './ask.translate';
+import { fromEscalationView } from './escalation.translate';
+import { fromFactView } from './fact.translate';
+import { fromDashboardView } from './runner-status.translate';
 
 /**
  * One runner's whole status read, composed into one poll —
@@ -25,7 +29,7 @@ import { hostKey, runnerDashboardKey } from './query-keys';
  * that can be `null` — a hub outage or an unwired runner, never a
  * client-visible error for that case). TanStack's query-key dedupe folds every
  * injection of one runner's {@link runnerDashboardKey} — the single-runner
- * {@link injectRunnerDashboardQuery} and the panel's fan-out (`panel-reads.ts`)
+ * {@link injectRunnerDashboardStatusQuery} and the panel's fan-out (`panel-reads.ts`)
  * alike — into one network request.
  */
 export function runnerDashboardQueryOptions(runnerId: string) {
@@ -44,12 +48,41 @@ export function runnerDashboardQueryOptions(runnerId: string) {
   };
 }
 
-/** One runner's dashboard ({@link runnerDashboardQueryOptions}) — for a section that shows
- * a single runner; held while `runnerId` gives `null`. */
-export function injectRunnerDashboardQuery(runnerId: () => string | null) {
+/** {@link runnerDashboardQueryOptions} read as its status sections (`DashboardStatus`) — the same key, cache
+ * and backstop, translated in the observer's `select`. */
+export function runnerDashboardStatusQueryOptions(runnerId: string) {
+  return { ...runnerDashboardQueryOptions(runnerId), select: fromDashboardView };
+}
+
+/** {@link runnerDashboardQueryOptions} read as its open asks — the same key, cache and backstop. */
+export function runnerAsksQueryOptions(runnerId: string) {
+  return {
+    ...runnerDashboardQueryOptions(runnerId),
+    select: (body: runnerApi.DashboardView) => (body.asks?.items ?? []).map(fromAskView),
+  };
+}
+
+/** {@link runnerDashboardQueryOptions} read as its newest facts — the same key, cache and backstop. */
+export function runnerFactsQueryOptions(runnerId: string) {
+  return {
+    ...runnerDashboardQueryOptions(runnerId),
+    select: (body: runnerApi.DashboardView) => (body.facts?.items ?? []).map(fromFactView),
+  };
+}
+
+/** {@link runnerDashboardQueryOptions} read as its open escalations — the same key, cache and backstop. */
+export function runnerEscalationsQueryOptions(runnerId: string) {
+  return {
+    ...runnerDashboardQueryOptions(runnerId),
+    select: (body: runnerApi.DashboardView) => (body.escalations?.items ?? []).map(fromEscalationView),
+  };
+}
+
+/** One runner's dashboard status ({@link runnerDashboardStatusQueryOptions}); held while `runnerId` gives `null`. */
+export function injectRunnerDashboardStatusQuery(runnerId: () => string | null) {
   return injectQuery(() => {
     const id = runnerId();
-    return { ...runnerDashboardQueryOptions(id ?? ''), enabled: id !== null };
+    return { ...runnerDashboardStatusQueryOptions(id ?? ''), enabled: id !== null };
   });
 }
 
@@ -75,14 +108,13 @@ export function injectLocalPauseMutation(runnerId: () => string) {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationKey: localPauseMutationKey(runnerId()),
-    mutationFn: async (vars: LocalPauseVars): Promise<runnerApi.RunnerControlView> => {
-      const { data, error } = await runnerApi.patchRunnerRunnersRunnerIdApiRunnerPatch({
+    mutationFn: async (vars: LocalPauseVars): Promise<void> => {
+      const { error } = await runnerApi.patchRunnerRunnersRunnerIdApiRunnerPatch({
         path: { runner_id: vars.runnerId },
         body: { paused: vars.paused },
         throwOnError: false,
       });
       if (error) throw error;
-      return data!;
     },
     onSettled: (_data, _error, vars) =>
       Promise.all([
@@ -110,7 +142,6 @@ export function injectFloorClearMutation(runnerId: () => string) {
             path: { slug: subscription }, body: {}, throwOnError: false,
           });
       if (result.error) throw result.error;
-      return result.data;
     },
     onSettled: (_data, _error, vars) => Promise.all([
       queryClient.invalidateQueries({ queryKey: hostKey }),

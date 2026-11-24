@@ -1,5 +1,7 @@
 import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet/runner-shell';
 
+import type { Lease } from './lease.domain';
+import { fromLeaseView } from './lease.translate';
 import { runnerLeasesKey } from './query-keys';
 
 /**
@@ -30,5 +32,14 @@ export function runnerLeasesQueryOptions(runnerId: string) {
     },
     // See RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS.
     refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
+  };
+}
+
+/** {@link runnerLeasesQueryOptions} read as domain {@link Lease}s — the same key, cache and backstop, translated in
+ * the observer's `select`. */
+export function runnerLeaseDomainsQueryOptions(runnerId: string) {
+  return {
+    ...runnerLeasesQueryOptions(runnerId),
+    select: (items: readonly runnerApi.LeaseView[]): readonly Lease[] => items.map(fromLeaseView),
   };
 }

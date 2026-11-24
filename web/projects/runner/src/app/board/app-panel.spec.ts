@@ -2,8 +2,17 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type runnerApi, ViewportService } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRunnerClient, workItemEntry } from 'fleet/testing';
+import { ViewportService } from 'fleet';
+import {
+  hostRunnerView,
+  type RequestClientStub,
+  runnerDashboardView,
+  runnerLeaseView,
+  settle,
+  stubError,
+  stubRunnerClient,
+  workItemEntry,
+} from 'fleet/testing';
 import { type MockInstance, vi } from 'vitest';
 
 import { LocalPanel } from './app-panel';
@@ -17,7 +26,12 @@ const CHUNK = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 const OTHER_CHUNK = 'ch_01KXKVVF1J3D6H6VYZ3XYNDDDD';
 const R2_CHUNK = 'ch_01KXKVVF1J3D6H6VYZ3XYNR2R2';
 
-const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView => ({
+/** The wire bodies the stubbed transport answers, shaped by their fixture builders. */
+type LeaseBody = ReturnType<typeof runnerLeaseView>;
+type HostRunnerBody = ReturnType<typeof hostRunnerView>;
+type DashboardBody = ReturnType<typeof runnerDashboardView>;
+
+const LEASE = (overrides: Partial<LeaseBody> = {}): LeaseBody => ({
   host_settings_revision: null,
   runner_settings_revision: null,
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
@@ -49,7 +63,7 @@ const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
 });
 
 /** A serving runner on the host, binding one project in one workspace. */
-function hostRunner(runnerId: string, name: string, project: string): runnerApi.HostRunnerView {
+function hostRunner(runnerId: string, name: string, project: string): HostRunnerBody {
   return {
     runner_id: runnerId,
     name,
@@ -70,7 +84,7 @@ const RUNNERS = [hostRunner('rn_1', 'r1', 'p'), hostRunner('rn_2', 'r2', 'q')];
 
 /** A minimal-but-complete `DashboardView` — every rail panel reads it per runner, so a test
  * overrides only the section it cares about. */
-function dashboardBody(runnerId: string, overrides: Partial<runnerApi.DashboardView> = {}): runnerApi.DashboardView {
+function dashboardBody(runnerId: string, overrides: Partial<DashboardBody> = {}): DashboardBody {
   return {
     runner: {
       runner_id: runnerId,
@@ -104,9 +118,9 @@ type RunnerRoutes = Parameters<typeof stubRunnerClient>[0];
 
 interface Fixture {
   /** Each runner's leases, by runner id; a runner with no entry holds none. */
-  readonly leases?: Record<string, runnerApi.LeaseView[]>;
+  readonly leases?: Record<string, LeaseBody[]>;
   /** Each runner's dashboard sections, by runner id. */
-  readonly dashboards?: Record<string, Partial<runnerApi.DashboardView>>;
+  readonly dashboards?: Record<string, Partial<DashboardBody>>;
   /** Routes answered ahead of the defaults. */
   readonly extra?: RunnerRoutes;
 }

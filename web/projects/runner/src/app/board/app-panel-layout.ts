@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { type runnerApi, type KitAsyncStateValue } from 'fleet';
+import { type KitAsyncStateValue } from 'fleet';
 
+import type { Escalation } from '../core/escalation.domain';
 import { MachineDetail } from './chunk-dock/chunk-detail';
 import { type BoardLayout, ChunkBoard } from './chunk-list/chunk-board';
 import type { MachineChunkStatus } from '../core/chunk-status';
@@ -62,7 +63,7 @@ export class LocalPanelLayout {
   readonly selectedStatus = input.required<MachineChunkStatus | null>();
 
   /** The open escalation for the selected chunk, when one exists. */
-  readonly selectedEscalation = input.required<runnerApi.EscalationView | null>();
+  readonly selectedEscalation = input.required<Escalation | null>();
 
   /** Emitted with a chunk id when the operator selects a chunk card or row. */
   readonly selectChunk = output<string>();

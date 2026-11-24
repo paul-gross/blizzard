@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
-import type { runnerApi } from 'fleet';
 import { fn } from 'storybook/test';
 
+import { escalation } from '../../core/escalation.builders';
+import type { Lease } from '../../core/lease.domain';
 import { MachineDetailView } from './chunk-detail-view';
 
-const LEASE: runnerApi.LeaseView = {
+const LEASE: Lease = {
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNNEW1',
   chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
   graph_id: 'gr_1',
@@ -19,10 +20,12 @@ const LEASE: runnerApi.LeaseView = {
   last_heartbeat_at: '2026-07-16T11:59:26.000Z',
   state: 'closed',
   liveness: 'ended',
-  display_status: 'escalated',
+  display_status: 'needs-human',
   closure_healthy: false,
   closed_at: '2026-07-16T12:00:00.000Z',
   closure_reason: 'escalated',
+  host_settings_revision: null,
+  runner_settings_revision: null,
   stale_after_seconds: 3600,
   resolved_model: null,
   resolved_effort: null,
@@ -32,7 +35,7 @@ const LEASE: runnerApi.LeaseView = {
   project_id: null,
 };
 
-const ESCALATION: runnerApi.EscalationView = {
+const ESCALATION = escalation({
   chunk_id: LEASE.chunk_id,
   lease_id: LEASE.lease_id,
   node_id: LEASE.node_id,
@@ -40,15 +43,9 @@ const ESCALATION: runnerApi.EscalationView = {
   closed_at: '2026-07-16T12:00:00.000Z',
   resume_command: 'cd /ws/beta && claude --resume sess-new',
   wrapped_takeover_command: 'blizzard runner takeover ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-  closure: null,
-  cause: null,
-  effort: null,
   harness_id: 'claude_code',
   harness_version: '1.2.3',
-  model: null,
-  project_id: null,
-  session_name: null,
-};
+});
 
 const meta: Meta<MachineDetailView> = {
   title: 'Runner/Machine detail',

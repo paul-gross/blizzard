@@ -29,13 +29,12 @@ export function injectChunkRequeueMutation(runnerId: () => string | null, handle
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationKey: chunkRequeueMutationKey(runnerId()),
-    mutationFn: async (vars: ChunkRequeueVars): Promise<runnerApi.RequeueResponse> => {
-      const { data, error } = await runnerApi.requeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPost({
+    mutationFn: async (vars: ChunkRequeueVars): Promise<void> => {
+      const { error } = await runnerApi.requeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPost({
         path: { runner_id: vars.runnerId, chunk_id: vars.chunkId },
         throwOnError: false,
       });
       if (error) throw error;
-      return data!;
     },
     onSuccess: (_data, vars) => handlers.onSuccess(vars),
     onError: (error, vars) => handlers.onError(error, vars),

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, booleanAttribute, computed, input } from '@angular/core';
-import { KitBadge, type runnerApi } from 'fleet';
+import { KitBadge } from 'fleet';
 
+import type { Lease } from '../core/lease.domain';
 import { deriveLeaseStatus } from '../core/lease-status';
 import { HeartbeatFreshness } from './heartbeat-freshness';
 
@@ -19,7 +20,7 @@ import { HeartbeatFreshness } from './heartbeat-freshness';
 })
 export class WorkerLine {
   /** The live lease this line renders. */
-  readonly lease = input.required<runnerApi.LeaseView>();
+  readonly lease = input.required<Lease>();
 
   /** Whether to lead with the node — off where the surrounding line already names it. */
   readonly showNode = input(true);

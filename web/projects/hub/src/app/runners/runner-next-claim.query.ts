@@ -4,6 +4,8 @@ import { prerequisiteStatuses } from './runner-next-claim.model';
 import type { QueryObserverResult } from '@tanstack/angular-query-experimental';
 import { hubApi, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
 import { hubChunkKey, hubRunnerNextClaimKey } from '../core/query-keys';
+import type { PrerequisiteStatus } from './runner-next-claim.domain';
+import { toNextClaim, toPrerequisiteStatus } from './runner-next-claim.translate';
 
 /** The hub's projection is authoritative; the client does not repeat the claim walk. */
 export function injectRunnerNextClaimQuery(runnerId: () => string) {
@@ -20,6 +22,7 @@ export function injectRunnerNextClaimQuery(runnerId: () => string) {
         return data!;
       },
       refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
+      select: toNextClaim,
     };
   });
 }
@@ -35,7 +38,8 @@ export function injectPrerequisiteStatuses(ids: () => readonly string[]) {
         return data!;
       },
       refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
+      select: toPrerequisiteStatus,
     })),
-    combine: (results) => prerequisiteStatuses(results as unknown as readonly QueryObserverResult<hubApi.ChunkDetail>[]),
+    combine: (results) => prerequisiteStatuses(results as unknown as readonly QueryObserverResult<PrerequisiteStatus>[]),
   }));
 }

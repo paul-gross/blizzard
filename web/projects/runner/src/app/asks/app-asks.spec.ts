@@ -2,33 +2,35 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type runnerApi } from 'fleet';
-import { type RequestClientStub, hostRunnerView, runnerDashboardView, settle, stubRunnerClient } from 'fleet/testing';
+import { type RequestClientStub, hostRunnerView, runnerDashboardView, runnerAskView, settle, stubRunnerClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { LocalAsks } from './app-asks';
+
+/** One item as the runner's dashboard body carries it. */
+type Wire = ReturnType<typeof runnerAskView>;
 
 let stub: RequestClientStub | undefined;
 
 afterEach(() => stub?.restore());
 
 /** A serving runner on the host, as `GET /api/host/runners` lists it. */
-function hostRunner(runnerId: string, name: string): runnerApi.HostRunnerView {
+function hostRunner(runnerId: string, name: string) {
   return hostRunnerView({ runner_id: runnerId, name, bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }], max_agents: 4 });
 }
 
 /** A full `DashboardView` body, `asks.items` set to `asks` and every other section
  * its empty default — `LocalAsks` reads off each runner's shared `/runners/<id>/api/dashboard`
  * poll, not a `/api/asks` route of its own. */
-function dashboardBody(asks: readonly runnerApi.AskView[]): runnerApi.DashboardView {
+function dashboardBody(asks: readonly Wire[]) {
   return runnerDashboardView({ asks: { items: [...asks] } });
 }
 
 /** Render `LocalAsks` over a host serving `rn_1` (`r1`) with `asks` open on it, and — given
  * `otherAsks` — `rn_2` (`r2`) with those open on it. */
 async function render(
-  asks: readonly runnerApi.AskView[],
-  otherAsks?: readonly runnerApi.AskView[],
+  asks: readonly Wire[],
+  otherAsks?: readonly Wire[],
 ): Promise<{ el: HTMLElement; fixture: ComponentFixture<LocalAsks> }> {
   const runners = [hostRunner('rn_1', 'r1'), ...(otherAsks ? [hostRunner('rn_2', 'r2')] : [])];
   stub = stubRunnerClient({
@@ -51,7 +53,7 @@ async function render(
   return { el: fixture.nativeElement as HTMLElement, fixture };
 }
 
-const ASK: runnerApi.AskView = {
+const ASK = runnerAskView({
   question_id: 'q-1',
   chunk_id: 'ch_01ABC',
   lease_id: 'lease-1',
@@ -61,7 +63,7 @@ const ASK: runnerApi.AskView = {
   harness_id: null,
   options: [],
   project_id: null,
-};
+});
 
 describe('LocalAsks', () => {
   it('renders an open ask with its chunk ref and question text', async () => {

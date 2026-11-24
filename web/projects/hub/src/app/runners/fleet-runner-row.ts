@@ -23,6 +23,7 @@ import { RunnerNextClaim } from './runner-next-claim';
 import { RunnerSubscription } from './runner-subscription';
 import { ServedProjectGroup } from './served-project-group';
 import { StatusLight } from './status-light';
+import { vocabularyWord } from '../core/runners.domain';
 
 /**
  * One runner as a wide row on the Fleet tab's detail pane: a header line (its light, name,
@@ -88,6 +89,14 @@ export class FleetRunnerRow {
   /** Every throttle holding the runner back, in the gate's order; empty when none is, or a brake holds it. */
   protected readonly decliningReasons = computed(() => decliningLabels(this.row()));
 
+  protected readonly connectionWord = computed(() => vocabularyWord(this.row().connection));
+
+  /** The hub's version standing as the row's data attribute names it; `null` before it has judged one. */
+  protected readonly standingWord = computed(() => {
+    const standing = this.row().version_standing;
+    return standing === null ? null : vocabularyWord(standing);
+  });
+
   protected readonly ref = computed(() => compactRef(this.row().runner_id));
 
   /** The hub's judgement of the runner's version, or `null` before it has judged one. */
@@ -96,7 +105,7 @@ export class FleetRunnerRow {
   /** "Claude Code · 4 agents · 2 busy" — its harnesses, and its agents where it binds any. */
   protected readonly summary = computed(() => {
     const row = this.row();
-    const parts = (row.capabilities ?? []).map((capability) => harnessName(capability.harness_id));
+    const parts = row.capabilities.map((capability) => harnessName(capability.harness_id));
     const declared = declaredAgents([row]);
     if (declared !== null) parts.push(`${declared} ${declared === 1 ? 'agent' : 'agents'}`, `${busyAgents([row])} busy`);
     return parts.length === 0 ? null : parts.join(' · ');

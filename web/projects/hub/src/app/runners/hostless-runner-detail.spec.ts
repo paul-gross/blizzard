@@ -1,3 +1,4 @@
+import type { HubRunner } from '../core/runners.domain';
 import { Component, input } from '@angular/core';
 import { FleetRunnerRow } from './fleet-runner-row';
 import { RunnerNextClaim } from './runner-next-claim';
@@ -5,7 +6,7 @@ import { RunnerNextClaim } from './runner-next-claim';
 @Component({ selector: 'app-runner-next-claim', template: '' })
 class StubRunnerNextClaim { readonly runnerId = input.required<string>(); }
 
-import { RunnerConnection, type RunnerRegistryView } from 'fleet';
+
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -15,7 +16,7 @@ import type { RunnerDetailVm } from './fleet-page.model';
 import { HostlessRunnerDetail } from './hostless-runner-detail';
 import type { RunnerRow } from './runner-rows.model';
 
-const REGISTRY: RunnerRegistryView = {
+const REGISTRY: HubRunner = {
   agents: null,
   runner_id: '',
   runner_name: '',
@@ -23,7 +24,7 @@ const REGISTRY: RunnerRegistryView = {
   added_by: null,
   bindings: null,
   capabilities: [],
-  connection: RunnerConnection.NEVER_CONNECTED,
+  connection: 'never_connected',
   declining: [],
   env_capacity: null,
   gates: [],

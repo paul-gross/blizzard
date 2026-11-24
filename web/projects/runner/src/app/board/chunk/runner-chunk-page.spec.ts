@@ -3,7 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type runnerApi } from 'fleet';
 import {
   type RequestClientStub,
   chunkDetail,
@@ -20,7 +19,7 @@ import { RunnerChunkPage } from './runner-chunk-page';
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 
 /** A chunk parked on an open question with options, beside an answered one, and an open gate with its checks. */
-const DETAIL: runnerApi.ChunkDetail = chunkDetail({
+const DETAIL = chunkDetail({
   chunk_id: CHUNK_ID,
   status: 'waiting_on_human',
   questions: [

@@ -1,4 +1,3 @@
-import type { runnerApi } from 'fleet';
 import { hostSubscriptionView } from 'fleet/testing';
 import { runnerSubscription } from '../core/host-subscription.translate';
 
@@ -8,7 +7,7 @@ const runners = [
   { runner_id: 'rn_a', name: 'r-claude' },
   { runner_id: 'rn_b', name: 'r-chatgpt' },
   { runner_id: 'rn_c', name: 'r-test' },
-] as runnerApi.HostRunnerView[];
+];
 const subscriptions = [runnerSubscription(hostSubscriptionView({ slug: 'anthropic', name: 'Anthropic', provider: 'anthropic', spenders: ['rn_a', 'rn_b', 'rn_c'] }))];
 
 describe('floorClearScope', () => {

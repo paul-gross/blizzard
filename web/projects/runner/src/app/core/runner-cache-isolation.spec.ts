@@ -2,11 +2,11 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { injectChunkDetailQuery, runnerClient, type runnerApi } from 'fleet';
+import { injectChunkDetailQuery, runnerClient } from 'fleet';
 import {
-  type RequestClientStub,
   chunkDetail,
   hostRunnerView,
+  type RequestClientStub,
   runnerDashboardView,
   runnerLeaseView,
   runnerStatusView,
@@ -37,7 +37,11 @@ class RunnerReadsHost {
   );
 }
 
-function hostRunner(runnerId: string, name: string): runnerApi.HostRunnerView {
+
+/** The wire bodies the stubbed transport answers, shaped by their fixture builders. */
+type HostRunnerBody = ReturnType<typeof hostRunnerView>;
+
+function hostRunner(runnerId: string, name: string): HostRunnerBody {
   return hostRunnerView({
     runner_id: runnerId,
     name,
@@ -86,7 +90,7 @@ describe('two runners on one host', () => {
     const host = fixture.componentInstance;
 
     // Each merged item carries the runner it was read off, and its body is that runner's.
-    expect(host.dashboards.data().map(({ owner, dashboard }) => [owner.runnerId, dashboard.runner.runner_id])).toEqual([
+    expect(host.dashboards.data().map(({ owner, dashboard }) => [owner.runnerId, dashboard.runner?.runner_id])).toEqual([
       ['rn_1', 'rn_1'],
       ['rn_2', 'rn_2'],
     ]);

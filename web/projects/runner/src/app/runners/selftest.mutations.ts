@@ -4,6 +4,8 @@ import { runnerApi } from 'fleet';
 
 import { selftestStartMutationKey } from '../core/mutation-keys';
 import { runnerDashboardKey } from '../core/query-keys';
+import type { SelftestRun } from './selftest.domain';
+import { fromSelfTestView } from './selftest.translate';
 
 /** Start a selftest of `harness` on `runnerId`. */
 export interface SelftestStartVars {
@@ -13,7 +15,7 @@ export interface SelftestStartVars {
 
 /** What one start's own outcome is handed to — each invocation's, with its own variables. */
 export interface SelftestStartHandlers {
-  readonly onSuccess: (run: runnerApi.SelfTestView, vars: SelftestStartVars) => void;
+  readonly onSuccess: (run: SelftestRun, vars: SelftestStartVars) => void;
   readonly onError: (error: unknown, vars: SelftestStartVars) => void;
 }
 
@@ -28,14 +30,14 @@ export function injectSelftestStartMutation(runnerId: () => string, handlers: Se
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationKey: selftestStartMutationKey(runnerId()),
-    mutationFn: async (vars: SelftestStartVars): Promise<runnerApi.SelfTestView> => {
+    mutationFn: async (vars: SelftestStartVars): Promise<SelftestRun> => {
       const { data, error } = await runnerApi.startSelftestRunnersRunnerIdApiSelftestsPost({
         path: { runner_id: vars.runnerId },
         body: { harness: vars.harness },
         throwOnError: false,
       });
       if (error) throw error;
-      return data!;
+      return fromSelfTestView(data!);
     },
     onSuccess: (run, vars) => handlers.onSuccess(run, vars),
     onError: (error, vars) => handlers.onError(error, vars),

@@ -2,14 +2,14 @@ import { ChangeDetectionStrategy, Component, computed, input, signal } from '@an
 import { errorMessage, injectPendingMutationVariables, KitBadge, KitButton, KitErrorLine } from 'fleet';
 
 import { localPauseMutationKey } from '../core/mutation-keys';
-import { injectLocalPauseMutation, injectRunnerDashboardQuery, type LocalPauseVars } from '../core/status.query';
+import { injectLocalPauseMutation, injectRunnerDashboardStatusQuery, type LocalPauseVars } from '../core/status.query';
 import { pendingLocalPause } from './app-pause-control.model';
 
 /**
  * One runner's pause/unpause control. The toggle flips only the **local** brake
  * (`PATCH /runners/{runner_id}/api/runner`); the hub's brake (`hub_paused`) is shown as a badge when
  * set, regardless of the local toggle. Reads the `pause` triad off
- * {@link injectRunnerDashboardQuery}, and its own mutation invalidates that read
+ * {@link injectRunnerDashboardStatusQuery}, and its own mutation invalidates that read
  * directly.
  *
  * A failed flip is surfaced, not swallowed: {@link error} holds the last flip's
@@ -29,7 +29,7 @@ export class LocalPauseControl {
   /** The toggle alone, where the brakes' state and reason already read beside it. */
   readonly compact = input(false);
 
-  private readonly dashboardQuery = injectRunnerDashboardQuery(() => this.runnerId());
+  private readonly dashboardQuery = injectRunnerDashboardStatusQuery(() => this.runnerId());
   private readonly pauseMutation = injectLocalPauseMutation(() => this.runnerId());
 
   /** Every local-pause mutation currently pending for this runner, with its

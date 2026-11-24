@@ -1,6 +1,7 @@
-import type { runnerApi, Tone } from 'fleet';
+import type { Tone } from 'fleet';
 
 import { type MachineChunkStatus, deriveMachineChunkStatus } from './chunk-status';
+import type { Lease } from './lease.domain';
 import { type PanelLease, type PanelProject, projectColorFor } from './panel-reads.model';
 import { isLiveLease } from './worker-session';
 
@@ -39,7 +40,7 @@ export const BOARD_LANES: readonly { readonly key: BoardLane; readonly label: st
  * the step closed) is done; anything else — a worker running, spawning, backing off or
  * parked, or a human already in the session — is in progress.
  */
-export function boardLane(lease: runnerApi.LeaseView): BoardLane {
+export function boardLane(lease: Lease): BoardLane {
   if (lease.display_status === 'needs-human' || lease.display_status === 'waiting-ask') return 'needs';
   if (lease.display_status === 'human-in-session') return 'progress';
   return isLiveLease(lease) ? 'progress' : 'done';

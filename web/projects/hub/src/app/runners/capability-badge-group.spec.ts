@@ -1,10 +1,12 @@
+import { runnerCapability } from '../core/runners.builders';
+import type { RunnerCapabilityFact } from '../core/runners.domain';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { RunnerCapability } from 'fleet';
+
 import { CapabilityBadgeGroup } from './capability-badge-group';
 
-async function render(capabilities: readonly RunnerCapability[]): Promise<HTMLElement> {
+async function render(capabilities: readonly RunnerCapabilityFact[]): Promise<HTMLElement> {
   const fixture = TestBed.createComponent(CapabilityBadgeGroup);
   fixture.componentRef.setInput('capabilities', capabilities);
   await fixture.whenStable();
@@ -21,8 +23,8 @@ describe('CapabilityBadgeGroup', () => {
 
   it('renders one distinct, aria-labelled badge per reported capability', async () => {
     const el = await render([
-      { harness_id: 'claude_code', version: '2.1.281 (Claude Code)', tiers: ['sonnet'], default: true, available: true },
-      { harness_id: 'opencode', version: '1.28.32', tiers: [], default: false, available: true },
+      runnerCapability({ harness_id: 'claude_code', version: '2.1.281 (Claude Code)', tiers: ['sonnet'], default: true, available: true }),
+      runnerCapability({ harness_id: 'opencode', version: '1.28.32', tiers: [], default: false, available: true }),
     ]);
 
     const badges = el.querySelectorAll('[data-testid="runner-capability-badge"]');
@@ -39,8 +41,8 @@ describe('CapabilityBadgeGroup', () => {
 
   it('distinguishes an unavailable capability from an available one', async () => {
     const el = await render([
-      { harness_id: 'claude', version: '1.0.0', tiers: [], default: true, available: true },
-      { harness_id: 'codex', version: '2.0.0', tiers: [], default: false, available: false },
+      runnerCapability({ harness_id: 'claude', version: '1.0.0', tiers: [], default: true, available: true }),
+      runnerCapability({ harness_id: 'codex', version: '2.0.0', tiers: [], default: false, available: false }),
     ]);
 
     const claude = el.querySelector('[data-harness-id="claude"]');

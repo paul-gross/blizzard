@@ -1,4 +1,4 @@
-import { hubApi, type RunnerConnection, type SubscriptionPace } from 'fleet';
+import type { SubscriptionPace } from 'fleet';
 
 import type { HostCard, HostGroups } from './host-rows.model';
 import { agentGauges, envGauges, railVm, subscriptionLines } from './runner-rail.model';
@@ -20,7 +20,7 @@ const row = (id: string, over: Partial<RunnerRow> = {}): RunnerRow =>
     hub_paused: false,
     locally_paused: false,
     workspace_id: null,
-    connection: 'online' as RunnerConnection,
+    connection: 'online' as const,
     used: 0,
     env_capacity: null,
     bindingLines: [],
@@ -170,7 +170,7 @@ describe('subscriptionLines', () => {
   });
 
   it("keeps one host's lapsed login from outranking another host's healthy reading of the same slug", () => {
-    const lapsed = pace('claude', { condition: hubApi.SampleMissReason.CREDENTIAL_LAPSED, sampledAt: '2026-07-16T10:00:00.000Z' });
+    const lapsed = pace('claude', { condition: 'credential_lapsed' as const, sampledAt: '2026-07-16T10:00:00.000Z' });
     const good = pace('claude', { sampledAt: '2026-07-16T12:00:00.000Z' });
 
     const lines = subscriptionLines(groups([lapsed, good].map((p, i) => ({ card: withPaces(`h${i}`, [p]), rows: [] }))));
@@ -185,7 +185,7 @@ describe('subscriptionLines', () => {
       groups([
         {
           card: withPaces('h1', [
-            pace('lapsed', { condition: hubApi.SampleMissReason.CREDENTIAL_LAPSED }),
+            pace('lapsed', { condition: 'credential_lapsed' as const }),
             pace('never', { sampledAt: null, paceBars: [] }),
             pace('empty', { paceBars: [] }),
           ]),

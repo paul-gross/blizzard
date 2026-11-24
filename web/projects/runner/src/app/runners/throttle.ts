@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
-import { asyncState, errorMessage, type runnerApi } from 'fleet';
+import { asyncState, errorMessage } from 'fleet';
 
-import { injectHostRunnersQuery, injectHostSubscriptionsQuery } from '../core/host.query';
-import { injectFloorClearMutation, injectRunnerDashboardQuery } from '../core/status.query';
+import { injectHostRunnerDomainsQuery, injectHostSubscriptionsQuery } from '../core/host.query';
+import { injectFloorClearMutation, injectRunnerDashboardStatusQuery } from '../core/status.query';
+import type { Throttle } from '../core/throttle.domain';
 import { floorClearScope } from './throttle.model';
 import { ThrottleView } from './throttle-view';
 
@@ -14,11 +15,11 @@ import { ThrottleView } from './throttle-view';
 })
 export class LocalThrottle {
   readonly runnerId = input.required<string>();
-  private readonly dashboard = injectRunnerDashboardQuery(() => this.runnerId());
-  private readonly runners = injectHostRunnersQuery();
+  private readonly dashboard = injectRunnerDashboardStatusQuery(() => this.runnerId());
+  private readonly runners = injectHostRunnerDomainsQuery();
   private readonly subscriptions = injectHostSubscriptionsQuery();
   protected readonly mutation = injectFloorClearMutation(() => this.runnerId());
-  protected readonly throttle = computed<runnerApi.ThrottleStatusView | null>(() => this.dashboard.data()?.runner?.throttle ?? null);
+  protected readonly throttle = computed<Throttle | null>(() => this.dashboard.data()?.runner?.throttle ?? null);
   protected readonly state = computed(() => asyncState(this.dashboard, this.throttle() === null));
   protected readonly scope = computed(() => floorClearScope(
     this.throttle()?.floor.subscription ?? null,

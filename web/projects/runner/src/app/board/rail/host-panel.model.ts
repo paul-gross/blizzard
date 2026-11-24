@@ -1,6 +1,9 @@
-import { type BeaconTone, type runnerApi } from 'fleet';
+import type { BeaconTone } from 'fleet';
 
+import type { HostRunner, HostRunnerBinding } from '../../core/host-runner.domain';
+import type { PauseState } from '../../core/pause-state.domain';
 import type { RunnerDashboard } from '../../core/panel-reads.model';
+import type { RunnerCapacities, RunnerStatus } from '../../core/runner-status.domain';
 import { runnerLight } from '../../core/runner-health.model';
 
 /** One binding of a runner: the project it serves in one workspace, and its agents in use of those it declares. */
@@ -32,7 +35,7 @@ export interface HostPanelRunner {
 
 /** A runner's brake in operator words for its glyph, or `null` while its own brake is off. */
 function localPauseText(
-  pause: runnerApi.PauseStateView | null | undefined,
+  pause: PauseState | null | undefined,
 ): string | null {
   if (!pause?.local) return null;
   return pause.local_reason
@@ -43,8 +46,8 @@ function localPauseText(
 /** A runner's binding lines: each binding the host declares for it, its agents in use read off the runner's own
  * slot accounting (`capacities`, `undefined` until that read lands, when every binding reads 0 in use). */
 function bindingLines(
-  bindings: readonly runnerApi.HostRunnerBindingView[],
-  capacities: runnerApi.CapacitiesView | undefined,
+  bindings: readonly HostRunnerBinding[],
+  capacities: RunnerCapacities | undefined,
 ): readonly HostPanelBinding[] {
   const manyWorkspaces =
     new Set(bindings.map((binding) => binding.workspace_id)).size > 1;
@@ -68,8 +71,8 @@ function bindingLines(
 /** One {@link HostPanelRunner} per runner the host serves or holds halted, in wire order, each judged by its own
  * `statuses` read (by runner id): its light, its brakes, and each serving runner's bindings off its slot accounting. */
 export function hostPanelRunners(
-  runners: readonly runnerApi.HostRunnerView[],
-  statuses: ReadonlyMap<string, runnerApi.RunnerStatusView>,
+  runners: readonly HostRunner[],
+  statuses: ReadonlyMap<string, RunnerStatus>,
 ): readonly HostPanelRunner[] {
   return runners.map((runner, index) => {
     const status = statuses.get(runner.runner_id ?? '');
@@ -96,18 +99,18 @@ export function hostPanelRunners(
 }
 
 /** `runners` narrowed to the one named `name` on the host, every one for `null`. */
-export function runnersNamed(
-  runners: readonly runnerApi.HostRunnerView[],
+export function runnersNamed<Runner extends Pick<HostRunner, 'name'>>(
+  runners: readonly Runner[],
   name: string | null,
-): readonly runnerApi.HostRunnerView[] {
+): readonly Runner[] {
   return name === null ? runners : runners.filter((runner) => runner.name === name);
 }
 
 /** Each runner's own status by runner id, off its dashboard. */
 export function statusesByRunner(
   dashboards: readonly RunnerDashboard[],
-): ReadonlyMap<string, runnerApi.RunnerStatusView> {
+): ReadonlyMap<string, RunnerStatus> {
   return new Map(
-    dashboards.map((entry) => [entry.owner.runnerId, entry.dashboard.runner] as const),
+    dashboards.flatMap((entry) => (entry.dashboard.runner ? [[entry.owner.runnerId, entry.dashboard.runner] as const] : [])),
   );
 }
