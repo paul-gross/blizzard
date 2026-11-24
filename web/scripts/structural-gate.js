@@ -998,7 +998,6 @@ const DOMAIN_BOUNDARY_EXEMPT = [
   'hub/src/app/admin/hub-settings',
   'hub/src/app/board',
   'hub/src/app/core',
-  'hub/src/app/delivery',
   'hub/src/app/runners',
   'runner/src/app/asks',
   'runner/src/app/board',

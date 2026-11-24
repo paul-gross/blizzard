@@ -4,15 +4,10 @@ import {
   asyncStateOf,
   compactBounce,
   domainChunkLane,
-  type ChunkSummary,
   compactRef,
   formatAbsolute,
   formatWhenParts,
-  type FlowFactView,
   type KitAsyncStateValue,
-  type FlowView,
-  type PrView,
-  type RepositorySummary,
   projectTint,
   runnerBoardParts,
   shortCommitHash,
@@ -20,7 +15,6 @@ import {
   type LaneStatus,
   toneColor,
   type Tone,
-  type WorkItemsView,
   type WorkLine,
   workLines,
   runnerBoardLabel,
@@ -30,6 +24,7 @@ import { withinDoneWindow } from '../core/done-window';
 import { ordinal, placeInLine } from '../core/flow-place.model';
 import { graphStepLabel, STEP_RUNNER_SEP } from '../core/step-label';
 import { deliveryDiagnostic, deliveryFailureLabel } from './delivery-failure-label.model';
+import type { DeliveryChunk, DeliveryFlow, DeliveryFlowFact, DeliveryPr, DeliveryRepository, DeliveryWorkItems } from './delivery.domain';
 
 /** How long a bounce keeps a chunk with no other delivery footprint in the list. */
 const BOUNCE_WINDOW_MS = 24 * 60 * 60_000;
@@ -50,21 +45,19 @@ export interface DeliveryChunkRef {
 
 /** Everything the page reads, handed whole to the joins below. */
 export interface DeliveryInputs {
-  readonly flows: readonly FlowView[];
+  readonly flows: readonly DeliveryFlow[];
   /** The tenant's repositories, which name each flow's repository. */
-  readonly repositories: readonly RepositorySummary[];
+  readonly repositories: readonly DeliveryRepository[];
   readonly chunks: readonly DeliveryChunk[];
   /** Each flow's newest record facts, newest first, by flow id. */
-  readonly facts: ReadonlyMap<string, readonly FlowFactView[]>;
-  readonly workItems: ReadonlyMap<string, WorkItemsView>;
+  readonly facts: ReadonlyMap<string, readonly DeliveryFlowFact[]>;
+  readonly workItems: ReadonlyMap<string, DeliveryWorkItems>;
   readonly projectColors: ReadonlyMap<string, string> | null;
   /** Each runner's host name by runner id. */
   readonly runnerHosts: ReadonlyMap<string, string>;
   /** The clock the list is judged against — a coarse one, since only the bounce window reads it. */
   readonly now: number;
 }
-
-export type DeliveryChunk = ChunkSummary & { readonly laneStatus: LaneStatus };
 
 /** A row's date: the time, with the day above it for an instant before today. */
 export interface DeliveryWhen {
@@ -159,7 +152,7 @@ export interface DeliveryRow {
 }
 
 /** The ids of every flow read. */
-export function flowIds(flows: readonly FlowView[]): readonly string[] {
+export function flowIds(flows: readonly DeliveryFlow[]): readonly string[] {
   return flows.map((flow) => flow.flow_id);
 }
 
@@ -181,7 +174,7 @@ export function deliveryChunkIds(chunks: readonly DeliveryChunk[], facts: Delive
     .map((chunk) => chunk.chunk_id);
 }
 
-function chunkRef(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryChunkRef {
+function chunkRef(chunk: DeliveryChunk, inputs: DeliveryInputs): DeliveryChunkRef {
   const view = inputs.workItems.get(chunk.chunk_id);
   const color = inputs.projectColors?.get(chunk.project_id ?? '');
   return {
@@ -199,7 +192,7 @@ function chunkRef(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryChunkRef
  * and has not landed — a place means it was resubmitted after the bounce and is back in line, so the bounce is
  * history. A chunk with no other delivery footprint keeps it only for {@link BOUNCE_WINDOW_MS}.
  */
-function chunkBounce(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryBounce | null {
+function chunkBounce(chunk: DeliveryChunk, inputs: DeliveryInputs): DeliveryBounce | null {
   const latest = chunk.latest_bounce;
   if (latest === null || chunk.landed || chunk.flow_places.length > 0) return null;
   const footprint = chunk.open_prs.length > 0 || chunk.awaiting_external_merge;
@@ -220,24 +213,24 @@ function chunkBounce(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryBounc
 }
 
 /** The chunk's latest turn that judged its submission, on any flow, or `undefined` for none. */
-function latestVerdict(chunk: ChunkSummary, inputs: DeliveryInputs): FlowFactView | undefined {
+function latestVerdict(chunk: DeliveryChunk, inputs: DeliveryInputs): DeliveryFlowFact | undefined {
   return chunkFacts(chunk.chunk_id, inputs.facts).find((fact) => fact.verdict !== null);
 }
 
 /** The furthest pipeline stage a chunk has reached across its repositories — a turn that landed with nothing to merge
  * counts as landed, though it leaves no landed repository behind. */
-function chunkStage(chunk: ChunkSummary, inputs: DeliveryInputs): number {
+function chunkStage(chunk: DeliveryChunk, inputs: DeliveryInputs): number {
   const places = chunk.flow_places;
   if (chunk.landed_repos.length > 0) return 3;
-  if (latestVerdict(chunk, inputs)?.verdict === 'landed') return 3;
-  if (places.some((place) => place.state === 'landing')) return 2;
+  if (latestVerdict(chunk, inputs)?.verdict?.kind === 'landed') return 3;
+  if (places.some((place) => place.state.kind === 'landing')) return 2;
   if (places.length > 0) return 1;
   if (chunk.open_prs.length > 0 || chunk.awaiting_external_merge) return 0;
   return -1;
 }
 
 /** The chunk's facts across every flow, newest first. */
-function chunkFacts(chunkId: string, facts: DeliveryInputs['facts']): readonly FlowFactView[] {
+function chunkFacts(chunkId: string, facts: DeliveryInputs['facts']): readonly DeliveryFlowFact[] {
   return [...facts.values()].flat().filter((fact) => fact.chunk_id === chunkId).sort((a, b) => b.at.localeCompare(a.at));
 }
 
@@ -249,7 +242,7 @@ function flowRepoName(flowId: string, fallback: string, inputs: DeliveryInputs):
 }
 
 /** A chunk's places in line — every place that is neither landing nor parked off the line — or `null` for none. */
-export function chunkLine(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryLine | null {
+export function chunkLine(chunk: DeliveryChunk, inputs: DeliveryInputs): DeliveryLine | null {
   const places = chunk.flow_places
     .filter(placeInLine)
     .sort((a, b) => a.position - b.position);
@@ -269,12 +262,12 @@ function repoName(forge: string): string {
   return forge.split('/').pop() ?? forge;
 }
 
-function prLink(pr: PrView): DeliveryLink {
+function prLink(pr: DeliveryPr): DeliveryLink {
   return { repo: repoName(pr.repo), text: `#${pr.number}`, url: pr.url, title: `${pr.repo}#${pr.number}` };
 }
 
 /** `graph/node · host/runner`, the runner part only while one holds the chunk. */
-function stepLine(chunk: ChunkSummary, inputs: DeliveryInputs): string | null {
+function stepLine(chunk: DeliveryChunk, inputs: DeliveryInputs): string | null {
   const node = chunk.current_node_name ?? chunk.current_node_id;
   const step = node ? graphStepLabel(chunk.graph_name, node) : null;
   const runner = chunk.runner_id ? runnerBoardLabel(runnerBoardParts(chunk.runner_id, chunk.runner_name, inputs.runnerHosts.get(chunk.runner_id))) : null;
@@ -298,9 +291,9 @@ function inFlightRow(chunk: DeliveryChunk, inputs: DeliveryInputs): DeliveryRow 
   };
 }
 
-function landedRow(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryRow {
+function landedRow(chunk: DeliveryChunk, inputs: DeliveryInputs): DeliveryRow {
   const facts = chunkFacts(chunk.chunk_id, inputs.facts);
-  const landedAt = (facts.find((fact) => fact.kind === 'landed') ?? facts.find((fact) => fact.verdict === 'landed'))?.at;
+  const landedAt = (facts.find((fact) => fact.kind.kind === 'landed') ?? facts.find((fact) => fact.verdict?.kind === 'landed'))?.at;
   const commits = chunk.landed_repos.map((landed) => ({
     repo: repoName(landed.repo),
     text: shortCommitHash(landed.commit_hash),

@@ -1,8 +1,9 @@
-import { type ChunkDetailAggregate as ChunkDetail, type FlowView, type RepositorySummary } from 'fleet';
+import type { ChunkDetailAggregate as ChunkDetail } from 'fleet';
 import { assetChunkArtifact as assetArtifactView, domainBounce as bounceView, domainChunkDetail as chunkDetail, FIXTURE_NOW, fixtureInstant, domainLandedRepo as landedRepoView, domainPr as prView, domainTransition as transitionView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
 import { deliveryDrawerView, deliveryHistory } from './delivery-history.model';
+import { deliveryFlow, deliveryRepository } from './delivery.builders';
 
 const MIN = 60;
 type FlowFactView = ChunkDetail['flow_record'][number];
@@ -10,14 +11,11 @@ type ChunkFlowPlaceView = ChunkDetail['flow_places'][number];
 type KnownFact = Exclude<FlowFactView['kind']['kind'], 'unknown'>;
 type KnownPlace = Exclude<ChunkFlowPlaceView['state']['kind'], 'unknown'>;
 
-const FLOWS = [
-  { flow_id: 'fl_a', repository_id: 'rp_a' },
-  { flow_id: 'fl_b', repository_id: 'rp_b' },
-] as FlowView[];
+const FLOWS = [deliveryFlow({ flow_id: 'fl_a', repository_id: 'rp_a' }), deliveryFlow({ flow_id: 'fl_b', repository_id: 'rp_b' })];
 const REPOSITORIES = [
-  { repository_id: 'rp_a', owner: 'paul-gross', repo: 'blizzard', name: 'blizzard' },
-  { repository_id: 'rp_b', owner: 'paul-gross', repo: 'blizzard-context', name: 'blizzard-context' },
-] as RepositorySummary[];
+  deliveryRepository({ repository_id: 'rp_a', name: 'blizzard', repo: 'blizzard' }),
+  deliveryRepository({ repository_id: 'rp_b', name: 'blizzard-context', repo: 'blizzard-context' }),
+];
 const FORGES: ReadonlyMap<string, string> = new Map([
   ['fl_a', 'paul-gross/blizzard'],
   ['fl_b', 'paul-gross/blizzard-context'],
@@ -70,6 +68,17 @@ describe('deliveryHistory', () => {
     const unknown: FlowFactView = { ...fact('fl_a', 'submitted', 1), kind: { kind: 'unknown', raw: 'future-fact' } };
     expect(texts(detail({ flow_record: [unknown] }))).toEqual(['future-fact']);
   });
+  it('gives an unknown fact kind its own entry with no tone', () => {
+    const unknown: FlowFactView = { ...fact('fl_a', 'submitted', 1), kind: { kind: 'unknown', raw: 'future-fact' } };
+    const history = deliveryHistory(detail({ flow_record: [unknown] }), FORGES, FIXTURE_NOW);
+    expect(history.map((entry) => [entry.text, entry.tone])).toEqual([['future-fact', null]]);
+  });
+
+  it('renders an unknown place state raw in the idle tone in the repo block', () => {
+    const view = deliveryDrawerView(detail({ flow_places: [place('fl_a', 3, 'mystery')] }), FLOWS, REPOSITORIES, FIXTURE_NOW)!;
+    expect(view.repos[0]).toMatchObject({ name: 'blizzard', state: 'mystery', tone: 'idle' });
+  });
+
   it('folds a run of polls into one entry, and a settled turn into its outcome, newest first', () => {
     const record = [
       fact('fl_a', 'submitted', 30),

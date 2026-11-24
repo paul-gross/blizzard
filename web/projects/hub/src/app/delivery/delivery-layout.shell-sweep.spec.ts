@@ -5,10 +5,11 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { commands, page, userEvent } from 'vitest/browser';
 
 import { FLEET_CLOCK, formatAbsolute } from 'fleet';
-import { bounceView, chunkDetail, chunkSummary, FIXTURE_NOW, fixtureInstant, prView, settle, stubHubClient } from 'fleet/testing';
+import { bounceView, chunkDetail, domainBounce, chunkSummary, FIXTURE_NOW, fixtureInstant, prView, settle, stubHubClient } from 'fleet/testing';
 import { DeliveryPage } from './delivery-page';
 import { DeliveryChunkPage } from './delivery-chunk-page';
 import { DeliveryGlanceView } from './delivery-glance-view';
+import { deliveryChunk } from './delivery.builders';
 import { deliveryList } from './delivery.model';
 
 /** The app shell bounds and clips the routed page; neither route may grow it to fit its history. */
@@ -40,10 +41,10 @@ const deliveryBounces = Array.from({ length: 60 }, (_, index) => bounceView({
 class TestDeliveryGlancePage {
   readonly now = FIXTURE_NOW;
   readonly list = deliveryList({
-    chunks: [{ ...chunkSummary({
-      chunk_id: deliveryId, graph_id: 'gr_build', status: 'needs_human', bounce_count: 1,
-      latest_bounce: bounceView({ cause: 'poll-timeout', envelope: '{}', recorded_at: fixtureInstant(-60) }),
-    }), laneStatus: { kind: 'needs_human' } }],
+    chunks: [deliveryChunk({
+      chunk_id: deliveryId, laneStatus: { kind: 'needs_human' }, bounce_count: 1,
+      latest_bounce: domainBounce({ cause: 'poll-timeout', envelope: '{}', recorded_at: fixtureInstant(-60) }),
+    })],
     flows: [], repositories: [], facts: new Map(), workItems: new Map(), projectColors: null, runnerHosts: new Map(), now: FIXTURE_NOW,
   });
 }
