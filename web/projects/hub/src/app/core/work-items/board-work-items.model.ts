@@ -1,5 +1,3 @@
-import type { WorkItemsView } from 'fleet';
-
 /** How many chunks one batch of the board's work-items read names. */
 export const WORK_ITEMS_BATCH_SIZE = 100;
 
@@ -17,10 +15,10 @@ export function workItemBatches(
 }
 
 /** Every answered batch's work items in one map by chunk id; a batch still reading adds nothing. */
-export function mergeWorkItemBatches(
-  batches: readonly (ReadonlyMap<string, WorkItemsView> | undefined)[],
-): ReadonlyMap<string, WorkItemsView> {
-  const merged = new Map<string, WorkItemsView>();
+export function mergeWorkItemBatches<T>(
+  batches: readonly (ReadonlyMap<string, T> | undefined)[],
+): ReadonlyMap<string, T> {
+  const merged = new Map<string, T>();
   for (const batch of batches) {
     for (const [chunkId, view] of batch ?? []) merged.set(chunkId, view);
   }

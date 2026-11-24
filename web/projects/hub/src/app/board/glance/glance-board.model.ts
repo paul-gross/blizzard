@@ -1,8 +1,9 @@
-import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, blockedLabel, domainChunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type LaneStatus, type UrgencyReference, type RunnerRegistryView, type WorkItemsView, workLines } from 'fleet';
+import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, blockedLabel, domainChunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type LaneStatus, type UrgencyReference, type RunnerRegistryView, workLines } from 'fleet';
 import type { BoardChunk } from '../../core/chunks.model';
 import type { GraphProgressNode } from '../../core/chunks.domain';
 import type { BoardQuestion } from '../questions/questions.domain';
 import type { BoardDecision } from '../gates/gates.domain';
+import type { BoardWorkItems } from '../../core/work-items/board-work-items.domain';
 
 import type { RowWork, Vitals } from './glance-view';
 
@@ -14,7 +15,7 @@ export function liveRunners(runners: readonly RunnerRegistryView[]): readonly Ru
 
 /** A chunk's work items as its row names them — the board card's own `workLines`, so a glance row and a
  * card agree on what a chunk is. */
-function rowWork(chunk: BoardChunk | undefined, workItems: ReadonlyMap<string, WorkItemsView>): RowWork {
+function rowWork(chunk: BoardChunk | undefined, workItems: ReadonlyMap<string, BoardWorkItems>): RowWork {
   if (chunk === undefined) return { lines: [], itemsRead: true };
   const view = workItems.get(chunk.chunk_id);
   return { lines: workLines(chunk.work_refs ?? [], view), itemsRead: view !== undefined };
@@ -92,7 +93,7 @@ export function glanceListGroups(
   backlogOrder: readonly { readonly chunk_id: string }[],
   runnerHosts: ReadonlyMap<string, string>,
   projectColors: ReadonlyMap<string, string> | null,
-  workItems: ReadonlyMap<string, WorkItemsView>,
+  workItems: ReadonlyMap<string, BoardWorkItems>,
 ): GlanceListGroups {
   const asks = new Map(questions.map((question) => [question.chunk_id, question.question]));
   const gated = new Set(decisions.map((decision) => decision.chunk_id));
