@@ -3,10 +3,14 @@ import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { listChunksApiChunksGet, laneStatus, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 import { DRAIN_LIMIT, drainPages } from './paginated-read';
-import type { BoardChunksRead } from './chunks.model';
 import { hubBoardChunksKey, lensedKey } from './query-keys';
 import { injectProjectFilter } from './project-filter';
 import { fromBoardPage, fromBoardSummary, fromGraphProgressNode, fromRunnerClaimChunk } from './chunks.translate';
+
+export interface BoardChunksRead {
+  readonly chunks: hubApi.ChunkSummary[];
+  readonly pages: readonly hubApi.ChunksPageView[];
+}
 
 /**
  * The board's chunk list as one query, for the project `project` names (`null` for the whole tenant): `GET

@@ -17,8 +17,7 @@ import {
   stubError,
   stubHubClient,
 } from 'fleet/testing';
-import { boardChunksQueryOptions, domainBoardChunksQueryOptions, injectHubBoardChunksQuery, runnerChunksQueryOptions } from './chunks.query';
-import type { BoardChunksRead } from './chunks.model';
+import { boardChunksQueryOptions, domainBoardChunksQueryOptions, injectHubBoardChunksQuery, runnerChunksQueryOptions, type BoardChunksRead } from './chunks.query';
 
 @Component({
   selector: 'app-test-chunks-query-host',

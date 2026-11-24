@@ -3,12 +3,11 @@ import {
   cardShowsStatus,
   type UrgencyReference,
   type ChunkCardView,
+  type ChunkDetailAggregate,
   type LaneStatus,
   finishedWord,
   formatCost,
   hasCostFigure,
-  type LandedRepoView,
-  type PrView,
   runnerBoardParts,
   runnerTitle,
   domainStatusLane,
@@ -66,8 +65,8 @@ export interface BoardCard {
   /** The blocking chunk's own derived status, when exactly one known chunk blocks this
    * one — null otherwise. */
   readonly blockedOnStatus: string | null;
-  readonly openPrs?: readonly PrView[];
-  readonly landedRepos?: readonly LandedRepoView[];
+  readonly openPrs?: readonly ChunkDetailAggregate['open_prs'][number][];
+  readonly landedRepos?: readonly ChunkDetailAggregate['landed_repos'][number][];
   readonly awaitingExternalMerge?: boolean;
   /** The chunk's place on each flow its open submission holds, from `ChunkSummary.flow_places` — one line per flow,
    * `landing on blizzard/master` or `3rd on blizzard/master`. */

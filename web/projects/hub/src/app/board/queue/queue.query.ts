@@ -10,6 +10,7 @@ import {
 import { DRAIN_LIMIT, drainPages } from '../../core/paginated-read';
 import { hubBacklogKey, hubQueueKey, lensedKey } from '../../core/query-keys';
 import { injectProjectFilter } from '../../core/project-filter';
+import { fromBoardOrderEntry } from './queue.translate';
 
 /**
  * Hub `GET /api/queue` read — the ready queue in the hub's explicit reorder +
@@ -32,6 +33,7 @@ export function injectHubQueueQuery() {
           (cursor) => getQueueApiQueueGet({ query: { cursor, limit: DRAIN_LIMIT, project }, throwOnError: false }),
           (page) => page.entries,
         ),
+      select: (entries: QueuePeekEntry[]) => entries.map(fromBoardOrderEntry),
       refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
     };
   });
@@ -62,6 +64,7 @@ export function injectHubBacklogQuery(canReorder: () => boolean) {
           (cursor) => getBacklogApiBacklogGet({ query: { cursor, limit: DRAIN_LIMIT, project }, throwOnError: false }),
           (page) => page.entries,
         ),
+      select: (entries: BacklogPeekEntry[]) => entries.map(fromBoardOrderEntry),
       refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
     };
   });

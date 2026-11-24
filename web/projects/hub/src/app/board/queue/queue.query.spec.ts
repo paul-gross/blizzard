@@ -4,6 +4,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 
 import { backlogPeekEntry, type RequestClientStub, stubHubClient, settle } from 'fleet/testing';
 import { injectHubBacklogQuery } from './queue.query';
+import { hubBacklogKey, lensedKey } from '../../core/query-keys';
 
 /** A minimal host so {@link injectHubBacklogQuery}'s reactive `canReorder`
  * accessor is driven by a real input, the same way `BoardPage` drives it off
@@ -52,7 +53,8 @@ describe('injectHubBacklogQuery (bzh:ranking-is-per-list)', () => {
     await settle(fixture);
 
     expect(stub.forRoute('/api/backlog', 'GET')).toHaveLength(1);
-    expect(fixture.componentInstance.query.data()).toEqual([BACKLOG_ENTRY]);
+    expect(fixture.componentInstance.query.data()).toEqual([{ chunk_id: BACKLOG_ENTRY.chunk_id }]);
+    expect(TestBed.inject(QueryClient).getQueryData(lensedKey(hubBacklogKey, null))).toEqual([BACKLOG_ENTRY]);
   });
 
   it('starts firing once the identity resolves queue:reorder mid-life — the gate re-evaluates, not a one-shot check', async () => {

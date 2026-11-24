@@ -2,17 +2,16 @@ import { boardChunk } from '../board.fixture';
 import type { BoardChunk } from '../../core/chunks.model';
 import type { LaneStatus } from 'fleet';
 type KnownLaneStatus = Exclude<LaneStatus['kind'], 'unknown'>;
-import { type WorkItemsView } from 'fleet';
 import type { GlanceRunner } from '../../core/runners.domain';
+import type { BoardWorkItems } from '../../core/work-items/board-work-items.domain';
 import type { BoardDecision } from '../gates/gates.domain';
 import type { BoardQuestion } from '../questions/questions.domain';
-type ChunkSummary = BoardChunk;
 import { describe, expect, it, vi } from 'vitest';
 
 import { filterGlanceRows, type GlanceFilter, glanceListGroups, glanceVitals, liveRunners } from './glance-board.model';
 
 /** No chunk's work items read yet. */
-const NO_ITEMS: ReadonlyMap<string, WorkItemsView> = new Map();
+const NO_ITEMS: ReadonlyMap<string, BoardWorkItems> = new Map();
 
 const NOW = Date.parse('2026-06-01T12:00:00Z');
 const HOUR = 60 * 60 * 1000;
@@ -61,7 +60,7 @@ const groups = (
     backlogOrder?: readonly string[];
     hosts?: ReadonlyMap<string, string>;
     colors?: ReadonlyMap<string, string>;
-    workItems?: ReadonlyMap<string, WorkItemsView>;
+    workItems?: ReadonlyMap<string, BoardWorkItems>;
   } = {},
 ) =>
   glanceListGroups(
@@ -93,7 +92,7 @@ describe('glanceListGroups', () => {
   it('leads with needs, then waiting, then running, then an unknown status', () => {
     const list = groups([
       chunk('ch_run', 'running'),
-      boardChunk({ chunk_id: 'ch_odd', graph_id: 'gr_1', status: 'mystery' as ChunkSummary['status'], laneStatus: { kind: 'unknown', raw: 'mystery' }, current_node_id: 'nd_build' }),
+      boardChunk({ chunk_id: 'ch_odd', graph_id: 'gr_1', status: 'mystery' as BoardChunk['status'], laneStatus: { kind: 'unknown', raw: 'mystery' }, current_node_id: 'nd_build' }),
       chunk('ch_wait', 'waiting_on_human'),
       chunk('ch_needs', 'needs_human'),
       chunk('ch_deliver', 'delivering'),
@@ -210,7 +209,7 @@ describe('glanceListGroups', () => {
           runner_id: 'rn_1',
           runner_name: 'r-claude',
           project_id: 'pj_1',
-          cost: { cost_usd: 1.5, cost_partial: true, estimated_cost_usd: 2 } as ChunkSummary['cost'],
+          cost: { cost_usd: 1.5, cost_partial: true, estimated_cost_usd: 2 } as BoardChunk['cost'],
         }),
       ],
       { hosts: new Map([['rn_1', 'atlas']]), colors: new Map([['pj_1', 'teal']]) },
@@ -226,17 +225,17 @@ describe('glanceListGroups', () => {
   });
 
   it('falls back to the node id, no runner, a zero cost, and no tint', () => {
-    const [row] = groups([chunk('ch_1', 'running', { cost: undefined as unknown as ChunkSummary['cost'] })]).live;
+    const [row] = groups([chunk('ch_1', 'running', { cost: undefined as unknown as BoardChunk['cost'] })]).live;
     expect(row).toMatchObject({ node: 'nd_build', runner: null, costUsd: 0, costPartial: false, estimatedCostUsd: null, projectColor: null });
   });
 
   it('leads each card with its work items\' labels and titles, as a board card does', () => {
     const refs = [
-      { source: 'wsrc_api', ref: '1', label: 'toy-api#1' },
-      { source: 'wsrc_web', ref: '3', label: 'toy-web#3' },
-    ] as ChunkSummary['work_refs'];
+      { source: 'wsrc_api', ref: '1', label: 'toy-api#1', web_url: null },
+      { source: 'wsrc_web', ref: '3', label: 'toy-web#3', web_url: null },
+    ];
     const read = new Map([
-      ['ch_1', { items: [{ source: 'wsrc_api', ref: '1', title: 'Rate-limit login' }, { source: 'wsrc_web', ref: '3', title: 'Drop moment.js' }] } as WorkItemsView],
+      ['ch_1', { items: [{ source: 'wsrc_api', ref: '1', title: 'Rate-limit login', label: null, web_url: null }, { source: 'wsrc_web', ref: '3', title: 'Drop moment.js', label: null, web_url: null }] }],
     ]);
     expect(groups([chunk('ch_1', 'running', { work_refs: refs })], { workItems: read }).live[0]).toMatchObject({
       itemsRead: true,
