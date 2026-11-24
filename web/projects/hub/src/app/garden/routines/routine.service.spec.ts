@@ -34,16 +34,16 @@ describe('injectRoutineService', () => {
   it('creates the translated draft, unversioned, and answers ok', async () => {
     const service = configure({ 'POST /api/projects/{project}/routines': () => gardenRoutineView({ routine_id: 'rtn_new', name: 'nightly', slug: 'nightly' }) });
 
-    expect(await service.create({ ...DRAFT, slug: ' nightly ', name: ' ' })).toEqual({ ok: true });
+    expect(await service.create({ ...DRAFT, slug: ' nightly ', scope: 'web\n', name: ' ' })).toEqual({ ok: true });
 
     const calls = stub.forRoute('/api/projects/acme/routines', 'POST');
     expect(calls).toHaveLength(1);
     expect(calls[0].headers['if-match']).toBeUndefined();
     expect(calls[0].body).toEqual({
-      slug: 'nightly',
+      slug: ' nightly ',
       name: null,
       graph_name: 'garden',
-      default_scope_slug: 'web',
+      default_scope_slug: 'web\n',
       default_urgency: null,
     });
   });

@@ -173,6 +173,25 @@ def test_a_create_refuses_a_misshapen_slug_and_takes_the_slug_from_a_lone_name(h
     assert (created.json()["slug"], created.json()["name"]) == ("Arch Sweep", "Arch Sweep")
 
 
+@pytest.mark.parametrize(
+    "stated",
+    [
+        {"slug": "nightly\n", "default_scope_slug": "blizzard"},
+        {"slug": " nightly ", "default_scope_slug": "blizzard"},
+        {"slug": "nightly", "default_scope_slug": "web\n"},
+        {"slug": "nightly", "default_scope_slug": " web "},
+    ],
+)
+def test_a_create_with_a_whitespace_bearing_slug_or_scope_is_refused_and_writes_nothing(
+    hub: HubHarness, stated: dict[str, str]
+) -> None:
+    refused = hub.client.post("/api/routines", json={"graph_name": "alpha", **stated})
+
+    assert refused.status_code == 422, refused.text
+    assert _changes(hub) == []
+    assert _changes(hub, "scope") == []
+
+
 def test_a_patch_sets_the_display_name_and_keeps_the_slug(hub: HubHarness) -> None:
     created = _create(hub)
 

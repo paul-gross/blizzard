@@ -91,13 +91,13 @@ describe('toUrgencyRef', () => {
 });
 
 describe('toCreateRequest', () => {
-  it('trims the definition and states null for a blank name and the tenant default', () => {
-    const draft = { slug: ' nightly ', name: ' ', graph: ' garden ', scope: ' web ', urgency: '' };
+  it('sends the slug and scope as typed, trims the graph, and states null for a blank name and the tenant default', () => {
+    const draft = { slug: ' nightly ', name: ' ', graph: ' garden ', scope: 'web\n', urgency: '' };
     expect(toCreateRequest(draft)).toEqual({
-      slug: 'nightly',
+      slug: ' nightly ',
       name: null,
       graph_name: 'garden',
-      default_scope_slug: 'web',
+      default_scope_slug: 'web\n',
       default_urgency: null,
     });
   });
