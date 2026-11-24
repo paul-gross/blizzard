@@ -16,7 +16,7 @@ from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.store.internal.base import (
     NO_NORMALIZER_VERSION,
     enqueue_transcript_final,
-    insert_outbox_row,
+    insert_outbox_rows,
     lease_select,
 )
 from blizzard.runner.store.schema import leases, transcript_outbound_buffer, transcript_segments
@@ -273,19 +273,21 @@ class TranscriptLedgerStore:
                     **self._merged_agent_tool_use_ids(conn, segment_id, agent_tool_use_ids),
                 )
             )
-            seqs: list[int] = []
-            for payload in payloads:
-                seq = insert_outbox_row(
-                    self._store,
-                    conn,
-                    transcript_outbound_buffer,
-                    segment_id=segment_id,
-                    chunk_id=chunk_id,
-                    final=False,
-                    payload=payload,
-                    created_at=created_at,
-                )
-                seqs.append(seq)
+            seqs = insert_outbox_rows(
+                self._store,
+                conn,
+                transcript_outbound_buffer,
+                [
+                    {
+                        "segment_id": segment_id,
+                        "chunk_id": chunk_id,
+                        "final": False,
+                        "payload": payload,
+                        "created_at": created_at,
+                    }
+                    for payload in payloads
+                ],
+            )
         return seqs
 
     def open_transcript_segment(

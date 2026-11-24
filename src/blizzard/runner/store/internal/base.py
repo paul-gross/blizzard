@@ -9,6 +9,7 @@ are confined to the bound runner as it is built: no runner-scoped statement is b
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -268,18 +269,29 @@ _OUTBOX_LANES: dict[Table, str] = {
 }
 
 
-def insert_outbox_row(store: RunnerStoreConnections, conn: Connection, table: Table, **values: Any) -> int:
-    """Insert one row into an outbox table, ``outbound_buffer`` or ``transcript_outbound_buffer``, on ``conn`` — the
-    caller's transaction — under the next ``seq`` of the bound runner's lane; answer that ``seq``.
+def insert_outbox_rows(
+    store: RunnerStoreConnections, conn: Connection, table: Table, rows: Sequence[dict[str, Any]]
+) -> list[int]:
+    """Insert ``rows`` into an outbox table, ``outbound_buffer`` or ``transcript_outbound_buffer``, on ``conn`` — the
+    caller's transaction — under one contiguous run of ``seq``s of the bound runner's lane; answer the seqs, in order.
 
-    The one door every outbox write passes through: the lane's counter in ``outbox_counters`` advances in the same
-    transaction as the row, so a rollback returns the seq, and a counter never moves backwards, so a pruned row's seq is
-    never issued again. ``tests/guards/test_layering.py`` fails an insert into either table that goes around it."""
-    seq = _advance_counter(
-        store, conn, outbox_counters, outbox_counters.c.lane == _OUTBOX_LANES[table], lane=_OUTBOX_LANES[table]
-    )
-    conn.execute(store.insert(table).values(seq=seq, **values))
-    return seq
+    The one door every outbox write passes through: the lane's counter in ``outbox_counters`` advances once, by
+    ``len(rows)``, in the same transaction as the rows' single INSERT, so a rollback returns the whole run, and a
+    counter never moves backwards, so a pruned row's seq is never issued again. An empty ``rows`` makes no statement.
+    ``tests/guards/test_layering.py`` fails an insert into either table that goes around it."""
+    if not rows:
+        return []
+    lane = _OUTBOX_LANES[table]
+    last = _advance_counter(store, conn, outbox_counters, outbox_counters.c.lane == lane, by=len(rows), lane=lane)
+    seqs = list(range(last - len(rows) + 1, last + 1))
+    conn.execute(store.insert_rows(table, [{**row, "seq": seq} for row, seq in zip(rows, seqs, strict=True)]))
+    return seqs
+
+
+def insert_outbox_row(store: RunnerStoreConnections, conn: Connection, table: Table, **values: Any) -> int:
+    """Insert one row into an outbox table on ``conn`` under the next ``seq`` of the bound runner's lane; answer that
+    ``seq``. The one-row case of :func:`insert_outbox_rows`."""
+    return insert_outbox_rows(store, conn, table, [values])[0]
 
 
 def insert_fact_row(store: RunnerStoreConnections, conn: Connection, table: Table, **values: Any) -> int:
@@ -303,23 +315,25 @@ def _advance_counter(
     conn: Connection,
     counters: Table,
     where: ColumnElement[bool] | None = None,
+    by: int = 1,
     **key: Any,
 ) -> int:
     """Advance the bound runner's counter row in ``counters`` (the one ``where`` selects, created with ``key`` columns)
-    and answer its new value. The advance takes the counter's row lock, so concurrent writers queue behind it; the first
-    allocation creates the row, and a writer that loses that race advances the row the winner created."""
-    advance = store.update(counters).values(last_seq=counters.c.last_seq + 1)
+    by ``by`` and answer its new value. The advance takes the counter's row lock, so concurrent writers queue behind it;
+    the first allocation creates the row at ``by``, and a writer that loses that race advances the row the winner
+    created."""
+    advance = store.update(counters).values(last_seq=counters.c.last_seq + by)
     read = store.select(counters, counters.c.last_seq)
     if where is not None:
         advance, read = advance.where(where), read.where(where)
     if not conn.execute(advance).rowcount:
         try:
             with conn.begin_nested():
-                conn.execute(store.insert(counters).values(last_seq=1, **key))
+                conn.execute(store.insert(counters).values(last_seq=by, **key))
         except IntegrityError:
             conn.execute(advance)
         else:
-            return 1
+            return by
     return conn.execute(read).scalar_one()
 
 
