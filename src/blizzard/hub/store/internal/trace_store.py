@@ -106,6 +106,29 @@ class TraceStore:
             )
         return {chunk_id: built[chunk_id] for chunk_id in corpus if chunk_id in built}
 
+    def closing_step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
+        """The corpus's step facts completed only as far as a step's close and a chunk's finish are told: the graphs
+        that name each node, and nothing else — no runner names, project, tenant name or work-source labels. The same
+        chunks are left out as :meth:`step_facts_for` leaves out — those of a tenant closed since the corpus read — so
+        a lag scan and a window agree on which closing facts close something."""
+        opened = _Opened(self._hydration)
+        corpus = self._corpus.step_facts_for(chunk_ids, opened.label)
+        by_tenant: dict[TenantId, dict[str, StepFacts]] = {}
+        for chunk_id, facts in corpus.items():
+            if facts.tenant is not None:
+                by_tenant.setdefault(facts.tenant, {})[chunk_id] = facts
+        built: dict[str, StepFacts] = {}
+        for tenant, tenant_facts in by_tenant.items():
+            reads = opened.reads(tenant)
+            if reads is None:
+                continue
+            graphs = reads.graphs.get_many(sorted({g for facts in tenant_facts.values() for g in _graph_ids(facts)}))
+            built.update(
+                (chunk_id, replace(facts, graphs={g: graphs[g] for g in _graph_ids(facts) if g in graphs}))
+                for chunk_id, facts in tenant_facts.items()
+            )
+        return {chunk_id: built[chunk_id] for chunk_id in corpus if chunk_id in built}
+
     # --- cursor and latch -----------------------------------------------------------
 
     def newest_cursor(self) -> TraceCheckpoint | None:

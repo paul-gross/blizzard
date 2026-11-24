@@ -151,6 +151,12 @@ class IReadTraceSteps(Protocol):
         """Each existing chunk's whole :class:`StepFacts`, keyed by chunk id, in a fixed number of statements."""
         ...
 
+    def closing_step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
+        """As :meth:`step_facts_for`, completed only with the graphs that name each node — ``runner_names``, the
+        project and tenant labels and the work-source labels are left unread. What telling a step's close or a
+        chunk's finish needs, and what telling its spans does not."""
+        ...
+
     def newest_cursor(self) -> TraceCheckpoint | None:
         """The newest ``trace_cursor`` row — the cursor's position — or ``None`` before the first pass."""
         ...

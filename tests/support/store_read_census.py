@@ -3400,6 +3400,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
             w.chunk_route_a,
         ]
     ),
+    (IReadTraceSteps, "closing_step_facts_for"): lambda w: _trace_store_of(
+        w.store_connections, w.hub
+    ).closing_step_facts_for([w.chunk_transition, w.chunk_migration, w.chunk_decision_1]),
     (IReadStepCorpus, "closing_candidates"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.closing_candidates(
         _HUB_BASE, _ht(10_000), 50
     ),

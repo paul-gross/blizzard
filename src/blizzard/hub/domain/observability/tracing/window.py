@@ -126,6 +126,15 @@ def read_window(reads: IReadTraceSteps, since: CursorKey, until: datetime, limit
     return select_window(facts.values(), since, until, candidates.frontier, limit, candidates.newest)
 
 
+def _read_unhydrated_window(reads: IReadTraceSteps, since: CursorKey, until: datetime, limit: int) -> TraceWindow:
+    """:func:`read_window` over facts completed with their graphs alone — its keys and position are the same, but
+    runner names and labels are not read, so its items may not be assembled."""
+    with reads.snapshot() as snapshot:
+        candidates = snapshot.closing_candidates(since.at, until, limit)
+        facts = snapshot.closing_step_facts_for(candidates.chunk_ids)
+    return select_window(facts.values(), since, until, candidates.frontier, limit, candidates.newest)
+
+
 def assemble_window(window: TraceWindow) -> tuple[FinishedSpan, ...]:
     """Every span of every item in the window — the one assembly a sweep and a replay both tell."""
     return tuple(span for item in window.items for span in _assemble(item))
@@ -143,9 +152,10 @@ def _assemble(item: TraceItem) -> tuple[FinishedSpan, ...]:
 
 def oldest_unsent(reads: IReadTraceSteps, since: CursorKey, until: datetime) -> TraceItem | None:
     """The first item after ``since`` and at or before ``until``, or ``None``. Read a page of
-    candidates at a time, moving past closing facts that close nothing."""
+    candidates at a time, moving past closing facts that close nothing. The item's facts are not fully completed:
+    only its key and kind are told, never its spans."""
     while True:
-        window = read_window(reads, since, until, _OLDEST_UNSENT_PAGE)
+        window = _read_unhydrated_window(reads, since, until, _OLDEST_UNSENT_PAGE)
         if window.items:
             return window.items[0]
         if window.position == since:
