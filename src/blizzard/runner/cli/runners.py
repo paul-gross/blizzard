@@ -30,7 +30,7 @@ from blizzard.runner.cli.runtime import (
 )
 from blizzard.runner.cli.store_guard import (
     StoreVerdict,
-    hosted_runner_ids,
+    host_roster,
     resolve_runner,
     store_refusal,
     store_write_guard,
@@ -282,7 +282,7 @@ def _hosting(config: HostConfig, target: _Retiring, verdict: StoreVerdict, clock
     """Make the stopped host's store hold ``target`` before it is retired: the file's runners hosted as the host's next
     start would. A store judged foreign is not taken up, and refuses unless it already hosts the runner."""
     if verdict.foreign is not None:
-        if target.runner_id in hosted_runner_ids(config, clock):
+        if target.runner_id in host_roster(config, clock).hosted:
             return
         raise click.ClickException(store_refusal(verdict) or f"the store does not hold runner {target.runner_id}")
     seed_hosted_runners(config, clock=clock)
@@ -319,7 +319,7 @@ def _retiring(config: HostConfig, runner: str, clock: IClock) -> _Retiring:
     try:
         entry = resolve_runner(config, runner, clock)
     except ConfigError as exc:
-        if HostLayout(config.root).store_path.exists() and runner in hosted_runner_ids(config, clock):
+        if HostLayout(config.root).store_path.exists() and runner in host_roster(config, clock).hosted:
             return _Retiring(name=runner, runner_id=runner, configured=False)
         raise click.ClickException(str(exc)) from exc
     if entry.id is None:

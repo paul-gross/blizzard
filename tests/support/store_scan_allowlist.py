@@ -256,6 +256,8 @@ RUNNER_ALLOWED_SCANS: list[Allowance] = [
             ("roster", "hosted_runners"),
             ("active", "hosted_runners"),
             ("retired", "hosted_runners"),
+            ("all_hosted", "hosted_runners"),
+            ("all_hosted", "hosted_runner_facts"),
         )
     ],
     # The host's subscription records — the census reads them — one row per record it ever held, read whole to list them.

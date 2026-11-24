@@ -8,7 +8,14 @@ from typing import Protocol
 
 from blizzard.foundation.secrets.sealing import SealedValue
 from blizzard.foundation.settings_record.vocabulary import Entry
-from blizzard.runner.hosting.model import HostedRoster, HostedRunnerFact, HostedRunnerOp, HostingFact, RunnerAdmission
+from blizzard.runner.hosting.model import (
+    HostedRoster,
+    HostedRunner,
+    HostedRunnerFact,
+    HostedRunnerOp,
+    HostingFact,
+    RunnerAdmission,
+)
 from blizzard.runner.hub.client import HostRefused, IHostRunnerAdder, RetiredHostRunner
 from blizzard.runner.hub.identity import RunnerIdentity
 
@@ -34,6 +41,11 @@ class IReadHostedRunnerRepository(Protocol):
 
     def facts(self, runner_id: str) -> tuple[HostedRunnerFact, ...]:
         """``runner_id``'s facts, oldest first; none for a runner the host never held."""
+        ...
+
+    def all_hosted(self) -> tuple[HostedRunner, ...]:
+        """Every hosted runner holding a fact, in the order it was first hosted, each with its facts oldest first — the
+        whole set in one read."""
         ...
 
 

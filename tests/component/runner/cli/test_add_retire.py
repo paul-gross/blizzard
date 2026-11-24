@@ -18,6 +18,7 @@ import httpx2
 import pytest
 import sqlalchemy as sa
 import uvicorn
+from sqlalchemy.exc import OperationalError
 
 import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.cli.main import blizzard
@@ -26,18 +27,22 @@ from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.app import build_hosted_app
-from blizzard.runner.cli.runtime import StoreHostedRunners, named_runners, seed_runners
+from blizzard.runner.cli.runtime import StoreHostedRunners, seed_runners
+from blizzard.runner.cli.store_guard import host_roster, resolve_runner
 from blizzard.runner.composition import (
     RunnerProcess,
+    RunnerStoreFiles,
     build_host_process,
     build_host_stores,
     build_running_host_runner_service,
     build_settings_stores,
 )
+from blizzard.runner.config_table import ConfigError
 from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.host_config import HostConfig
 from blizzard.runner.host_layout import HostLayout, HostLock
+from blizzard.runner.hosting.roster import HostRoster
 from blizzard.runner.hub.client import ClaimRequest, HostRunnerRetireRefused, QueueEntry, RouteClaimOutcome
 from blizzard.runner.hub.sealed_tokens import StoredToken
 from blizzard.runner.hub.token_file import ENV_FILENAME
@@ -347,7 +352,7 @@ def _retired(root: Path) -> frozenset[str]:
 
 
 def _row_ids(root: Path) -> tuple[str, ...]:
-    return named_runners(load_host_config(root), SystemClock())
+    return host_roster(load_host_config(root), SystemClock()).named
 
 
 def _files(root: Path) -> tuple[bytes, bytes]:
@@ -566,6 +571,22 @@ def test_a_retired_file_runners_name_yields_to_the_active_runner_the_store_names
 
     assert result.exit_code == 0, result.output
     assert seen == ["rn_init2"]
+
+
+def test_an_unreadable_store_resolves_the_declared_runner_and_keeps_the_config_refusal(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+
+    def unreadable(self: RunnerStoreFiles, url: str) -> HostRoster:
+        raise OperationalError("select", {}, RuntimeError("file is not a database"))
+
+    monkeypatch.setattr(RunnerStoreFiles, "host_roster", unreadable)
+    config = load_host_config(root)
+
+    assert resolve_runner(config, "runner-local", SystemClock()).name == "runner-local"
+    with pytest.raises(ConfigError, match="declares no runner 'ghost'"):
+        resolve_runner(config, "ghost", SystemClock())
 
 
 def test_add_under_a_host_holding_the_directory_without_answering_is_refused(

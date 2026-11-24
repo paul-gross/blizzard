@@ -55,11 +55,9 @@ from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.store import runtime_of
 from blizzard.runner.cli.store_guard import (
-    hosted_runner_ids,
+    host_roster,
     judge_store,
-    named_runners,
     resolve_runner,
-    store_hosted_runner_ids,
     store_reason,
     store_write_guard,
 )
@@ -579,9 +577,8 @@ def _refuse_unsettled(config: HostConfig, entry: RunnerEntry, joined: JoinedRunn
     written. The configured id is not counted as ours: a store naming a stale one under a re-add is foreign too."""
     siblings = tuple(other.id for other in config.runners if other.name != entry.name and other.id is not None)
     # The joined runner counts among the file's ids: its join writes its hosting with its row.
-    verdict = host_store_verdict(
-        named_runners(config, clock), hosted_runner_ids(config, clock), (joined.runner_id, *siblings)
-    )
+    roster = host_roster(config, clock)
+    verdict = host_store_verdict(roster.named, roster.hosted, (joined.runner_id, *siblings))
     if verdict is None:
         return
     held = f"runner {entry.name}'s token belongs to runner {joined.runner_id}"
@@ -657,8 +654,9 @@ class _RuntimeStore:
         siblings = {e.id for e in self.config.runners if sibling_of is not None and e.name != sibling_of.name}
         # A runner the store hosts beside the file, or holds retired, is the host's own as a sibling's is: a scaffold
         # joins beside an API-added runner.
-        siblings |= store_hosted_runner_ids(self.config, self.clock) if sibling_of is not None else frozenset()
-        named = [runner_id for runner_id in named_runners(self.config, self.clock) if runner_id not in siblings]
+        roster = host_roster(self.config, self.clock)
+        siblings |= roster.through_a_door() if sibling_of is not None else frozenset()
+        named = [runner_id for runner_id in roster.named if runner_id not in siblings]
         return named[0] if named else None
 
     def is_set_aside(self) -> bool:
