@@ -709,8 +709,7 @@ def flow_line_factory_leaf(
 def register_legacy(registry: LegacyRegistry, *, flows: Ref[FlowStore]) -> None:
     """Declare the store's adapters and the legacy bridge's leaves, each built as the legacy builder built it: the
     process services a request's admission reads before its tenant is known, and the transitional ports and leaves of
-    the areas not yet adopted — invitation writes, flow
-    reads and the flow-line builder. The flow reads alias the flow store the root hands in."""
+    the areas not yet adopted — invitation writes, flow reads and the flow-line builder. The flow reads alias the flow store the root hands in."""
     registry.leaf(open_tenants_leaf, lifetime=Lifetime.PROCESS)
     registry.leaf(action_loop_leaf, lifetime=Lifetime.PROCESS)
     step_wake = registry.leaf(step_wake_leaf, lifetime=Lifetime.PROCESS)
