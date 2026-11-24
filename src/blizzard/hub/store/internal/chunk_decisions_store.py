@@ -28,7 +28,7 @@ from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, Fenc
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_rows import enqueue_close_intents, fence, is_landing_marker, next_artifact_seq
+from blizzard.hub.store.internal.chunk_rows import enqueue_close_intents, fence, insert_artifacts, is_landing_marker
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
@@ -301,23 +301,7 @@ class ChunkDecisionsStore:
                 imposed_by_runner_id=imposed_by_runner_id,
             )
         )
-        for row in artifacts:
-            conn.execute(
-                self._store.insert(s.artifacts).values(
-                    artifact_id=row.artifact_id,
-                    chunk_id=row.chunk_id,
-                    node_id=row.node_id,
-                    node_name=row.node_name,
-                    epoch=row.epoch,
-                    name=row.name,
-                    kind=row.kind.value,
-                    data=row.data,
-                    repo=row.repo,
-                    forge=row.forge,
-                    produced_at=at,
-                    seq=next_artifact_seq(conn, row.chunk_id),
-                )
-            )
+        insert_artifacts(conn, chunk_id, artifacts, at=at)
         if any(is_landing_marker(row.name, row.data) for row in artifacts):
             return DecisionWrite(
                 wrote=True, close_skipped=enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)

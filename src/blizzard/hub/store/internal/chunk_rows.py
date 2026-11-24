@@ -25,6 +25,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.roles import adapter_model
+from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     CloseEnqueueDecision,
@@ -425,6 +426,35 @@ def next_artifact_seq(conn: Connection, chunk_id: str) -> int:
         statements_of(conn).select(s.artifacts, func.max(s.artifacts.c.seq)).where(s.artifacts.c.chunk_id == chunk_id)
     ).scalar()
     return (current or 0) + 1
+
+
+def insert_artifacts(conn: Connection, chunk_id: str, artifacts: Sequence[StoredArtifact], *, at: datetime) -> None:
+    """Insert ``artifacts`` in order under consecutive ``seq`` values: one max read, then a local
+    increment, so a write costs one read and one executemany however many artifacts it carries.
+    ``conn`` holds the chunk's row lock (see ``next_artifact_seq``)."""
+    if not artifacts:
+        return
+    base = next_artifact_seq(conn, chunk_id)
+    conn.execute(
+        statements_of(conn).insert(s.artifacts),
+        [
+            {
+                "artifact_id": a.artifact_id,
+                "chunk_id": chunk_id,
+                "node_id": a.node_id,
+                "node_name": a.node_name,
+                "epoch": a.epoch,
+                "name": a.name,
+                "kind": a.kind.value,
+                "data": a.data,
+                "repo": a.repo,
+                "forge": a.forge,
+                "produced_at": at,
+                "seq": base + i,
+            }
+            for i, a in enumerate(artifacts)
+        ],
+    )
 
 
 def graph_id_of(conn: Connection, chunk_id: str) -> str:
