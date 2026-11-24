@@ -6,7 +6,7 @@ for repository management and capability discovery.
 
 | Policy            | Choose it when                                                                                                                                                    |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `merge-on-checks` | The hub should open and update a pull request and merge it after checks pass. This is the default.                                                                |
+| `merge-on-checks` | The hub should open and update a pull request and merge it when its checks permit landing. This is the default.                                                   |
 | `fast-forward`    | The hub should prove checks on a revision and advance the base without a pull request. A diverged base needs a proven merge candidate on `<work-branch>-landing`. |
 | `park`            | A person should decide and merge a pull request. The hub observes the result rather than merging it.                                                              |
 
@@ -26,9 +26,10 @@ the forge's capabilities.
 
 When a PR is behind, the hub updates it by merge when merge commits are enabled, otherwise by rebase, including for a
 squash-only repository. An automatic rebase is admitted only when the hub can prove the rewritten commits correspond to
-the authorized work; an unsupported or unprovable rewrite does not land. A rewritten head must pass its own checks
-before landing. Rebase merge and squash can produce a different landed revision; the hub records that actual revision
-without running checks again on it.
+the authorized work; an unsupported or unprovable rewrite does not land. The hub reads checks for the rewritten head
+independently; it does not reuse the prior head's results. Its checks must pass or be neutral, or a successful empty
+read must be permitted by `allow_no_ci`, before landing. Rebase merge and squash can produce a different landed
+revision; the hub records that actual revision without running checks again on it.
 
 If no allowed method can be used, `merge-method-refused` names the allowed set and the individual refusals, or says that
 none are allowed. Inspect those details and the repository's GitHub settings before requeueing. Permission, protection,
@@ -38,10 +39,10 @@ operation succeeded. Inspect the PR and diagnostic before intervening.
 
 ## Checks and missing CI
 
-`merge-on-checks` requires checks on the admitted PR head; `fast-forward` requires them on the revision to advance. Both
-require at least one check, with every check passed or neutral. GitHub check runs and commit statuses both count.
-Pending checks wait and failing checks follow the failure path; an unavailable or refused check read is not evidence
-that CI is absent. Ensure the repository's forge token can read both kinds of GitHub result
+`merge-on-checks` reads checks on the admitted PR head; `fast-forward` reads them on the revision to advance. By
+default, both require at least one check, with every check passed or neutral. GitHub check runs and commit statuses both
+count. Pending checks wait and failing checks follow the failure path; an unavailable or refused check read is not
+evidence that CI is absent. Ensure the repository's forge token can read both kinds of GitHub result
 ([forge token](./repositories.md#the-forge-token)).
 
 By default `allow_no_ci` is false, including on existing repositories migrated to this version. If a successful read

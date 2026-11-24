@@ -29,3 +29,21 @@ test('exhausted merge methods remain readable on a narrow chunk page', async ({ 
   }, viewportWidth);
   expect(fits).toBe(true);
 });
+
+test('unbroken escalation detail wraps without widening the page', async ({ issue, page }) => {
+  const { chunk } = await issue('long escalation detail');
+  const detail = 'LONG'.repeat(150);
+  await page.route(`**/api/chunks/${chunk.chunk_id}`, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({ response, json: { ...body, status: 'needs_human', escalation: {
+      epoch: 1, cause: 'merge-method-refused', detail, takeover_command: '', wrapped_takeover_command: '',
+    } } });
+  });
+  for (const width of [320, 390, 1440]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(`/board/chunk/${chunk.chunk_id}`);
+    await expect(page.getByTestId('escalation-detail')).toHaveText(detail);
+    expect(await page.evaluate<number>('document.documentElement.scrollWidth - document.documentElement.clientWidth')).toBe(0);
+  }
+});
