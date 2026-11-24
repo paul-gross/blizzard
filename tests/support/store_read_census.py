@@ -179,6 +179,7 @@ from blizzard.hub.domain.observability.tracing.repository import (
     TraceCheckpoint,
 )
 from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments
+from blizzard.hub.domain.operations.queue import GroupService
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectEdit, ProjectId, ProjectSlug
@@ -202,6 +203,8 @@ from blizzard.hub.domain.urgency.ports import (
 from blizzard.hub.domain.urgency.services import TenantSettingsService
 from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.settings.model import IReadHubSettings, IReadHubSettingsAdmin
 from blizzard.hub.store import schema as s
@@ -1470,7 +1473,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
 
     # --- graphs -------------------------------------------------------------------------
     default_graph = hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     minted = hub.client.post("/api/graphs", json={"definition_yaml": _HUB_GRAPH_YAML})
     assert minted.status_code == 201, minted.text
@@ -2321,7 +2324,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     chunk_lifecycle_merged = "ch_hub_lifecycle_merged"
     _mint(chunk_lifecycle_survivor, "1021", at=_ht(83))
     _mint(chunk_lifecycle_merged, "1022", at=_ht(84))
-    hub.services.group.group(chunk_lifecycle_survivor, [chunk_lifecycle_merged])
+    hub.default_adapter(GroupService).group(chunk_lifecycle_survivor, [chunk_lifecycle_merged])
 
     # --- route ---------------------------------------------------------------------------------
     chunk_route_a = "ch_hub_route_a"

@@ -19,6 +19,7 @@ import pytest
 
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.api.fleet import _flow_namer as flow_namer  # pyright: ignore[reportPrivateUsage]
+from blizzard.hub.domain.chunk.ingest import IngestService
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.work_refs import work_ref_lock
 from blizzard.hub.domain.config.changes import RecordKind
@@ -406,7 +407,7 @@ def test_config_export_and_a_no_op_apply_are_flat_across_project_counts(tmp_path
 def test_choose_project_is_flat_across_source_counts(tmp_path: Path) -> None:
     names = [f"src{i}" for i in range(N)]
     hub = build_hub(tmp_path, work_sources={name: FakeWorkSource(name=name) for name in names})
-    ingest = hub.services.ingest
+    ingest = hub.default_adapter(IngestService)
 
     def choose(n: int) -> None:
         assert ingest.choose_project([WorkRef(source=name, ref="1") for name in names[:n]], None)

@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkRef
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
-from blizzard.hub.work_sources.source import WorkItem
+from blizzard.hub.work_sources.source import IWorkSourceRegistry, WorkItem
 from tests.support.chunk_units import chunk_unit
 from tests.support.scaffolding import (
     FakeBatchWorkSource,
@@ -23,9 +26,9 @@ from tests.support.scaffolding import (
     hub_store_connections,
     ingest,
     pointer_token,
+    resolve_default_tenant_with,
     seed_runner,
     seed_work_item,
-    serve_default_tenant,
 )
 
 
@@ -122,7 +125,7 @@ def test_hub_authored_refs_cost_a_bounded_number_of_statements(tmp_path: Path) -
     def seeded(root: Path, count: int) -> tuple[Any, list[str]]:
         hub = build_hub(root)
         graph = hub.services.default_graph.ensure_default(
-            hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+            PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
         )
         store = hub_store_connections(hub.engine)
         refs = ChunkWorkRefsStore(store, hub.clock, facts=ChunkFactsStore(store, hub.clock))
@@ -155,7 +158,9 @@ def test_hub_authored_refs_cost_a_bounded_number_of_statements(tmp_path: Path) -
     )
 
 
-def test_store_backed_labels_cost_the_same_at_two_and_eight_pointers(tmp_path: Path) -> None:
+def test_store_backed_labels_cost_the_same_at_two_and_eight_pointers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     (tmp_path / "small").mkdir()
     (tmp_path / "large").mkdir()
 
@@ -171,7 +176,7 @@ def test_store_backed_labels_cost_the_same_at_two_and_eight_pointers(tmp_path: P
             build=lambda record: BuiltWorkSource(record, FakeWorkSource(name=record.name, title="t"), lambda: None),
             built_in=built_in,
         )
-        serve_default_tenant(hub, replace(hub.services, work_sources=registry))
+        resolve_default_tenant_with(hub, monkeypatch, {IWorkSourceRegistry: registry})
         return hub, chunk_id
 
     small, small_id = seeded(tmp_path / "small", 2)

@@ -14,6 +14,8 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
+from blizzard.hub.api.chunk_frames import ChunkFrameLoader
+from blizzard.hub.api.chunk_views import ChunkViewReads
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
@@ -26,9 +28,9 @@ from tests.support.scaffolding import (
     build_hub,
     hub_store_connections,
     ingest,
+    resolve_default_tenant_with,
     seed_session,
     seed_user,
-    serve_default_tenant,
 )
 
 
@@ -45,16 +47,15 @@ class _CountingFactsStore(ChunkFactsStore):
         return super().load_facts(chunk_id, transaction=transaction)
 
 
-def _wire_counting_facts(hub: HubHarness) -> _CountingFactsStore:
+def _wire_counting_facts(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> _CountingFactsStore:
     counting = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
-    assert hub.app is not None
-    serve_default_tenant(
+    resolve_default_tenant_with(
         hub,
-        replace(
-            hub.services,
-            chunks=replace(hub.services.chunks, facts=counting),
-            chunk_frames=replace(hub.services.chunk_frames, facts=counting),
-        ),
+        monkeypatch,
+        {
+            ChunkViewReads: replace(hub.default_adapter(ChunkViewReads), facts=counting),
+            ChunkFrameLoader: replace(hub.default_adapter(ChunkFrameLoader), facts=counting),
+        },
     )
     return counting
 
@@ -93,12 +94,12 @@ def _wire_counting_sessions(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) ->
 # --- facts-load counting: pause, stop, question-answer -----------------------------
 
 
-def test_pause_calls_load_facts_exactly_twice(tmp_path: Path) -> None:
+def test_pause_calls_load_facts_exactly_twice(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Before: 4 (``ChunkChanged.before``, ``PauseService``'s own reload, ``publish``,
     ``ChunkView.of``'s reload). After: 2 — pre-write and post-write only."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    counting = _wire_counting_facts(hub)
+    counting = _wire_counting_facts(hub, monkeypatch)
 
     resp = hub.client.post(f"/api/chunks/{chunk_id}/pause", json={"by": "alice"})
 
@@ -106,12 +107,12 @@ def test_pause_calls_load_facts_exactly_twice(tmp_path: Path) -> None:
     assert counting.load_facts_calls[chunk_id] == 2
 
 
-def test_stop_calls_load_facts_exactly_twice(tmp_path: Path) -> None:
+def test_stop_calls_load_facts_exactly_twice(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Before: 4 (``ChunkChanged.before``, ``StopService``'s own reload, ``publish``,
     ``ChunkView.of``'s reload). After: 2 — pre-write and post-write only."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    counting = _wire_counting_facts(hub)
+    counting = _wire_counting_facts(hub, monkeypatch)
 
     resp = hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "alice"})
 

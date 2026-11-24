@@ -9,9 +9,11 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.api import problems
-from blizzard.hub.domain.chunk.ingest import IngestSourceNotLinked
+from blizzard.hub.domain.chunk.ingest import IngestService, IngestSourceNotLinked
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkRef
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.wire.chunk import POINTER_ALREADY_HELD, ChunkIngestConflict
 from tests.support.project_ingest import ingest_project, two_projects
 from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
@@ -164,9 +166,9 @@ def test_a_source_unlinked_after_the_project_was_chosen_refuses_the_ingest(tmp_p
     chunk the project no longer draws from."""
     hub, first, _ = two_projects(tmp_path)
     graph = hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
-    ingest = hub.services.ingest
+    ingest = hub.default_adapter(IngestService)
     chosen = ingest.choose_project([WorkRef(source="a", ref="7")], None)
     assert chosen == first
     unlinked = hub.client.post(f"/api/projects/{first}/source-links/a/retire")

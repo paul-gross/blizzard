@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from blizzard.hub.domain.execution import apply as apply_module
+from blizzard.hub.domain.execution.decisions import RequeueService
 from tests.support.gate_decisions import (
     _open_decision,  # pyright: ignore[reportPrivateUsage]  # shared test helper
 )
@@ -56,7 +57,7 @@ def test_requeue_rolls_back_when_route_release_fails(tmp_path: Path, monkeypatch
 
     monkeypatch.setattr(hub.services.chunks.route, "record_route_released", fail)
     with pytest.raises(RuntimeError, match="release failure"):
-        hub.services.requeue.requeue(chunk, by="operator")
+        hub.default_adapter(RequeueService).requeue(chunk, by="operator")
     assert hub.services.chunks.facts.load_facts(chunk_id) == before
     assert hub.services.chunks.route.route_of(chunk_id) is not None
 

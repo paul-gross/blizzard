@@ -17,6 +17,8 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.hub_event_types import HubEventType
+from blizzard.hub.domain.operations.complete import CompleteService
+from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_questions_store import ChunkQuestionsStore
@@ -447,9 +449,9 @@ def test_an_answer_on_an_ended_chunk_is_refused_and_the_question_stays_unanswere
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     if end == "stop":
-        hub.services.stop.stop(chunk, by="operator")
+        hub.default_adapter(StopService).stop(chunk, by="operator")
     else:
-        hub.services.complete.complete(chunk, by="operator")
+        hub.default_adapter(CompleteService).complete(chunk, by="operator")
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == ("stopped" if end == "stop" else "done")
 
     resp = hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"})

@@ -9,10 +9,13 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
+from blizzard.hub.api.chunk_views import ChunkViewReads
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support.scaffolding import build_hub, hub_store_connections, ingest, serve_default_tenant
+from tests.support.scaffolding import build_hub, hub_store_connections, ingest, resolve_default_tenant_with
 
 
 class _CountingGraphStore(GraphStore):
@@ -28,13 +31,16 @@ class _CountingGraphStore(GraphStore):
         return super().get(graph_id)
 
 
-def test_chunk_detail_never_calls_graphs_get_with_no_pending_poll(tmp_path: Path) -> None:
+def test_chunk_detail_never_calls_graphs_get_with_no_pending_poll(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])
 
     counting_graphs = _CountingGraphStore(hub_store_connections(hub.engine))
     assert hub.app is not None
-    serve_default_tenant(hub, replace(hub.services, graphs=counting_graphs))
+    views = hub.default_adapter(ChunkViewReads)
+    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewReads: replace(views, graphs=counting_graphs)})
 
     resp = hub.client.get(f"/api/chunks/{chunk_id}")
 

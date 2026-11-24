@@ -28,7 +28,6 @@ from blizzard.hub.api import queue as queue_api
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
@@ -526,15 +525,18 @@ def get_runner(
     response_model=NextClaimResponse,
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
-def get_runner_next_claim(runner_id: str, services: Services) -> NextClaimResponse:
+@inject_sync
+def get_runner_next_claim(
+    runner_id: str, registry: Runners, hosts: Hosts, reads: FromDishka[queue_api.QueueReads]
+) -> NextClaimResponse:
     """The hub's best account of the chunk one runner reaches for next and every chunk it passes on the way — walked
     from the runner's served projects and bindings and its latest capability snapshot. A retired or paused runner is
     answered like any other; 404 on unknown."""
-    registration = _registration(services.registry, runner_id)
-    host = services.hosts.get_host(registration.host_id) if registration.host_id is not None else None
+    registration = _registration(registry, runner_id)
+    host = hosts.get_host(registration.host_id) if registration.host_id is not None else None
     return queue_api.NextClaim.of(
-        services,
-        services.chunks.facts.load_live_statuses(),
+        reads,
+        reads.facts.load_live_statuses(),
         served=offered_projects(registration, host),
         capabilities=registration.capabilities,
     ).view

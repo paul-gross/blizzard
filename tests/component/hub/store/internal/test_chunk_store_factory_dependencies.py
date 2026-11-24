@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.chunk.dependencies import DependencyService
 from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
 from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
 from tests.support.scaffolding import build_hub, chunk_stores, migrate_to
@@ -32,6 +33,6 @@ def test_the_read_bundle_exposes_the_same_dependencies_adapter(tmp_path: Path) -
 
     # Identity, not just isinstance — the very same adapter instance `DependencyService`
     # holds for its own writes, not a second, disconnected object.
-    assert dependencies is hub.services.dependencies.dependencies
+    assert dependencies is hub.default_adapter(DependencyService).dependencies
     assert isinstance(dependencies, ChunkDependenciesStore)
     assert dependencies.list_standing_edges() == []

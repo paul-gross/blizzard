@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 
-from blizzard.foundation.roles import collaborator
+from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.foundation.untyped import as_list, as_table
 from blizzard.hub.documents import YAML_CODEC, accepted_extensions, codec_for_path
 from blizzard.hub.documents.codec import IConfigCodec
@@ -153,6 +153,22 @@ class PackagedGraphs:
 
 
 PACKAGED = PackagedGraphs(Path(__file__).resolve().parent)
+
+
+@domain_model
+@dataclass(frozen=True)
+class PackagedDefaultGraph:
+    """The packaged default graph as an ingest mints against it — its document and its inlined YAML, both read from
+    one graph set through one codec, once per process."""
+
+    doc: GraphDoc
+    yaml: str
+
+
+def packaged_default_graph(graphs: PackagedGraphs, codec: IConfigCodec) -> PackagedDefaultGraph:
+    """``graphs``' default graph, parsed and inlined once."""
+    default = graphs.default
+    return PackagedDefaultGraph(doc=default.doc, yaml=default.inlined_yaml(codec))
 
 
 @cache

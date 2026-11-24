@@ -13,12 +13,17 @@ import pytest
 from sqlalchemy import select
 
 from blizzard.hub.domain.chunk.dependencies import (
+    DependencyService,
     NoStandingDependencyToRelease,
     PrerequisiteIsEphemeral,
     PrerequisiteScope,
 )
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import DependencyEdge
+from blizzard.hub.domain.operations.complete import CompleteService
+from blizzard.hub.domain.operations.delete import DeleteService
+from blizzard.hub.domain.operations.queue import GroupService
+from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.store import schema as s
 from tests.support.scaffolding import HubHarness, build_hub, claim_route, hub_scoped, ingest
 
@@ -36,12 +41,12 @@ def test_an_edge_onto_a_done_prerequisite_is_accepted_with_no_satisfaction_state
     hub = build_hub(tmp_path)
     dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
     prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)
-    hub.services.complete.complete(_resolve(hub, prerequisite_id), by="user:alice")
+    hub.default_adapter(CompleteService).complete(_resolve(hub, prerequisite_id), by="user:alice")
     prerequisite_facts = hub.services.chunks.facts.load_facts(prerequisite_id)
     assert prerequisite_facts is not None
     assert prerequisite_facts.status().value == "done"
 
-    edge = hub.services.dependencies.declare(
+    edge = hub.default_adapter(DependencyService).declare(
         _resolve(hub, dependent_id), PrerequisiteScope(_resolve(hub, prerequisite_id).chunk_id), by="user:alice"
     )
 
@@ -66,12 +71,12 @@ def test_declaring_against_a_stopped_prerequisite_is_accepted(tmp_path: Path) ->
     hub = build_hub(tmp_path)
     dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
     prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)
-    hub.services.stop.stop(_resolve(hub, prerequisite_id), by="operator")
+    hub.default_adapter(StopService).stop(_resolve(hub, prerequisite_id), by="operator")
     prerequisite_facts = hub.services.chunks.facts.load_facts(prerequisite_id)
     assert prerequisite_facts is not None
     assert prerequisite_facts.status().value == "stopped"
 
-    edge = hub.services.dependencies.declare(
+    edge = hub.default_adapter(DependencyService).declare(
         _resolve(hub, dependent_id), PrerequisiteScope(_resolve(hub, prerequisite_id).chunk_id), by="user:alice"
     )
 
@@ -83,8 +88,8 @@ def _claimed_dependent_with_a_standing_edge(hub: HubHarness) -> tuple[str, Depen
     """A dependent claimed past a declared (met) edge onto a done prerequisite — running, edge standing."""
     dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
     prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)
-    hub.services.complete.complete(_resolve(hub, prerequisite_id), by="operator")
-    edge = hub.services.dependencies.declare(
+    hub.default_adapter(CompleteService).complete(_resolve(hub, prerequisite_id), by="operator")
+    edge = hub.default_adapter(DependencyService).declare(
         _resolve(hub, dependent_id), PrerequisiteScope(_resolve(hub, prerequisite_id).chunk_id), by="operator"
     )
     claim_route(hub, dependent_id)
@@ -101,7 +106,7 @@ def test_releasing_an_edge_has_no_status_window_on_the_dependent(tmp_path: Path,
     assert facts is not None
     assert facts.status().value == ("paused" if paused else "running")
 
-    released = hub.services.dependencies.release(edge, by="operator")
+    released = hub.default_adapter(DependencyService).release(edge, by="operator")
 
     assert released.released_by == "operator"
     assert hub.services.chunks.dependencies.list_standing_edges() == []
@@ -116,11 +121,13 @@ def test_a_second_release_of_the_same_pair_is_refused_and_the_first_release_stan
     prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)
     dependent = _resolve(hub, dependent_id)
     prerequisite = _resolve(hub, prerequisite_id)
-    edge = hub.services.dependencies.declare(dependent, PrerequisiteScope(prerequisite.chunk_id), by="user:alice")
-    released = hub.services.dependencies.release(edge, by="user:bob")
+    edge = hub.default_adapter(DependencyService).declare(
+        dependent, PrerequisiteScope(prerequisite.chunk_id), by="user:alice"
+    )
+    released = hub.default_adapter(DependencyService).release(edge, by="user:bob")
 
     with pytest.raises(NoStandingDependencyToRelease):
-        hub.services.dependencies.release(edge, by="user:carol")
+        hub.default_adapter(DependencyService).release(edge, by="user:carol")
 
     with hub.engine.connect() as conn:
         rows = conn.execute(hub_scoped(select(s.chunk_dependencies))).mappings().all()
@@ -139,10 +146,12 @@ def test_declaring_against_a_dependent_deleted_after_resolution_is_refused(tmp_p
     dependent = _resolve(hub, dependent_id)
     prerequisite = _resolve(hub, prerequisite_id)
 
-    hub.services.delete.delete(dependent, by="operator")
+    hub.default_adapter(DeleteService).delete(dependent, by="operator")
 
     with pytest.raises(ChunkNotFound):
-        hub.services.dependencies.declare(dependent, PrerequisiteScope(prerequisite.chunk_id), by="user:alice")
+        hub.default_adapter(DependencyService).declare(
+            dependent, PrerequisiteScope(prerequisite.chunk_id), by="user:alice"
+        )
 
     assert hub.services.chunks.dependencies.list_standing_edges() == []
 
@@ -157,10 +166,12 @@ def test_declaring_against_a_prerequisite_deleted_after_resolution_is_refused(tm
     dependent = _resolve(hub, dependent_id)
     prerequisite = _resolve(hub, prerequisite_id)
 
-    hub.services.delete.delete(prerequisite, by="operator")
+    hub.default_adapter(DeleteService).delete(prerequisite, by="operator")
 
     with pytest.raises(PrerequisiteIsEphemeral) as exc_info:
-        hub.services.dependencies.declare(dependent, PrerequisiteScope(prerequisite.chunk_id), by="user:alice")
+        hub.default_adapter(DependencyService).declare(
+            dependent, PrerequisiteScope(prerequisite.chunk_id), by="user:alice"
+        )
 
     assert exc_info.value.chunk_id == prerequisite_id
     assert hub.services.chunks.dependencies.list_standing_edges() == []
@@ -177,10 +188,12 @@ def test_declaring_against_a_prerequisite_grouped_away_after_resolution_is_refus
     dependent = _resolve(hub, dependent_id)
     prerequisite = _resolve(hub, prerequisite_id)
 
-    hub.services.group.group(survivor_id, [prerequisite_id])
+    hub.default_adapter(GroupService).group(survivor_id, [prerequisite_id])
 
     with pytest.raises(PrerequisiteIsEphemeral) as exc_info:
-        hub.services.dependencies.declare(dependent, PrerequisiteScope(prerequisite.chunk_id), by="user:alice")
+        hub.default_adapter(DependencyService).declare(
+            dependent, PrerequisiteScope(prerequisite.chunk_id), by="user:alice"
+        )
 
     assert exc_info.value.chunk_id == prerequisite_id
     assert hub.services.chunks.dependencies.list_standing_edges() == []

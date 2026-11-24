@@ -12,10 +12,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import cast
 
-from blizzard.hub.domain.chunk.dependencies import DependencyWouldCloseCycle, PrerequisiteIsEphemeral, PrerequisiteScope
+from blizzard.hub.domain.chunk.dependencies import (
+    DependencyService,
+    DependencyWouldCloseCycle,
+    PrerequisiteIsEphemeral,
+    PrerequisiteScope,
+)
 from blizzard.hub.domain.chunk.model import Chunk, DependencyEdge
 from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
+from blizzard.hub.domain.operations.queue import GroupService
 from tests.support.scaffolding import HubHarness, build_hub, ingest
 
 
@@ -56,7 +62,9 @@ def test_two_opposing_declarations_racing_resolve_to_exactly_one_commit(tmp_path
     first_result: dict[str, object] = {}
 
     def _declare_a_depends_on_b() -> None:
-        first_result["edge"] = hub.services.dependencies.declare(a, PrerequisiteScope(b.chunk_id), by="user:alice")
+        first_result["edge"] = hub.default_adapter(DependencyService).declare(
+            a, PrerequisiteScope(b.chunk_id), by="user:alice"
+        )
 
     first_thread = threading.Thread(target=_declare_a_depends_on_b)
     first_thread.start()
@@ -66,7 +74,9 @@ def test_two_opposing_declarations_racing_resolve_to_exactly_one_commit(tmp_path
 
     def _declare_b_depends_on_a() -> None:
         try:
-            second_result["edge"] = hub.services.dependencies.declare(b, PrerequisiteScope(a.chunk_id), by="user:bob")
+            second_result["edge"] = hub.default_adapter(DependencyService).declare(
+                b, PrerequisiteScope(a.chunk_id), by="user:bob"
+            )
         except DependencyWouldCloseCycle as exc:
             second_result["refused"] = exc
 
@@ -118,10 +128,10 @@ def test_a_disjoint_cycle_across_four_chunks_is_closed_by_the_shared_lock_not_th
     assert b is not None
     assert c is not None
     assert d is not None
-    hub.services.dependencies.declare(
+    hub.default_adapter(DependencyService).declare(
         b, PrerequisiteScope(c.chunk_id), by="user:alice"
     )  # b depends on c, already standing
-    hub.services.dependencies.declare(
+    hub.default_adapter(DependencyService).declare(
         d, PrerequisiteScope(a.chunk_id), by="user:alice"
     )  # d depends on a, already standing
 
@@ -144,7 +154,9 @@ def test_a_disjoint_cycle_across_four_chunks_is_closed_by_the_shared_lock_not_th
     first_result: dict[str, object] = {}
 
     def _declare_a_depends_on_b() -> None:
-        first_result["edge"] = hub.services.dependencies.declare(a, PrerequisiteScope(b.chunk_id), by="user:alice")
+        first_result["edge"] = hub.default_adapter(DependencyService).declare(
+            a, PrerequisiteScope(b.chunk_id), by="user:alice"
+        )
 
     first_thread = threading.Thread(target=_declare_a_depends_on_b)
     first_thread.start()
@@ -154,7 +166,9 @@ def test_a_disjoint_cycle_across_four_chunks_is_closed_by_the_shared_lock_not_th
 
     def _declare_c_depends_on_d() -> None:
         try:
-            second_result["edge"] = hub.services.dependencies.declare(c, PrerequisiteScope(d.chunk_id), by="user:bob")
+            second_result["edge"] = hub.default_adapter(DependencyService).declare(
+                c, PrerequisiteScope(d.chunk_id), by="user:bob"
+            )
         except DependencyWouldCloseCycle as exc:
             second_result["refused"] = exc
 
@@ -199,7 +213,7 @@ def test_repeated_opposing_declaration_races_never_yield_two_standing_edges(tmp_
         ) -> None:
             barrier.wait()
             try:
-                sink["x_on_y"] = hub.services.dependencies.declare(
+                sink["x_on_y"] = hub.default_adapter(DependencyService).declare(
                     dep, PrerequisiteScope(prereq.chunk_id), by="user:alice"
                 )
             except DependencyWouldCloseCycle:
@@ -210,7 +224,7 @@ def test_repeated_opposing_declaration_races_never_yield_two_standing_edges(tmp_
         ) -> None:
             barrier.wait()
             try:
-                sink["y_on_x"] = hub.services.dependencies.declare(
+                sink["y_on_x"] = hub.default_adapter(DependencyService).declare(
                     dep, PrerequisiteScope(prereq.chunk_id), by="user:bob"
                 )
             except DependencyWouldCloseCycle:
@@ -266,7 +280,7 @@ def test_a_fold_and_a_racing_declare_naming_its_target_are_serialized_by_the_sha
     fold_result: dict[str, object] = {}
 
     def _fold_target_into_survivor() -> None:
-        fold_result["result"] = hub.services.group.group(survivor_id, [target_id])
+        fold_result["result"] = hub.default_adapter(GroupService).group(survivor_id, [target_id])
 
     fold_thread = threading.Thread(target=_fold_target_into_survivor)
     fold_thread.start()
@@ -276,7 +290,7 @@ def test_a_fold_and_a_racing_declare_naming_its_target_are_serialized_by_the_sha
 
     def _declare_dependent_on_target() -> None:
         try:
-            declare_result["edge"] = hub.services.dependencies.declare(
+            declare_result["edge"] = hub.default_adapter(DependencyService).declare(
                 dependent, PrerequisiteScope(target.chunk_id), by="user:alice"
             )
         except PrerequisiteIsEphemeral as exc:

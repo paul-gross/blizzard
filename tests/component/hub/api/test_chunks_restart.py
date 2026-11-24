@@ -18,7 +18,8 @@ from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRe
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.operations import restart
-from blizzard.hub.domain.operations.restart import SUPERSEDED_ANSWER, RestartGraphPinChanged
+from blizzard.hub.domain.operations.edit import EditService
+from blizzard.hub.domain.operations.restart import SUPERSEDED_ANSWER, RestartGraphPinChanged, RestartService
 from blizzard.runner.hub.internal.http_hub import chunk_state
 from blizzard.runner.lifecycle.model import HeldChunkMove, held_chunk_move, owns_node_entry
 from blizzard.tools.invariants import hub_invariants
@@ -705,10 +706,12 @@ def test_a_same_graph_restart_refuses_a_graph_that_changed_since_the_caller_load
     target_id = _target_graph(hub)
     target_graph = hub.services.graphs.get(target_id)
     assert target_graph is not None
-    hub.services.edit.set_graph(stale_chunk, graph=target_graph)  # a concurrent edit re-pins it
+    hub.default_adapter(EditService).set_graph(stale_chunk, graph=target_graph)  # a concurrent edit re-pins it
 
     with pytest.raises(RestartGraphPinChanged):
-        hub.services.restart.restart(stale_chunk, stale_graph, node_name=None, by="operator", to_graph=None)
+        hub.default_adapter(RestartService).restart(
+            stale_chunk, stale_graph, node_name=None, by="operator", to_graph=None
+        )
 
     # Refused writing nothing.
     assert _detail(hub, chunk_id)["restarts"] == []

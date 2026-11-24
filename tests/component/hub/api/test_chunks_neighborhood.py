@@ -10,7 +10,10 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
+
 from blizzard.foundation.clock import IClock
+from blizzard.hub.api.chunk_views import ChunkViewReads
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.chunk.ports.dependencies import DEPENDENCIES_LOCK, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.kernel.transactions import Transaction
@@ -23,7 +26,7 @@ from tests.support.scaffolding import (
     count_queries,
     hub_store_connections,
     ingest,
-    serve_default_tenant,
+    resolve_default_tenant_with,
 )
 
 _DEPENDENT = {"source": "default", "ref": "dependent"}
@@ -142,7 +145,9 @@ class _CountingFactsStore(ChunkFactsStore):
         return super().load_facts(chunk_id, transaction=transaction)
 
 
-def test_a_chunk_with_no_standing_edges_costs_no_additional_facts_reads(tmp_path: Path) -> None:
+def test_a_chunk_with_no_standing_edges_costs_no_additional_facts_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A bare chunk's neighborhood costs exactly the one facts read the route already
     makes for its own status — no edges means no further per-neighbor reads."""
     hub = build_hub(tmp_path)
@@ -150,7 +155,8 @@ def test_a_chunk_with_no_standing_edges_costs_no_additional_facts_reads(tmp_path
 
     counting = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
-    serve_default_tenant(hub, replace(hub.services, chunks=replace(hub.services.chunks, facts=counting)))
+    views = hub.default_adapter(ChunkViewReads)
+    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewReads: replace(views, facts=counting)})
 
     resp = hub.client.get(f"/api/chunks/{bare_id}")
 

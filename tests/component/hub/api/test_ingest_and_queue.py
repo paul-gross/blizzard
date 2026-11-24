@@ -7,6 +7,8 @@ from pathlib import Path
 
 from blizzard.hub.domain.chunk.model import WorkRef, mint_chunk
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from tests.support.ingest_queue_graphs import BUILD_REVIEW_DELIVER_YAML, pass_node
 from tests.support.scaffolding import (
     FakeWorkSource,
@@ -59,7 +61,7 @@ def test_list_row_is_board_legible(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
     graph = hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     unconfigured = WorkRef(source="retired", ref="9")
     unconfigured_chunk = mint_chunk(

@@ -12,6 +12,7 @@ from typing import Any, cast
 from blizzard.foundation.platform_tracing.handle import IInstrumentClient
 from blizzard.foundation.registry.interface import Lifetime, Registry, port
 from blizzard.hub.auth.users import IReadUserRepository
+from blizzard.hub.domain.chunk.ingest import IWorkRefLabels
 from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.chunk.ports.work_sources import IWorkClosers
 from blizzard.hub.domain.config.credentials import IReadCredentialRepository
@@ -72,17 +73,24 @@ def work_closers(registry: IWorkSourceRegistry) -> IWorkClosers:
     return registry
 
 
+def work_ref_labels(registry: IWorkSourceRegistry) -> IWorkRefLabels:
+    """How the tenant's sources and pointers display, as ingest labels a chunk's work refs."""
+    return registry
+
+
 def register(registry: Registry) -> None:
-    """Declare the tenant's work-source registry, the close halves the domain reads it through, and its work ref
-    label."""
+    """Declare the tenant's work-source registry, the close halves and labels the domain reads it through, and its
+    work ref label."""
     registry.factory(work_source_registry, lifetime=Lifetime.TENANT)
     registry.factory(work_closers, lifetime=Lifetime.TENANT)
+    registry.factory(work_ref_labels, lifetime=Lifetime.TENANT)
     registry.factory(work_ref_label, lifetime=Lifetime.TENANT)
 
 
 def register_absent(registry: Registry) -> None:
-    """Declare the registry, its closers and the label absent, for the store-free graph."""
+    """Declare the registry, its closers, its labels and the label absent, for the store-free graph."""
     registry.absent(port(IWorkSourceRegistry), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
     registry.absent(port(IWorkClosers), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
+    registry.absent(port(IWorkRefLabels), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
     # A callable alias keys the label, so it is named as its key rather than as a class.
     registry.absent(port(cast("type[Any]", WorkRefLabel)), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)

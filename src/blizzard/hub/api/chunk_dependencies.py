@@ -1,12 +1,13 @@
 """Chunk-dependency routes — declare and release a dependency edge between two chunks,
 the operator's own control-plane surface. Release addresses the standing
 edge by its ordered pair, never a minted edge id — deliberately no GET or listing route
-here, which stays #457's to add."""
+here."""
 
 from __future__ import annotations
 
 from functools import partial
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Request, status
 
 from blizzard.auth_core import Permission
@@ -14,11 +15,10 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problem_rendering import problem_response
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.dependencies import (
+    DependencyService,
     DependencyWouldCloseCycle,
     DependentNotEditable,
     NoStandingDependencyToRelease,
@@ -27,6 +27,9 @@ from blizzard.hub.domain.chunk.dependencies import (
 )
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, DependencyEdge
+from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.lifecycle import IReadChunkLifecycleRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.wire.chunk import (
     ChunkDependencyDeclareRequest,
     ChunkDependencyEdgeView,
@@ -38,32 +41,36 @@ router = APIRouter(
 )
 
 
-def _resolve_dependent(services: TenantServices, chunk_id: str) -> Chunk:
-    chunk = services.chunks.record.get(chunk_id)
+def _resolve_dependent(records: IReadChunkRecordRepository, chunk_id: str) -> Chunk:
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     return chunk
 
 
-def resolve_prerequisite(services: TenantServices, chunk_id: str) -> PrerequisiteScope:
+def resolve_prerequisite(
+    records: IReadChunkRecordRepository, lifecycle: IReadChunkLifecycleRepository, chunk_id: str
+) -> PrerequisiteScope:
     """Resolve the named prerequisite to its scope — from its chunk, or, for an id minted but since
     gone ephemeral (grouped-away or deleted), which has no chunk to load, from the id; 404 for an id
     never minted. Whether an ephemeral prerequisite is refused is ``DependencyService``'s to decide,
     under the lock."""
-    chunk = services.chunks.record.get(chunk_id)
+    chunk = records.get(chunk_id)
     if chunk is not None:
         return PrerequisiteScope(chunk_id=chunk.chunk_id)
-    if services.chunks.lifecycle.is_ephemeral(chunk_id):
+    if lifecycle.is_ephemeral(chunk_id):
         return PrerequisiteScope(chunk_id=chunk_id)
     raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
 
 
-def _resolve_standing_edge(services: TenantServices, dependent: Chunk, prerequisite_chunk_id: str) -> DependencyEdge:
+def _resolve_standing_edge(
+    dependencies: IReadChunkDependenciesRepository, dependent: Chunk, prerequisite_chunk_id: str
+) -> DependencyEdge:
     """Resolve the ordered pair to the standing edge a release operates on
     (``bzh:domain-takes-objects``). Nothing about the prerequisite is read: an edge whose
     prerequisite was since deleted still releases, which is the lever that keeps blocked a
     held state rather than a dead end."""
-    edge = services.chunks.dependencies.standing_edge(dependent.chunk_id, prerequisite_chunk_id)
+    edge = dependencies.standing_edge(dependent.chunk_id, prerequisite_chunk_id)
     if edge is None:
         raise NoStandingDependencyToRelease(dependent.chunk_id, prerequisite_chunk_id)
     return edge
@@ -87,21 +94,24 @@ def _edge_view(edge: DependencyEdge) -> ChunkDependencyEdgeView:
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
+@inject_sync
 def declare_dependency(
     chunk_id: str,
     request: ChunkDependencyDeclareRequest,
     http_request: Request,
-    services: Services,
+    records: FromDishka[IReadChunkRecordRepository],
+    lifecycle: FromDishka[IReadChunkLifecycleRepository],
+    dependencies: FromDishka[DependencyService],
 ) -> object:
     """Declare that CHUNK depends on ``prerequisite_chunk_id``.
 
     Idempotent: an already-standing pair is reported back, even past the dependent's window or once the
     prerequisite goes ephemeral. 404 for an unknown or concurrently deleted dependent or prerequisite;
     409 for a dependent past its window, a cycle the edge would close, or an ephemeral prerequisite."""
-    dependent = _resolve_dependent(services, chunk_id)
-    prerequisite = resolve_prerequisite(services, request.prerequisite_chunk_id)
+    dependent = _resolve_dependent(records, chunk_id)
+    prerequisite = resolve_prerequisite(records, lifecycle, request.prerequisite_chunk_id)
     try:
-        edge = services.dependencies.declare(dependent, prerequisite, by=request.by)
+        edge = dependencies.declare(dependent, prerequisite, by=request.by)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except DependentNotEditable as exc:
@@ -125,18 +135,21 @@ def declare_dependency(
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
+@inject_sync
 def release_dependency(
     chunk_id: str,
     request: ChunkDependencyReleaseRequest,
-    services: Services,
+    records: FromDishka[IReadChunkRecordRepository],
+    edges: FromDishka[IReadChunkDependenciesRepository],
+    dependencies: FromDishka[DependencyService],
 ) -> object:
     """Release CHUNK's standing dependency on ``prerequisite_chunk_id``
     — recorded, never deleted. Admitted whenever the edge stands, whatever the
     prerequisite's own state. 404 for an unknown dependent; 409 when no edge stands."""
-    dependent = _resolve_dependent(services, chunk_id)
+    dependent = _resolve_dependent(records, chunk_id)
     try:
-        edge = _resolve_standing_edge(services, dependent, request.prerequisite_chunk_id)
-        released = services.dependencies.release(edge, by=request.by)
+        edge = _resolve_standing_edge(edges, dependent, request.prerequisite_chunk_id)
+        released = dependencies.release(edge, by=request.by)
     except NoStandingDependencyToRelease as exc:
         raise ProblemHTTPException(
             partial(problems.no_standing_dependency_problem, exc.dependent_chunk_id, exc.prerequisite_chunk_id)

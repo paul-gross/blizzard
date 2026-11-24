@@ -23,7 +23,8 @@ from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, ScopeNotRel
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.domain.graph.model import Graph
-from blizzard.hub.graphs import PACKAGED
+from blizzard.hub.graphs import PACKAGED, packaged_default_yaml
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingSetStore
 from tests.support.garden_delivery_world import add_op, garden_delivery_recorder, garden_delta
@@ -46,7 +47,7 @@ _AUTHOR = WorkItemAuthor.user("usr_1")
 
 def _default_graph(hub: HubHarness) -> Graph:
     return hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
 
 

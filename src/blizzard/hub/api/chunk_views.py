@@ -15,13 +15,12 @@ from blizzard.foundation.usage_kind import UsageKind
 from blizzard.foundation.wait_kinds import WaitKind
 from blizzard.hub.api import problems
 from blizzard.hub.api.decisions import to_decision_view
-from blizzard.hub.api.flow_places import chunk_flow_places, fact_view
+from blizzard.hub.api.flow_places import FlowLineReads, chunk_flow_places, fact_view
 from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields, project_label_fields
 from blizzard.hub.api.questions import question_view
 from blizzard.hub.api.urgency_refs import urgency_ref
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.artifact.model import GitCommitArtifact, StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.dependencies import BlockedMarking
@@ -36,18 +35,30 @@ from blizzard.hub.domain.chunk.model import (
     holds_claim,
     verb_legal_from,
 )
-from blizzard.hub.domain.config.repositories import CommitOrigin, resolve_origin_record
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
+from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
+from blizzard.hub.domain.config.forges import IReadForgeRepository
+from blizzard.hub.domain.config.repositories import CommitOrigin, IReadRepositoryRecordRepository, resolve_origin_record
 from blizzard.hub.domain.delivery.declarations import delivery_declarations_for
 from blizzard.hub.domain.delivery.flows import PollPolicy, SubmissionRecord, bounce_is_rework, bounce_withdrew
-from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.delivery.ports.flows import IReadFlows, IReadFlowViews
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, IReadGraphRepository
 from blizzard.hub.domain.graph.progress import NodeVisit, node_progress
 from blizzard.hub.domain.operations.complete import is_completion_replay
 from blizzard.hub.domain.operations.edit import is_graph_editable
 from blizzard.hub.domain.operations.promote import is_promotable
-from blizzard.hub.domain.projects.model import Project, ProjectId
-from blizzard.hub.domain.projects.targets import TargetChunk, with_records
+from blizzard.hub.domain.projects.links import IReadProjectLinks
+from blizzard.hub.domain.projects.model import IReadProjectRepository, Project, ProjectId
+from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk, with_records
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
+from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.forge.web import web_links
 from blizzard.hub.work_sources.registry import SelectedWorkSources
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
@@ -160,6 +171,32 @@ class DeliveryWireFields(TypedDict):
 
 
 @dataclass(frozen=True)
+class ChunkViewReads:
+    """What one chunk read renders from — the chunk's own reads, its graphs, urgencies, project and delivery
+    records, its runner's names, its work sources, and the flow reads its places and bounces come from."""
+
+    facts: IReadChunkFactsRepository
+    route: IReadChunkRouteRepository
+    work_refs: IReadChunkWorkRefsRepository
+    artifacts: IReadChunkArtifactsRepository
+    decisions: IReadChunkDecisionsRepository
+    questions: IReadChunkQuestionsRepository
+    graphs: IReadGraphRepository
+    urgency_reading: UrgencyReading
+    projects: IReadProjectRepository
+    project_links: IReadProjectLinks
+    repository_records: IReadRepositoryRecordRepository
+    forge_records: IReadForgeRepository
+    chunk_targets: ChunkTargets
+    commit_links: IReadLandedCommitLinks
+    registry: IReadRunnerRegistry
+    work_sources: IWorkSourceRegistry
+    flows: IReadFlows
+    flow_views: IReadFlowViews
+    lines: FlowLineReads
+
+
+@dataclass(frozen=True)
 class ChunkView:
     """One chunk read — the row, the facts every derived value comes from
     (``bzh:facts-not-status``), and the graph resolver the read shares.
@@ -167,7 +204,7 @@ class ChunkView:
     A whole-fleet read hands :meth:`of` one :class:`GraphNames` for every chunk, so the
     graphs a fleet shares are resolved once across the list rather than once per row."""
 
-    services: TenantServices
+    reads: ChunkViewReads
     chunk: Chunk
     facts: ChunkFacts
     names: GraphNames
@@ -201,7 +238,7 @@ class ChunkView:
     @classmethod
     def of(
         cls,
-        services: TenantServices,
+        reads: ChunkViewReads,
         chunk: Chunk,
         names: GraphNames | None = None,
         blocked: BlockedView | None = None,
@@ -212,12 +249,10 @@ class ChunkView:
         """``facts`` hands in the chunk's own facts a caller already loaded; omitted, this
         loads them."""
         return cls(
-            services=services,
+            reads=reads,
             chunk=chunk,
-            facts=facts
-            if facts is not None
-            else (services.chunks.facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)),
-            names=names or GraphNames(services.graphs),
+            facts=facts if facts is not None else (reads.facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)),
+            names=names or GraphNames(reads.graphs),
             blocked=blocked,
             neighborhood=neighborhood,
             delete_refusal=delete_refusal,
@@ -226,7 +261,7 @@ class ChunkView:
     @classmethod
     def injected(
         cls,
-        services: TenantServices,
+        reads: ChunkViewReads,
         chunk: Chunk,
         facts: ChunkFacts,
         route: Route | None,
@@ -246,7 +281,7 @@ class ChunkView:
         a per-chunk ``load_facts``/``route_of``/``live_holders``/``names_for``/project read.
         ``route=None`` means "no live route"; :meth:`of` leaves both uninjected."""
         return cls(
-            services=services,
+            reads=reads,
             chunk=chunk,
             facts=facts,
             names=names,
@@ -267,13 +302,13 @@ class ChunkView:
         places = (
             self.flow_places
             if self.flow_places is not None
-            else chunk_flow_places(self.services, [self.chunk.chunk_id])
+            else chunk_flow_places(self.reads.lines, [self.chunk.chunk_id])
         )
         return places.get(self.chunk.chunk_id, [])
 
     def urgency(self) -> UrgencyRef | None:
         """The chunk's urgency reference: joined to the injected set, else to one read of the set."""
-        urgencies = self.urgencies if self.urgencies is not None else self.services.urgency_reading.by_id()
+        urgencies = self.urgencies if self.urgencies is not None else self.reads.urgency_reading.by_id()
         return urgency_ref(self.chunk.urgency_id, urgencies)
 
     def _project_fields(self) -> ProjectLabelFields:
@@ -283,21 +318,21 @@ class ChunkView:
             return project_label_fields(None, None)
         if self.projects is not None:
             return project_label_fields(project_id, self.projects.get(project_id))
-        return project_label_fields(project_id, self.services.projects.get(project_id))
+        return project_label_fields(project_id, self.reads.projects.get(project_id))
 
     def _delivery(self) -> DeliveryRead:
         if self.delivery is not None:
             return self.delivery
-        sources = self.services.chunks.artifacts.delivery_sources_for([self.chunk.chunk_id])
+        sources = self.reads.artifacts.delivery_sources_for([self.chunk.chunk_id])
         declarations = delivery_declarations_for(
             [self.chunk],
             sources,
-            project_links=self.services.project_links,
-            repository_records=self.services.repository_records,
-            forge_records=self.services.forge_records,
-            targets=self.services.chunk_targets,
+            project_links=self.reads.project_links,
+            repository_records=self.reads.repository_records,
+            forge_records=self.reads.forge_records,
+            targets=self.reads.chunk_targets,
         )
-        commit_links = self.services.commit_links.for_chunks([self.chunk])
+        commit_links = self.reads.commit_links.for_chunks([self.chunk])
         return DeliveryRead.of(
             self.facts,
             sources.get(self.chunk.chunk_id, DeliverySources()),
@@ -322,19 +357,19 @@ class ChunkView:
         via :meth:`~blizzard.hub.domain.chunk.ports.route.IReadChunkRouteRepository.route_of`."""
         if self.route is not _ROUTE_NOT_INJECTED:
             return self.route
-        return self.services.chunks.route.route_of(self.chunk.chunk_id)
+        return self.reads.route.route_of(self.chunk.chunk_id)
 
     def _runner_names(self, runner_ids: Iterable[str | None]) -> Mapping[str, str]:
         """The registered names of the runners this render shows: the injected map, else one
         ``names_for`` read over just ``runner_ids`` (none at all when every id is ``None``)."""
         if self.runner_names is not None:
             return self.runner_names
-        return self.services.registry.names_for(runner_id for runner_id in runner_ids if runner_id is not None)
+        return self.reads.registry.names_for(runner_id for runner_id in runner_ids if runner_id is not None)
 
     def _resolved_live_holders(self) -> dict[WorkRef, str]:
         if self.live_holders is not _LIVE_HOLDERS_NOT_INJECTED:
             return self.live_holders
-        return self.services.chunks.work_refs.live_holders(self.chunk.work_refs)
+        return self.reads.work_refs.live_holders(self.chunk.work_refs)
 
     def summary(self) -> ChunkSummary:
         """The derived fleet-list row — rendered both by the list read and by
@@ -348,7 +383,7 @@ class ChunkView:
         elif self.route is not _ROUTE_NOT_INJECTED:
             route = self.route
         else:
-            route = self.services.chunks.route.route_of(self.chunk.chunk_id)
+            route = self.reads.route.route_of(self.chunk.chunk_id)
         runner_id = route.runner_id if route is not None else None
         completed_at = self.facts.completed_at()
         return ChunkSummary(
@@ -419,9 +454,7 @@ class ChunkView:
         resolves to its own binding by key, so a chunk's pointers need not all share one source. Liveness resolves
         via :meth:`_resolved_live_holders`'s one bulk call."""
         holders = self._resolved_live_holders()
-        sources = self.sources or SelectedWorkSources(
-            self.services.work_sources, (p.source for p in self.chunk.work_refs)
-        )
+        sources = self.sources or SelectedWorkSources(self.reads.work_sources, (p.source for p in self.chunk.work_refs))
         views: list[WorkRefView] = []
         for p in self.chunk.work_refs:
             source = sources.source(p.source)
@@ -441,12 +474,12 @@ class ChunkView:
     def detail(self) -> ChunkDetail:
         node_id, node_name = self.current_node()
         graph_created_at = self.names.created_at(self.chunk.graph_id)
-        artifacts = self.services.chunks.artifacts.load_artifacts(self.chunk.chunk_id)
+        artifacts = self.reads.artifacts.load_artifacts(self.chunk.chunk_id)
         history = ChunkHistoryView(self.facts, self.names)
         status = self.facts.status()
         route = self._resolved_route()
-        decision = self.services.chunks.decisions.decision_for_chunk(self.chunk.chunk_id)
-        questions = self.services.chunks.questions.load_questions(self.chunk.chunk_id)
+        decision = self.reads.decisions.decision_for_chunk(self.chunk.chunk_id)
+        questions = self.reads.questions.load_questions(self.chunk.chunk_id)
         # One read names every runner the detail shows: the route's, the gate's, each asker's.
         runner_names = self._runner_names(
             [
@@ -513,15 +546,15 @@ class ChunkView:
             # times — so it sits outside the page-bounded rule; no detail-load slowdown has been shown.
             flow_record=[
                 fact_view(fact)
-                for fact in self.services.flow_views.chunk_records([self.chunk.chunk_id]).get(self.chunk.chunk_id, [])
+                for fact in self.reads.flow_views.chunk_records([self.chunk.chunk_id]).get(self.chunk.chunk_id, [])
             ],
             **project,
         )
 
     def _repository_targets(self) -> list[ChunkRepositoryTargetView]:
         """The chunk's effective targets (:func:`with_records`): each captured one, else its live preview."""
-        targets = self.services.chunk_targets.effective(TargetChunk(self.chunk.chunk_id, self.chunk.project_id))
-        records = self.services.repository_records.get_many(sorted(targets)) if targets else {}
+        targets = self.reads.chunk_targets.effective(TargetChunk(self.chunk.chunk_id, self.chunk.project_id))
+        records = self.reads.repository_records.get_many(sorted(targets)) if targets else {}
         return [
             ChunkRepositoryTargetView(
                 repository_id=target.repository_id,
@@ -558,7 +591,7 @@ class ChunkView:
                 overrode_red_checks=d.overrode_red_checks,
                 note=d.note,
             )
-            for d in self.services.chunks.decisions.resolutions_for_chunk(self.chunk.chunk_id)
+            for d in self.reads.decisions.resolutions_for_chunk(self.chunk.chunk_id)
         ]
 
     def _escalation(self) -> ChunkEscalationView | None:
@@ -583,7 +616,7 @@ class ChunkView:
         pending = self.facts.hub_node_pending()
         if pending is None or self.facts.open_escalation() is not None:
             return None
-        graph = self.services.graphs.get(self.chunk.graph_id)
+        graph = self.reads.graphs.get(self.chunk.graph_id)
         node = graph.node_by_id(pending.node_id) if graph is not None else None
         if node is None:
             return None
@@ -640,7 +673,7 @@ class ChunkView:
         elif self.submissions is not None:
             submissions = self.submissions.get(self.chunk.chunk_id, [])
         else:
-            submissions = self.services.flows.submissions_of(self.chunk.chunk_id)
+            submissions = self.reads.flows.submissions_of(self.chunk.chunk_id)
         return [
             BounceView(
                 cause=b.cause,
@@ -663,12 +696,12 @@ class ChunkView:
             return lambda _row, _commit: None
         project_id = self.chunk.project_id
         linked = (
-            frozenset(link.repository_id for link in self.services.project_links.repositories_of(project_id))
+            frozenset(link.repository_id for link in self.reads.project_links.repositories_of(project_id))
             if project_id is not None
             else frozenset[str]()
         )
-        records = self.services.repository_records.list_all(include_retired=True) if linked else []
-        forges = self.services.forge_records.get_many(
+        records = self.reads.repository_records.list_all(include_retired=True) if linked else []
+        forges = self.reads.forge_records.get_many(
             list({record.fields.forge_id for record in records if record.repository_id in linked})
         )
         minted_at = self.chunk.minted_at
@@ -757,7 +790,7 @@ class ChunkHistoryView:
         ]
 
     def restarts(self) -> list[RestartView]:
-        """The chunk's operator restarts oldest-first (#370, #371).
+        """The chunk's operator restarts oldest-first.
 
         Each end resolves against its own graph the way :meth:`migrations` does, so a move that
         crossed one degrades neither side to a raw id; unset, ``from_graph`` is ``graph_id``."""

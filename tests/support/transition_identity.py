@@ -20,9 +20,32 @@ from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_driver import StepWake
 from blizzard.hub.documents.codec import IConfigCodec
+from blizzard.hub.domain.chunk.event_log import EventLogService
+from blizzard.hub.domain.chunk.ingest import IWorkItemProjectRead
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository, IWriteChunkDecisionsRepository
+from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository, IWriteChunkDeliveryRepository
+from blizzard.hub.domain.chunk.ports.dependencies import (
+    IReadChunkDependenciesRepository,
+    IWriteChunkDependenciesRepository,
+)
+from blizzard.hub.domain.chunk.ports.escalations import (
+    IReadChunkEscalationsRepository,
+    IWriteChunkEscalationsRepository,
+)
+from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository, IWriteChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.flow_submissions import IReadChunkFlowSubmissions
+from blizzard.hub.domain.chunk.ports.hub_exec import IReadChunkHubExecRepository, IWriteChunkHubExecRepository
+from blizzard.hub.domain.chunk.ports.lifecycle import IReadChunkLifecycleRepository, IWriteChunkLifecycleRepository
+from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository, IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository, IWriteChunkQuestionsRepository
+from blizzard.hub.domain.chunk.ports.queue import IReadChunkQueueRepository, IWriteChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository, IWriteChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository, IWriteChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
-from blizzard.hub.domain.execution.decisions import RequeueService
-from blizzard.hub.domain.execution.detach import DetachService
+from blizzard.hub.domain.chunk.ports.usage import IReadChunkUsageRepository, IWriteChunkUsageRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, IWriteChunkWorkRefsRepository
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository, IWriteFindingRepository
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
@@ -34,6 +57,7 @@ from blizzard.hub.domain.graph.model import (
     IWriteGraphRepository,
 )
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
+from blizzard.hub.domain.operations.delete import IHubItemWithdrawals
 from blizzard.hub.domain.projects.bulk_resolve import IBulkProjectLookup
 from blizzard.hub.domain.projects.links import IReadProjectLinks, IWriteProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, IWriteProjectRepository
@@ -52,6 +76,8 @@ from blizzard.hub.domain.urgency.ports import (
     IWriteUrgencyRepository,
 )
 from blizzard.hub.domain.urgency.services import UrgencyReading
+from blizzard.hub.domain.work_items.editing import WorkItemEditService
+from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository, IWriteWorkItemRepository
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.graphs import PackagedGraphs
@@ -103,7 +129,7 @@ ADAPTER_PORTS: Mapping[type[Any], tuple[type[Any], ...]] = {
     ProjectLinkStore: (IReadProjectLinks, IWriteProjectLinks),
     RunnerRegistryStore: (IReadRunnerRegistry, IWriteRunnerRegistry),
     HostRegistryStore: (IReadHostRegistry, IWriteHostRegistry),
-    WorkItemStore: (),
+    WorkItemStore: (IReadWorkItemRepository, IWriteWorkItemRepository, IHubItemWithdrawals, IWorkItemProjectRead),
     ChunkStores: (),
     GardenProposalStore: (),
     GardenProposalClosureStore: (),
@@ -112,7 +138,7 @@ ADAPTER_PORTS: Mapping[type[Any], tuple[type[Any], ...]] = {
     RepositoryRecordStore: (),
     ForgeRecordStore: (),
     CredentialRecordStore: (),
-    FlowStore: (),
+    FlowStore: (IReadChunkFlowSubmissions,),
     SecretReferrersStore: (),
     ForgeReferrersStore: (),
     CredentialReferrersStore: (),
@@ -129,6 +155,27 @@ ADAPTER_PORTS: Mapping[type[Any], tuple[type[Any], ...]] = {
     ConfigRevisionsStore: (),
     FindingStore: (IReadFindingRepository, IWriteFindingRepository),
     GraphStore: (IReadGraphRepository, IWriteGraphRepository, IReadGraphBodies, IReadNodeExecutors),
+}
+
+
+#: Each field of the tenant's one chunk-store bundle, and the chunk ports that resolve to it.
+CHUNK_PORTS: Mapping[str, tuple[type[Any], ...]] = {
+    "facts": (IReadChunkFactsRepository,),
+    "record": (IReadChunkRecordRepository, IWriteChunkRecordRepository),
+    "lifecycle": (IReadChunkLifecycleRepository, IWriteChunkLifecycleRepository),
+    "work_refs": (IReadChunkWorkRefsRepository, IWriteChunkWorkRefsRepository),
+    "queue": (IReadChunkQueueRepository, IWriteChunkQueueRepository),
+    "route": (IReadChunkRouteRepository, IWriteChunkRouteRepository),
+    "movement": (IReadChunkMovementRepository, IWriteChunkMovementRepository),
+    "artifacts": (IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository),
+    "questions": (IReadChunkQuestionsRepository, IWriteChunkQuestionsRepository),
+    "decisions": (IReadChunkDecisionsRepository, IWriteChunkDecisionsRepository),
+    "escalations": (IReadChunkEscalationsRepository, IWriteChunkEscalationsRepository),
+    "events": (IReadChunkEventsRepository, IWriteChunkEventsRepository),
+    "usage": (IReadChunkUsageRepository, IWriteChunkUsageRepository),
+    "delivery": (IReadChunkDeliveryRepository, IWriteChunkDeliveryRepository),
+    "hub_exec": (IReadChunkHubExecRepository, IWriteChunkHubExecRepository),
+    "dependencies": (IReadChunkDependenciesRepository, IWriteChunkDependenciesRepository),
 }
 
 
@@ -192,8 +239,8 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantServices.events", services.events, EventBroker),
         ("TenantServices.registry", services.registry, IReadRunnerRegistry),
         ("TenantServices.hosts", services.hosts, IReadHostRegistry),
-        ("TenantServices.detach", services.detach, DetachService),
-        ("TenantServices.requeue", services.requeue, RequeueService),
+        ("TenantStores.work_item_edits", stores.work_item_edits, WorkItemEditService),
+        ("TenantServices.event_log", services.event_log, EventLogService),
     )
     problems = [
         f"{name} is not its container instance" for name, field, key in retained if field is not tenant.get(key)
@@ -204,6 +251,13 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
             f"{each.__qualname__} is not {adapter.__qualname__}'s instance"
             for each in ports
             if tenant.get(each) is not owned
+        )
+    chunks = tenant.get(ChunkStores)
+    for field, ports in CHUNK_PORTS.items():
+        problems.extend(
+            f"{each.__qualname__} is not ChunkStores.{field}"
+            for each in ports
+            if tenant.get(each) is not getattr(chunks, field)
         )
     return problems
 

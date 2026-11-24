@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.work_sources.source import WorkItem
@@ -95,7 +97,7 @@ def test_work_items_with_no_pointers_is_an_empty_list(tmp_path: Path) -> None:
     # to the record store to prove the route still answers one.
     hub = build_hub(tmp_path)
     graph = hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     chunk = Chunk(chunk_id="ch_empty", graph_id=graph.graph_id, work_refs=[], minted_at=hub.clock.now())
     seed_chunk_record(chunk_stores(hub.engine, hub.clock), chunk)
@@ -117,7 +119,7 @@ def test_work_items_carries_a_hub_pointer_s_author_and_priority_beside_a_forge_p
     forge = FakeWorkSource(name="widget", title="flaky test", body="please fix the flake")
     hub = build_hub(tmp_path, work_sources={"widget": forge})
     graph = hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     hub_store = hub_store_connections(hub.engine)
     work_refs = ChunkWorkRefsStore(hub_store, hub.clock, facts=ChunkFactsStore(hub_store, hub.clock))

@@ -43,6 +43,7 @@ from blizzard.hub.domain.config.repositories import (
 )
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
+from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.forge.auth import ForgeAuthorization
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.landing import (
@@ -1239,7 +1240,7 @@ def test_a_chunk_stopped_while_land_merges_its_first_repository_keeps_that_landi
     def stop(_number: int) -> None:
         chunk = hub.services.chunks.record.get(chunk_id)
         assert chunk is not None
-        hub.services.stop.stop(chunk, by="operator")
+        hub.default_adapter(StopService).stop(chunk, by="operator")
 
     first = min(double.repos)  # both unranked, so they land in slug order
     double.repos[first].on_merge = stop
@@ -1590,7 +1591,7 @@ def test_a_landing_record_is_written_past_the_fence_once_and_answers_whether_it_
                 transaction=unit,
             ).refused
 
-    hub.services.stop.stop(chunk, by="operator")
+    hub.default_adapter(StopService).stop(chunk, by="operator")
 
     assert record() is True
     assert record() is True

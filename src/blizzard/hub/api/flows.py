@@ -8,6 +8,7 @@ from __future__ import annotations
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Query
 
 from blizzard.auth_core import Permission
@@ -16,7 +17,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.api.deps import Services
-from blizzard.hub.api.flow_places import FlowLineRead, fact_view
+from blizzard.hub.api.flow_places import FlowLineRead, FlowLineReads, fact_view
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.domain.delivery.flows import FlowOverview
 from blizzard.wire.flow import FlowListView, FlowRecordPage, FlowView
@@ -43,11 +44,12 @@ PathFlow = Annotated[FlowOverview, Depends(_overview)]
 
 
 @router.get("/flows", response_model=FlowListView, dependencies=[_VIEW])
-def list_flows(services: Services, active: Annotated[bool, Query()] = False) -> FlowListView:
+@inject_sync
+def list_flows(reads: FromDishka[FlowLineReads], active: Annotated[bool, Query()] = False) -> FlowListView:
     """The tenant's flows in resource order, each with its open turn, its line, and the newest of its record. With
     ``active``, only those with an open submission or a fact in the last 48 hours."""
-    overviews = services.flow_views.flow_overviews()
-    read = FlowLineRead.of(services, services.flow_views.open_submissions_on([o.flow.flow_id for o in overviews]))
+    overviews = reads.flow_views.flow_overviews()
+    read = FlowLineRead.of(reads, reads.flow_views.open_submissions_on([o.flow.flow_id for o in overviews]))
     since = read.now - BOARD_DONE_WINDOW
     return FlowListView(
         flows=[
@@ -59,10 +61,11 @@ def list_flows(services: Services, active: Annotated[bool, Query()] = False) -> 
 
 
 @router.get("/flows/{flow_id}", response_model=FlowView, dependencies=[_VIEW])
-def get_flow(overview: PathFlow, services: Services) -> FlowView:
+@inject_sync
+def get_flow(overview: PathFlow, reads: FromDishka[FlowLineReads]) -> FlowView:
     """One flow with its open turn, its line, and the newest of its record: 200, or 404 for one the tenant does not
     hold."""
-    return FlowLineRead.around(services, [overview.flow.flow_id]).flow_view(overview)
+    return FlowLineRead.around(reads, [overview.flow.flow_id]).flow_view(overview)
 
 
 @router.get("/flows/{flow_id}/record", response_model=FlowRecordPage, dependencies=[_VIEW])

@@ -24,6 +24,8 @@ from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.domain.execution.questions import QuestionService
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
+from blizzard.hub.domain.operations.complete import CompleteService
+from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.transactions import HubTransactions
 from tests.support.chunk_questions import ask_question
@@ -40,13 +42,13 @@ from tests.support.scaffolding import (
 def _stop(hub: HubHarness, chunk_id: str) -> None:
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
-    hub.services.stop.stop(chunk, by="operator")
+    hub.default_adapter(StopService).stop(chunk, by="operator")
 
 
 def _complete(hub: HubHarness, chunk_id: str) -> None:
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
-    hub.services.complete.complete(chunk, by="operator")
+    hub.default_adapter(CompleteService).complete(chunk, by="operator")
 
 
 def _answer_rows(hub: HubHarness, question_id: str) -> int:

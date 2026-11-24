@@ -14,6 +14,7 @@ import pytest
 from sqlalchemy import Connection, select
 
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkRef
+from blizzard.hub.domain.operations.complete import CompleteService
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import chunk_lifecycle_store
 from tests.support.chunk_units import chunk_unit
@@ -60,7 +61,7 @@ def test_completion_publishes_one_skip_frame_keyed_to_its_committed_row(
     monkeypatch.setattr(hub.events, "publish_event_logged", observe)
     since = hub.events.latest_id()
 
-    hub.services.complete.complete(chunk, by="test")
+    hub.default_adapter(CompleteService).complete(chunk, by="test")
 
     rows = _skip_row_ids(hub)
     assert len(rows) == 1
@@ -71,7 +72,7 @@ def test_completion_publishes_one_skip_frame_keyed_to_its_committed_row(
     assert visible_at_publish == [rows]
 
     replayed_since = hub.events.latest_id()
-    assert hub.services.complete.complete(chunk, by="test") is None
+    assert hub.default_adapter(CompleteService).complete(chunk, by="test") is None
     assert _skip_frames(hub, since=replayed_since) == []
     assert _skip_row_ids(hub) == rows
 
@@ -95,7 +96,7 @@ def test_a_completion_unit_that_fails_after_the_enqueue_leaves_no_row_and_no_fra
     since = hub.events.latest_id()
 
     with pytest.raises(RuntimeError, match="rollback"):
-        hub.services.complete.complete(chunk, by="test")
+        hub.default_adapter(CompleteService).complete(chunk, by="test")
 
     assert _skip_row_ids(hub) == []
     assert _skip_frames(hub, since=since) == []

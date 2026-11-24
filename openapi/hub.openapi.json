@@ -42273,7 +42273,7 @@
     },
     "/api/chunks/{chunk_id}/restart": {
       "post": {
-        "description": "Force a chunk onto a node now, on a freshly minted session (#370, #371).\n\nAt a bumped epoch, so the running attempt is fenced out and the holding runner re-enters;\n``node`` omitted means its current node, or the entry of the graph it lands on when it never\nmoved. 409 refuses a terminal chunk, an unmatched name, or its own pin; 404 an unknown target.",
+        "description": "Force a chunk onto a node now, on a freshly minted session.\n\nAt a bumped epoch, so the running attempt is fenced out and the holding runner re-enters;\n``node`` omitted means its current node, or the entry of the graph it lands on when it never\nmoved. 409 refuses a terminal chunk, an unmatched name, or its own pin; 404 an unknown target.",
         "operationId": "restart_chunk_api_chunks__chunk_id__restart_post",
         "parameters": [
           {

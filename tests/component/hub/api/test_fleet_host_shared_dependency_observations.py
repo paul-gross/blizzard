@@ -14,6 +14,7 @@ from blizzard.hub.api.auth import HostAuth
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.runners.host import HostTokenRotation
 from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
@@ -146,7 +147,7 @@ def test_shared_refusals_match_each_host_operation(
         registry.record_lifecycle(
             "runner-a", retired=False, at=hub.clock.now(), by="racer", expected_lifecycle=registration.lifecycle_version
         )
-        release = hub.services.detach.release_held
+        release = hub.default_adapter(DetachService).release_held
 
         def reinstate_before_release(chunk: Chunk, *, runner: RunnerLifecycleVersion) -> int | None:
             registration = registry.get_runner("runner-a")
@@ -161,7 +162,7 @@ def test_shared_refusals_match_each_host_operation(
             return release(chunk, runner=runner)
 
         with monkeypatch.context() as patch:
-            patch.setattr(hub.services.detach, "release_held", reinstate_before_release)
+            patch.setattr(hub.default_adapter(DetachService), "release_held", reinstate_before_release)
             observe(client.post(retire_url, json={"force": True}, headers=headers), 409, RunnerRetireInterruptedProblem)
 
     retired_host = hub.client.post("/api/hosts", json={"name": "retired"})

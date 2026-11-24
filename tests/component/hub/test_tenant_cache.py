@@ -256,7 +256,6 @@ def test_a_tenants_services_are_built_once_over_its_own_stores(tmp_path: Path) -
     assert hub.tenants.open_services(StoreScope(second)) is services
     stores = core.open(StoreScope(second))
     assert services.registry is stores.registry
-    assert services.delete is stores.delete
     assert services.findings is stores.finding_store
     assert services is not first
     assert services.registry is not first.registry

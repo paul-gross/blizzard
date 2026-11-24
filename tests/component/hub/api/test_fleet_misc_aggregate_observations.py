@@ -25,6 +25,7 @@ from tests.support.credential_runners import seed_credential_runners
 from tests.support.hub_request_auth import bearer
 from tests.support.refusal_observation import RefusalObservation, coverage_mismatches, observe_refusal
 from tests.support.scaffolding import build_hub, close_tenant
+from tests.support.store_free_process import store_free
 
 
 @pytest.mark.parametrize(
@@ -62,10 +63,8 @@ def test_fleet_read_problem_variants(tmp_path: Path, path: str) -> None:
     if "{question_id}" in path:
         observe(client.get(url, headers=bearer(live)), 404, QuestionNotFoundProblem)
 
-    services = hub.app.state.services
-    hub.app.state.services = None
-    observe(client.get(url, headers=bearer(live), params=params), 503, HubStoreUnavailableProblem)
-    hub.app.state.services = services
+    with store_free(hub.app):
+        observe(client.get(url, headers=bearer(live), params=params), 503, HubStoreUnavailableProblem)
 
     def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
         principal = RunnerAuth.of(request).demand()

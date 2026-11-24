@@ -27,6 +27,12 @@ from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.runs.run import RoutineRetiredError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
+from blizzard.hub.domain.operations.delete import DeleteService
+from blizzard.hub.domain.operations.promote import PromoteService
+from blizzard.hub.domain.operations.queue import GroupService
+from blizzard.hub.domain.operations.stop import StopService
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.errand_runs_store import ErrandRunsStore
 from tests.support.scaffolding import HubHarness, build_hub, default_project, hub_scoped, project_record
@@ -41,7 +47,7 @@ def hub(tmp_path: Path) -> HubHarness:
 
 def _routine(hub: HubHarness, slug: str, *linked: str) -> Routine:
     graph = hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     project = project_record(hub, default_project(hub.engine))
     routine = hub.services.routine_authoring.create(
@@ -131,7 +137,7 @@ def test_the_newest_marked_run_is_the_last_and_a_stopped_holder_settles_it(hub: 
     (errand,) = _errands(hub, cadence).values()
     first = _mint(hub, cadence, errand)
     stopped_at = hub.clock.now()
-    hub.services.stop.stop(_chunk(hub, first.chunk.chunk_id), by="operator")
+    hub.default_adapter(StopService).stop(_chunk(hub, first.chunk.chunk_id), by="operator")
 
     settled = _last(hub, errand)
     assert settled is not None
@@ -155,7 +161,7 @@ def test_a_deleted_run_reads_withdrawn_and_a_lost_holder_reads_live(hub: HubHarn
     found = _errands(hub, cadence)
     deleted = _mint(hub, cadence, found[("every", "sweep")])
     lost = _mint(hub, cadence, found[("every", "runner")])
-    hub.services.delete.delete(_chunk(hub, deleted.chunk.chunk_id), by="operator")
+    hub.default_adapter(DeleteService).delete(_chunk(hub, deleted.chunk.chunk_id), by="operator")
     with hub.engine.begin() as conn:
         conn.execute(
             hub_scoped(sa.delete(s.chunk_work_refs).where(s.chunk_work_refs.c.chunk_id == lost.chunk.chunk_id))
@@ -178,13 +184,13 @@ def test_runs_grouped_into_one_chunk_each_read_the_survivor_until_it_settles(hub
     found = _errands(hub, cadence)
     survivor = _mint(hub, cadence, found[("every", "sweep")])
     folded = _mint(hub, cadence, found[("every", "runner")])
-    hub.services.group.group(survivor.chunk.chunk_id, [folded.chunk.chunk_id])
+    hub.default_adapter(GroupService).group(survivor.chunk.chunk_id, [folded.chunk.chunk_id])
 
     runs = hub.default_adapter(ErrandRunsStore).last_runs([errand.key for errand in found.values()])
     assert {run.work_item_id for run in runs.values()} == {survivor.item.work_item_id, folded.item.work_item_id}
     assert all(run.run.unfinished() for run in runs.values())
 
-    hub.services.stop.stop(_chunk(hub, survivor.chunk.chunk_id), by="operator")
+    hub.default_adapter(StopService).stop(_chunk(hub, survivor.chunk.chunk_id), by="operator")
     runs = hub.default_adapter(ErrandRunsStore).last_runs([errand.key for errand in found.values()])
     assert [run.run.outcome() for run in runs.values()] == [RunOutcome.CANCELLED, RunOutcome.CANCELLED]
 
@@ -296,7 +302,7 @@ def test_a_promoting_mint_and_an_operator_promote_each_land_at_their_own_tail(hu
         author=WorkItemAuthor.user("u"),
     )
     first = _mint(hub, cadence, found[("every", "sweep")])
-    hub.services.promote.promote(_chunk(hub, hand.chunk_id))
+    hub.default_adapter(PromoteService).promote(_chunk(hub, hand.chunk_id))
     last = _mint(hub, cadence, found[("every", "runner")])
 
     positions = hub.services.chunks.queue.queue_positions([first.chunk.chunk_id, hand.chunk_id, last.chunk.chunk_id])

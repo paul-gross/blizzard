@@ -11,6 +11,7 @@ from blizzard.foundation.registry.internal.recording import RecordingRegistry
 from blizzard.foundation.registry.internal.translation import HOST_LIFETIMES, HUB_LIFETIMES
 from blizzard.foundation.registry.scopes import ScopeValues
 from tests.support.container_guards import (
+    NARROWED_MODULES,
     alias_identity_violations,
     child_open_violations,
     default_factory_violations,
@@ -119,6 +120,29 @@ def test_the_wiring_gate_catches_planted_cross_area_and_adapter_imports(tmp_path
     assert wiring_boundary_violations(root) == [
         "findings/wiring.py: imports the adapter blizzard.chunks.internal.store",
         "findings/wiring.py: imports another area's wiring blizzard.chunks.wiring",
+    ]
+
+
+def test_the_wiring_gate_catches_a_domain_wiring_reaching_outside_the_domain(tmp_path: Path) -> None:
+    root = _plant(
+        tmp_path,
+        {
+            "hub/domain/chunks/wiring.py": (
+                "from blizzard.foundation.registry.interface import Registry\n"
+                "from blizzard.hub.events.broker import EventBroker\n"
+                "from blizzard.hub.work_sources.source import IWorkSourceRegistry\n"
+                "from blizzard.hub.domain.chunks.service import Service\n"
+                "from blizzard.hub.tenancy import STORE_UNAVAILABLE\n"
+            ),
+            "hub/events/wiring.py": (
+                "from blizzard.foundation.registry.interface import Registry\n"
+                "from blizzard.hub.events.broker import EventBroker\n"
+            ),
+        },
+    )
+    assert wiring_boundary_violations(root) == [
+        "hub/domain/chunks/wiring.py: imports blizzard.hub.events.broker from outside the domain",
+        "hub/domain/chunks/wiring.py: imports blizzard.hub.work_sources.source from outside the domain",
     ]
 
 
@@ -252,6 +276,16 @@ def test_the_narrowing_gate_fails_a_planted_bag_import_parameter_and_attribute(t
         "hub/api/planted.py:3: names Services",
         "hub/api/planted.py:3: names TenantServices",
     ]
+
+
+def test_the_narrowing_gate_fails_a_bag_planted_in_a_rostered_chunk_operations_module(tmp_path: Path) -> None:
+    rostered = Path("hub/api/chunks.py")
+    assert rostered in NARROWED_MODULES
+    planted = tmp_path / rostered
+    planted.parent.mkdir(parents=True)
+    planted.write_text((_SRC / rostered).read_text() + "\ndef planted(services: Services) -> None: ...\n")
+    lines = len(planted.read_text().splitlines())
+    assert narrowing_violations(tmp_path, [rostered]) == [f"hub/api/chunks.py:{lines}: names Services"]
 
 
 def test_the_narrowing_gate_fails_a_planted_hub_bag(tmp_path: Path) -> None:

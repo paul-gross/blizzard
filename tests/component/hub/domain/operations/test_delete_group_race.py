@@ -19,9 +19,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import cast
 
-from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
+from blizzard.hub.domain.chunk.dependencies import DependencyService, PrerequisiteScope
 from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
+from blizzard.hub.domain.operations.delete import DeleteService
+from blizzard.hub.domain.operations.queue import GroupService
 from tests.support.scaffolding import HubHarness, build_hub, ingest
 
 
@@ -44,7 +46,7 @@ def test_a_delete_blocks_while_a_fold_holds_the_shared_lock_mid_rewrite(tmp_path
     prerequisite = hub.services.chunks.record.get(prerequisite_id)
     assert dependent is not None
     assert prerequisite is not None
-    hub.services.dependencies.declare(dependent, PrerequisiteScope(prerequisite.chunk_id), by="user:alice")
+    hub.default_adapter(DependencyService).declare(dependent, PrerequisiteScope(prerequisite.chunk_id), by="user:alice")
 
     entered_write = threading.Event()
     release_write = threading.Event()
@@ -68,7 +70,7 @@ def test_a_delete_blocks_while_a_fold_holds_the_shared_lock_mid_rewrite(tmp_path
     group_result: dict[str, object] = {}
 
     def _group() -> None:
-        group_result["result"] = hub.services.group.group(survivor_id, [prerequisite_id])
+        group_result["result"] = hub.default_adapter(GroupService).group(survivor_id, [prerequisite_id])
 
     group_thread = threading.Thread(target=_group)
     group_thread.start()
@@ -79,7 +81,7 @@ def test_a_delete_blocks_while_a_fold_holds_the_shared_lock_mid_rewrite(tmp_path
     def _delete() -> None:
         chunk = hub.services.chunks.record.get(dependent_id)
         assert chunk is not None
-        delete_result["id"] = hub.services.delete.delete(chunk, by="operator")
+        delete_result["id"] = hub.default_adapter(DeleteService).delete(chunk, by="operator")
 
     delete_thread = threading.Thread(target=_delete)
     delete_thread.start()

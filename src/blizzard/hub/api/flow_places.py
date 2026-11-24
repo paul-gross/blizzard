@@ -7,11 +7,17 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.composition import TenantServices
-from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryId
+from blizzard.hub.domain.config.repositories import (
+    ConfiguredRepository,
+    IReadRepositoryRecordRepository,
+    RepositoryId,
+)
 from blizzard.hub.domain.delivery.flows import Flow, FlowFact, FlowLine, FlowOverview, FlowPlace, Submission, Turn
+from blizzard.hub.domain.delivery.lines import FlowLineFactory
+from blizzard.hub.domain.delivery.ports.flows import IReadFlows, IReadFlowViews
 from blizzard.wire.flow import (
     ChunkFlowPlaceView,
     FlowFactView,
@@ -37,6 +43,18 @@ def fact_view(fact: FlowFact) -> FlowFactView:
     )
 
 
+@dataclass(frozen=True)
+class FlowLineReads:
+    """What a flow line is read from — the open submissions and turns, the line builder, the records of the
+    repositories its flows land on, and the clock its places are judged at."""
+
+    flows: IReadFlows
+    flow_views: IReadFlowViews
+    lines: FlowLineFactory
+    repositories: IReadRepositoryRecordRepository
+    clock: IClock
+
+
 @collaborator
 @dataclass(frozen=True)
 class FlowLineRead:
@@ -49,28 +67,27 @@ class FlowLineRead:
     now: datetime
 
     @classmethod
-    def of(cls, services: TenantServices, submissions: Sequence[Submission]) -> FlowLineRead:
+    def of(cls, reads: FlowLineReads, submissions: Sequence[Submission]) -> FlowLineRead:
         """The line over ``submissions``, which must hold every open submission on each flow any of them holds — a
         place depends on every submission ahead of it there, on whatever page that submission's chunk sits."""
         turns = {
-            turn.submission_id: turn
-            for turn in services.flows.open_turns_of([sub.submission_id for sub in submissions])
+            turn.submission_id: turn for turn in reads.flows.open_turns_of([sub.submission_id for sub in submissions])
         }
         repository_ids = sorted({RepositoryId(flow.repository_id) for sub in submissions for flow in sub.flows})
         return cls(
-            line=services.flow_line_factory.line(submissions, turning=frozenset(turns)),
+            line=reads.lines.line(submissions, turning=frozenset(turns)),
             turns=turns,
-            repositories=services.repository_records.get_many(repository_ids) if repository_ids else {},
-            now=services.clock.now(),
+            repositories=reads.repositories.get_many(repository_ids) if repository_ids else {},
+            now=reads.clock.now(),
         )
 
     @classmethod
-    def around(cls, services: TenantServices, flow_ids: Sequence[str]) -> FlowLineRead:
+    def around(cls, reads: FlowLineReads, flow_ids: Sequence[str]) -> FlowLineRead:
         """The line of every open submission on ``flow_ids``, and on every other flow one of those holds — whether
         a submission is next turns on each flow it holds."""
-        held = services.flow_views.open_submissions_on(flow_ids) if flow_ids else []
+        held = reads.flow_views.open_submissions_on(flow_ids) if flow_ids else []
         wider = sorted({flow.flow_id for sub in held for flow in sub.flows} - set(flow_ids))
-        return cls.of(services, services.flow_views.open_submissions_on([*flow_ids, *wider]) if wider else held)
+        return cls.of(reads, reads.flow_views.open_submissions_on([*flow_ids, *wider]) if wider else held)
 
     def _repository(self, flow: Flow) -> ConfiguredRepository | None:
         return self.repositories.get(RepositoryId(flow.repository_id))
@@ -141,17 +158,17 @@ class FlowLineRead:
         )
 
 
-def chunk_flow_places(services: TenantServices, chunk_ids: Sequence[str]) -> dict[str, list[ChunkFlowPlaceView]]:
+def chunk_flow_places(reads: FlowLineReads, chunk_ids: Sequence[str]) -> dict[str, list[ChunkFlowPlaceView]]:
     """Each named chunk's places, by chunk id; a chunk with no open submission holding a flow has no entry.
 
     A place depends on the submissions ahead of it, whose chunks may sit on no page that names them, so the line is
     read whole over the flows the chunks hold — a fixed number of batched reads bounded by the line, not the fleet.
     The places are those of the chunks' submissions in that line, not in the first read: one that closed in between
     is in neither the line nor its facts."""
-    own = services.flow_views.open_submissions_of(chunk_ids) if chunk_ids else []
+    own = reads.flow_views.open_submissions_of(chunk_ids) if chunk_ids else []
     flow_ids = sorted({flow.flow_id for sub in own for flow in sub.flows})
     if not flow_ids:
         return {}
-    read = FlowLineRead.of(services, services.flow_views.open_submissions_on(flow_ids))
+    read = FlowLineRead.of(reads, reads.flow_views.open_submissions_on(flow_ids))
     named = set(chunk_ids)
     return read.chunk_places([sub for sub in read.line.submissions if sub.chunk_id in named])

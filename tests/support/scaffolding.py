@@ -27,6 +27,7 @@ from typing import Any, NotRequired, Required, TypedDict, cast
 from urllib.parse import urlparse
 
 import httpx2
+import pytest
 import sqlalchemy as sa
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
@@ -45,8 +46,10 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
 from blizzard.foundation.project_colors import ProjectColor
+from blizzard.foundation.registry.interface import Lifetime
 from blizzard.foundation.registry.internal.recording import RecordingRegistry, Rewrites
 from blizzard.foundation.registry.internal.translation import HUB_LIFETIMES, build_container
+from blizzard.foundation.registry.scopes import OwnedChild, Resolver, ScopeValues
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.sealing import IKeyProvider
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -149,6 +152,7 @@ from blizzard.hub.domain.observability.transcripts import (
     transcript_chunk_lock,
     transcript_lane_lock,
 )
+from blizzard.hub.domain.operations.promote import PromoteService
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
 from blizzard.hub.domain.projects.model import Project, ProjectId
@@ -1665,6 +1669,57 @@ def serve_default_tenant(hub: HubHarness, services: TenantServices) -> None:
     hub.app.state.services = replace(hub.hub_services, tenants=replace(tenants, open_services=open_services))
 
 
+@dataclass(frozen=True)
+class _OverridingResolver:
+    """A request scope's resolver that answers each overridden key with its stand-in, and every other key as the
+    request scope does."""
+
+    inner: Resolver
+    overrides: Mapping[Any, object]
+
+    def get(self, dependency_type: Any, component: str | None = "") -> Any:
+        if dependency_type in self.overrides:
+            return self.overrides[dependency_type]
+        return self.inner.get(dependency_type, component)
+
+
+@dataclass(frozen=True)
+class _OverriddenChild:
+    """A request scope whose resolver answers the overridden keys with their stand-ins."""
+
+    child: OwnedChild
+    resolver: _OverridingResolver
+
+    @property
+    def lifetime(self) -> Lifetime:
+        return self.child.lifetime
+
+    @property
+    def owner(self) -> str:
+        return self.child.owner
+
+    def close(self, exception: BaseException | None = None) -> None:
+        self.child.close(exception)
+
+
+def resolve_default_tenant_with(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch, overrides: Mapping[Any, object]
+) -> None:
+    """Resolve each of ``overrides``' keys, in every request the default tenant admits, to its stand-in — a test's
+    counting double for a seam a narrowed route names; every other key resolves as the container resolves it."""
+    tenants = hub.hub_services.process.tenants
+    default = default_tenant(hub.engine)
+    opened = tenants.request
+
+    def request(scope: StoreScope, values: ScopeValues) -> OwnedChild:
+        child = opened(scope, values)
+        if scope.tenant != default:
+            return child
+        return _OverriddenChild(child, _OverridingResolver(child.resolver, overrides))
+
+    monkeypatch.setattr(tenants, "request", request)
+
+
 _hub_prototype_lock = threading.Lock()
 _hub_prototype_tmp: tempfile.TemporaryDirectory[str] | None = None
 _hub_prototype_db: Path | None = None
@@ -2567,7 +2622,7 @@ def make_ready(hub: HubHarness, chunk_id: str) -> None:
     finds it ``ready``. Bypasses the HTTP route: no operator session and no SSE frame."""
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None, f"unknown chunk {chunk_id}"
-    hub.services.promote.promote(chunk)
+    hub.default_adapter(PromoteService).promote(chunk)
 
 
 def claim_route(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1") -> RouteClaimReply:

@@ -20,7 +20,9 @@ import sqlalchemy as sa
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
-from blizzard.hub.domain.operations.promote import ChunkNotPromotable
+from blizzard.hub.domain.operations.promote import ChunkNotPromotable, PromoteService
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.hub.store import schema as s
 from tests.support.scaffolding import HubHarness, build_hub, hub_scoped, ingest, pointer_token, with_test_lock_wait
 
@@ -116,7 +118,7 @@ def test_two_concurrent_first_default_graph_resolutions_mint_it_once(tmp_path: P
     def _ensure(name: str) -> None:
         try:
             graph = services.default_graph.ensure_default(
-                services.default_graph_doc, definition_yaml=services.default_graph_yaml
+                PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
             )
             ids[name] = graph.graph_id
         except BaseException as error:
@@ -141,7 +143,7 @@ def test_two_concurrent_first_default_graph_resolutions_mint_it_once(tmp_path: P
     assert ids["first"] == ids["second"]
     with hub.engine.connect() as conn:
         minted = conn.execute(
-            hub_scoped(sa.select(s.graphs.c.graph_id).where(s.graphs.c.name == services.default_graph_doc.name))
+            hub_scoped(sa.select(s.graphs.c.graph_id).where(s.graphs.c.name == PACKAGED_GRAPHS.default.doc.name))
         ).all()
     assert [row.graph_id for row in minted] == [ids["first"]]
 
@@ -157,7 +159,7 @@ def test_a_chunk_stopped_after_its_caller_resolved_it_is_not_promoted(tmp_path: 
     assert stopped.status_code == 202, stopped.text
 
     with pytest.raises(ChunkNotPromotable):
-        hub.services.promote.promote(chunk)
+        hub.default_adapter(PromoteService).promote(chunk)
 
     with hub.engine.connect() as conn:
         assert (

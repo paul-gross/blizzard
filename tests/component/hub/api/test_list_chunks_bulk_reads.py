@@ -12,8 +12,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from blizzard.foundation.clock import IClock
+from blizzard.hub.api.chunk_views import ChunkViewReads
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef
+from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.revisions import ConfigRevisions
 from blizzard.hub.domain.delivery.flows import FlowResource
@@ -43,9 +48,9 @@ from tests.support.scaffolding import (
     ingest,
     make_ready,
     report_lease,
+    resolve_default_tenant_with,
     seed_chunk,
     seed_graph,
-    serve_default_tenant,
 )
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -113,7 +118,9 @@ def test_list_chunks_query_count_is_independent_of_fleet_size_with_its_chunks_in
     assert count_queries(small.engine, lambda: call(small)) == count_queries(large.engine, lambda: call(large))
 
 
-def test_list_resolves_store_backed_sources_once_per_name_and_only_on_the_page(tmp_path: Path) -> None:
+def test_list_resolves_store_backed_sources_once_per_name_and_only_on_the_page(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource(), "other": FakeWorkSource(name="other")})
     # Ingest with the fixture registry, then swap in the production registry and cache.
     for i in range(5):
@@ -138,7 +145,8 @@ def test_list_resolves_store_backed_sources_once_per_name_and_only_on_the_page(t
         build=lambda record: BuiltWorkSource(record, FakeWorkSource(name=record.name), lambda: None),
         built_in=built_in,
     )
-    serve_default_tenant(hub, replace(hub.services, work_sources=registry))
+    views = hub.default_adapter(ChunkViewReads)
+    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewReads: replace(views, work_sources=registry)})
 
     def page() -> None:
         resp = hub.client.get("/api/chunks", params={"limit": 2})
@@ -171,7 +179,7 @@ def test_list_resolves_store_backed_sources_once_per_name_and_only_on_the_page(t
     assert revisions.calls[-2:] == ["default", "other"]
 
 
-def test_on_page_fallback_pointers_do_not_repeat_record_reads(tmp_path: Path) -> None:
+def test_on_page_fallback_pointers_do_not_repeat_record_reads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource()})
     for n in range(9):
         ingest(hub, [{"source": "default", "ref": str(n)}])
@@ -198,7 +206,8 @@ def test_on_page_fallback_pointers_do_not_repeat_record_reads(tmp_path: Path) ->
         build=lambda record: BuiltWorkSource(record, FallbackSource(name=record.slug), lambda: None),
         built_in=built_in,
     )
-    serve_default_tenant(hub, replace(hub.services, work_sources=registry))
+    views = hub.default_adapter(ChunkViewReads)
+    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewReads: replace(views, work_sources=registry)})
 
     def page(limit: int) -> None:
         response = hub.client.get("/api/chunks", params={"limit": limit})
@@ -268,7 +277,9 @@ class _CountingRouteStore(ChunkRouteStore):
         return super().route_of(chunk_id, transaction=transaction)
 
 
-def test_list_chunks_reads_its_page_in_batches_and_never_the_whole_tenant(tmp_path: Path) -> None:
+def test_list_chunks_reads_its_page_in_batches_and_never_the_whole_tenant(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     hub = build_hub(tmp_path)
     ingest(hub, [{"source": "default", "ref": "1"}])
     ingest(hub, [{"source": "default", "ref": "2"}])
@@ -276,8 +287,9 @@ def test_list_chunks_reads_its_page_in_batches_and_never_the_whole_tenant(tmp_pa
     counting_facts = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     counting_route = _CountingRouteStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
-    serve_default_tenant(
-        hub, replace(hub.services, chunks=replace(hub.services.chunks, facts=counting_facts, route=counting_route))
+    views = hub.default_adapter(ChunkViewReads)
+    resolve_default_tenant_with(
+        hub, monkeypatch, {ChunkViewReads: replace(views, facts=counting_facts, route=counting_route)}
     )
 
     resp = hub.client.get("/api/chunks")
@@ -312,7 +324,9 @@ class _CountingWorkRefsStore(ChunkWorkRefsStore):
         return super().live_holders(pointers, transaction=transaction)
 
 
-def test_list_chunks_renders_work_refs_with_one_batched_live_holders_call(tmp_path: Path) -> None:
+def test_list_chunks_renders_work_refs_with_one_batched_live_holders_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """`list_chunks` resolves its live-holder map with one batched `live_holders` call over the
     page's pointers, never the per-pointer `find_live_holder` or a per-chunk fact load."""
     hub = build_hub(tmp_path)
@@ -322,9 +336,9 @@ def test_list_chunks_renders_work_refs_with_one_batched_live_holders_call(tmp_pa
     counting_facts = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     counting_work_refs = _CountingWorkRefsStore(hub_store_connections(hub.engine), hub.clock, facts=counting_facts)
     assert hub.app is not None
-    serve_default_tenant(
-        hub,
-        replace(hub.services, chunks=replace(hub.services.chunks, facts=counting_facts, work_refs=counting_work_refs)),
+    views = hub.default_adapter(ChunkViewReads)
+    resolve_default_tenant_with(
+        hub, monkeypatch, {ChunkViewReads: replace(views, facts=counting_facts, work_refs=counting_work_refs)}
     )
 
     resp = hub.client.get("/api/chunks")
@@ -351,14 +365,15 @@ class _CountingGraphStore(GraphStore):
         return super().get(graph_id)
 
 
-def test_list_chunks_never_calls_graphs_get(tmp_path: Path) -> None:
+def test_list_chunks_never_calls_graphs_get(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hub = build_hub(tmp_path)
     ingest(hub, [{"source": "default", "ref": "1"}])
     ingest(hub, [{"source": "default", "ref": "2"}])
 
     counting_graphs = _CountingGraphStore(hub_store_connections(hub.engine))
     assert hub.app is not None
-    serve_default_tenant(hub, replace(hub.services, graphs=counting_graphs))
+    views = hub.default_adapter(ChunkViewReads)
+    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewReads: replace(views, graphs=counting_graphs)})
 
     resp = hub.client.get("/api/chunks")
 
@@ -581,7 +596,9 @@ def test_next_cursor_is_non_null_until_the_final_page(tmp_path: Path) -> None:
     assert second_body["next_cursor"] is None
 
 
-def test_list_chunks_never_reads_standing_edges_or_records_tenant_wide(tmp_path: Path) -> None:
+def test_list_chunks_never_reads_standing_edges_or_records_tenant_wide(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
     from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 
@@ -608,8 +625,8 @@ def test_list_chunks_never_reads_standing_edges_or_records_tenant_wide(tmp_path:
     edges.__dict__.update(hub.services.chunks.dependencies.__dict__)
     record = _NoList.__new__(_NoList)
     record.__dict__.update(hub.services.chunks.record.__dict__)
-    serve_default_tenant(
-        hub, replace(hub.services, chunks=replace(hub.services.chunks, dependencies=edges, record=record))
+    resolve_default_tenant_with(
+        hub, monkeypatch, {IReadChunkDependenciesRepository: edges, IReadChunkRecordRepository: record}
     )
 
     # Newest first: the dependent is alone on page one; its prerequisite is off the page.

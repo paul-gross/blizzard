@@ -15,6 +15,8 @@ from blizzard.hub.api import auth_session
 from blizzard.hub.auth.permissions import permissions_for
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.scopes import ScopeSlug
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.wire.cadence import REVISION_CONFLICT, RevisionConflictProblem
 from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
 from tests.support.scaffolding import (
@@ -40,7 +42,7 @@ def _project(hub: HubHarness) -> str:
 
 def _routine(hub: HubHarness, slug: str, scope: str = "blizzard") -> None:
     graph = hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     hub.services.routine_authoring.create(
         project=project_record(hub, _project(hub)),

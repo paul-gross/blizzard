@@ -13,7 +13,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.api.auth import RunnerAuth
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
 from blizzard.hub.api.hub_level import Hub
-from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
+from blizzard.hub.domain.chunk.dependencies import DependencyService, PrerequisiteScope
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
     CliPkceRequiredProblem,
@@ -349,7 +349,7 @@ def test_claim_409_variants_are_all_observed(tmp_path: Path) -> None:
     prerequisite_id = ingest(hub, [{"source": "default", "ref": "prerequisite"}])
     dependent = hub.services.chunks.record.get(dependent_id)
     assert dependent is not None
-    hub.services.dependencies.declare(dependent, PrerequisiteScope(prerequisite_id), by="user:alice")
+    hub.default_adapter(DependencyService).declare(dependent, PrerequisiteScope(prerequisite_id), by="user:alice")
     dependency = claim("r1", dependent_id)
     assert dependency.json()["prerequisite_chunk_id"] == prerequisite_id
     observe(dependency, RouteClaimDependencyProblem)

@@ -25,6 +25,8 @@ from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsReposi
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.execution.decisions import DecisionService
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
+from blizzard.hub.domain.operations.restart import RestartService
+from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.scoped import ScopedConnections
@@ -52,7 +54,7 @@ def _chunk_of(hub: HubHarness, decision_id: str) -> str:
 def _stop(hub: HubHarness, chunk_id: str) -> None:
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
-    hub.services.stop.stop(chunk, by="operator")
+    hub.default_adapter(StopService).stop(chunk, by="operator")
 
 
 def _restart_onto_gate(hub: HubHarness, chunk_id: str) -> None:
@@ -60,7 +62,7 @@ def _restart_onto_gate(hub: HubHarness, chunk_id: str) -> None:
     assert chunk is not None
     graph = hub.services.graphs.get(chunk.graph_id)
     assert graph is not None
-    hub.services.restart.restart(chunk, graph, node_name="approve-gate", by="operator")
+    hub.default_adapter(RestartService).restart(chunk, graph, node_name="approve-gate", by="operator")
 
 
 def _resolution_rows(hub: HubHarness, decision_id: str) -> int:

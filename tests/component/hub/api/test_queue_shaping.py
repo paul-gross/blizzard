@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import timedelta
 from pathlib import Path
 
+from blizzard.hub.domain.operations.queue import GroupService
 from tests.support.scaffolding import HubHarness, build_hub, capture_statements, pointer_token, write_chunk_pause_facts
 
 
@@ -398,7 +399,7 @@ def test_group_reads_the_fold_in_a_bounded_number_of_statements(tmp_path: Path) 
 
     def reads(hub: HubHarness, ids: list[str]) -> int:
         with capture_statements(hub.engine) as statements:
-            hub.services.group.group(ids[0], ids[1:])
+            hub.default_adapter(GroupService).group(ids[0], ids[1:])
         # The guard reads (record + facts) only — the fold's writes and their own
         # bookkeeping legitimately scale with the targets.
         return sum(

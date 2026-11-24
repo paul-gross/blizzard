@@ -9,12 +9,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
-from typing import cast
 
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
+from blizzard.hub.api.queue import QueueReads
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.kernel.transactions import Transaction
@@ -31,7 +31,7 @@ from tests.support.scaffolding import (
     count_queries,
     hub_store_connections,
     ingest,
-    serve_default_tenant,
+    resolve_default_tenant_with,
 )
 
 _PEEKS = [("/api/queue", True), ("/api/backlog", False)]
@@ -128,7 +128,7 @@ class _CountingFactsStore(ChunkFactsStore):
         return super().load_facts(chunk_id, transaction=transaction)
 
 
-def _wire_counting_facts(hub: HubHarness) -> _CountingFactsStore:
+def _wire_counting_facts(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> _CountingFactsStore:
     """Swap the hub's facts seam for a counting one, wiring the queue service's own
     record store over the same counting instance — `list_ready`/`list_not_ready` no
     longer touch facts at all (they take an already-derived ``statuses`` map), but the
@@ -137,32 +137,31 @@ def _wire_counting_facts(hub: HubHarness) -> _CountingFactsStore:
     counting = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     record = ChunkRecordStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
-    # The peek reads through the queue service's own store handle, not `services.chunks`.
-    serve_default_tenant(
-        hub,
-        replace(
-            hub.services,
-            chunks=replace(hub.services.chunks, facts=counting, record=record),
-            queue=QueueService(
-                queue=cast(IWriteChunkQueueRepository, hub.services.chunks.queue),
-                record=record,
-                facts=counting,
-                transactions=HubTransactions(hub_store_connections(hub.engine)),
-                clock=hub.clock,
-                urgency_order=UrgencyOrderStore(hub_store_connections(hub.engine)),
-            ),
-        ),
+    # The peek reads through the queue service's own store handle, not only the route's facts seam.
+    reads = hub.default_adapter(QueueReads)
+    order = QueueService(
+        queue=hub.default_adapter(IWriteChunkQueueRepository),
+        record=record,
+        facts=counting,
+        transactions=HubTransactions(hub_store_connections(hub.engine)),
+        clock=hub.clock,
+        urgency_order=UrgencyOrderStore(hub_store_connections(hub.engine)),
+    )
+    resolve_default_tenant_with(
+        hub, monkeypatch, {QueueReads: replace(reads, facts=counting, records=record, order=order)}
     )
     return counting
 
 
 @pytest.mark.parametrize(("path", "promote"), _PEEKS)
-def test_peek_reads_statuses_in_bulk_once_and_never_per_chunk(tmp_path: Path, path: str, promote: bool) -> None:
+def test_peek_reads_statuses_in_bulk_once_and_never_per_chunk(
+    tmp_path: Path, path: str, promote: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
     hub = build_hub(tmp_path)
     ingest(hub, [{"source": "default", "ref": "1"}], promote=promote)
     ingest(hub, [{"source": "default", "ref": "2"}], promote=promote)
 
-    counting = _wire_counting_facts(hub)
+    counting = _wire_counting_facts(hub, monkeypatch)
 
     resp = hub.client.get(path)
 
@@ -177,13 +176,15 @@ def test_peek_reads_statuses_in_bulk_once_and_never_per_chunk(tmp_path: Path, pa
 
 
 @pytest.mark.parametrize("path", ["/api/queue", "/api/backlog"])
-def test_replace_issues_one_load_live_statuses_call_on_success(tmp_path: Path, path: str) -> None:
+def test_replace_issues_one_load_live_statuses_call_on_success(
+    tmp_path: Path, path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     promote = path == "/api/queue"
     hub = build_hub(tmp_path)
     a = ingest(hub, [{"source": "default", "ref": "1"}], promote=promote)
     b = ingest(hub, [{"source": "default", "ref": "2"}], promote=promote)
 
-    counting = _wire_counting_facts(hub)
+    counting = _wire_counting_facts(hub, monkeypatch)
 
     resp = hub.client.put(path, json={"chunk_ids": [b, a]})
 
@@ -194,13 +195,15 @@ def test_replace_issues_one_load_live_statuses_call_on_success(tmp_path: Path, p
 
 
 @pytest.mark.parametrize("path", ["/api/queue", "/api/backlog"])
-def test_replace_issues_one_load_live_statuses_call_on_conflict(tmp_path: Path, path: str) -> None:
+def test_replace_issues_one_load_live_statuses_call_on_conflict(
+    tmp_path: Path, path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     promote = path == "/api/queue"
     hub = build_hub(tmp_path)
     ingest(hub, [{"source": "default", "ref": "1"}], promote=promote)
     elsewhere = ingest(hub, [{"source": "default", "ref": "2"}], promote=not promote)
 
-    counting = _wire_counting_facts(hub)
+    counting = _wire_counting_facts(hub, monkeypatch)
 
     resp = hub.client.put(path, json={"chunk_ids": [elsewhere]})
 
@@ -211,13 +214,15 @@ def test_replace_issues_one_load_live_statuses_call_on_conflict(tmp_path: Path, 
 
 
 @pytest.mark.parametrize("path", ["/api/queue/position", "/api/backlog/position"])
-def test_reposition_issues_one_load_live_statuses_call_on_success(tmp_path: Path, path: str) -> None:
+def test_reposition_issues_one_load_live_statuses_call_on_success(
+    tmp_path: Path, path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     promote = path == "/api/queue/position"
     hub = build_hub(tmp_path)
     a = ingest(hub, [{"source": "default", "ref": "1"}], promote=promote)
     b = ingest(hub, [{"source": "default", "ref": "2"}], promote=promote)
 
-    counting = _wire_counting_facts(hub)
+    counting = _wire_counting_facts(hub, monkeypatch)
 
     resp = hub.client.post(path, json={"chunk_id": b, "after_chunk_id": None if a == b else a})
 
@@ -228,13 +233,15 @@ def test_reposition_issues_one_load_live_statuses_call_on_success(tmp_path: Path
 
 
 @pytest.mark.parametrize("path", ["/api/queue/position", "/api/backlog/position"])
-def test_reposition_issues_one_load_live_statuses_call_on_conflict(tmp_path: Path, path: str) -> None:
+def test_reposition_issues_one_load_live_statuses_call_on_conflict(
+    tmp_path: Path, path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     promote = path == "/api/queue/position"
     hub = build_hub(tmp_path)
     ingest(hub, [{"source": "default", "ref": "1"}], promote=promote)
     elsewhere = ingest(hub, [{"source": "default", "ref": "2"}], promote=not promote)
 
-    counting = _wire_counting_facts(hub)
+    counting = _wire_counting_facts(hub, monkeypatch)
 
     resp = hub.client.post(path, json={"chunk_id": elsewhere, "after_chunk_id": None})
 
@@ -245,9 +252,11 @@ def test_reposition_issues_one_load_live_statuses_call_on_conflict(tmp_path: Pat
 
 
 @pytest.mark.parametrize("path", ["/api/queue", "/api/backlog"])
-def test_an_unknown_id_is_refused_without_deriving_statuses(tmp_path: Path, path: str) -> None:
+def test_an_unknown_id_is_refused_without_deriving_statuses(
+    tmp_path: Path, path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     hub = build_hub(tmp_path)
-    counting = _wire_counting_facts(hub)
+    counting = _wire_counting_facts(hub, monkeypatch)
 
     replaced = hub.client.put(path, json={"chunk_ids": ["ch_no_such_chunk"]})
     moved = hub.client.post(f"{path}/position", json={"chunk_id": "ch_no_such_chunk", "after_chunk_id": None})

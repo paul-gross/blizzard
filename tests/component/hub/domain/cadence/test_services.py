@@ -21,6 +21,8 @@ from blizzard.hub.domain.cadence.model import (
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.scopes import ScopeSlug
+from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
+from blizzard.hub.graphs import packaged_default_yaml
 from tests.support.scaffolding import HubHarness, build_hub, count_queries, default_project, project_record
 
 _CTX = ChangeContext(actor="operator", door=Door.API)
@@ -37,7 +39,7 @@ def _project(hub: HubHarness) -> str:
 
 def _routine(hub: HubHarness, slug: str, scope: str) -> Routine:
     graph = hub.services.default_graph.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     return hub.services.routine_authoring.create(
         project=project_record(hub, _project(hub)),
