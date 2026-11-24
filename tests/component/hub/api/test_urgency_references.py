@@ -12,6 +12,8 @@ import httpx2
 import pytest
 
 from blizzard.hub.domain.cadence.model import CadenceEdit
+from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
+from blizzard.hub.domain.cadence.services import CadenceAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import IReadRoutineRepository, RoutineAuthoring, RoutineEdit
@@ -242,7 +244,7 @@ def test_an_edit_read_before_a_retire_cleared_a_reference_it_leaves_is_refused_a
     routine_id = _routine(hub, default_urgency="urgent").json()["routine_id"]
     cadence_id = _cadence(hub, {"key": "nightly", "routine": "sweep", "urgency": "urgent"}).json()["cadence_id"]
     routine = hub.default_adapter(IReadRoutineRepository).get(routine_id)
-    cadence = hub.services.cadences.get(cadence_id)
+    cadence = hub.default_adapter(IReadCadenceRepository).get(cadence_id)
     assert routine is not None and cadence is not None
 
     _retire(hub, "urgent")
@@ -250,4 +252,4 @@ def test_an_edit_read_before_a_retire_cleared_a_reference_it_leaves_is_refused_a
     with pytest.raises(ConfigRevisionConflict):
         hub.default_adapter(RoutineAuthoring).edit(routine, RoutineEdit(name="renamed"), _CTX)
     with pytest.raises(ConfigRevisionConflict):
-        hub.services.cadence_authoring.edit(cadence, CadenceEdit(name="renamed"), _CTX, may_admit=True)
+        hub.default_adapter(CadenceAuthoring).edit(cadence, CadenceEdit(name="renamed"), _CTX, may_admit=True)

@@ -20,7 +20,7 @@ from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_driver import StepWake
 from blizzard.hub.documents.codec import IConfigCodec
-from blizzard.hub.domain.cadence.services import CadenceReading
+from blizzard.hub.domain.cadence.ports import IReadCadenceRepository, IReadErrandRunsRepository, IWriteCadenceRepository
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ingest import IWorkItemProjectRead
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
@@ -96,6 +96,7 @@ from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
 from blizzard.hub.store.internal.credential_referrers import CredentialReferrersStore
+from blizzard.hub.store.internal.errand_runs_store import ErrandRunsStore
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
@@ -135,6 +136,8 @@ ADAPTER_PORTS: Mapping[type[Any], tuple[type[Any], ...]] = {
     RunnerRegistryStore: (IReadRunnerRegistry, IWriteRunnerRegistry),
     HostRegistryStore: (IReadHostRegistry, IWriteHostRegistry),
     WorkItemStore: (IReadWorkItemRepository, IWriteWorkItemRepository, IHubItemWithdrawals, IWorkItemProjectRead),
+    CadenceStore: (IReadCadenceRepository, IWriteCadenceRepository),
+    ErrandRunsStore: (IReadErrandRunsRepository,),
     ChunkStores: (),
     GardenProposalStore: (),
     GardenDeliveryStore: (IReadGardenDeliveryRepository, IWriteGardenDeliveryRepository),
@@ -216,8 +219,6 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantServices.graphs", services.graphs, GraphStore),
         ("TenantServices.graph_bodies", services.graph_bodies, GraphStore),
         ("TenantServices.node_executors", services.node_executors, GraphStore),
-        ("TenantServices.cadences", services.cadences, CadenceStore),
-        ("TenantServices.cadence_reading", services.cadence_reading, CadenceReading),
         ("TenantServices.work_source_records", services.work_source_records, WorkSourceRecordStore),
         ("TenantServices.repository_records", services.repository_records, RepositoryRecordStore),
         ("TenantServices.forge_records", services.forge_records, ForgeRecordStore),

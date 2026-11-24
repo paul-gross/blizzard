@@ -18,6 +18,8 @@ from blizzard.hub.domain.cadence.model import (
     CadenceShape,
     ChoreShape,
 )
+from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
+from blizzard.hub.domain.cadence.services import CadenceAuthoring, CadenceLifecycle, CadenceReading
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine, RoutineAuthoring
 from blizzard.hub.domain.garden.scopes import ScopeRegistry, ScopeSlug
@@ -55,7 +57,7 @@ def _shape(slug: str, *chores: ChoreShape) -> CadenceShape:
 
 
 def _create(hub: HubHarness, shape: CadenceShape, *, may_admit: bool = True) -> Cadence:
-    return hub.services.cadence_authoring.create(
+    return hub.default_adapter(CadenceAuthoring).create(
         shape, project=project_record(hub, _project(hub)), ctx=_CTX, may_admit=may_admit
     )
 
@@ -64,7 +66,7 @@ def test_a_create_keeping_a_promoting_chore_needs_may_admit(hub: HubHarness) -> 
     with pytest.raises(CadenceAdmissionRefused):
         _create(hub, _shape("promoting", ChoreShape("a", "r")), may_admit=False)
 
-    assert hub.services.cadences.list_all() == []
+    assert hub.default_adapter(IReadCadenceRepository).list_all() == []
     held = _create(hub, _shape("held", ChoreShape("a", "r", promote=False)), may_admit=False)
     assert held.slug == "held"
 
@@ -74,24 +76,24 @@ def test_an_edit_or_enable_leaving_a_live_cadence_promoting_needs_may_admit(hub:
     promote = CadenceEdit(chores=[ChoreShape("a", "r")])
 
     with pytest.raises(CadenceAdmissionRefused):
-        hub.services.cadence_authoring.edit(held, promote, _CTX, may_admit=False)
+        hub.default_adapter(CadenceAuthoring).edit(held, promote, _CTX, may_admit=False)
 
-    retired = hub.services.cadence_lifecycle.retire(held, _CTX, by="operator")
-    promoting_while_retired = hub.services.cadence_authoring.edit(retired, promote, _CTX, may_admit=False)
+    retired = hub.default_adapter(CadenceLifecycle).retire(held, _CTX, by="operator")
+    promoting_while_retired = hub.default_adapter(CadenceAuthoring).edit(retired, promote, _CTX, may_admit=False)
     assert promoting_while_retired.chores[0].spec.promote
     with pytest.raises(CadenceAdmissionRefused):
-        hub.services.cadence_lifecycle.enable(promoting_while_retired, _CTX, by="operator", may_admit=False)
-    enabled = hub.services.cadence_lifecycle.enable(promoting_while_retired, _CTX, by="operator", may_admit=True)
+        hub.default_adapter(CadenceLifecycle).enable(promoting_while_retired, _CTX, by="operator", may_admit=False)
+    enabled = hub.default_adapter(CadenceLifecycle).enable(promoting_while_retired, _CTX, by="operator", may_admit=True)
     assert not enabled.retired
 
 
 def test_retire_and_a_write_changing_nothing_never_ask_may_admit(hub: HubHarness) -> None:
     promoting = _create(hub, _shape("promoting", ChoreShape("a", "r")))
 
-    unchanged = hub.services.cadence_authoring.edit(
+    unchanged = hub.default_adapter(CadenceAuthoring).edit(
         promoting, CadenceEdit(chores=[ChoreShape("a", "r")]), _CTX, may_admit=False
     )
-    retired = hub.services.cadence_lifecycle.retire(promoting, _CTX, by="operator")
+    retired = hub.default_adapter(CadenceLifecycle).retire(promoting, _CTX, by="operator")
 
     assert unchanged is promoting
     assert retired.retired
@@ -111,10 +113,13 @@ def test_attention_names_what_stops_each_errand_and_a_retired_cadence_needs_none
         ),
     )
     empty = _create(hub, _shape("empty"))
-    gone = hub.services.cadence_lifecycle.retire(_create(hub, _shape("gone", ChoreShape("x", "nope"))), _CTX, by="op")
+    gone = hub.default_adapter(CadenceLifecycle).retire(
+        _create(hub, _shape("gone", ChoreShape("x", "nope"))), _CTX, by="op"
+    )
 
     views = {
-        view.cadence.slug: view.attention for view in hub.services.cadence_reading.list_cadences(include_retired=True)
+        view.cadence.slug: view.attention
+        for view in hub.default_adapter(CadenceReading).list_cadences(include_retired=True)
     }
 
     assert views == {
@@ -126,12 +131,12 @@ def test_attention_names_what_stops_each_errand_and_a_retired_cadence_needs_none
         "empty": (Attention(AttentionReason.NO_CHORES),),
         "gone": (),
     }
-    assert {view.cadence.slug for view in hub.services.cadence_reading.list_cadences()} == {"empty", "attended"}
-    shown = hub.services.cadence_reading.show(attended.cadence_id)
+    assert {view.cadence.slug for view in hub.default_adapter(CadenceReading).list_cadences()} == {"empty", "attended"}
+    shown = hub.default_adapter(CadenceReading).show(attended.cadence_id)
     assert shown is not None and shown.attention == views["attended"]
-    assert hub.services.cadence_reading.view(empty).attention == views["empty"]
-    assert hub.services.cadence_reading.show(gone.cadence_id) is not None
-    assert hub.services.cadence_reading.show("cad_missing") is None
+    assert hub.default_adapter(CadenceReading).view(empty).attention == views["empty"]
+    assert hub.default_adapter(CadenceReading).show(gone.cadence_id) is not None
+    assert hub.default_adapter(CadenceReading).show("cad_missing") is None
 
 
 def _seed(hub: HubHarness, count: int, start: int) -> None:
@@ -150,9 +155,9 @@ def _seed(hub: HubHarness, count: int, start: int) -> None:
 
 def test_a_listing_reads_in_a_number_of_queries_flat_in_its_cadences(hub: HubHarness) -> None:
     _seed(hub, 2, 0)
-    few = count_queries(hub.engine, lambda: hub.services.cadence_reading.list_cadences())
+    few = count_queries(hub.engine, lambda: hub.default_adapter(CadenceReading).list_cadences())
     _seed(hub, 6, 2)
-    many = count_queries(hub.engine, lambda: hub.services.cadence_reading.list_cadences())
+    many = count_queries(hub.engine, lambda: hub.default_adapter(CadenceReading).list_cadences())
 
     assert many == few
-    assert len(hub.services.cadence_reading.list_cadences()) == 8
+    assert len(hub.default_adapter(CadenceReading).list_cadences()) == 8

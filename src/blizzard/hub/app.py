@@ -58,7 +58,6 @@ from blizzard.hub.api.auth_session import refuse_closed_tenant
 from blizzard.hub.api.cadences import project_router as project_cadences_router
 from blizzard.hub.api.cadences import router as cadences_router
 from blizzard.hub.api.chunk_dependencies import router as chunk_dependencies_router
-from blizzard.hub.api.chunk_events import announce_minted
 from blizzard.hub.api.chunks import router as chunks_router
 from blizzard.hub.api.clock import clock_router
 from blizzard.hub.api.config import router as config_router
@@ -845,7 +844,6 @@ def build_hosted_app(
             extractors=shipped_extractors(),
             egress_path_key=_egress_path_key(config.egress),
             cadences_on=lambda: flags.on("cadences"),
-            announce_minted=announce_minted,
         )
         # Closed before the action loop stops: each tenant scope's finalizer closes the configured clients its
         # records built on the loop they run on.

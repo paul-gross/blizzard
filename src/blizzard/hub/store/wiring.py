@@ -84,7 +84,6 @@ _TENANT_SERVICES: tuple[type[Any], ...] = (
     TranscriptEventStore,
     AnalyticsEventQueryStore,
     AnalyticsOperationalStore,
-    ErrandRunsStore,
     EnvTimelineStore,
     ForgeAnnotationStore,
 )
@@ -105,7 +104,6 @@ class StoreRefs:
 #: The tenant services a legacy-bridge alias targets, registered apart so their ``Ref`` is handed back.
 _TENANT_ALIASED: tuple[type[Any], ...] = (
     HubTransactions,
-    CadenceStore,
     InvitationStore,
 )
 
@@ -279,6 +277,31 @@ def register_garden_runs(registry: Registry) -> GardenRunsRefs:
 def register_garden_runs_absent(registry: Registry) -> None:
     """Declare the tenant's garden run-read adapters absent, for the store-free graph."""
     for missing in _GARDEN_RUNS_SERVICES:
+        registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
+
+
+#: The cadence adapters, whose ``Ref`` the cadence area aliases its ports onto.
+_CADENCE_SERVICES: tuple[type[Any], ...] = (CadenceStore, ErrandRunsStore)
+
+
+@adapter_model
+@dataclass(frozen=True)
+class CadenceRefs:
+    """The ``Ref`` of each cadence adapter, named for the port family the cadence area aliases onto it."""
+
+    cadences: Ref[CadenceStore]
+    runs: Ref[ErrandRunsStore]
+
+
+def register_cadence(registry: Registry) -> CadenceRefs:
+    """Declare the tenant's cadence adapters, handing back the ``Ref`` of each, which the cadence area's ports alias."""
+    refs = StoreRefs({each: registry.service(each, lifetime=Lifetime.TENANT) for each in _CADENCE_SERVICES})
+    return CadenceRefs(cadences=refs.of(CadenceStore), runs=refs.of(ErrandRunsStore))
+
+
+def register_cadence_absent(registry: Registry) -> None:
+    """Declare the tenant's cadence adapters absent, for the store-free graph."""
+    for missing in _CADENCE_SERVICES:
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
 
 

@@ -60,7 +60,6 @@ from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.hub.api.auth_session import TENANT_HEADER
-from blizzard.hub.api.chunk_events import announce_minted
 from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.auth.invitations import InvitationToken
 from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
@@ -2018,7 +2017,6 @@ def build_hub(
         egress_path_key=egress_path_key,
         extractors=extractors,
         cadences_on=lambda: (flags or HUB_FLAGS).on("cadences"),
-        announce_minted=announce_minted,
     )
     hub_services.tenants.open_tenants.refresh()
     services = hub_services.tenants.open_services(default)

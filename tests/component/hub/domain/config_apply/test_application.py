@@ -11,6 +11,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.ids import Id
+from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryEdit
 from blizzard.hub.domain.config_apply.entries import DeclaredRepository, DocumentEntries
@@ -70,7 +71,7 @@ def _application(hub: HubHarness, clock: FixedClock) -> ConfigApplication:
         scopes=hub.default_adapter(IReadScopeRepository),
         routines=hub.default_adapter(IReadRoutineRepository),
         routine_scopes=hub.default_adapter(IReadRoutineScopeRepository),
-        cadences=services.cadences,
+        cadences=hub.default_adapter(IReadCadenceRepository),
         graphs=services.graphs,
         secrets=services.secret_catalog,
         tenant_id=default_tenant(hub.engine),

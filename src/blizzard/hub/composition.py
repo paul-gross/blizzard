@@ -56,14 +56,6 @@ from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE, ActionPassDrive
 from blizzard.hub.delivery.action_registry import HubActions, build_hub_actions
 from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores, ITurnRunner, StepWake
 from blizzard.hub.documents.codec import IConfigCodec
-from blizzard.hub.domain.cadence.mint import CadenceMint, ErrandPlanning, MintedErrand
-from blizzard.hub.domain.cadence.ports import IReadCadenceRepository, IWriteCadenceRepository
-from blizzard.hub.domain.cadence.services import (
-    CadenceAttention,
-    CadenceAuthoring,
-    CadenceLifecycle,
-    CadenceReading,
-)
 from blizzard.hub.domain.cadence.sweep import CadenceSweep, TenantCadence
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import WorkRefLabel
@@ -83,11 +75,6 @@ from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import (
     IReadFindingRepository,
 )
-from blizzard.hub.domain.garden.routines import (
-    IReadRoutineRepository,
-    IReadRoutineScopeRepository,
-)
-from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
 from blizzard.hub.domain.graph.authoring import DefaultGraphService, GraphMintService
 from blizzard.hub.domain.graph.model import IReadGraphBodies, IReadGraphRepository, IReadNodeExecutors
@@ -136,9 +123,7 @@ from blizzard.hub.domain.sweeps.roster import SweepRoster
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.domain.tenancy.teardown import TenantTeardown, TenantTeardownSweep
 from blizzard.hub.domain.urgency.services import (
-    TenantDefault,
     UrgencyReading,
-    UrgencyReferences,
 )
 from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentDrainer
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
@@ -164,7 +149,6 @@ from blizzard.hub.store import wiring as store_wiring
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
-from blizzard.hub.store.internal.cadence_store import CadenceStore
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
@@ -173,8 +157,7 @@ from blizzard.hub.store.internal.credential_record_store import CredentialRecord
 from blizzard.hub.store.internal.credential_referrers import CredentialReferrersStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.env_timeline_store import EnvTimelineStore
-from blizzard.hub.store.internal.errand_runs_store import ErrandRunsStore
-from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
+from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.flow_store import tenant_flows
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
@@ -189,7 +172,6 @@ from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
-from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
@@ -291,21 +273,9 @@ class TenantServices:
     chunk_targets: ChunkTargets
     #: List and show urgencies in order, with the default marked and their open chunks counted.
     urgency_reading: UrgencyReading
-    #: The cadence read Protocol — the same store instance as ``cadence_authoring``'s writes.
-    cadences: IReadCadenceRepository
-    #: Create and edit a cadence, refusing an admission the writer may not make.
-    cadence_authoring: CadenceAuthoring
-    #: The cadence retire/enable brake.
-    cadence_lifecycle: CadenceLifecycle
-    #: List and show cadences with their attention, resolved in bulk.
-    cadence_reading: CadenceReading
     #: Each errand's last run, read in one snapshot or in a caller's unit.
     #: Every node step a routed chunk spent in a runner environment over a window.
     env_timeline: EnvTimelineReading
-    #: A due set's planning inputs, read in bulk.
-    errand_planning: ErrandPlanning
-    #: Mint one due errand's run in its own unit of work.
-    cadence_mint: CadenceMint
     #: The finding read Protocol.
     findings: IReadFindingRepository
     #: A run's finding bucket — what it is shown and may cite.
@@ -552,7 +522,6 @@ class TenantSweeps:
 
     close_drain: CloseIntentDrainer
     event_derivation: TenantEventDerivation
-    cadence: TenantCadence
     annotation: TenantAnnotation
 
 
@@ -711,24 +680,6 @@ def step_wake_leaf() -> StepWake:
     return StepWake()
 
 
-def cadence_attention_leaf(
-    routines: IReadRoutineRepository,
-    routine_scopes: IReadRoutineScopeRepository,
-    scopes: IReadScopeRepository,
-    graphs: IReadGraphRepository,
-) -> CadenceAttention:
-    """What each cadence's routine, scope and graph say of its attention, shared by the cadence reads and the sweep — a
-    legacy leaf the cadence area owns until it adopts it."""
-    return CadenceAttention(routines=routines, routine_scopes=routine_scopes, scopes=scopes, graphs=graphs)
-
-
-def cadence_reading_leaf(
-    cadences: IReadCadenceRepository, attention: CadenceAttention, runs: ErrandRunsStore, clock: IClock
-) -> CadenceReading:
-    """List and show cadences with their attention, a legacy leaf the cadence area owns until it adopts it."""
-    return CadenceReading(cadences=cadences, attention=attention, runs=runs, clock=clock)
-
-
 def action_pass_driver_leaf(loop: ActionLoop, config: HubConfigSource) -> ActionPassDriver:
     """Takes every tenant's action passes on the one loop, each bound by the live config's pass seconds past the
     default grace — a legacy leaf the hub lifecycle owns until it adopts it."""
@@ -738,8 +689,7 @@ def action_pass_driver_leaf(loop: ActionLoop, config: HubConfigSource) -> Action
 def register_legacy(registry: LegacyRegistry) -> None:
     """Declare the store's adapters and the legacy bridge's leaves, each built as the legacy builder built it: the
     process services a request's admission reads before its tenant is known, and the transitional ports and leaves of
-    the areas not yet adopted — cadence reads and writes and its attention and reading leaves, invitation writes, and
-    the action pass driver."""
+    the areas not yet adopted — invitation writes and the action pass driver."""
     registry.leaf(open_tenants_leaf, lifetime=Lifetime.PROCESS)
     registry.leaf(action_loop_leaf, lifetime=Lifetime.PROCESS)
     registry.leaf(action_pass_driver_leaf, lifetime=Lifetime.PROCESS)
@@ -750,23 +700,14 @@ def register_legacy(registry: LegacyRegistry) -> None:
     registry.alias(port(IReadHubEventLog), hub_events)
     tenant = store_wiring.register_tenant(registry)
     registry.alias(port(IHubTransactions), tenant.of(HubTransactions))
-    # The cadence reads and writes, until the cadence area adopts them.
-    registry.alias(port(IReadCadenceRepository), tenant.of(CadenceStore))
-    registry.alias(port(IWriteCadenceRepository), tenant.of(CadenceStore))
     # The reads a chunk-changed frame is enriched from.
     registry.alias(port(IWriteInvitationRepository), tenant.of(InvitationStore))
-    registry.leaf(cadence_attention_leaf, lifetime=Lifetime.TENANT)
-    registry.leaf(cadence_reading_leaf, lifetime=Lifetime.TENANT)
 
 
 #: The transitional tenant ports and leaves :func:`register_legacy` declares, for the store-free graph.
 _LEGACY_TENANT_KEYS: tuple[type[Any], ...] = (
     IHubTransactions,
-    IReadCadenceRepository,
-    IWriteCadenceRepository,
     IWriteInvitationRepository,
-    CadenceAttention,
-    CadenceReading,
 )
 
 
@@ -871,8 +812,6 @@ class TenantServiceParts:
     transcript_caps: TranscriptCaps | None
     extractors: Sequence[ITurnEventExtractor]
     step_wake: StepWake
-    #: Publishes a committed cadence mint's frames through the tenant's chunk-frame loader; the app owns the frames.
-    announce_minted: Callable[[ChunkFrameLoader, MintedErrand], None]
 
 
 def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, events: EventBroker) -> ServedTenant:
@@ -882,7 +821,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     tenant = stores.tenant
     graph_yaml = tenant.get(IConfigCodec)
     chunk_stores = stores.chunk_stores
-    work_item_store = stores.work_item_store
     finding_store = stores.finding_store
     registry_store = tenant.get(IReadRunnerRegistry)
     host_store = tenant.get(IReadHostRegistry)
@@ -919,18 +857,11 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     retired = tenant.get(RetiredRunnerGuard)
     graph_mint = tenant.get(GraphMintService)
     default_graph = tenant.get(DefaultGraphService)
-    cadence_store = tenant.get(CadenceStore)
-    urgency_references = tenant.get(UrgencyReferences)
-    errand_runs_store = tenant.get(ErrandRunsStore)
     config_authoring = tenant.get(ConfigAuthoring)
-    finding_set_store = tenant.get(FindingSetStore)
-    run_context_store = tenant.get(RunContextStore)
     finding_bucket = tenant.get(FindingBucketReader)
     commit_links = tenant.get(LandedCommitLinks)
     chunk_targets = tenant.get(ChunkTargets)
     work_ref_label: WorkRefLabel = tenant.get(WorkRefLabel)
-    tenant_default = tenant.get(TenantDefault)
-    cadence_attention = tenant.get(CadenceAttention)
     services = TenantServices(
         forges=forges,
         forge_budgets=forge_budgets,
@@ -992,25 +923,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         project_links=stores.project_links,
         chunk_targets=chunk_targets,
         urgency_reading=tenant.get(UrgencyReading),
-        cadences=cadence_store,
-        cadence_authoring=CadenceAuthoring(cadences=cadence_store, urgencies=urgency_references, clock=clock),
-        cadence_lifecycle=CadenceLifecycle(cadences=cadence_store, clock=clock),
-        cadence_reading=tenant.get(CadenceReading),
         env_timeline=EnvTimelineReading(
             facts=tenant.get(EnvTimelineStore), graphs=graph_store, artifacts=chunk_artifacts, clock=clock
-        ),
-        errand_planning=ErrandPlanning(graphs=graph_store, finding_sets=finding_set_store),
-        cadence_mint=CadenceMint(
-            items=work_item_store,
-            run_contexts=run_context_store,
-            work_refs=chunk_work_refs,
-            runs=errand_runs_store,
-            record=chunk_record,
-            queue=chunk_queue,
-            facts=chunk_facts,
-            transactions=stores.transactions,
-            clock=clock,
-            default=tenant_default,
         ),
         findings=finding_store,
         finding_bucket=finding_bucket,
@@ -1027,15 +941,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             public_url=parts.public_url,
         ),
         event_derivation=TenantEventDerivation(service=event_derivation_service, events=event_store, clock=clock),
-        cadence=TenantCadence(
-            cadences=cadence_store,
-            attention=cadence_attention,
-            runs=errand_runs_store,
-            planning=services.errand_planning,
-            mint=services.cadence_mint,
-            announce=lambda minted: parts.announce_minted(services.chunk_frames, minted),
-            clock=clock,
-        ),
         annotation=TenantAnnotation(
             facts=chunk_facts,
             work_sources=work_sources,
@@ -1057,12 +962,11 @@ def build_services(
     egress_path_key: bytes | None = None,
     extractors: Sequence[ITurnEventExtractor],
     cadences_on: Callable[[], bool],
-    announce_minted: Callable[[ChunkFrameLoader, MintedErrand], None],
 ) -> HubServices:
     """Construct the hub-level services over the shared :class:`HubCore`, its tenant cache serving each tenant's
     (:func:`build_tenant_services`). Each sweep or export is one pass per hub, acting on a row through its tenant's
     services; live config is read through the container's :class:`HubConfigSource`. ``cadences_on`` answers
-    whether a cadence pass may mint, and ``announce_minted`` publishes each mint it commits."""
+    whether a cadence pass may mint."""
     clock = core.clock
     process = core.process.resolver
     config_source = process.get(HubConfigSource)
@@ -1078,7 +982,6 @@ def build_services(
         transcript_caps=transcript_caps,
         extractors=extractors,
         step_wake=step_wake,
-        announce_minted=announce_minted,
     )
     core.tenants.serve(TenantServing(build=lambda stores, events: build_tenant_services(stores, parts, events=events)))
     hub_events = core.hub_events
@@ -1257,7 +1160,7 @@ def build_services(
     )
     cadence = CadenceSweep(
         corpus=core.hub_scoped_reads.corpus,
-        tenant=lambda tenant: sweeps_of(tenant).cadence,
+        tenant=lambda tenant: core.process.tenants.resolve(scope_of(tenant), TenantCadence),
         minting=cadences_on,
     )
     event_derivation = EventDerivationReconciler(
