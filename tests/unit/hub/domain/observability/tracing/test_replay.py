@@ -69,6 +69,9 @@ class _ClosingSteps:
     def step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
         return {c: self._facts[c] for c in chunk_ids}
 
+    def closing_step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
+        return self.step_facts_for(chunk_ids)
+
     def newest_cursor(self) -> None:
         return None
 

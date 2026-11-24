@@ -372,6 +372,9 @@ class _CountingReads:
     def step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
         return self._store.step_facts_for(chunk_ids)
 
+    def closing_step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
+        return self._store.closing_step_facts_for(chunk_ids)
+
     def newest_cursor(self) -> TraceCheckpoint | None:
         raise NotImplementedError
 
@@ -402,6 +405,7 @@ class _NonClosingBacklog:
         self._ids = [f"ch_{i:04d}" for i in range(depth)]
         self.limits: list[int] = []
         self.hydrated = 0
+        self.unhydrated = 0
 
     def snapshot(self) -> nullcontext[_NonClosingBacklog]:
         return nullcontext(self)
@@ -421,6 +425,10 @@ class _NonClosingBacklog:
         self.hydrated += 1
         return {}
 
+    def closing_step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
+        self.unhydrated += 1
+        return {}
+
     def newest_cursor(self) -> TraceCheckpoint | None:
         raise NotImplementedError
 
@@ -437,7 +445,8 @@ def test_oldest_unsent_passes_grow_by_pages_of_candidates_not_by_candidates(dept
 
     # One read per page, then the settling read that finds the position unmoved.
     assert backlog.limits == [100] * (pages + 1)
-    assert backlog.hydrated == pages + 1
+    assert backlog.unhydrated == pages + 1
+    assert backlog.hydrated == 0
 
 
 def test_oldest_unsent_answers_none_with_nothing_after_the_cursor_and_writes_nothing(tmp_path: Path) -> None:
@@ -483,3 +492,22 @@ def test_the_export_latch_reads_the_newer_of_the_two_kinds(tmp_path: Path) -> No
     record("trace-config-rejected", 2)
     record("trace-export-recovered", 3)
     assert store.newest_export_latch() == "trace-export-recovered"
+
+
+def test_closing_step_facts_skip_the_completion_reads_and_the_oldest_unsent_stays_the_same(tmp_path: Path) -> None:
+    hub, graph = trace_hub(tmp_path)
+    moved, stopped = transitioned_and_stopped(hub, graph, 1)
+    store = trace_store(hub)
+    since = CursorKey.opening(hub.clock.now() - timedelta(hours=1))
+    until = since.at + timedelta(hours=2)
+
+    whole = count_queries(hub.engine, lambda: store.step_facts_for([moved, stopped]))
+    bare = count_queries(hub.engine, lambda: store.closing_step_facts_for([moved, stopped]))
+    facts = store.closing_step_facts_for([moved, stopped])
+
+    assert bare < whole
+    assert set(facts) == {moved, stopped}
+    assert all(f.graphs and not f.runner_names and f.tenant_name is None for f in facts.values())
+    oldest = oldest_unsent(store, since, until)
+    assert oldest is not None
+    assert oldest.key == read_window(store, since, until, 1000).items[0].key

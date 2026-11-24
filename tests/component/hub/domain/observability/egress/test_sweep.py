@@ -371,6 +371,10 @@ class _SnapshotDepths:
         self.log.reads.append(("facts", self._depth))
         return self._store.step_facts_for(chunk_ids)
 
+    def closing_step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
+        self.log.reads.append(("facts", self._depth))
+        return self._store.closing_step_facts_for(chunk_ids)
+
     def newest_cursor(self) -> TraceCheckpoint | None:
         return self._store.newest_cursor()
 
@@ -801,6 +805,9 @@ def test_reset_before_empty_advance_wins(tmp_path: Path, dataset: str) -> None:
 
     class MissingFacts(_SnapshotDepths):
         def step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
+            return {}
+
+        def closing_step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
             return {}
 
     class ResetBeforeAdvance(EgressStore):
