@@ -15,6 +15,7 @@ from collections.abc import Callable, Mapping, Sequence
 from functools import partial
 from typing import Annotated, Literal
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
 from blizzard.auth_core import Permission
@@ -23,7 +24,6 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems, problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
@@ -32,7 +32,6 @@ from blizzard.hub.api.project_params import PathProject, QueryProject
 from blizzard.hub.api.urgency_refs import urgency_slug
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import may_admit
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.cadence.model import (
     ALL_SCOPES,
     Attention,
@@ -46,12 +45,19 @@ from blizzard.hub.domain.cadence.model import (
     ScheduleShape,
     ScopeSelection,
 )
+from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
+from blizzard.hub.domain.cadence.services import (
+    CadenceAuthoring,
+    CadenceLifecycle,
+    CadenceReading,
+    ErrandView,
+)
 from blizzard.hub.domain.cadence.services import CadenceView as CadenceRead
-from blizzard.hub.domain.cadence.services import ErrandView
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.kernel.unset import UNSET
-from blizzard.hub.domain.projects.model import Project
+from blizzard.hub.domain.projects.model import IReadProjectRepository, Project
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
+from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.wire.cadence import (
     CadenceAttentionView,
     CadenceCreateRequest,
@@ -73,6 +79,13 @@ router = APIRouter(prefix="/api", tags=["cadences"], dependencies=_GUARDS)
 project_router = APIRouter(prefix="/api/projects/{project}", tags=["cadences"], dependencies=_GUARDS)
 
 _EDIT = Depends(require(Permission.GRAPH_EDIT))
+
+Cadences = FromDishka[IReadCadenceRepository]
+Reading = FromDishka[CadenceReading]
+Authoring = FromDishka[CadenceAuthoring]
+Lifecycle = FromDishka[CadenceLifecycle]
+Urgencies = FromDishka[UrgencyReading]
+ProjectReads = FromDishka[IReadProjectRepository]
 
 
 def schedule_shape(schedule: CadenceScheduleDocument | None) -> ScheduleShape | None:
@@ -115,10 +128,10 @@ def cadence_shape(document: CadenceDocument, urgency: UrgencyNamer | None = None
     )
 
 
-def _named_urgency(services: TenantServices) -> UrgencyNamer:
+def _named_urgency(urgencies: UrgencyReading) -> UrgencyNamer:
     """A request names an urgency by id or slug: each resolves to the id of the urgency the tenant holds, and one
     naming none is refused ``urgency_unknown``."""
-    named = services.urgency_reading.namer()
+    named = urgencies.namer()
     return lambda field, key: named(field, key).urgency_id
 
 
@@ -192,21 +205,28 @@ def _cadence_view(read: CadenceRead, labels: ProjectLabelFields, urgencies: Mapp
     )
 
 
-def _labelled(cadence: Cadence, services: TenantServices) -> CadenceView:
+def _labelled(
+    cadence: Cadence, reading: CadenceReading, projects: IReadProjectRepository, urgencies: UrgencyReading
+) -> CadenceView:
     """``cadence``'s view as a write left it, labelled from one read of its project."""
-    read = services.cadence_reading.view(cadence)
+    read = reading.view(cadence)
     return _cadence_view(
-        read,
-        ProjectLabels.read(services.projects, [cadence.project_id]).fields(cadence.project_id),
-        services.urgency_reading.by_id(),
+        read, ProjectLabels.read(projects, [cadence.project_id]).fields(cadence.project_id), urgencies.by_id()
     )
 
 
-def _listing(services: TenantServices, project_id: str | None, *, include_retired: bool) -> list[CadenceView]:
-    reads = services.cadence_reading.list_cadences(project_id, include_retired=include_retired)
-    labels = ProjectLabels.read(services.projects, (r.cadence.project_id for r in reads))
-    urgencies = services.urgency_reading.by_id()
-    return [_cadence_view(r, labels.fields(r.cadence.project_id), urgencies) for r in reads]
+def _listing(
+    reading: CadenceReading,
+    projects: IReadProjectRepository,
+    urgencies: UrgencyReading,
+    project_id: str | None,
+    *,
+    include_retired: bool,
+) -> list[CadenceView]:
+    reads = reading.list_cadences(project_id, include_retired=include_retired)
+    labels = ProjectLabels.read(projects, (r.cadence.project_id for r in reads))
+    by_id = urgencies.by_id()
+    return [_cadence_view(r, labels.fields(r.cadence.project_id), by_id) for r in reads]
 
 
 def _unprocessable(exc: ConfigFieldError) -> HTTPException:
@@ -222,8 +242,8 @@ def admission_refused(exc: CadenceAdmissionRefused) -> HTTPException:
     return ProblemHTTPException(partial(problems_garden.cadence_admission_refused_problem, str(exc)))
 
 
-def _cadence_or_404(cadence_id: str, services: TenantServices) -> Cadence:
-    cadence = services.cadences.get(cadence_id)
+def _cadence_or_404(cadence_id: str, cadences: IReadCadenceRepository) -> Cadence:
+    cadence = cadences.get(cadence_id)
     if cadence is None:
         raise ProblemHTTPException(partial(problems_garden.cadence_not_found_problem, f"unknown cadence {cadence_id}"))
     return cadence
@@ -233,12 +253,14 @@ def _create(
     request: CadenceCreateRequest,
     identity: ResolvedIdentity,
     door: RequestDoor,
-    services: TenantServices,
+    authoring: CadenceAuthoring,
+    reading: CadenceReading,
+    urgencies: UrgencyReading,
     project: Project,
 ) -> CadenceView:
     try:
-        cadence = services.cadence_authoring.create(
-            cadence_shape(request, _named_urgency(services)),
+        cadence = authoring.create(
+            cadence_shape(request, _named_urgency(urgencies)),
             project=project,
             ctx=change_context(identity, door),
             may_admit=may_admit(identity.permissions),
@@ -249,18 +271,19 @@ def _create(
         raise ProblemHTTPException(partial(problems_garden.cadence_slug_taken_problem, str(exc))) from exc
     except CadenceAdmissionRefused as exc:
         raise admission_refused(exc) from exc
-    read = services.cadence_reading.view(cadence)
-    return _cadence_view(
-        read, ProjectLabels.of_project(project).fields(cadence.project_id), services.urgency_reading.by_id()
-    )
+    read = reading.view(cadence)
+    return _cadence_view(read, ProjectLabels.of_project(project).fields(cadence.project_id), urgencies.by_id())
 
 
 @project_router.post("/cadences", response_model=CadenceView, status_code=status.HTTP_201_CREATED)
+@inject_sync
 def create_project_cadence(
     request: CadenceCreateRequest,
     identity: Annotated[ResolvedIdentity, _EDIT],
     door: RequestDoor,
-    services: Services,
+    authoring: Authoring,
+    reading: Reading,
+    urgencies: Urgencies,
     project: PathProject,
 ) -> CadenceView:
     """Create a cadence in the project. 422 naming the field on a shape that cannot mean anything — no schedule and
@@ -268,43 +291,50 @@ def create_project_cadence(
     it would keep a promoting chore and the caller may not promote chunks; 404 on an unknown project. A chore whose
     routine or scopes do not resolve is accepted, and shown in the cadence's `attention`; a chore's `urgency`, by id
     or slug, is refused 422 `urgency_unknown` or `urgency_retired` when it names no urgency or a retired one."""
-    return _create(request, identity, door, services, project)
+    return _create(request, identity, door, authoring, reading, urgencies, project)
 
 
 @router.get("/cadences", response_model=list[CadenceView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
+@inject_sync
 def list_cadences(
-    services: Services,
+    reading: Reading,
+    projects: ProjectReads,
+    urgencies: Urgencies,
     project: QueryProject,
     include_retired: Annotated[bool, Query()] = False,
 ) -> list[CadenceView]:
     """Every cadence with its attention, newest first — of the project `?project=` names, else of every project; a
     retired cadence excluded by default, included and marked when `include_retired`."""
-    return _listing(services, project, include_retired=include_retired)
+    return _listing(reading, projects, urgencies, project, include_retired=include_retired)
 
 
 @project_router.get(
     "/cadences", response_model=list[CadenceView], dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
+@inject_sync
 def list_project_cadences(
-    services: Services,
+    reading: Reading,
+    projects: ProjectReads,
+    urgencies: Urgencies,
     project: PathProject,
     include_retired: Annotated[bool, Query()] = False,
 ) -> list[CadenceView]:
     """Every cadence of the project with its attention, newest first — a retired cadence excluded by default,
     included and marked when `include_retired`; 404 on an unknown project."""
-    return _listing(services, project.project_id, include_retired=include_retired)
+    return _listing(reading, projects, urgencies, project.project_id, include_retired=include_retired)
 
 
 @router.get(
     "/cadences/{cadence_id}", response_model=CadenceView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
-def get_cadence(cadence_id: str, services: Services) -> CadenceView:
+@inject_sync
+def get_cadence(cadence_id: str, reading: Reading, projects: ProjectReads, urgencies: Urgencies) -> CadenceView:
     """One cadence's whole record with its attention; 404 on an unknown id."""
-    read = services.cadence_reading.show(cadence_id)
+    read = reading.show(cadence_id)
     if read is None:
         raise ProblemHTTPException(partial(problems_garden.cadence_not_found_problem, f"unknown cadence {cadence_id}"))
-    labels = ProjectLabels.read(services.projects, [read.cadence.project_id])
-    return _cadence_view(read, labels.fields(read.cadence.project_id), services.urgency_reading.by_id())
+    labels = ProjectLabels.read(projects, [read.cadence.project_id])
+    return _cadence_view(read, labels.fields(read.cadence.project_id), urgencies.by_id())
 
 
 @router.get(
@@ -312,16 +342,17 @@ def get_cadence(cadence_id: str, services: Services) -> CadenceView:
     response_model=list[CadenceErrandView],
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
-def list_cadence_errands(cadence_id: str, services: Services) -> list[CadenceErrandView]:
+@inject_sync
+def list_cadence_errands(cadence_id: str, cadences: Cadences, reading: Reading) -> list[CadenceErrandView]:
     """Every errand of the cadence — each chore over each scope — with its state (`due`, `running`, `waiting`, or
     `stopped`), the attention that stops it, its last run, and when it is next due (`due_at`, null while running
     or stopped), chore by chore in cadence order and by scope slug within a chore; 404 on an unknown id. A retired
     cadence's errands are all `stopped`."""
-    cadence = _cadence_or_404(cadence_id, services)
-    return [_errand_view(row) for row in services.cadence_reading.errands(cadence)]
+    cadence = _cadence_or_404(cadence_id, cadences)
+    return [_errand_view(row) for row in reading.errands(cadence)]
 
 
-def _cadence_edit(request: CadenceEditRequest, services: TenantServices) -> CadenceEdit:
+def _cadence_edit(request: CadenceEditRequest, urgencies: UrgencyReading) -> CadenceEdit:
     """The sparse edit ``request`` states — only its present fields."""
     stated = request.model_fields_set
     return CadenceEdit(
@@ -330,7 +361,7 @@ def _cadence_edit(request: CadenceEditRequest, services: TenantServices) -> Cade
         spacing=request.spacing if "spacing" in stated else UNSET,
         anchor=request.anchor if "anchor" in stated else UNSET,
         chores=(
-            chore_shapes(CadenceEdit.stated_chores(request.chores), _named_urgency(services))
+            chore_shapes(CadenceEdit.stated_chores(request.chores), _named_urgency(urgencies))
             if "chores" in stated
             else UNSET
         ),
@@ -338,23 +369,28 @@ def _cadence_edit(request: CadenceEditRequest, services: TenantServices) -> Cade
 
 
 @router.patch("/cadences/{cadence_id}", response_model=CadenceView)
+@inject_sync
 def edit_cadence(
     cadence_id: str,
     request: CadenceEditRequest,
     identity: Annotated[ResolvedIdentity, _EDIT],
     door: RequestDoor,
-    services: Services,
+    cadences: Cadences,
+    authoring: Authoring,
+    reading: Reading,
+    projects: ProjectReads,
+    urgencies: Urgencies,
     if_match: Annotated[int | None, Header()] = None,
 ) -> CadenceView:
     """Apply only the fields present; chores match the stored ones by key, keeping their ids, and `null` clears
     `schedule`, `spacing`, or `anchor`. A no-op writes nothing. 404 unknown id; 422 naming the field on a `null` name
     or chore list, a meaningless merged shape, or a chore `urgency` unknown or retired; 403 keeping a promoting chore
     live without promote rights; 409 stale `If-Match`."""
-    cadence = _cadence_or_404(cadence_id, services)
+    cadence = _cadence_or_404(cadence_id, cadences)
     try:
-        edited = services.cadence_authoring.edit(
+        edited = authoring.edit(
             cadence,
-            _cadence_edit(request, services),
+            _cadence_edit(request, urgencies),
             change_context(identity, door),
             may_admit=may_admit(identity.permissions),
             if_match=if_match,
@@ -365,44 +401,52 @@ def edit_cadence(
         raise _revision_conflict(exc) from exc
     except CadenceAdmissionRefused as exc:
         raise admission_refused(exc) from exc
-    return _labelled(edited, services)
+    return _labelled(edited, reading, projects, urgencies)
 
 
 @router.post("/cadences/{cadence_id}/retire", response_model=CadenceView, status_code=status.HTTP_202_ACCEPTED)
+@inject_sync
 def retire_cadence(
     cadence_id: str,
     request: CadenceLifecycleRequest,
     identity: Annotated[ResolvedIdentity, _EDIT],
     door: RequestDoor,
-    services: Services,
+    cadences: Cadences,
+    lifecycle: Lifecycle,
+    reading: Reading,
+    projects: ProjectReads,
+    urgencies: Urgencies,
     if_match: Annotated[int | None, Header()] = None,
 ) -> CadenceView:
     """Retire a cadence — a reversible brake: a retired cadence mints nothing. Retiring a retired cadence writes
     nothing. 404 on an unknown id, 409 on a stale `If-Match`."""
-    cadence = _cadence_or_404(cadence_id, services)
+    cadence = _cadence_or_404(cadence_id, cadences)
     try:
-        retired = services.cadence_lifecycle.retire(
-            cadence, change_context(identity, door), by=request.by, if_match=if_match
-        )
+        retired = lifecycle.retire(cadence, change_context(identity, door), by=request.by, if_match=if_match)
     except ConfigRevisionConflict as exc:
         raise _revision_conflict(exc) from exc
-    return _labelled(retired, services)
+    return _labelled(retired, reading, projects, urgencies)
 
 
 @router.post("/cadences/{cadence_id}/enable", response_model=CadenceView, status_code=status.HTTP_202_ACCEPTED)
+@inject_sync
 def enable_cadence(
     cadence_id: str,
     request: CadenceLifecycleRequest,
     identity: Annotated[ResolvedIdentity, _EDIT],
     door: RequestDoor,
-    services: Services,
+    cadences: Cadences,
+    lifecycle: Lifecycle,
+    reading: Reading,
+    projects: ProjectReads,
+    urgencies: Urgencies,
     if_match: Annotated[int | None, Header()] = None,
 ) -> CadenceView:
     """Re-enable a retired cadence; enabling an enabled one writes nothing. 404 on an unknown id; 403 when it keeps
     a promoting chore and the caller may not promote chunks; 409 on a stale `If-Match`."""
-    cadence = _cadence_or_404(cadence_id, services)
+    cadence = _cadence_or_404(cadence_id, cadences)
     try:
-        enabled = services.cadence_lifecycle.enable(
+        enabled = lifecycle.enable(
             cadence,
             change_context(identity, door),
             by=request.by,
@@ -413,4 +457,4 @@ def enable_cadence(
         raise _revision_conflict(exc) from exc
     except CadenceAdmissionRefused as exc:
         raise admission_refused(exc) from exc
-    return _labelled(enabled, services)
+    return _labelled(enabled, reading, projects, urgencies)
