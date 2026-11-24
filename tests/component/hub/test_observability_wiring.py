@@ -128,13 +128,11 @@ def test_the_hub_event_log_and_invariant_check_are_each_one_process_instance_the
     assert hub.core is not None
 
     assert hub.hub_services.process.tenants.resolve(tenant, HubEventLogService) is event_log
-    assert hub.core.hub_event_log is event_log
     assert hub.hub_services.hub_event_log is event_log
     assert hub.hub_services.tenant_teardown._events is event_log
     assert hub.hub_services.egress_reset._events is event_log
     assert event_log._events is process.get(HubEventLogStore)
     assert process.get(IReadHubEventLog) is process.get(IWriteHubEventLog) is process.get(HubEventLogStore)
-    assert hub.core.hub_events is process.get(HubEventLogStore)
 
     assert check._checker is process.get(IHubInvariantChecker) is process.get(HubInvariants)
 

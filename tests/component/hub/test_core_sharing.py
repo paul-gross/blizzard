@@ -21,7 +21,7 @@ from blizzard.hub.domain.urgency.ports import IReadUrgencyRepository, IWriteUrge
 from blizzard.hub.domain.urgency.services import TenantDefault, UrgencyLifecycle, UrgencyReading
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.finding_store import FindingStore
-from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.urgency_store import UrgencyStore
 from blizzard.hub.tenancy import StoreScope, TenantId
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
@@ -157,10 +157,10 @@ def test_the_process_identity_gate_fails_a_planted_second_copy(tmp_path: Path) -
     hub = build_hub(tmp_path)
     assert hub.core is not None
 
-    planted = replace(hub.core, hub_events=HubEventLogStore(hub.core.store_connections))
+    planted = replace(hub.core, hub_scoped_reads=build_hub_scoped_reads(hub.core.store_connections))
 
     assert process_identity_violations(planted, hub.hub_services) == [
-        "HubCore.hub_events is not its container instance"
+        "HubCore.hub_scoped_reads is not its container instance"
     ]
 
 

@@ -149,7 +149,6 @@ from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
 from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.store.internal.hub_settings_store import HubSettingsStore
-from blizzard.hub.store.internal.invariants import HubInvariants
 from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_store import ProjectStore
@@ -529,9 +528,6 @@ class HubCore:
     #: The factory the connections wrap a driver fault through, shared with every adapter that opens its own.
     store_errors: HubStoreErrorFactory
     hub_scoped_reads: HubScopedReads
-    #: The hub's own event log, and the service recording an occurrence in it.
-    hub_events: HubEventLogStore
-    hub_event_log: HubEventLogService
     tenants: TenantCache
     clock: IClock
     #: The process container the core was opened through; whoever disposes the store closes it first.
@@ -724,7 +720,6 @@ def hub_core_over(process: HubProcess, store_connections: HubStoreConnections, *
     store_errors = store_connections.errors
     resolver = process.resolver
     hub_scoped_reads = resolver.get(HubScopedReads)
-    hub_events = resolver.get(HubEventLogStore)
 
     def build(scope: StoreScope) -> TenantStores:
         # The tenant's container scope opens with its legacy entry, whose adopted values and leaves are read from it, so
@@ -735,8 +730,6 @@ def hub_core_over(process: HubProcess, store_connections: HubStoreConnections, *
         store_connections=store_connections,
         store_errors=store_errors,
         hub_scoped_reads=hub_scoped_reads,
-        hub_events=hub_events,
-        hub_event_log=resolver.get(HubEventLogService),
         tenants=TenantCache(build=build, confirm_open=hub_scoped_reads.tenants.confirm_open),
         clock=clock,
         process=process,
@@ -900,8 +893,8 @@ def build_services(
         step_wake=step_wake,
     )
     core.tenants.serve(TenantServing(build=lambda stores, events: build_tenant_services(stores, parts, events=events)))
-    hub_events = core.hub_events
-    hub_event_log = core.hub_event_log
+    hub_events = core.process.resolver.get(HubEventLogStore)
+    hub_event_log = core.process.resolver.get(HubEventLogService)
     open_tenants = core.process.resolver.get(OpenTenants)
 
     def scope_of(tenant: TenantId) -> StoreScope:
@@ -1154,11 +1147,6 @@ def build_services(
             clock=clock,
         ),
     )
-
-
-def build_hub_invariants(connections: HubStoreConnections, clock: IClock) -> HubInvariants:
-    """The hub half of the invariant checker over ``connections``, built by the store wiring's registered factory."""
-    return store_wiring.hub_invariant_checker(connections, clock)
 
 
 def build_flow_driver(process: HubProcess) -> FlowDriver:

@@ -286,9 +286,7 @@ def process_identity_violations(core: HubCore, services: HubServices) -> list[st
     process = core.process.resolver
     retained: tuple[tuple[str, object, Any], ...] = (
         ("HubCore.hub_scoped_reads", core.hub_scoped_reads, HubScopedReads),
-        ("HubCore.hub_events", core.hub_events, HubEventLogStore),
         ("HubServices.hub_scoped_reads", services.hub_scoped_reads, HubScopedReads),
-        ("HubCore.hub_event_log", core.hub_event_log, HubEventLogService),
         ("HubServices.hub_event_log", services.hub_event_log, HubEventLogService),
         ("IReadHubEventLog", process.get(IReadHubEventLog), HubEventLogStore),
         ("IWriteHubEventLog", process.get(IWriteHubEventLog), HubEventLogStore),

@@ -3,6 +3,7 @@ written by the hub's start, its migration, and its exports, and read newest-of-a
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -10,10 +11,12 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard import __version__
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogSeverity, narrow_event_log_kind
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub import app as hub_app
+from blizzard.hub import event_log_opener
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.domain.observability.hub_events import HubEvent
 from blizzard.hub.secrets import ENV_SECRET_KEY
@@ -196,3 +199,70 @@ def test_a_downgrade_below_the_hub_log_records_nothing_and_exits_cleanly(tmp_pat
 def test_a_credential_check_is_a_tenant_event_kind_recorded_at_info() -> None:
     assert narrow_event_log_kind("credential-check") == "credential-check"
     assert EVENT_LOG_SEVERITY["credential-check"] is EventLogSeverity.INFO
+
+
+class _RecordedEngine:
+    def __init__(self, order: list[str]) -> None:
+        self._order = order
+
+    def dispose(self) -> None:
+        self._order.append("engine disposed")
+
+
+def _store_of(order: list[str]) -> Callable[[str], tuple[_RecordedEngine, object]]:
+    def open_store(_url: str) -> tuple[_RecordedEngine, object]:
+        return _RecordedEngine(order), object()
+
+    return open_store
+
+
+class _FailingResolver:
+    def get(self, _key: object) -> object:
+        raise RuntimeError("the event log could not be resolved")
+
+
+class _RecordedProcess:
+    def __init__(self, order: list[str]) -> None:
+        self._order = order
+        self.resolver = _FailingResolver()
+
+    def close(self) -> None:
+        self._order.append("process closed")
+
+
+def test_the_opener_closes_its_process_before_disposing_its_engine_when_construction_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = init_hub(tmp_path)
+    order: list[str] = []
+    monkeypatch.setattr(event_log_opener, "open_hub_store", _store_of(order))
+
+    def open_root(*_args: object, **_kwargs: object) -> _RecordedProcess:
+        return _RecordedProcess(order)
+
+    monkeypatch.setattr(event_log_opener, "open_store_backed", open_root)
+    open_event_log = event_log_opener.system_event_log_opener(FixedClock(_T0), {})
+
+    with pytest.raises(RuntimeError, match="could not be resolved"), open_event_log(config):
+        pass
+
+    assert order == ["process closed", "engine disposed"]
+
+
+def test_the_opener_disposes_its_engine_when_its_root_fails_to_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = init_hub(tmp_path)
+    order: list[str] = []
+
+    def refuse(*_args: object, **_kwargs: object) -> object:
+        raise RuntimeError("the root could not be opened")
+
+    monkeypatch.setattr(event_log_opener, "open_hub_store", _store_of(order))
+    monkeypatch.setattr(event_log_opener, "open_store_backed", refuse)
+    open_event_log = event_log_opener.system_event_log_opener(FixedClock(_T0), {})
+
+    with pytest.raises(RuntimeError, match="could not be opened"), open_event_log(config):
+        pass
+
+    assert order == ["engine disposed"]
