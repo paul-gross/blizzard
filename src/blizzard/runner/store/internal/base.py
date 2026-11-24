@@ -385,6 +385,7 @@ def enqueue_transcript_final(store: RunnerStoreConnections, conn: Connection, se
     the ledger row (``bzh:dependency-inversion``). Ships unconditionally. Shared by the
     leases adapter (a spawn/closure boundary implicitly finalizes) and the transcripts
     adapter (an explicit finalize)."""
+    payload = json.dumps({"segment_id": str(segment.segment_id)})
     insert_outbox_row(
         store,
         conn,
@@ -392,6 +393,7 @@ def enqueue_transcript_final(store: RunnerStoreConnections, conn: Connection, se
         segment_id=str(segment.segment_id),
         chunk_id=str(segment.chunk_id),
         final=True,
-        payload=json.dumps({"segment_id": str(segment.segment_id)}),
+        payload=payload,
+        payload_bytes=len(payload.encode()),
         created_at=at,
     )

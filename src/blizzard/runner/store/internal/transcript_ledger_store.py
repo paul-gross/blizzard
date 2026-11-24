@@ -102,10 +102,8 @@ class TranscriptLedgerStore:
         return result
 
     def outstanding_transcript_buffer_bytes(self) -> int:
-        # Payloads are `json.dumps(ensure_ascii=True)`, so SQL `length()` (chars) agrees
-        # with the encoded byte length here.
         stmt = self._store.select(
-            transcript_outbound_buffer, func.coalesce(func.sum(func.length(transcript_outbound_buffer.c.payload)), 0)
+            transcript_outbound_buffer, func.coalesce(func.sum(transcript_outbound_buffer.c.payload_bytes), 0)
         ).where(transcript_outbound_buffer.c.acked_at.is_(None))
         with self._store.connect() as conn:
             return int(conn.execute(stmt).scalar_one())
@@ -283,6 +281,7 @@ class TranscriptLedgerStore:
                         "chunk_id": chunk_id,
                         "final": False,
                         "payload": payload,
+                        "payload_bytes": len(payload.encode()),
                         "created_at": created_at,
                     }
                     for payload in payloads

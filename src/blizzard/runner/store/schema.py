@@ -1062,6 +1062,8 @@ transcript_outbound_buffer = Table(
     # Two shapes, keyed by `final`: non-final is a TranscriptSegmentRecord's fields (minus
     # `seq`/`runner_id`); final is just `{"segment_id": ...}` — see `_enqueue_transcript_final`.
     Column("payload", Text, nullable=False),
+    # The payload's UTF-8 byte length, written beside it, so sizing the backlog never reads a payload.
+    Column("payload_bytes", Integer, nullable=False, server_default="0"),
     Column("created_at", UtcDateTime, nullable=False),
     # NULL = pending. An acked non-final row is deleted, never reaching this state; an
     # acked final row IS marked here — its continued presence is the exactly-once receipt.
