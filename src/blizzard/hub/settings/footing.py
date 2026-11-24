@@ -74,6 +74,16 @@ def _put(document: dict[str, object], path: str, value: object) -> None:
     table[parts[-1]] = thaw(value)
 
 
+def export_document(registry: ConfigRegistry, entries: Mapping[str, Entry]) -> dict[str, object]:
+    """Every settable key whose entry is off its default, as the nested document apply accepts."""
+    settable = {key.path for key in settable_declarations(registry)}
+    document: dict[str, object] = {}
+    for path, entry in entries.items():
+        if path in settable and not entry.at_default:
+            _put(document, path, entry.value)
+    return document
+
+
 def _finite(value: object) -> bool:
     if isinstance(value, float):
         return math.isfinite(value)

@@ -5,7 +5,14 @@ from __future__ import annotations
 import pytest
 
 from blizzard.foundation.config_keys import INTEGER, TABLE, ConfigKey, ConfigRegistry, Lifetime
-from blizzard.hub.settings.footing import SettingNotLive, SettingUnknown, require_settable, setting_keys
+from blizzard.foundation.settings_record.vocabulary import Entry
+from blizzard.hub.settings.footing import (
+    SettingNotLive,
+    SettingUnknown,
+    export_document,
+    require_settable,
+    setting_keys,
+)
 
 REGISTRY = ConfigRegistry(
     name="hub",
@@ -41,3 +48,18 @@ def test_a_boot_key_is_not_live() -> None:
 def test_the_first_offending_key_in_sorted_order_is_refused() -> None:
     with pytest.raises(SettingNotLive):
         require_settable(REGISTRY, {"missing", "boot", "zlive"})
+
+
+def test_export_leaves_out_every_key_apply_would_refuse() -> None:
+    entries = {
+        "live": Entry(5),
+        "zlive": Entry(1, at_default=True),
+        "boot": Entry(2),
+        "old": Entry(3),
+        "group": Entry({"child": 4}),
+        "group.child": Entry(6),
+        "missing": Entry(7),
+    }
+    document = export_document(REGISTRY, entries)
+    assert document == {"live": 5, "group": {"child": 6}}
+    require_settable(REGISTRY, {"live", "group.child"})
