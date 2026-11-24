@@ -323,3 +323,15 @@ def test_a_settings_less_hub_answers_an_admin_the_store_unavailable_problem_and_
         }
         assert hub.client.request(method, path, headers=member_headers, json=body).status_code == 403
         assert hub.client.request(method, path, json=body).status_code in (401, 403)
+
+
+def test_export_applies_back_without_refusal(tmp_path: Path) -> None:
+    client = _hub(tmp_path).client
+    path = "/api/admin/settings"
+    values = {"action_pass_seconds": 5, "auth.login_throttle.refill_seconds": 1.5}
+    assert client.patch(path, headers={"If-Match": "0"}, json={"set": values}).status_code == 200
+    exported = client.get(path + "/export").json()
+    assert exported == {"action_pass_seconds": 5, "auth": {"login_throttle": {"refill_seconds": 1.5}}}
+    reapplied = client.post(path + "/apply", json=exported)
+    assert reapplied.status_code == 200, reapplied.text
+    assert all(outcome["op"] == "unchanged" for outcome in reapplied.json()["outcomes"])
