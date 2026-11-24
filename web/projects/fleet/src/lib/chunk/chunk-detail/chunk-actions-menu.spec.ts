@@ -1,9 +1,9 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { ChunkDetail } from '../../api/hub';
+import type { ChunkDetail } from '../chunk-page/chunk-detail.model';
 import { runnerDisplayName } from '../../core/runner-display-name';
-import { chunkControlStub, chunkDetail, chunkEscalationView, type ChunkControlStub } from 'fleet/testing';
+import { chunkControlStub, domainChunkDetail as chunkDetail, chunkEscalation as chunkEscalationView, type ChunkControlStub } from 'fleet/testing';
 import { ChunkActionsMenu } from './chunk-actions-menu';
 
 /**
@@ -67,10 +67,10 @@ const ESCALATED_ROUTED_DETAIL: ChunkDetail = chunkDetail({
 });
 
 /** A chunk carrying an open pause fact, whatever its derived status reads. */
-function pausedDetail(status: ChunkDetail['status'], extra: Partial<ChunkDetail> = {}): ChunkDetail {
+function pausedDetail(status: Exclude<ChunkDetail['status']['kind'], 'unknown'>, extra: Partial<ChunkDetail> = {}): ChunkDetail {
   return {
     ...ROUTED_DETAIL,
-    status,
+    status: { kind: status },
     pause: { by: 'operator', set_at: '2026-07-16T00:00:00Z' },
     ...extra,
   };
@@ -336,7 +336,7 @@ describe('ChunkActionsMenu', () => {
       'done',
     ] as const) {
       const fixture = TestBed.createComponent(ChunkActionsMenu);
-      fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status, delete_refusal: 'status' });
+      fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status, delete_refusal: { kind: 'status' } });
       mount(fixture);
       await fixture.whenStable();
       await openMenu(fixture);
@@ -415,7 +415,7 @@ describe('ChunkActionsMenu', () => {
       ...ISSUE_DETAIL,
       status: 'ready',
       deletable: true,
-      delete_refusal: 'dependents',
+      delete_refusal: { kind: 'dependents' },
       neighborhood: {
         prerequisites: [],
         dependents: [{ chunk_id: 'ch_01dependent0000000000ccc', status: 'not_ready', satisfied: false }],
@@ -477,7 +477,7 @@ describe('ChunkActionsMenu', () => {
     fixture.componentRef.setInput('detail', {
       ...ISSUE_DETAIL,
       status: 'ready',
-      delete_refusal: 'status',
+      delete_refusal: { kind: 'status' },
       neighborhood: {
         prerequisites: [],
         dependents: [{ chunk_id: 'ch_01dependent0000000000ccc', status: 'not_ready', satisfied: false }],
@@ -494,7 +494,7 @@ describe('ChunkActionsMenu', () => {
 
   it('disables Delete and names a refusal the client does not declare, raw', async () => {
     const fixture = TestBed.createComponent(ChunkActionsMenu);
-    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'ready', delete_refusal: 'something_new' });
+    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'ready', delete_refusal: { kind: 'unknown', raw: 'something_new' } });
     mount(fixture);
     await fixture.whenStable();
     await openMenu(fixture);

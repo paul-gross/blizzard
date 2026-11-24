@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 
-import { type ChunkDetail as ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, injectRunnerHostNames, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, asyncState, type WorkItemsState } from 'fleet';
+import { type ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, injectRunnerHostNames, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, asyncState, type WorkItemsState } from 'fleet';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectProjectsQuery } from '../../core/projects.query';
 import { type CompleteVars } from '../chunks/complete.mutations';
@@ -78,8 +78,8 @@ export class ChunkDetail {
 
   /** The chunk's rendered status — {@link overrideStatus} while it names one, else the
    * real `detail.status` (`bzh:frontend-pending-override`). */
-  protected renderedStatus(detail: ChunkDetailAggregate): ChunkStatus {
-    return this.overrideStatus() ?? detail.status;
+  protected renderedStatus(detail: ChunkDetailAggregate): string {
+    return this.overrideStatus() ?? (detail.status.kind === 'unknown' ? detail.status.raw : detail.status.kind);
   }
 
   /** The open chunk's last operator-action failure, or `null`. */

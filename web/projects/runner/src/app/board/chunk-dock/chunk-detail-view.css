@@ -66,6 +66,8 @@
   color: var(--text);
   font-size: var(--fs-sm);
   user-select: all;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 .resume-harness {
   display: inline-block;

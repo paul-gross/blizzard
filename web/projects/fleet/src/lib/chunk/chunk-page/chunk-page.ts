@@ -19,7 +19,7 @@ import { type ChunkDetailTab, injectChunkDetailSelection } from './chunk-detail-
 import { ChunkGeneralTab } from './chunk-general-tab';
 import { ChunkNodeHistoryContainer } from './chunk-node-history-container';
 import { CHUNK_PAGE_DAEMON } from './chunk-page-daemon';
-import { boardBackParams, chunkProjectColor, chunkTabOptions, type FocusRequest, nextFocus, preDetailState } from './chunk-page.model';
+import { boardBackParams, chunkProjectColor, chunkStatusText, chunkTabOptions, type FocusRequest, nextFocus, preDetailState } from './chunk-page.model';
 import { ChunkPageHeader } from './chunk-page-header';
 import { ChunkPageShell } from './chunk-page-shell';
 import { AppLink, AppScope } from '../../core/app-scope';
@@ -240,7 +240,8 @@ export class ChunkPage {
   protected readonly projectColor = computed<string | null>(() =>
     chunkProjectColor(this.detail()?.project_id, this.daemon.projectColor?.bind(this.daemon)),
   );
-  protected readonly tone = computed(() => STATUS_TONE(this.detail()?.laneStatus.kind ?? 'ready'));
+  protected readonly tone = computed(() => STATUS_TONE(this.detail()?.status.kind ?? 'ready'));
+  protected readonly statusText = computed(() => chunkStatusText(this.detail()?.status));
   /** The daemon's chunk-control port, or `null` — the header hides its ⋮ menu. */
   protected readonly control = this.actions?.control ?? null;
 

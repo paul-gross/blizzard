@@ -2,8 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import type { ChunkDetail } from '../../api/hub';
-import { chunkDetail, decisionView, questionView, transitionView, workItemEntry, workRefView } from '../../testing/builders/chunk.translate';
+import type { ChunkDetail } from './chunk-detail.model';
+import { domainChunkDetail as chunkDetail, domainDecision as decisionView, domainQuestion as questionView, domainTransition as transitionView, workItem } from '../../testing/builders/chunk';
 import type { WorkItemsState } from '../chunk-detail';
 import { recordingAwaitingHumanActions } from '../../testing/builders/awaiting-human';
 import { ChunkGeneralTab } from './chunk-general-tab';
@@ -17,7 +17,7 @@ const DETAIL: ChunkDetail = chunkDetail({
   current_node_name: null,
   graph_editable: true,
   latest_epoch: null,
-  work_refs: [workRefView({ source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42' })],
+  work_refs: [{ source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42' }],
   history: [],
   artifacts: [],
 });
@@ -25,7 +25,7 @@ const DETAIL: ChunkDetail = chunkDetail({
 const WORK_ITEMS: WorkItemsState = {
   status: 'success',
   items: [
-    workItemEntry({
+    workItem({
       source: 'widget',
       ref: '42',
       label: 'widget#42',
@@ -51,14 +51,15 @@ describe('ChunkGeneralTab', () => {
 
   it('renders the wrapper handle and every section off plain inputs, in attention order', async () => {
     const fixture = TestBed.createComponent(ChunkGeneralTab);
-    fixture.componentRef.setInput('detail', {
+    fixture.componentRef.setInput('detail', chunkDetail({
       ...DETAIL,
+      awaitingHuman: undefined,
       questions: [
         questionView({ question_id: 'open', chunk_id: DETAIL.chunk_id, question: 'Open?', answered: false }),
         questionView({ question_id: 'answered', chunk_id: DETAIL.chunk_id, question: 'Answered?', answered: true, answer: 'Yes' }),
       ],
       decision: decisionView({ decision_id: 'decision', chunk_id: DETAIL.chunk_id, node_id: 'gate', node_name: 'gate', transitioned: false }),
-    });
+    }));
     fixture.componentRef.setInput('workItems', WORK_ITEMS);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -140,7 +141,7 @@ describe('ChunkGeneralTab', () => {
     const fixture = TestBed.createComponent(ChunkGeneralTab);
     fixture.componentRef.setInput('detail', {
       ...DETAIL,
-      neighborhood: { prerequisites: [{ chunk_id: 'ch_01prereq00000000000000000', satisfied: true, status: 'done' }], dependents: [] },
+      neighborhood: { prerequisites: [{ chunk_id: 'ch_01prereq00000000000000000', satisfied: true, status: 'done', laneStatus: { kind: 'done' } }], dependents: [] },
     });
     fixture.componentRef.setInput('chunkLinkBase', ['/runner', 'chunk']);
     await fixture.whenStable();
@@ -149,8 +150,9 @@ describe('ChunkGeneralTab', () => {
   });
 
   it('saves an answer from the asks section through its port when canAnswer opts in', async () => {
-    const waiting: ChunkDetail = {
+    const waiting: ChunkDetail = chunkDetail({
       ...DETAIL,
+      awaitingHuman: undefined,
       status: 'waiting_on_human',
       questions: [
         questionView({
@@ -165,7 +167,7 @@ describe('ChunkGeneralTab', () => {
           answered: false,
         }),
       ],
-    };
+    });
     const fixture = TestBed.createComponent(ChunkGeneralTab);
     fixture.componentRef.setInput('detail', waiting);
     fixture.componentRef.setInput('canAnswer', true);
@@ -185,8 +187,9 @@ describe('ChunkGeneralTab', () => {
   });
 
   it('saves a resolution from the decisions section through its port when canResolve opts in', async () => {
-    const waiting: ChunkDetail = {
+    const waiting: ChunkDetail = chunkDetail({
       ...DETAIL,
+      awaitingHuman: undefined,
       status: 'waiting_on_human',
       decision: decisionView({
         decision_id: 'de_01',
@@ -202,7 +205,7 @@ describe('ChunkGeneralTab', () => {
         check_results: [],
         transitioned: false,
       }),
-    };
+    });
     const fixture = TestBed.createComponent(ChunkGeneralTab);
     fixture.componentRef.setInput('detail', waiting);
     fixture.componentRef.setInput('canResolve', true);
@@ -221,7 +224,7 @@ describe('ChunkGeneralTab', () => {
   it('emits pickStep when a row in the node-history summary is activated', async () => {
     const withHistory: ChunkDetail = {
       ...DETAIL,
-      status: 'running',
+      status: { kind: 'running' },
       history: [
         transitionView({
           choice_name: 'pass',

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 
-import { chunkDetail, landedChunkDetail, landedRepoView, prView } from 'fleet/testing';
+import { domainChunkDetail as chunkDetail, domainLandedChunk as landedChunkDetail, domainLandedRepo as landedRepoView, domainPr as prView } from 'fleet/testing';
 import { ChunkDelivery } from './chunk-delivery';
 
 const meta: Meta<ChunkDelivery> = {
@@ -48,7 +48,7 @@ export const ParkedAwaitingMerge: Story = {
     detail: chunkDetail({
       status: 'delivering',
       open_prs: [prView()],
-      pending: { node_name: 'park', next_poll_at: '2026-10-30T12:05:00Z', kind: 'awaiting-merge', since: '2026-10-30T12:00:00Z' },
+      pending: { node_name: 'park', next_poll_at: '2026-10-30T12:05:00Z', kind: { kind: 'awaiting-merge' }, since: '2026-10-30T12:00:00Z' },
     }),
   },
 };
@@ -57,7 +57,7 @@ export const ParkedAwaitingMergeWithoutStart: Story = {
     detail: chunkDetail({
       status: 'delivering',
       open_prs: [prView()],
-      pending: { node_name: 'park', next_poll_at: '2026-10-30T12:05:00Z', kind: 'awaiting-merge', since: null },
+      pending: { node_name: 'park', next_poll_at: '2026-10-30T12:05:00Z', kind: { kind: 'awaiting-merge' }, since: null },
     }),
   },
 };

@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { type ArtifactView, injectHubChunkDetailQuery, sortArtifacts } from 'fleet';
+import { type ChunkArtifact, injectHubChunkDetailQuery, sortArtifacts } from 'fleet';
 import { injectHubBoardChunksQuery } from '../core/chunks.query';
 
 import { type DemoConfig, demoQueryParams, readDemoConfig } from './demo-config';
@@ -173,10 +173,10 @@ export class DemoDirector {
 
   /** The touring chunk's artifact store in display order, or `null` until the
    * detail read for *this* chunk has resolved. */
-  private artifacts(): readonly ArtifactView[] | null {
+  private artifacts(): readonly ChunkArtifact[] | null {
     const detail = this.detailQuery.data();
     if (detail === undefined || detail.chunk_id !== this.touring()) return null;
-    return sortArtifacts(detail.artifacts ?? []);
+    return sortArtifacts(detail.artifacts);
   }
 
   /** A random chunk off the live fleet list, or `null` before the read lands. */
@@ -197,7 +197,7 @@ export class DemoDirector {
 
 /** A random entry that is not `current`, falling back to `current` when the
  * store holds nothing else to move to. */
-function pickAnother(artifacts: readonly ArtifactView[], current: string | null, random: () => number): string {
+function pickAnother(artifacts: readonly ChunkArtifact[], current: string | null, random: () => number): string {
   const others = artifacts.filter((artifact) => artifact.key !== current);
   const pool = others.length > 0 ? others : artifacts;
   return pool[Math.floor(random() * pool.length)].key;

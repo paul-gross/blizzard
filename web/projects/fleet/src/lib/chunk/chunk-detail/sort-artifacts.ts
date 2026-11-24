@@ -1,4 +1,4 @@
-import type { ArtifactView } from '../../api/hub';
+import type { ChunkArtifact } from './artifact.model';
 
 /**
  * The chunk artifact store, ordered oldest attachment first — by `recorded_at`
@@ -9,6 +9,6 @@ import type { ArtifactView } from '../../api/hub';
  * and the chunk detail page's Artifacts tab nav both sort through this so
  * neither can drift from the other.
  */
-export function sortArtifacts(artifacts: readonly ArtifactView[]): ArtifactView[] {
+export function sortArtifacts(artifacts: readonly ChunkArtifact[]): ChunkArtifact[] {
   return [...artifacts].sort((a, b) => (a.recorded_at ?? '').localeCompare(b.recorded_at ?? ''));
 }

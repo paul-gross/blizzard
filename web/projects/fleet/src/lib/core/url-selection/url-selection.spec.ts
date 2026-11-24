@@ -62,6 +62,24 @@ describe('injectChunkUrlSelection', () => {
     expect(host.selection.chunkId()).toBeNull();
   });
 
+  it.each(['ch_2', null])('clears transcript selection on change to %s while retaining scope and step', async (next) => {
+    const harness = await RouterTestingHarness.create();
+    const host = (await harness.navigateByUrl('/page?project=p&runner=r&step=s&chunk=ch_1&artifact=a&segment=sg_1&sidechain=1.0', SelectionHost)) as SelectionHost;
+    host.selection.select(next);
+    await harness.fixture.whenStable();
+    const params = TestBed.inject(Router).parseUrl(TestBed.inject(Router).url).queryParams;
+    expect(params).toEqual(next ? { project: 'p', runner: 'r', step: 's', chunk: next } : { project: 'p', runner: 'r', step: 's' });
+  });
+
+  it('retains transcript selection when selecting the same chunk', async () => {
+    const harness = await RouterTestingHarness.create();
+    const url = '/page?chunk=ch_1&artifact=a&segment=sg_1&sidechain=1.0';
+    const host = (await harness.navigateByUrl(url, SelectionHost)) as SelectionHost;
+    host.selection.select('ch_1');
+    await harness.fixture.whenStable();
+    expect(TestBed.inject(Router).url).toBe(url);
+  });
+
   it('back and forward walk the selection history', async () => {
     const harness = await RouterTestingHarness.create();
     TestBed.inject(Router).setUpLocationChangeListener();

@@ -402,7 +402,7 @@ describe('LocalPanel', () => {
 
       await click(el.querySelector<HTMLElement>('[data-testid="chunk-card"]'));
 
-      expect(navigateSpy).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { chunk: CHUNK }, queryParamsHandling: 'merge' }));
+      expect(navigateSpy).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { chunk: CHUNK, artifact: null, segment: null, sidechain: null }, queryParamsHandling: 'merge' }));
       expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain(CHUNK);
       const facts = el.querySelector('[data-testid="detail-facts"]')?.textContent ?? '';
       expect(facts).toContain('4821');
@@ -455,14 +455,17 @@ describe('LocalPanel', () => {
       expect(navigateSpy).not.toHaveBeenCalled();
     });
 
-    it('touches no param but its own when a different chunk is selected', async () => {
+    it('clears chunk-specific params but retains scope when a different chunk is selected', async () => {
       const other = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNCCCC', chunk_id: OTHER_CHUNK });
       stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE(), other] } }));
-      const el = await mount({ chunk: CHUNK, attempt: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB' });
+      const el = await mount({ chunk: CHUNK, attempt: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', scope: 'all', artifact: 'art-1', segment: 'seg-1', sidechain: 'side-1' });
 
       await click(el.querySelector<HTMLElement>(`[data-testid="chunk-card"][data-chunk="${OTHER_CHUNK}"]`));
 
-      expect(navigateSpy).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { chunk: OTHER_CHUNK } }));
+      expect(navigateSpy).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { chunk: OTHER_CHUNK, artifact: null, segment: null, sidechain: null }, queryParamsHandling: 'merge' }));
+      expect(TestBed.inject(Router).parseUrl(TestBed.inject(Router).url).queryParams).toEqual({
+        chunk: OTHER_CHUNK, attempt: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', scope: 'all',
+      });
     });
 
     it('degrades an unknown chunk id to no selection, leaving the URL untouched', async () => {

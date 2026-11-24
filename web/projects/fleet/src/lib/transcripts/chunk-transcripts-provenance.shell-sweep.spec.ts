@@ -2,10 +2,10 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { commands, page } from 'vitest/browser';
 
-import type { TranscriptSegmentIndexEntry, TransitionView } from '../api/hub';
-import { transitionView } from '../testing/builders/chunk.translate';
-import { transcriptSegmentIndexEntry } from '../testing/builders/transcript.translate';
+import type { TranscriptSegmentIndexEntry, TranscriptHistoryStep } from './transcript-turn';
+import { sidechainSegmentView, toolCallSegmentView, transcriptSegmentIndexEntry, turnSegmentView } from './transcript-fixtures';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
+import { TranscriptViewer } from './transcript-viewer';
 
 /** The design tokens are a global stylesheet the app build loads, never a standalone mount —
  * injected so the kit badges' tone colours resolve to real colours. */
@@ -37,18 +37,12 @@ function tokenColor(token: string): string {
  * needs `--browsers=ChromiumHeadless`, not jsdom — run it via `npm run shell-sweep`
  * (`web/scripts/shell-sweep.js`).
  */
-const HISTORY: readonly TransitionView[] = [
-  transitionView({
+const HISTORY: readonly TranscriptHistoryStep[] = [
+  {
     from_node_id: 'nd_build',
     from_node_name: 'Build',
-    to_node_id: 'nd_review',
-    to_node_name: 'Review',
-    choice_name: 'pass',
     epoch: 1,
-    recorded_at: '2026-08-09T00:00:00+00:00',
-    graph_id: null,
-    graph_name: null,
-  }),
+  },
 ];
 
 function segment(overrides: Partial<TranscriptSegmentIndexEntry> = {}): TranscriptSegmentIndexEntry {
@@ -76,6 +70,52 @@ const SEGMENTS: readonly TranscriptSegmentIndexEntry[] = [
 ];
 
 describe('chunk transcripts harness-provenance layout shell sweep (web:shell-sweep, blizzard#441)', () => {
+  it('keeps expanded nested turns and tool output readable in narrow gutter viewers', async () => {
+    await loadDesignTokens();
+    await TestBed.configureTestingModule({
+      imports: [TranscriptViewer],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TranscriptViewer);
+    fixture.componentRef.setInput('turns', [
+      turnSegmentView({
+        kind: 'tool',
+        tool: toolCallSegmentView({ name: 'Task' }),
+        sidechain: sidechainSegmentView({ turns: [
+          turnSegmentView({ kind: 'env', text: 'Find the builders and inspect the results.' }),
+          turnSegmentView({ index: 1, kind: 'tool', tool: toolCallSegmentView({
+            name: 'Bash', output: 'unbroken-output-'.repeat(30),
+          }) }),
+        ] }),
+      }),
+    ]);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    try {
+      await fixture.whenStable();
+      for (const width of [320, 390]) {
+        await page.viewport(width, 800);
+        root.style.width = `${width - 32}px`;
+        for (const details of root.querySelectorAll<HTMLDetailsElement>('details.tool-call')) details.open = true;
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const nested = root.querySelector<HTMLElement>('[data-testid="transcript-sidechain-nested"] fleet-transcript-viewer')!;
+        const body = nested.querySelector<HTMLElement>('.turn.k-tool .b')!;
+        const card = nested.querySelector<HTMLElement>('.tool-call')!;
+        const input = nested.querySelector<HTMLElement>('.tc-input')!;
+        const output = nested.querySelector<HTMLElement>('.tc-out')!;
+        const text = nested.querySelector<HTMLElement>('.turn.k-env .tx')!;
+        expect(body.clientWidth, `${width}px nested body`).toBeGreaterThan(150);
+        expect(card.clientWidth, `${width}px nested tool`).toBeGreaterThan(150);
+        expect(input.clientWidth, `${width}px input preview`).toBeGreaterThan(40);
+        expect(output.scrollWidth, `${width}px output overflow`).toBeLessThanOrEqual(output.clientWidth);
+        expect(text.scrollWidth, `${width}px text overflow`).toBeLessThanOrEqual(text.clientWidth);
+        expect(root.scrollWidth, `${width}px viewer overflow`).toBeLessThanOrEqual(root.clientWidth);
+      }
+    } finally {
+      root.remove();
+    }
+  });
+
   it('keeps two segments recording distinct harnesses visually distinct with no page errors or horizontal overflow at ~390px', async () => {
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);

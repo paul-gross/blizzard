@@ -1,4 +1,9 @@
-import { boardBackParams, chunkProjectColor, chunkTabOptions, nextFocus, preDetailState } from './chunk-page.model';
+import { boardBackParams, chunkProjectColor, chunkStatusText, chunkTabOptions, nextFocus, preDetailState } from './chunk-page.model';
+
+it('renders unknown status spellings without losing them', () => {
+  expect(chunkStatusText({ kind: 'unknown', raw: 'future-status' })).toBe('future-status');
+  expect(chunkStatusText({ kind: 'running' })).toBe('running');
+});
 
 describe('chunkTabOptions', () => {
   it('offers the Transcripts tab last when the identity may read transcripts', () => {

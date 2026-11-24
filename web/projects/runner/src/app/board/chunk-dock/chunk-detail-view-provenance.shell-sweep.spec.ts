@@ -131,6 +131,46 @@ describe('machine detail workdir layout (web:shell-sweep)', () => {
 });
 
 describe('app-panel escalation harness-provenance layout shell sweep (web:shell-sweep)', () => {
+  it('keeps wrapped and fallback commands readable at 320px alongside copy', async () => {
+    const command = 'cd /mock/workdir/ch_01M765F1D3TX19RBCKK62JG5JP && claude --resume sess_01M765F1D3TX19RBCKK62JG5JP';
+    const tokens = document.createElement('style');
+    tokens.textContent = await commands.readFile('projects/fleet/src/lib/core/design/tokens.css');
+    document.head.appendChild(tokens);
+    await TestBed.configureTestingModule({ imports: [MachineDetailView], providers: [provideZonelessChangeDetection()] }).compileComponents();
+    const fixture = TestBed.createComponent(MachineDetailView);
+    fixture.componentRef.setInput('lease', LEASE);
+    fixture.componentRef.setInput('escalation', { ...ESCALATION, wrapped_takeover_command: command, resume_command: command });
+    await fixture.whenStable();
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    try {
+      await page.viewport(320, 800);
+      const fallback = root.querySelector<HTMLDetailsElement>('[data-testid="detail-resume-fallback"]')!;
+      fallback.open = true;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const box = root.querySelector<HTMLElement>('[data-testid="detail-resume"]')!;
+      const copy = root.querySelector<HTMLElement>('[data-testid="copy-takeover"]')!;
+      const bounds = box.getBoundingClientRect();
+      expect(copy.getBoundingClientRect().right).toBeLessThanOrEqual(bounds.right);
+      for (const code of root.querySelectorAll<HTMLElement>('.resume-box code')) {
+        expect(code.textContent).toBe(command);
+        const range = document.createRange();
+        for (let i = 0; i < command.length; i++) {
+          range.setStart(code.firstChild!, i);
+          range.setEnd(code.firstChild!, i + 1);
+          const glyph = range.getBoundingClientRect();
+          expect(glyph.left).toBeGreaterThanOrEqual(bounds.left - 1);
+          expect(glyph.right).toBeLessThanOrEqual(bounds.right + 1);
+        }
+      }
+      expect(box.scrollWidth).toBeLessThanOrEqual(box.clientWidth);
+    } finally {
+      fixture.destroy();
+      root.remove();
+      tokens.remove();
+    }
+  });
+
   it('renders the harness badge beside the resume command with no page errors or horizontal overflow at ~390px', async () => {
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);

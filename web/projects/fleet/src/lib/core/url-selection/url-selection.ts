@@ -17,8 +17,8 @@ export interface ChunkUrlSelection {
   readonly chunkId: Signal<string | null>;
 
   /** Merge a selection into the URL — a client-side navigation (no reload)
-   * that pushes a history entry. `null` clears `chunk`. Touches no other
-   * param: `chunk` is the only one this helper owns. */
+   * that pushes a history entry. Changing chunks also clears the previous
+   * chunk's artifact and transcript selection; other parameters remain intact. */
   select(chunkId: string | null): void;
 }
 
@@ -36,7 +36,9 @@ export function injectChunkUrlSelection(): ChunkUrlSelection {
     select(chunkId: string | null): void {
       void router.navigate([], {
         relativeTo: route,
-        queryParams: { chunk: chunkId },
+        queryParams: chunkId === params().get('chunk')
+          ? { chunk: chunkId }
+          : { chunk: chunkId, artifact: null, segment: null, sidechain: null },
         queryParamsHandling: 'merge',
       });
     },

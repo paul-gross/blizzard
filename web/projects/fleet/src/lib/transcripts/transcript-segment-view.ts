@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import type { TranscriptSegmentIndexEntry } from '../api/hub';
+import type { TranscriptSegmentIndexEntry } from './transcript-turn';
 import { harnessName } from '../core/harness-name';
 import { KitBadge } from '../kit/kit-badge';
 import { KitButton } from '../kit/kit-button';

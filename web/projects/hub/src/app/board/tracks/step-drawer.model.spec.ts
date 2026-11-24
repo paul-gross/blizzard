@@ -1,4 +1,6 @@
-import type { ChunkDetail, ProjectView } from 'fleet';
+import { assetChunkArtifact } from 'fleet/testing';
+import type { ChunkArtifact, ChunkArtifactStore } from 'fleet';
+import type { ProjectView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
 import type { EnvTimelineSegment, PlacedStep } from './step.model';
@@ -264,7 +266,7 @@ describe('stepFacts', () => {
 });
 
 describe('chunkFor', () => {
-  const detail = { chunk_id: 'ch_1', artifacts: [] } as unknown as ChunkDetail;
+  const detail = { chunk_id: 'ch_1', artifacts: [] };
 
   it('is the detail once it answers for the chunk', () => {
     expect(chunkFor(detail, 'ch_1')).toBe(detail);
@@ -278,18 +280,17 @@ describe('chunkFor', () => {
 });
 
 describe('stepArtifactsOf', () => {
-  type Artifact = ChunkDetail['artifacts'][number];
-  const art = (key: string, o: Partial<Artifact> = {}): Artifact => ({ key, name: key, node_id: 'nd_build', epoch: 1, ...o }) as unknown as Artifact;
-  const chunkWith = (...artifacts: Artifact[]): ChunkDetail => ({ chunk_id: 'ch_AAAA0001', title: 'kept', artifacts }) as unknown as ChunkDetail;
-  const keys = (c: ChunkDetail | null): string[] => c!.artifacts.map((a) => a.key);
+  const art = (key: string, o: Partial<ChunkArtifact> = {}): ChunkArtifact => assetChunkArtifact({ key, name: key, ...o });
+  const chunkWith = (...artifacts: ChunkArtifact[]) => ({ chunk_id: 'ch_AAAA0001', artifacts });
+  const keys = (c: ChunkArtifactStore | null): string[] => c!.artifacts.map((a) => a.key);
 
   it('is null without a chunk or the step read', () => {
     expect(stepArtifactsOf(null, [])).toBeNull();
     expect(stepArtifactsOf(chunkWith(), undefined)).toBeNull();
   });
 
-  it('keeps the rest of the chunk and narrows its artifacts', () => {
-    expect(stepArtifactsOf(chunkWith(art('a')), ['a'])).toMatchObject({ chunk_id: 'ch_AAAA0001', title: 'kept' });
+  it('keeps the chunk id and narrows its artifacts', () => {
+    expect(stepArtifactsOf(chunkWith(art('a')), ['a'])).toMatchObject({ chunk_id: 'ch_AAAA0001' });
   });
 
   it('keeps exactly the artifacts the step read names, whatever their node or epoch', () => {

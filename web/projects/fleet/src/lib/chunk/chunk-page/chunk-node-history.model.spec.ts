@@ -1,11 +1,11 @@
-import type { ArtifactView } from '../../api/hub';
-import { assetArtifactView } from '../../testing/builders/artifact.translate';
+import type { ChunkArtifact } from '../chunk-detail/artifact.model';
+import { assetChunkArtifact } from '../../testing/builders/artifact';
 import { parseSelectedKey, stepArtifacts } from './chunk-node-history.model';
 
-function artifact(overrides: Partial<ArtifactView>): ArtifactView {
-  return assetArtifactView({
+function artifact(overrides: Partial<ChunkArtifact>): ChunkArtifact {
+  return assetChunkArtifact({
     key: 'k',
-    kind: 'asset',
+    kind: { kind: 'asset' },
     name: 'n',
     node_id: 'nd_build',
     node_name: 'build',

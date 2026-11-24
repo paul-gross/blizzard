@@ -9,4 +9,6 @@ export {
   injectChunkTranscriptsQuery,
   TranscriptFetchError,
 } from './transcript-segments.query';
-export type { TranscriptSegmentContentView, TranscriptSegmentIndexEntry } from '../api/hub';
+
+export type { TranscriptTurn, TranscriptSegmentContent } from './transcript-turn';
+export { translateTranscriptTurn } from './transcript-turn.translate';

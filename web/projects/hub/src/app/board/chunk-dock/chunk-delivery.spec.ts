@@ -2,8 +2,8 @@ import { provideZonelessChangeDetection, type Type } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import { type ChunkDetail, ChunkGeneralTab } from 'fleet';
-import { chunkDetail } from 'fleet/testing';
+import { type ChunkDetailAggregate as ChunkDetail, ChunkGeneralTab } from 'fleet';
+import { domainChunkDetail as chunkDetail } from 'fleet/testing';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 
 const DETAIL: ChunkDetail = chunkDetail({
@@ -29,7 +29,7 @@ describe('chunk delivery in both detail views', () => {
     it(`${component.name} shows per-repo links, fallback text and explicit wait`, async () => {
       const fixture = TestBed.createComponent(component as Type<ChunkDetailPanel | ChunkGeneralTab>);
       fixture.componentRef.setInput('detail', DETAIL);
-      if (component === ChunkDetailPanel) fixture.componentRef.setInput('renderedStatus', DETAIL.status);
+      if (component === ChunkDetailPanel) fixture.componentRef.setInput('renderedStatus', DETAIL.status.kind);
       await fixture.whenStable();
       const el = fixture.nativeElement as HTMLElement;
       expect(el.querySelector<HTMLAnchorElement>('[data-testid="delivery-pr-link"]')?.href).toBe('https://forge.example/widget/pull/42');
@@ -51,9 +51,9 @@ describe('chunk delivery in both detail views', () => {
         ...DETAIL,
         landed_repos: [],
         awaiting_external_merge: false,
-        pending: { node_name: 'park', next_poll_at: '2026-10-30T12:05:00Z', kind: 'awaiting-merge', since: '2026-10-30T12:00:00Z' },
+        pending: { node_name: 'park', next_poll_at: '2026-10-30T12:05:00Z', kind: { kind: 'awaiting-merge' }, since: '2026-10-30T12:00:00Z' },
       });
-      if (component === ChunkDetailPanel) fixture.componentRef.setInput('renderedStatus', DETAIL.status);
+      if (component === ChunkDetailPanel) fixture.componentRef.setInput('renderedStatus', DETAIL.status.kind);
       await fixture.whenStable();
       const el = fixture.nativeElement as HTMLElement;
       expect(el.querySelector('[data-testid="delivery-park-wait"]')?.textContent).toContain('Awaiting merge since');
@@ -67,9 +67,9 @@ describe('chunk delivery in both detail views', () => {
         open_prs: [],
         landed_repos: [],
         awaiting_external_merge: false,
-        pending: { node_name: 'park', next_poll_at: '2026-10-30T12:05:00Z', kind: 'awaiting-merge', since: null },
+        pending: { node_name: 'park', next_poll_at: '2026-10-30T12:05:00Z', kind: { kind: 'awaiting-merge' }, since: null },
       });
-      if (component === ChunkDetailPanel) fixture.componentRef.setInput('renderedStatus', DETAIL.status);
+      if (component === ChunkDetailPanel) fixture.componentRef.setInput('renderedStatus', DETAIL.status.kind);
       await fixture.whenStable();
       expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="delivery-park-wait"]')?.textContent?.trim()).toBe('Awaiting merge');
     });

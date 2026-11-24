@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, computed, input } from '@angular/core';
 
-import type { FindingSurvey } from '../../api/hub';
+import type { FindingSurvey } from './artifact-structured.model';
 import { KitFactList, type KitFact } from '../../kit/kit-fact-list';
 import { KitProseBlock } from '../../kit/kit-prose-block';
 import { ChunkArtifactRawDisclosure } from './chunk-artifact-raw-disclosure';

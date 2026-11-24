@@ -1,8 +1,6 @@
-import type { BounceAction, BounceEnvelope, BounceUnlandedRepo } from '../../api/hub';
+import type { BounceAction, BounceUnlandedRepo, ParsedBounceEnvelope } from './artifact-structured.model';
 
-/** The generated `BounceEnvelope`, its `diagnostic` widened to admit `undefined`: the key was absent from the body, so
- * whether the hub had a diagnostic is unknown — distinct from `null`, known to have none. */
-export type ParsedBounceEnvelope = Omit<BounceEnvelope, 'diagnostic'> & { readonly diagnostic: BounceEnvelope['diagnostic'] | undefined };
+export type { ParsedBounceEnvelope } from './artifact-structured.model';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

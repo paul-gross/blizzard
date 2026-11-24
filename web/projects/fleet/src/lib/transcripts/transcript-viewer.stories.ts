@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
-import { sidechainSegmentView, toolCallSegmentView, turnSegmentView } from '../testing/builders/transcript.translate';
+import { sidechainSegmentView, toolCallSegmentView, turnSegmentView } from './transcript-fixtures';
 import { TranscriptViewer } from './transcript-viewer';
 
 const meta: Meta<TranscriptViewer> = {
@@ -35,7 +35,7 @@ export const UnknownKind: Story = {
   args: {
     turns: [
       turnSegmentView({ index: 0, kind: 'asst', text: 'A declared assistant turn.' }),
-      turnSegmentView({ index: 1, kind: 'novel' as never, text: 'A turn of a kind this board does not know.' }),
+      turnSegmentView({ index: 1, kind: 'unknown', rawKind: 'novel', text: 'A turn of a kind this board does not know.' }),
     ],
   },
 };

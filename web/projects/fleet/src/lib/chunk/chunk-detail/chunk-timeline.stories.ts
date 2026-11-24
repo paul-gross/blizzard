@@ -2,15 +2,15 @@ import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
 import {
-  bouncedChunkDetail,
-  chunkDetail,
-  escalatedChunkDetail,
+  domainBouncedChunk as bouncedChunkDetail,
+  domainChunkDetail as chunkDetail,
+  domainEscalatedChunk as escalatedChunkDetail,
   fixtureInstant,
-  landedChunkDetail,
-  midFlightChunkDetail,
-  queuedChunkDetail,
-  stoppedChunkDetail,
-  transitionView,
+  domainLandedChunk as landedChunkDetail,
+  domainMidFlightChunk as midFlightChunkDetail,
+  domainQueuedChunk as queuedChunkDetail,
+  domainStoppedChunk as stoppedChunkDetail,
+  domainTransition as transitionView,
 } from 'fleet/testing';
 import { ChunkTimeline } from './chunk-timeline';
 
@@ -41,7 +41,7 @@ const meta: Meta<ChunkTimeline> = {
   },
   render: (args) => ({
     props: args,
-    template: `<fleet-chunk-detail-timeline [detail]="detail" [heading]="heading" [activatable]="activatable" [selectedKey]="selectedKey" (pickStep)="pickStep($event)" />`,
+    template: `<fleet-chunk-detail-timeline [detail]="detail" [heading]="heading" [activatable]="activatable" [selectedKey]="selectedKey" (pickStep)="selectedKey = $event; pickStep($event)" />`,
   }),
 };
 export default meta;
@@ -62,7 +62,7 @@ export const LongHistory: Story = {
   args: { detail: longHistory },
   render: (args) => ({
     props: args,
-    template: `<div style="max-height: 320px; overflow: auto"><fleet-chunk-detail-timeline [detail]="detail" [heading]="heading" [activatable]="activatable" [selectedKey]="selectedKey" (pickStep)="pickStep($event)" /></div>`,
+    template: `<div style="max-height: 320px; overflow: auto"><fleet-chunk-detail-timeline [detail]="detail" [heading]="heading" [activatable]="activatable" [selectedKey]="selectedKey" (pickStep)="selectedKey = $event; pickStep($event)" /></div>`,
   }),
 };
 export const Narrow: Story = {

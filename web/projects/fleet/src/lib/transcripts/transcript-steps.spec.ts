@@ -1,5 +1,5 @@
-import type { TranscriptSegmentIndexEntry, TransitionView } from '../api/hub';
-import { transcriptSegmentIndexEntry } from '../testing/builders/transcript.translate';
+import type { TranscriptSegmentIndexEntry, TranscriptHistoryStep } from './transcript-turn';
+import { transcriptSegmentIndexEntry } from './transcript-fixtures';
 import { deriveTranscriptSteps, resolveSegmentSeams } from './transcript-steps';
 
 function segment(overrides: Partial<TranscriptSegmentIndexEntry> = {}): TranscriptSegmentIndexEntry {
@@ -21,17 +21,11 @@ function segment(overrides: Partial<TranscriptSegmentIndexEntry> = {}): Transcri
   });
 }
 
-function transition(overrides: Partial<TransitionView> = {}): TransitionView {
+function transition(overrides: Partial<TranscriptHistoryStep> = {}): TranscriptHistoryStep {
   return {
     from_node_id: 'build',
     from_node_name: 'Build',
-    to_node_id: 'review',
-    to_node_name: 'Review',
-    choice_name: 'pass',
     epoch: 2,
-    recorded_at: '2026-08-09T00:00:00+00:00',
-    graph_id: null,
-    graph_name: null,
     ...overrides,
   };
 }
@@ -108,7 +102,7 @@ describe('deriveTranscriptSteps', () => {
   it('does not append a phantom in-flight step for a completed chunk\'s reserved "done" terminal', () => {
     const steps = deriveTranscriptSteps(
       [segment({ segment_id: 'a', node_id: 'build', epoch: 2 })],
-      [transition({ from_node_id: 'build', epoch: 2, to_node_id: 'done' })],
+      [transition({ from_node_id: 'build', epoch: 2 })],
       { nodeId: 'done', nodeName: null, epoch: 2, terminal: true },
     );
 
@@ -131,7 +125,7 @@ describe('deriveTranscriptSteps', () => {
     // names the previous step's — the next lease hasn't minted its own epoch yet.
     const steps = deriveTranscriptSteps(
       [],
-      [transition({ from_node_id: 'build', epoch: 1, to_node_id: 'review' })],
+      [transition({ from_node_id: 'build', epoch: 1 })],
       { nodeId: 'review', nodeName: 'Review', epoch: 1, terminal: false },
     );
 

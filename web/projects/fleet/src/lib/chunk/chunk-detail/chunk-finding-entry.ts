@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import type { FindingCandidate } from '../../api/hub';
+import type { FindingCandidate } from './artifact-structured.model';
 import { KitProseBlock } from '../../kit/kit-prose-block';
 import { shortCommitHash } from '../../core/commit-hash';
 

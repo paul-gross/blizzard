@@ -9,12 +9,8 @@ import { RouterLink } from '@angular/router';
 
 import {
   WorkRefLink,
-  type ChunkDetail,
-  type ChunkStatus,
+  type ChunkDetailAggregate,
   type ChunkControl,
-  type PauseView,
-  type WorkRefView,
-  type RouteView,
   runnerDisplayName,
   runnerTitle,
   KitCloseButton,
@@ -23,6 +19,9 @@ import {
   ChunkUrgency,
 } from 'fleet';
 import { AppLink } from 'fleet/shell';
+
+type ChunkHeaderDetail = Pick<ChunkDetailAggregate, 'chunk_id' | 'project_name' | 'work_refs' | 'pause' | 'route' | 'terminal' | 'urgency' |
+  'pausable' | 'completable' | 'current_node_name' | 'current_node_id' | 'delete_refusal' | 'neighborhood'>;
 
 /**
  * The chunk detail dock's header — the chunk's identity (short name, work item, state,
@@ -49,7 +48,7 @@ import { AppLink } from 'fleet/shell';
 })
 export class ChunkDetailHeader {
   /** The chunk aggregate to render (identity, status, current node, pause, route). */
-  readonly detail = input.required<ChunkDetail>();
+  readonly detail = input.required<ChunkHeaderDetail>();
 
   /** The chunk's project's color, drawn as the swatch beside its name; `null` draws the name alone. */
   readonly projectColor = input<string | null>(null);
@@ -58,7 +57,7 @@ export class ChunkDetailHeader {
    * Never consulted by the ⋮ menu's gates: those decide what the *next* click is
    * admissible to fire against the server-read status, which an in-flight mutation's own
    * predicted outcome must not perturb. */
-  readonly renderedStatus = input.required<ChunkStatus>();
+  readonly renderedStatus = input.required<string>();
 
   /** The chunk detail route's path segments, before the chunk id — the longname link's target. */
   readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
@@ -78,19 +77,19 @@ export class ChunkDetailHeader {
   /** The chunk's work refs, for the header — each linked out to its source's web
    * address when the configured binding rendered one (a null `web_url` degrades to
    * plain text, no broken link). */
-  protected readonly pointers = computed<readonly WorkRefView[]>(
+  protected readonly pointers = computed<ChunkHeaderDetail['work_refs']>(
     () => this.detail().work_refs ?? [],
   );
 
   /** The chunk's open operator pause, if any — who set it. Read off the
    * detail's `pause` fact, not `status`: a chunk both paused and parked on a question
    * derives `waiting_on_human`, so `status` alone would never surface it. */
-  protected readonly pause = computed<PauseView | null>(
+  protected readonly pause = computed<ChunkHeaderDetail['pause']>(
     () => this.detail().pause ?? null,
   );
 
   /** The chunk's live route, if any — the runner fact reads off it. */
-  protected readonly route = computed<RouteView | null>(
+  protected readonly route = computed<ChunkHeaderDetail['route']>(
     () => this.detail().route ?? null,
   );
 

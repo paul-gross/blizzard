@@ -43,7 +43,7 @@
         <fleet-chunk-detail-timeline [detail]="detail()" [graphLinkBase]="graphLinkBase()" [costOnly]="true" />
       </section>
       <section class="d-sec d-sec--flush" aria-labelledby="chunk-artifacts-heading">
-        <app-chunk-detail-artifacts [detail]="detail()" />
+        <app-chunk-detail-artifacts [detail]="{ chunk_id: detail().chunk_id, artifacts: artifacts() }" />
       </section>
     </div>
   </div>

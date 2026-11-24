@@ -13,7 +13,6 @@ export { sortArtifacts } from './sort-artifacts';
 export { filterArtifactsByStep } from './filter-artifacts-by-step';
 export { ChunkEscalation } from './chunk-escalation';
 export { ChunkFacts } from './chunk-facts';
-export type { FactsDetail } from './chunk-facts';
 export { chunkGraphLabel } from './graph-label';
 export { ChunkIssuePane } from './chunk-issue-pane';
 export { deriveWorkItemsState } from './work-items-state';
@@ -21,3 +20,5 @@ export type { WorkItemsState, WorkItemsQuery } from './work-items-state';
 export { ChunkTimeline } from './chunk-timeline';
 export type { TransitionView, ArtifactView, DecisionView, ChunkUsageTotalView } from '../../api/hub';
 export { ChunkUrgency } from './chunk-urgency';
+
+export type { ChunkArtifact, ChunkArtifactStore } from './artifact.model';

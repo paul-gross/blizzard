@@ -3,16 +3,11 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ChunkPage, ChunkGeneralTab, ChunkTranscriptsTab, type hubApi, ViewportService } from 'fleet';
+import { ChunkPage, ChunkGeneralTab, ChunkTranscriptsTab, type ChunkDetailAggregate, type hubApi, ViewportService } from 'fleet';
 import {
   assetArtifactView,
   chunkDetail,
-  chunkEscalationView,
-  chunkUsageTotalView,
-  chunkUsageView,
-  decisionView,
   OPERATOR_ME_RESPONSE,
-  questionView,
   recordingAwaitingHumanActions,
   settle,
   stubError,
@@ -21,13 +16,19 @@ import {
   transcriptSegmentIndexEntry,
   transitionView,
   turnSegmentView,
-  workRefView,
+  domainChunkDetail,
+  domainQuestion,
+  domainDecision,
+  domainTransition,
+  domainUsage,
+  domainUsageTotal,
+  chunkEscalation,
 } from 'fleet/testing';
 import { page } from 'vitest/browser';
 import { HUB_CHUNK_PAGE_PROVIDERS } from './hub-chunk-actions';
 import { ChunkDetailPanel } from '../chunk-dock/chunk-detail-panel';
 /** The chunk page's layout under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep. */
-const DETAIL: hubApi.ChunkDetail = chunkDetail({
+const DETAIL: ChunkDetailAggregate = domainChunkDetail({
   chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
   graph_id: 'gr_1',
   graph_name: 'default',
@@ -35,9 +36,9 @@ const DETAIL: hubApi.ChunkDetail = chunkDetail({
   current_node_name: 'review',
   latest_epoch: 2,
   status: 'running',
-  work_refs: [workRefView({ source: 'blizzard', ref: '26', web_url: null })],
+  work_refs: [{ source: 'blizzard', ref: '26', label: 'blizzard#1274', web_url: null }],
   history: [
-    transitionView({
+    domainTransition({
       choice_name: null,
       epoch: 1,
       from_node_id: null,
@@ -50,43 +51,39 @@ const DETAIL: hubApi.ChunkDetail = chunkDetail({
 });
 
 /** A multiline ask with an unbroken path wider than a phone. */
-const ASK_DETAIL: hubApi.ChunkDetail = {
+const ASK_QUESTION = domainQuestion({
+  question_id: 'qn_long', chunk_id: DETAIL.chunk_id,
+  question:
+    'Issue #214 does not reproduce under any condition I can test. Details:\n\n' +
+    '1. Code trace: the mutation already invalidates both query keys.\n' +
+    '2. Live browser test: the board updated within 500ms.\n\n' +
+    'The failing path is web/projects/fleet/src/lib/chunk/awaiting-human/chunk-awaiting-human.spec.ts\n\n' +
+    'How should I proceed?',
+  options: [], epoch: 2, runner_id: 'rn_01', asked_at: '2026-07-16T11:30:00.000Z', answered: false,
+});
+const ASK_DETAIL: ChunkDetailAggregate = domainChunkDetail({
   ...DETAIL,
   status: 'waiting_on_human',
-  questions: [
-    questionView({
-      question_id: 'qn_long',
-      chunk_id: DETAIL.chunk_id,
-      question:
-        'Issue #214 does not reproduce under any condition I can test. Details:\n\n' +
-        '1. Code trace: the mutation already invalidates both query keys.\n' +
-        '2. Live browser test: the board updated within 500ms.\n\n' +
-        'The failing path is web/projects/fleet/src/lib/chunk/awaiting-human/chunk-awaiting-human.spec.ts\n\n' +
-        'How should I proceed?',
-      options: [],
-      epoch: 2,
-      runner_id: 'rn_01',
-      asked_at: '2026-07-16T11:30:00.000Z',
-      answered: false,
-    }),
-  ],
-};
+  awaitingHuman: undefined,
+  questions: [ASK_QUESTION],
+});
 /** Both live controls and the answered trail must coexist without being promoted together. */
-const SPLIT_DETAIL: hubApi.ChunkDetail = {
+const SPLIT_DETAIL: ChunkDetailAggregate = domainChunkDetail({
   ...ASK_DETAIL,
+  awaitingHuman: undefined,
   questions: [
-    ...ASK_DETAIL.questions!,
-    questionView({
+    ASK_QUESTION,
+    domainQuestion({
       question_id: 'qn_answered', chunk_id: DETAIL.chunk_id, question: 'Previously asked?',
       answered: true, answer: 'Yes', answered_by: 'operator', answered_at: '2026-07-16T11:31:00Z',
     }),
   ],
-  decision: decisionView({
+  decision: domainDecision({
     decision_id: 'de_01', chunk_id: DETAIL.chunk_id, node_id: 'nd_review', node_name: 'review',
     choices: [{ name: 'approve', description: 'Approve', requires_checks: false, would_override_red_checks: false }],
     check_results: [], transitioned: false,
   }),
-};
+});
 function expectSplitOrder(root: HTMLElement, workSelector: string, issuesSelector: string, width: number): void {
   const selectors = ['[data-testid="open-question"]', workSelector, issuesSelector,
     '[data-testid="answered-questions"]', '[data-testid="open-decision"]'];
@@ -107,21 +104,21 @@ function expectSplitOrder(root: HTMLElement, workSelector: string, issuesSelecto
   }
 }
 /** Estimate-only figures in the total and timeline. */
-const ESTIMATE_DETAIL: hubApi.ChunkDetail = {
+const ESTIMATE_DETAIL: ChunkDetailAggregate = {
   ...DETAIL,
   history: [
-    transitionView({ choice_name: 'pass', epoch: 1, from_node_id: 'nd_build', from_node_name: 'build', to_node_id: 'nd_review', to_node_name: 'review', recorded_at: '2026-07-16T11:00:00.000Z' }),
+    domainTransition({ choice_name: 'pass', epoch: 1, from_node_id: 'nd_build', from_node_name: 'build', to_node_id: 'nd_review', to_node_name: 'review', recorded_at: '2026-07-16T11:00:00.000Z' }),
   ],
-  cost: chunkUsageTotalView({ input_tokens: 900, output_tokens: 400, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 0, cost_partial: false, estimated_cost_usd: 0.07 }),
+  cost: domainUsageTotal({ input_tokens: 900, output_tokens: 400, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 0, cost_partial: false, estimated_cost_usd: 0.07 }),
   usage: [
-    chunkUsageView({ node_id: 'nd_build', epoch: 1, kind: 'spawn', model: 'claude-opus-4-8', input_tokens: 900, output_tokens: 400, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: null, estimated_cost_usd: 0.07 }),
+    domainUsage({ node_id: 'nd_build', epoch: 1, kind: { kind: 'spawn' }, model: 'claude-opus-4-8', input_tokens: 900, output_tokens: 400, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: null, estimated_cost_usd: 0.07 }),
   ],
 };
 /** Long primary and fallback commands exercise both takeover scroll containers. */
-const NEEDS_HUMAN_DETAIL: hubApi.ChunkDetail = {
+const NEEDS_HUMAN_DETAIL: ChunkDetailAggregate = {
   ...DETAIL,
-  status: 'needs_human',
-  escalation: chunkEscalationView({
+  status: { kind: 'needs_human' },
+  escalation: chunkEscalation({
     epoch: 2,
     cause: null,
     detail: null,
@@ -132,7 +129,7 @@ const NEEDS_HUMAN_DETAIL: hubApi.ChunkDetail = {
       'blizzard runner takeover ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9 --dir /home/blizzard/runner/data/runtime',
   }),
 };
-async function render(detail: hubApi.ChunkDetail = DETAIL) {
+async function render(detail: ChunkDetailAggregate = DETAIL) {
   await TestBed.configureTestingModule({
     imports: [ChunkGeneralTab],
     providers: [provideZonelessChangeDetection(), provideRouter([])],

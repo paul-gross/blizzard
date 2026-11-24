@@ -1,4 +1,4 @@
-import { deriveWorkItemsState, isPendingFor, type ChunkDetail, type ChunkStatus, type WorkItemsQuery, type WorkItemsState } from 'fleet';
+import { deriveWorkItemsState, isPendingFor, type ChunkDetailAggregate, type WorkItemsQuery, type WorkItemsState } from 'fleet';
 
 /**
  * The status `detail` will read once a pending Pause or Complete on it settles, when that outcome is total
@@ -8,20 +8,20 @@ import { deriveWorkItemsState, isPendingFor, type ChunkDetail, type ChunkStatus,
  * Resume (`paused: false`) and every other chunk's mutation predict nothing.
  */
 export function pendingStatusOverride(
-  detail: ChunkDetail | undefined,
+  detail: Pick<ChunkDetailAggregate, 'chunk_id' | 'status_if_paused'> | undefined,
   pendingCompletes: readonly { readonly chunkId: string }[],
   pendingPauses: readonly { readonly chunkId: string; readonly paused: boolean }[],
-): ChunkStatus | null {
+): 'done' | 'paused' | null {
   if (detail === undefined) return null;
   if (isPendingFor(pendingCompletes, (vars) => vars.chunkId === detail.chunk_id)) return 'done';
   const pausing = isPendingFor(pendingPauses, (vars) => vars.chunkId === detail.chunk_id && vars.paused);
-  if (pausing && detail.status_if_paused === 'paused') return 'paused';
+  if (pausing && detail.status_if_paused?.kind === 'paused') return 'paused';
   return null;
 }
 
 
 /** The open chunk's aggregate — `undefined` while the dock is closed, whatever a disabled query still holds. */
-export function openDetail<T extends ChunkDetail>(chunkId: string | null, data: T | undefined): T | undefined {
+export function openDetail<T>(chunkId: string | null, data: T | undefined): T | undefined {
   return chunkId === null ? undefined : data;
 }
 

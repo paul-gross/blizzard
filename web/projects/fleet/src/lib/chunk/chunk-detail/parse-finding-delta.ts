@@ -1,4 +1,4 @@
-import type { AddFindingOp, FindingDelta, GoneFindingOp, ObservedFindingOp } from '../../api/hub';
+import type { AddFindingOp, FindingDelta, GoneFindingOp, ObservedFindingOp } from './artifact-structured.model';
 
 /**
  * Runtime validation of a delivered finding list against the generated `FindingDelta`.

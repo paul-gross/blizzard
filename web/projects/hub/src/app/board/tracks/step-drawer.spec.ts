@@ -7,7 +7,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { vi } from 'vitest';
 
 import { FLEET_CLOCK, formatHeldFor, type hubApi } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
+import { assetArtifactView, chunkDetail, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 import type { EnvTimelineStepView } from './step.query';
 import { StepDrawer } from './step-drawer';
 
@@ -57,8 +57,9 @@ describe('StepDrawer', () => {
   let browser = 0;
   afterEach(() => vi.useRealTimers());
 
-  async function mount(url: string, route: Parameters<typeof stubHubClient>[0]['GET /api/env-timeline/step'] = () => VIEW) {
-    stub = stubHubClient({ 'GET /api/env-timeline/step': route });
+  async function mount(url: string, route: Parameters<typeof stubHubClient>[0]['GET /api/env-timeline/step'] = () => VIEW,
+    chunkRoute?: Parameters<typeof stubHubClient>[0]['GET /api/chunks/{chunk_id}']) {
+    stub = stubHubClient({ 'GET /api/env-timeline/step': route, ...(chunkRoute ? { 'GET /api/chunks/{chunk_id}': chunkRoute } : {}) });
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -74,6 +75,13 @@ describe('StepDrawer', () => {
   }
 
   const reads = () => stub.forRoute('/api/env-timeline/step', 'GET');
+
+  it('renders only the step-owned artifacts from the translated chunk read', async () => {
+    const chunk = chunkDetail({ chunk_id: 'ch_01', artifacts: [assetArtifactView({ key: 'mine' }), assetArtifactView({ key: 'other' })] });
+    const { el } = await mount('/board?chunk=ch_01&step=lease_01', () => ({ ...VIEW, artifact_keys: ['mine'] }), () => chunk);
+    expect(el.querySelector('[data-testid="artifact-key"]')?.textContent).toContain('mine');
+    expect(el.querySelectorAll('[data-testid="artifact-key"]')).toHaveLength(1);
+  });
 
   describe('an executor the client does not list', () => {
     const transcriptReads = () => stub.forRoute('/api/env-timeline/step/transcript', 'GET');

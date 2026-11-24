@@ -1,4 +1,4 @@
-import type { ArtifactView } from '../../api/hub';
+import type { ChunkArtifact } from '../chunk-detail/artifact.model';
 import { parseNodeStepKey } from '../../core/node-step';
 import { filterArtifactsByStep } from '../chunk-detail/filter-artifacts-by-step';
 import { sortArtifacts } from '../chunk-detail/sort-artifacts';
@@ -12,9 +12,9 @@ export function parseSelectedKey(key: string | null): { nodeId: string; epoch: n
 /** The selected node-step's own artifacts, oldest first — none when no step is
  * selected. */
 export function stepArtifacts(
-  artifacts: readonly ArtifactView[],
+  artifacts: readonly ChunkArtifact[],
   selection: { readonly nodeId: string; readonly epoch: number } | null,
-): ArtifactView[] {
+): ChunkArtifact[] {
   if (selection === null) return [];
   return sortArtifacts(filterArtifactsByStep(artifacts, selection.nodeId, selection.epoch));
 }

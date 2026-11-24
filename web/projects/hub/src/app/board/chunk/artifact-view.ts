@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
-  type ArtifactView as ArtifactModel,
+  type ChunkArtifact as ArtifactModel,
   ChunkArtifactBody,
   KitAsyncState,
   type KitAsyncStateValue,

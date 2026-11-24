@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { ArtifactKind, type ArtifactView, type FindingDelta, type FindingSurvey } from '../../api/hub';
+import type { ChunkArtifact } from './artifact.model';
+import type { FindingDelta, FindingSurvey } from './artifact-structured.model';
 import { shortCommitHash } from '../../core/commit-hash';
 import { FleetWhen } from '../../core/when-display/fleet-when';
 import { ChunkArtifactBounce } from './chunk-artifact-bounce';
@@ -54,7 +55,7 @@ import { parseFindingSurvey } from './parse-finding-survey';
 })
 export class ChunkArtifactBody {
   /** The artifact to render. */
-  readonly artifact = input.required<ArtifactView>();
+  readonly artifact = input.required<ChunkArtifact>();
 
   /** `full` (default) renders an asset's content verbatim; `summary` omits it —
    * a `git_commit`'s ref line renders either way, since it carries nothing to
@@ -73,7 +74,12 @@ export class ChunkArtifactBody {
 
   /** The commit's short hash; the full hash rides the element's title. */
   protected readonly shortHash = computed(() => shortCommitHash(this.artifact().commit_hash ?? ''));
-  protected readonly isAsset = computed(() => this.artifact().kind === ArtifactKind.ASSET);
+  protected readonly kindLabel = computed(() => {
+    const kind = this.artifact().kind;
+    return kind.kind === 'unknown' ? kind.raw : kind.kind;
+  });
+  protected readonly isCommit = computed(() => this.artifact().kind.kind === 'git_commit');
+  protected readonly isAsset = computed(() => this.artifact().kind.kind === 'asset');
 
   /** The asset's content, parsed as a `FindingDelta` — `null` when there is no
    * content to try ({@link structuredCandidate}) or it fails
@@ -109,7 +115,7 @@ export class ChunkArtifactBody {
    * never spend a parse on content they don't render anyway. */
   private readonly structuredCandidate = computed<string | null>(() => {
     const artifact = this.artifact();
-    if (artifact.kind !== ArtifactKind.ASSET || this.body() !== 'full') return null;
+    if (artifact.kind.kind !== 'asset' || this.body() !== 'full') return null;
     return artifact.content ?? null;
   });
 }

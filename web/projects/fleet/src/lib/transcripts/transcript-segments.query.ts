@@ -1,10 +1,11 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import * as hubApi from '../api/hub';
-import type { TranscriptSegmentContentView, TranscriptSegmentIndexView } from '../api/hub';
 import * as runnerApi from '../api/runner';
 import { type DaemonTarget, targetKeyRoot } from '../core/daemon-target/daemon-target';
 import { chunkTranscriptSegmentKey, chunkTranscriptsKey } from '../core/query-keys';
+import type { TranscriptSegmentContent, TranscriptSegmentIndex } from './transcript-turn';
+import { translateTranscriptTurn } from './transcript-turn.translate';
 
 /** One chunk's segment index through the target's own generated function
  * (`bzh:generated-client`) — the two specs mirror each other's path shape, but calling
@@ -82,10 +83,30 @@ export function injectChunkTranscriptsQuery(target: () => DaemonTarget | null, c
     return {
       queryKey: chunkTranscriptsKey(active === null ? '' : targetKeyRoot(active), id),
       enabled: id !== null && active !== null,
-      queryFn: async (): Promise<TranscriptSegmentIndexView> => {
+      queryFn: async () => {
         const { data, error, response } = await fetchSegmentIndex(active!, id!);
         if (error) throw new TranscriptFetchError(response?.status ?? 0);
         return data!;
+      },
+      select: (data: NonNullable<Awaited<ReturnType<typeof fetchSegmentIndex>>['data']>): TranscriptSegmentIndex => {
+        return {
+          chunk_id: data.chunk_id,
+          segments: data.segments.map((segment) => ({
+            segment_id: segment.segment_id,
+            node_id: segment.node_id,
+            epoch: segment.epoch,
+            spawn_generation: segment.spawn_generation,
+            turn_range_start: segment.turn_range_start,
+            turn_range_end: segment.turn_range_end,
+            byte_count: segment.byte_count,
+            final: segment.final,
+            truncated: segment.truncated,
+            harness_id: segment.harness_id,
+            harness_version: segment.harness_version,
+            normalizer_version: segment.normalizer_version,
+            received_at: segment.received_at,
+          })),
+        };
       },
       retry: shouldRetryTranscriptFetch,
       refetchInterval: false as const,
@@ -125,10 +146,18 @@ export function injectChunkTranscriptSegmentQuery(
     return {
       queryKey: chunkTranscriptSegmentKey(active === null ? '' : targetKeyRoot(active), cid, sid, isFinal ?? false),
       enabled: active !== null && cid !== null && sid !== null && isFinal !== null,
-      queryFn: async (): Promise<TranscriptSegmentContentView> => {
+      queryFn: async () => {
         const { data, error, response } = await fetchSegment(active!, cid!, sid!);
         if (error) throw new TranscriptFetchError(response?.status ?? 0);
         return data!;
+      },
+      select: (content: NonNullable<Awaited<ReturnType<typeof fetchSegment>>['data']>): TranscriptSegmentContent => {
+        return {
+          segment_id: content.segment_id,
+          final: content.final,
+          truncated: content.truncated,
+          turns: content.turns.map(translateTranscriptTurn),
+        };
       },
       retry: shouldRetryTranscriptFetch,
       refetchInterval: false as const,

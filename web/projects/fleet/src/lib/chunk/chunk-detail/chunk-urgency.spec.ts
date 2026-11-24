@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
-import { chunkControlStub, chunkDetail } from 'fleet/testing';
+import { chunkControlStub, domainChunkDetail as chunkDetail } from 'fleet/testing';
 import type { Urgency } from '../../core/urgency';
 import { legibleOnDark, projectColorValue } from '../../kit/kit-swatch-color';
 import { ChunkUrgency } from './chunk-urgency';

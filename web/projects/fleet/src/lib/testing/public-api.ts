@@ -85,3 +85,6 @@ export { gardenFindingView } from './builders/garden.translate';
 export { graphSummaryView } from './builders/graph-summary.translate';
 export { eventView } from './builders/event-log.translate';
 export { flowView, flowFactView } from './builders/delivery-flow.translate';
+
+export { assetChunkArtifact, commitChunkArtifact, surveyChunkArtifact, deltaChunkArtifact, bounceChunkArtifact, domainFindingCandidate, domainFindingSurvey, domainFindingDelta, domainAddFindingOp, domainObservedFindingOp, domainGoneFindingOp } from './builders/artifact';
+export { chunkArtifactStore, chunkEscalation, domainChunkDetail, domainDecision, domainQuestion, domainTransition, domainPr, domainLandedRepo, domainRoute, domainBounce, domainUsage, domainUsageTotal, domainQueuedChunk, domainMidFlightChunk, domainBouncedChunk, domainEscalatedChunk, domainLandedChunk, domainStoppedChunk, workItem } from './builders/chunk';

@@ -2,7 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { page } from 'vitest/browser';
 
-import type { ArtifactView } from '../../api/hub';
+import { assetChunkArtifact } from '../../testing/builders/artifact';
+import type { ChunkArtifact } from './artifact.model';
 import { ChunkArtifactBody } from './chunk-artifact-body';
 
 /**
@@ -60,17 +61,17 @@ function surveyContent(): string {
   });
 }
 
-function artifact(content: string): ArtifactView {
-  return {
+function artifact(content: string): ChunkArtifact {
+  return assetChunkArtifact({
     key: 'reconcile.finding-set.1',
-    kind: 'asset',
+    kind: { kind: 'asset' },
     name: 'finding-set',
     node_id: 'nd_reconcile',
     node_name: 'reconcile',
     epoch: 1,
     content,
     recorded_at: '2026-08-09T00:00:00.000Z',
-  } as ArtifactView;
+  });
 }
 
 const CAP = 420;

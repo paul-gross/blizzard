@@ -1,9 +1,10 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { ArtifactView, ChunkDetail } from '../../api/hub';
-import { assetArtifactView } from '../../testing/builders/artifact.translate';
-import { chunkDetail, transitionView } from '../../testing/builders/chunk.translate';
+import type { ChunkDetail } from './chunk-detail.model';
+import type { ChunkArtifact } from '../chunk-detail/artifact.model';
+import { assetChunkArtifact } from '../../testing/builders/artifact';
+import { domainChunkDetail as chunkDetail, domainTransition as transitionView } from '../../testing/builders/chunk';
 
 import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
 
@@ -32,13 +33,13 @@ const DETAIL: ChunkDetail = chunkDetail({
   artifacts: [],
 });
 
-const STEP_ARTIFACT: ArtifactView = assetArtifactView({
+const STEP_ARTIFACT: ChunkArtifact = assetChunkArtifact({
   key: 'build.plan.1',
   node_id: 'nd_build',
   node_name: 'build',
   epoch: 1,
   name: 'plan',
-  kind: 'asset',
+  kind: { kind: 'asset' },
   content: 'the plan',
   recorded_at: '2026-08-09T00:00:00.000Z',
 });
@@ -46,7 +47,7 @@ const STEP_ARTIFACT: ArtifactView = assetArtifactView({
 interface RenderOptions {
   selectedKey?: string | null;
   drilldown?: boolean;
-  stepArtifacts?: readonly ArtifactView[];
+  stepArtifacts?: readonly ChunkArtifact[];
   indexState?: 'loading' | 'error' | 'empty' | 'ready';
   isForbidden?: boolean;
   segmentState?: 'loading' | 'error' | 'empty' | 'ready';

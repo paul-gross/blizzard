@@ -1,13 +1,13 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { ArtifactView } from '../../api/hub';
-import { assetArtifactView, commitArtifactView } from '../../testing/builders/artifact.translate';
+import type { ChunkArtifact } from '../chunk-detail/artifact.model';
+import { assetChunkArtifact, commitChunkArtifact } from '../../testing/builders/artifact';
 import { ChunkArtifactsPanel } from './chunk-artifacts-panel';
 
-const OLDER: ArtifactView = commitArtifactView({
+const OLDER: ChunkArtifact = commitChunkArtifact({
   key: 'build.branch.1',
-  kind: 'git_commit',
+  kind: { kind: 'git_commit' },
   name: 'branch',
   node_id: 'nd_build',
   node_name: 'build',
@@ -19,9 +19,9 @@ const OLDER: ArtifactView = commitArtifactView({
   recorded_at: '2026-07-16T11:10:00.000Z',
 });
 
-const NEWER: ArtifactView = assetArtifactView({
+const NEWER: ChunkArtifact = assetChunkArtifact({
   key: 'review.findings.2',
-  kind: 'asset',
+  kind: { kind: 'asset' },
   name: 'findings',
   node_id: 'nd_review',
   node_name: 'review',

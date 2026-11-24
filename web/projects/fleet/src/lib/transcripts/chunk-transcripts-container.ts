@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import type { TransitionView } from '../api/hub';
+import type { TranscriptHistoryStep } from './transcript-turn';
 import { asyncState, restingAsyncState } from '../core/query-state';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
 import type { DaemonTarget } from '../core/daemon-target/daemon-target';
@@ -39,7 +39,7 @@ export class ChunkTranscriptsContainer {
    * so the query's own `enabled: id !== null` stays the real gate
    * rather than a `?? ''` sentinel that could pass it with an empty id. */
   readonly chunkId = input.required<string | null>();
-  readonly history = input.required<readonly TransitionView[]>();
+  readonly history = input.required<readonly TranscriptHistoryStep[]>();
   readonly currentNodeId = input<string | null>(null);
   readonly currentNodeName = input<string | null>(null);
   readonly latestEpoch = input<number | null>(null);

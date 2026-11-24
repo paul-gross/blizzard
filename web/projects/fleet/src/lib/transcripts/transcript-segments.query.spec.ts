@@ -5,7 +5,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { client as hubClient } from '../api/hub/client.gen';
 import { client as runnerClient } from '../api/runner/client.gen';
 import type { DaemonTarget } from '../core/daemon-target/daemon-target';
-import { chunkDetailKey } from '../core/query-keys';
+import { chunkDetailKey, chunkTranscriptSegmentKey, chunkTranscriptsKey } from '../core/query-keys';
 import { settle } from '../testing/settle';
 import {
   type RequestClientStub,
@@ -217,6 +217,29 @@ describe('injectChunkTranscriptsQuery — plane-generic (D5)', () => {
     expect(stub.requests).toHaveLength(1);
   });
 
+  it.each([['hub', HUB_TARGET], ['runner', RUNNER_TARGET]] as const)(
+    'projects populated index metadata on %s', async (_plane, target) => {
+      const entry = { segment_id: 'seg', node_id: 'build', epoch: 2, spawn_generation: 3,
+        turn_range_start: 4, turn_range_end: 9, byte_count: 25, final: false, truncated: true,
+        harness_id: null, harness_version: null, normalizer_version: 'v1', received_at: '2026-01-01T00:00:00Z',
+        future_field: 'preserved in cache' };
+      const wire = { chunk_id: 'ch_1', segments: [entry] };
+      stub = target.plane === 'hub'
+        ? stubHubClient({ 'GET /api/chunks/{chunk_id}/transcripts': () => wire })
+        : stubRunnerClient({ 'GET /runners/{runner_id}/api/chunks/{chunk_id}/transcripts': () => wire });
+      const Host = definePlaneTranscriptsQueryHost(target);
+      const queryClient = new QueryClient();
+      TestBed.configureTestingModule({ imports: [Host], providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)] });
+      const fixture = TestBed.createComponent(Host);
+      await settle(fixture);
+      const { future_field: _future, ...projected } = entry;
+      expect(_future).toBe('preserved in cache');
+      expect(fixture.componentInstance.query.data()).toEqual({ chunk_id: 'ch_1', segments: [projected] });
+      expect(fixture.componentInstance.query.data()?.segments[0]).not.toBe(entry);
+      expect(queryClient.getQueryData(chunkTranscriptsKey(target.plane === 'hub' ? 'hub' : 'rn_1', 'ch_1'))).toEqual(wire);
+    },
+  );
+
   it('holds the read while the target is null', async () => {
     stub = stubPlane('runner');
 
@@ -245,6 +268,32 @@ describe('injectChunkTranscriptsQuery — plane-generic (D5)', () => {
 describe('injectChunkTranscriptSegmentQuery — plane-generic (D5)', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
+
+  it.each([['hub', HUB_TARGET], ['runner', RUNNER_TARGET]] as const)(
+    'projects nested and unlisted turns on %s', async (_plane, target) => {
+      const turn = { index: 1, kind: 'future' as 'asst', text: '', timestamp: null, thinking_redacted: false, truncated: true,
+        tool: null, sidechain: { agent_id: null, agent_type: null, link: 'unlinked', turns: [] } };
+      const content = { segment_id: 'seg-1', final: true, truncated: true, turns: [turn], future_field: 'preserved in cache' };
+      stub = target.plane === 'hub'
+        ? stubHubClient({ 'GET /api/chunks/{chunk_id}/transcripts/{segment_id}': () => content })
+        : stubRunnerClient({ 'GET /runners/{runner_id}/api/chunks/{chunk_id}/transcripts/{segment_id}': () => content });
+      @Component({ selector: 'fleet-test-populated-segment-host', changeDetection: ChangeDetectionStrategy.OnPush, template: '' })
+      class Host {
+        readonly query = injectChunkTranscriptSegmentQuery(() => target, () => 'ch_1', () => 'seg-1', () => true);
+      }
+      const queryClient = new QueryClient();
+      TestBed.configureTestingModule({ imports: [Host], providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)] });
+      const fixture = TestBed.createComponent(Host);
+      await settle(fixture);
+      expect(fixture.componentInstance.query.data()).toEqual({
+        segment_id: content.segment_id, final: content.final, truncated: content.truncated,
+        turns: [{ ...turn, kind: 'unknown', rawKind: 'future' }],
+      });
+      expect(fixture.componentInstance.query.data()?.turns[0]).not.toBe(turn);
+      expect(queryClient.getQueryData(chunkTranscriptSegmentKey(target.plane === 'hub' ? 'hub' : 'rn_1', 'ch_1', 'seg-1', true)))
+        .toEqual(content);
+    },
+  );
 
   it.each([
     ['hub', HUB_TARGET, '/api/chunks/ch_1/transcripts/seg-1'] as const,

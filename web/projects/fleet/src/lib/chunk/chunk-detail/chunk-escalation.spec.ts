@@ -2,20 +2,11 @@ import { ErrorHandler, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 
-import type { ChunkDetail } from '../../api/hub';
-import { chunkDetail } from 'fleet/testing';
+import type { EscalationDetail } from './escalation.model';
 import { ChunkEscalation } from './chunk-escalation';
 
 /** An escalation carrying both forms — the runner-composed shape. */
-const WRAPPED_DETAIL: ChunkDetail = chunkDetail({
-  chunk_id: 'ch_01esc00000000000000000000000',
-  graph_id: 'gr_1',
-  status: 'needs_human',
-  current_node_id: 'nd_build',
-  latest_epoch: 3,
-  work_refs: [],
-  history: [],
-  artifacts: [],
+const WRAPPED_DETAIL: EscalationDetail = {
   escalation: {
     epoch: 3,
     takeover_command:
@@ -25,15 +16,13 @@ const WRAPPED_DETAIL: ChunkDetail = chunkDetail({
     cause: null,
     detail: null,
   },
-  graph_name: null,
-  current_node_name: null,
-});
+};
 
 /** An escalation carrying only the raw field, populated with a runnable resume
  * command — the shape of a row stored before the wrapped column existed, or written
  * by a runner that could not compose the wrapped form
  * (`blizzard-context:/domain/humans/escalation.md` §What each origin carries). */
-const RAW_ONLY_DETAIL: ChunkDetail = {
+const RAW_ONLY_DETAIL: EscalationDetail = {
   ...WRAPPED_DETAIL,
   escalation: {
     epoch: 3,
@@ -49,7 +38,7 @@ const RAW_ONLY_DETAIL: ChunkDetail = {
  * rather than a runnable command — the hub-authored, cross-graph-unresolvable shape
  * (`blizzard-context:/domain/humans/escalation.md` §What each origin carries). The hub never composes a
  * wrapped form. */
-const PROSE_ONLY_DETAIL: ChunkDetail = {
+const PROSE_ONLY_DETAIL: EscalationDetail = {
   ...WRAPPED_DETAIL,
   escalation: {
     epoch: 3,
@@ -64,7 +53,7 @@ const PROSE_ONLY_DETAIL: ChunkDetail = {
 
 /** An escalation carrying neither form — no session was ever parked for it, so there
  * is nothing to take over. */
-const NO_COMMAND_DETAIL: ChunkDetail = {
+const NO_COMMAND_DETAIL: EscalationDetail = {
   ...WRAPPED_DETAIL,
   escalation: {
     epoch: 3,
@@ -76,13 +65,12 @@ const NO_COMMAND_DETAIL: ChunkDetail = {
 };
 
 /** A chunk with no open escalation at all — the common, healthy case. */
-const NO_ESCALATION_DETAIL: ChunkDetail = {
+const NO_ESCALATION_DETAIL: EscalationDetail = {
   ...WRAPPED_DETAIL,
-  status: 'running',
   escalation: null,
 };
 
-async function render(detail: ChunkDetail, extraProviders: unknown[] = []) {
+async function render(detail: EscalationDetail, extraProviders: unknown[] = []) {
   await TestBed.configureTestingModule({
     imports: [ChunkEscalation],
     providers: [provideZonelessChangeDetection(), ...extraProviders],

@@ -1,8 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 
-import { type WaitKind } from '../../api/hub';
-import { chunkDetail, prView } from '../../testing/builders/chunk.translate';
+import { domainChunkDetail as chunkDetail, domainPr as prView } from '../../testing/builders/chunk';
 import { ChunkDelivery } from './chunk-delivery';
 
 describe('ChunkDelivery', () => {
@@ -10,7 +9,7 @@ describe('ChunkDelivery', () => {
     const fixture = TestBed.createComponent(ChunkDelivery);
     const pr = prView();
     fixture.componentRef.setInput('detail', chunkDetail({
-      pending: { node_name: 'park', next_poll_at: '2026-10-30T12:05:00Z', kind: 'awaiting-merge', since: '2026-10-30T12:00:00Z' },
+      pending: { node_name: 'park', next_poll_at: '2026-10-30T12:05:00Z', kind: { kind: 'awaiting-merge' }, since: '2026-10-30T12:00:00Z' },
       open_prs: [pr],
     }));
     await fixture.whenStable();
@@ -25,14 +24,14 @@ describe('ChunkDelivery', () => {
     const fixture = TestBed.createComponent(ChunkDelivery);
     fixture.componentRef.setInput('detail', chunkDetail({
       awaiting_external_merge: true,
-      pending: { node_name: 'land', next_poll_at: '2026-10-30T12:05:00Z', kind: 'future-kind' as WaitKind, since: null },
+      pending: { node_name: 'land', next_poll_at: '2026-10-30T12:05:00Z', kind: { kind: 'unknown', raw: 'future-kind' }, since: null },
     }));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="delivery-park-wait"]')).toBeNull();
     expect(el.querySelector('[data-testid="delivery-merge-wait"]')).not.toBeNull();
     fixture.componentRef.setInput('detail', chunkDetail({
-      pending: { node_name: 'park', next_poll_at: '2026-10-30T12:05:00Z', kind: 'awaiting-merge', since: null },
+      pending: { node_name: 'park', next_poll_at: '2026-10-30T12:05:00Z', kind: { kind: 'awaiting-merge' }, since: null },
     }));
     await fixture.whenStable();
     expect(el.querySelector('[data-testid="delivery-park-wait"]')?.textContent?.trim()).toBe('Awaiting merge');

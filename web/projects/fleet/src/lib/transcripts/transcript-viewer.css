@@ -5,6 +5,7 @@
   font-variant-numeric: tabular-nums;
 }
 .turns {
+  container-type: inline-size;
   padding: 4px 0 12px;
 }
 .turn {
@@ -80,6 +81,7 @@
 .turn .tx {
   color: var(--text);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .turn.k-env .tx {
   color: var(--label);
@@ -129,6 +131,7 @@
   color: var(--label);
   font-size: var(--fs-xs);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   max-height: 200px;
   overflow-y: auto;
 }
@@ -153,6 +156,7 @@
   margin-top: 3px;
   color: var(--label);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-size: var(--fs-sm);
 }
 .thinking .th-redacted {
@@ -199,4 +203,22 @@
 }
 .turns.stacked .turn .g {
   display: none;
+}
+
+/* Each nested viewer responds to its own available width, not the viewport. */
+@container (max-width: 400px) {
+  .turn {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+    padding: 6px 8px;
+  }
+  .turn .t {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    padding-top: 0;
+  }
+  .turn .g {
+    display: none;
+  }
 }

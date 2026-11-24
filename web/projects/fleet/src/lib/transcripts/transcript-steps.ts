@@ -1,9 +1,10 @@
-import type { TranscriptSegmentIndexEntry, TransitionView } from '../api/hub';
+import type { TranscriptHistoryStep } from './transcript-turn';
+import type { TranscriptSegmentIndexEntry } from './transcript-turn';
 import { nodeStepKey } from '../core/node-step';
 
 /**
  * One node-history step's transcript-segment group — joined to
- * `ChunkDetail.history` by `(node_id, epoch)`: a {@link TransitionView}'s own
+ * `ChunkDetail.history` by `(node_id, epoch)`: a {@link TranscriptHistoryStep}'s own
  * `from_node_id`/`epoch` name the step that *produced* it (the node that ran and then
  * transitioned out), the same pair a segment's `node_id`/`epoch` carries — not
  * `to_node_id`, which names where the chunk arrived next, a different step's own pair.
@@ -15,7 +16,7 @@ export interface TranscriptStep {
   readonly nodeId: string | null;
   readonly nodeName: string | null;
   readonly epoch: number | null;
-  /** Whether this is the chunk's in-flight step — no {@link TransitionView} names it
+  /** Whether this is the chunk's in-flight step — no {@link TranscriptHistoryStep} names it
    * yet, since it has not transitioned out. */
   readonly current: boolean;
   /** `false` for a segment group whose `(node_id, epoch)` matched no history row and
@@ -40,7 +41,7 @@ function bySpawnGeneration(entries: readonly TranscriptSegmentIndexEntry[]): Tra
  */
 export function deriveTranscriptSteps(
   segments: readonly TranscriptSegmentIndexEntry[],
-  history: readonly TransitionView[],
+  history: readonly TranscriptHistoryStep[],
   current: { nodeId: string | null; nodeName: string | null; epoch: number | null; terminal: boolean },
 ): TranscriptStep[] {
   const bySegmentStep = new Map<string, TranscriptSegmentIndexEntry[]>();

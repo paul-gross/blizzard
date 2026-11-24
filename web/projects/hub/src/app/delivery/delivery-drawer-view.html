@@ -3,7 +3,7 @@
   @if (detail(); as d) {
     <app-chunk-detail-header
       [detail]="d"
-      [renderedStatus]="d.status"
+      [renderedStatus]="d.status.kind === 'unknown' ? d.status.raw : d.status.kind"
       [projectColor]="projectColor()"
       [runnerHosts]="runnerHosts()"
       [closable]="closable()"

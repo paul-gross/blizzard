@@ -67,7 +67,7 @@
             }
             @if (priorityTone(item); as tone) {
               <fleet-kit-badge [tone]="tone" variant="pill" data-testid="issue-priority">{{
-                item.stated_priority
+                priorityLabel(item)
               }}</fleet-kit-badge>
             }
           }

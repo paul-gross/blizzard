@@ -3,8 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { commands, page } from 'vitest/browser';
 
-import type { ChunkDetail } from '../../api/hub';
-import { bounceView, chunkDetail, transitionView } from 'fleet/testing';
+import type { ChunkDetail } from '../chunk-page/chunk-detail.model';
+import { domainBounce as bounceView, domainChunkDetail as chunkDetail, domainTransition as transitionView } from 'fleet/testing';
 import { ChunkTimeline } from './chunk-timeline';
 
 /**

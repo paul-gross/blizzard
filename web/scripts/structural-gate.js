@@ -993,14 +993,12 @@ const LAYERED_PROJECTS = [
 const DOMAIN_BOUNDARY_EXEMPT = [
   'fleet/src/lib/chunk',
   'fleet/src/lib/host',
-  'fleet/src/lib/transcripts',
   'hub/src/app/admin',
   'hub/src/app/admin/forges',
   'hub/src/app/admin/hub-settings',
   'hub/src/app/board',
   'hub/src/app/core',
   'hub/src/app/delivery',
-  'hub/src/app/demo',
   'hub/src/app/runners',
   'runner/src/app/asks',
   'runner/src/app/board',
@@ -1039,6 +1037,10 @@ const DOMAIN_BOUNDARY_STRICT_SCOPES = [
   'runner/src/app/shell/app-scope-navigation',
   'runner/src/app/shell/app-session-recovery',
   'runner/src/app/shell/legacy-runner-redirect',
+  'fleet/src/lib/chunk/chunk-artifacts-panel',
+  'fleet/src/lib/chunk/chunk-detail',
+  'fleet/src/lib/chunk/chunk-page',
+  'hub/src/app/board/chunk-dock/chunk-detail.model',
 ];
 
 /** The `DOMAIN_BOUNDARY_EXEMPT` unit of `rel`, a `projects/`-relative posix path.

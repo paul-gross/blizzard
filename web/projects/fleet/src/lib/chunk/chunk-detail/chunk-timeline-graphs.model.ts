@@ -1,7 +1,9 @@
-import type { ChunkDetail } from '../../api/hub';
-import type { HistoryRow } from './chunk-timeline-rows';
+import type { ChunkGraphIdentity } from './graph-label';
 
-type GraphRow = Pick<HistoryRow, 'graphId' | 'graphName'>;
+interface GraphRow {
+  readonly graphId: string | null;
+  readonly graphName: string | null;
+}
 
 export interface TimelineGraphHeader {
   readonly id: string | null;
@@ -22,7 +24,7 @@ export function deriveGraphHeaders(rows: readonly GraphRow[]): readonly (Timelin
 
 export function deriveActiveGraphHeader(
   rows: readonly GraphRow[],
-  detail: Pick<ChunkDetail, 'graph_id' | 'graph_name'>,
+  detail: Pick<ChunkGraphIdentity, 'graph_id' | 'graph_name'>,
 ): TimelineGraphHeader | null {
   const last = rows.filter((row) => row.graphId !== null || row.graphName !== null).at(-1);
   return !last || (last.graphId ?? last.graphName) !== detail.graph_id

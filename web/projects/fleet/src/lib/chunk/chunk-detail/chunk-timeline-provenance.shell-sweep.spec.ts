@@ -3,8 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
-import type { ChunkDetail } from '../../api/hub';
-import { chunkDetail, chunkUsageView, transitionView } from 'fleet/testing';
+import type { ChunkDetail } from '../chunk-page/chunk-detail.model';
+import { domainChunkDetail as chunkDetail, domainUsage as chunkUsageView, domainTransition as transitionView } from 'fleet/testing';
 import { ChunkTimeline } from './chunk-timeline';
 
 /**
@@ -36,7 +36,7 @@ const DETAIL: ChunkDetail = chunkDetail({
     chunkUsageView({
       node_id: 'nd_build',
       epoch: 1,
-      kind: 'spawn',
+      kind: { kind: 'spawn' },
       model: 'claude-opus-4-8',
       harness_id: 'claude_code',
       harness_version: '1.2.3',
@@ -51,7 +51,7 @@ const DETAIL: ChunkDetail = chunkDetail({
     chunkUsageView({
       node_id: 'nd_review',
       epoch: 2,
-      kind: 'spawn',
+      kind: { kind: 'spawn' },
       model: 'gpt-5.6',
       harness_id: 'codex',
       harness_version: '4.5.6',

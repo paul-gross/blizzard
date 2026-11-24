@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 
-import { chunkDetail, routeView, workRefView } from '../../testing/builders/chunk.translate';
+import { domainChunkDetail as chunkDetail, domainRoute as routeView, domainWorkRef as workRefView } from '../../testing/builders/chunk';
 import { chunkControlStub } from '../../testing/chunk-control-stub';
 import { ChunkPageHeader } from './chunk-page-header';
 
