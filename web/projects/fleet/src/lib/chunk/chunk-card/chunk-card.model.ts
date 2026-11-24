@@ -1,4 +1,4 @@
-import type { ChunkStatus, LandedRepoView, PrView } from '../../api/hub';
+import type { LandedRepoView, PrView } from '../../api/hub';
 import { compactRef } from '../../core/compact-ref';
 import type { Tone } from '../../kit';
 
@@ -10,7 +10,7 @@ const FOLDED_TITLES = 2;
  * their lane's namesake, and `delivering` is already said by the hub node the card's step names.
  * The rest — paused beside waiting_on_human — say more than their lane does, as does any status
  * added later until it is named here. */
-const UNSAID_STATUSES: ReadonlySet<ChunkStatus> = new Set(['running', 'ready', 'not_ready', 'needs_human', 'delivering']);
+const UNSAID_STATUSES: ReadonlySet<string> = new Set(['running', 'ready', 'not_ready', 'needs_human', 'delivering']);
 
 /** One work item as a card names it: its work-ref label over its title. Either may be absent —
  * a pointer naming no configured source has no label, and the title is `null` until read. */
@@ -74,19 +74,19 @@ export function foldTitles<T>(titles: readonly T[], expanded: boolean): { shown:
 }
 
 /** Whether a card names its status — only where it says more than the lane does. */
-export function cardShowsStatus(status: ChunkStatus): boolean {
+export function cardShowsStatus(status: string): boolean {
   return !UNSAID_STATUSES.has(status);
 }
 
 /** The word a finished chunk is named by — `Stopped` for a stopped chunk, `Completed` for any
  * other the DONE lane holds. */
-export function finishedWord(status: ChunkStatus): string {
+export function finishedWord(status: string): string {
   return status === 'stopped' ? 'Stopped' : 'Completed';
 }
 
 /** A card's step: the current node's name, or `stopped` for a stopped chunk, whose last
  * node is noise once it has stopped. */
-export function stepLabel(status: ChunkStatus, node: string): string {
+export function stepLabel(status: string, node: string): string {
   return status === 'stopped' ? 'stopped' : node;
 }
 

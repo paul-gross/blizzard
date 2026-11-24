@@ -28,7 +28,7 @@ import { chunkDeleteMutationKey, demoteChunkMutationKey, promoteChunkMutationKey
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { type DeleteVars } from './chunks/delete.mutations';
 import { injectHubBacklogQuery, injectHubQueueQuery } from './queue/queue.query';
-import { injectHubBoardChunksQuery } from '../core/chunks.query';
+import { injectDomainBoardChunksQuery } from '../core/chunks.query';
 import { injectHubChunkCountsQuery } from './chunks/chunk-counts.query';
 import { injectDemoteChunkMutation, type DemoteVars } from './chunks/demote.mutations';
 import { injectPromoteChunkMutation, type PromoteVars } from './chunks/promote.mutations';
@@ -87,7 +87,7 @@ export class BoardPage {
 
   protected readonly urgenciesQuery = injectDomainUrgenciesQuery();
   private readonly pendingUrgencies = injectPendingMutationVariables<ChunkUrgencyVars>(chunkUrgencyMutationKey);
-  private readonly chunksQuery = injectHubBoardChunksQuery();
+  private readonly chunksQuery = injectDomainBoardChunksQuery();
   private readonly countsQuery = injectHubChunkCountsQuery();
   private readonly queueQuery = injectHubQueueQuery();
   private readonly decisionsQuery = injectHubDecisionsQuery();

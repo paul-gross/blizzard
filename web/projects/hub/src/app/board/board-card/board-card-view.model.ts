@@ -3,7 +3,6 @@ import {
   cardShowsStatus,
   type UrgencyReference,
   type ChunkCardView,
-  type ChunkStatus,
   type LaneStatus,
   finishedWord,
   formatCost,
@@ -26,7 +25,7 @@ import { graphStepLabel, STEP_RUNNER_SEP } from '../../core/step-label';
 export interface BoardCard {
   readonly chunkId: string;
   readonly shortId: string;
-  readonly status: ChunkStatus;
+  readonly status: string;
   readonly laneStatus: LaneStatus;
   /** The hub's `ChunkSummary.terminal` — the card sits in the DONE lane exactly when set. */
   readonly terminal: boolean;
@@ -66,7 +65,7 @@ export interface BoardCard {
   readonly blockedCount: number;
   /** The blocking chunk's own derived status, when exactly one known chunk blocks this
    * one — null otherwise. */
-  readonly blockedOnStatus: ChunkStatus | null;
+  readonly blockedOnStatus: string | null;
   readonly openPrs?: readonly PrView[];
   readonly landedRepos?: readonly LandedRepoView[];
   readonly awaitingExternalMerge?: boolean;

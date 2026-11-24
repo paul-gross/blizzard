@@ -1,5 +1,5 @@
 import { fromUrgencyRef } from '../../core/urgency.translate';
-import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, blockedLabel, domainChunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type ChunkStatus, type LaneStatus, type UrgencyReference, type ChunkSummary, type DecisionView, type QuestionView, type RunnerRegistryView, type WorkItemsView, workLines } from 'fleet';
+import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, blockedLabel, domainChunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type LaneStatus, type UrgencyReference, type DecisionView, type QuestionView, type RunnerRegistryView, type WorkItemsView, workLines } from 'fleet';
 import type { BoardChunk } from '../../core/chunks.model';
 import type { GraphProgressNode } from '../../core/chunks.domain';
 
@@ -13,7 +13,7 @@ export function liveRunners(runners: readonly RunnerRegistryView[]): readonly Ru
 
 /** A chunk's work items as its row names them — the board card's own `workLines`, so a glance row and a
  * card agree on what a chunk is. */
-function rowWork(chunk: ChunkSummary | undefined, workItems: ReadonlyMap<string, WorkItemsView>): RowWork {
+function rowWork(chunk: BoardChunk | undefined, workItems: ReadonlyMap<string, WorkItemsView>): RowWork {
   if (chunk === undefined) return { lines: [], itemsRead: true };
   const view = workItems.get(chunk.chunk_id);
   return { lines: workLines(chunk.work_refs ?? [], view), itemsRead: view !== undefined };
@@ -38,7 +38,7 @@ export interface GlanceRow extends RowWork {
   readonly shortId: string;
   /** The board lane it sits in — the card's icon. */
   readonly lane: string;
-  readonly status: ChunkStatus;
+  readonly status: string;
   readonly laneStatus: LaneStatus;
   /** `paused` or `stopped`, which the icon alone cannot tell from its lane on a touch screen; else `null`. */
   readonly statusWord: string | null;

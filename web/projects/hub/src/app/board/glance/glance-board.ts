@@ -9,7 +9,7 @@ import { injectUrgencyIconUrls } from '../../core/urgency-icon.query';
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { asyncState, injectRunnerHostNames, type KitAsyncStateValue } from 'fleet';
 import { boardDonePolicy } from '../../core/board-done-policy.model';
-import { injectHubBoardChunksQuery } from '../../core/chunks.query';
+import { injectDomainBoardChunksQuery } from '../../core/chunks.query';
 import { injectFleetSpendDays } from '../fleet-spend/fleet-spend-days';
 import { injectHubBacklogQuery, injectHubQueueQuery } from '../queue/queue.query';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
@@ -39,7 +39,7 @@ import { injectShowProjectColors, projectColorMap } from '../../core/project-len
 export class GlanceBoard {
   protected readonly urgenciesQuery = injectDomainUrgenciesQuery();
   private readonly pendingUrgencies = injectPendingMutationVariables<ChunkUrgencyVars>(chunkUrgencyMutationKey);
-  private readonly chunksQuery = injectHubBoardChunksQuery();
+  private readonly chunksQuery = injectDomainBoardChunksQuery();
   private readonly queueQuery = injectHubQueueQuery();
   private readonly meQuery = injectMeQuery();
   private readonly canReorder = computed(() => hasPermission(this.meQuery.data(), 'queue:reorder'));

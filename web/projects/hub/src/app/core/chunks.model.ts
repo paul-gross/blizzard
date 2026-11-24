@@ -1,10 +1,7 @@
-import type { ChunkSummary, LaneStatus, hubApi } from 'fleet';
-import type { GraphProgressNode } from './chunks.domain';
+import type { ChunkSummary, hubApi } from 'fleet';
+import type { BoardSummary } from './chunks.domain';
 
-export type BoardChunk = ChunkSummary & {
-  readonly laneStatus: LaneStatus;
-  readonly graphProgress: readonly GraphProgressNode[];
-};
+export type BoardChunk = BoardSummary;
 
 export interface BoardChunksRead {
   readonly chunks: ChunkSummary[];
