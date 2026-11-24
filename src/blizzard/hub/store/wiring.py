@@ -370,8 +370,9 @@ def register_observability_absent(registry: Registry) -> None:
     registry.absent(port(HubInvariants), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
 
 
-#: The adapters built once per hub, as services over the borrowed connections.
-_PROCESS_SERVICES: tuple[type[Any], ...] = (
+#: The tenant directory, deletion-fact and closed-tenant unit adapters, built once per hub over the borrowed
+#: connections.
+_TENANCY_SERVICES: tuple[type[Any], ...] = (
     TenantAdministrationStore,
     TenantTeardownStore,
     ClosedTenantUnits,
@@ -387,7 +388,6 @@ _PROCESS_KEYS: tuple[type[Any], ...] = (
     IReadOpenTenants,
     IStoreStatusReader,
     ReadinessService,
-    *_PROCESS_SERVICES,
 )
 
 
@@ -439,10 +439,7 @@ def register_process(registry: Registry) -> Ref[HubEventLogStore]:
     registry.factory(open_tenant_reads, lifetime=Lifetime.PROCESS)
     registry.factory(store_status_reader, lifetime=Lifetime.PROCESS)
     registry.factory(readiness_service, lifetime=Lifetime.PROCESS)
-    hub_events = registry.service(HubEventLogStore, lifetime=Lifetime.PROCESS)
-    for each in _PROCESS_SERVICES:
-        registry.service(each, lifetime=Lifetime.PROCESS)
-    return hub_events
+    return registry.service(HubEventLogStore, lifetime=Lifetime.PROCESS)
 
 
 def register_process_absent(registry: Registry) -> None:
@@ -451,6 +448,33 @@ def register_process_absent(registry: Registry) -> None:
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
     # A callable alias keys the opener, so it is named as its key rather than as a class.
     registry.absent(port(cast("type[Any]", InvitationWriters)), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+
+
+@adapter_model
+@dataclass(frozen=True)
+class TenancyRefs:
+    """The ``Ref`` of each tenancy adapter, which the tenancy area's ports alias."""
+
+    directory: Ref[TenantAdministrationStore]
+    teardowns: Ref[TenantTeardownStore]
+    units: Ref[ClosedTenantUnits]
+
+
+def register_tenancy(registry: Registry) -> TenancyRefs:
+    """Declare the tenant directory, deletion-fact and closed-tenant unit adapters once per process, handing back the
+    ``Ref`` of each."""
+    refs = StoreRefs({each: registry.service(each, lifetime=Lifetime.PROCESS) for each in _TENANCY_SERVICES})
+    return TenancyRefs(
+        directory=refs.of(TenantAdministrationStore),
+        teardowns=refs.of(TenantTeardownStore),
+        units=refs.of(ClosedTenantUnits),
+    )
+
+
+def register_tenancy_absent(registry: Registry) -> None:
+    """Declare the tenancy adapters absent, for the store-free graph."""
+    for missing in _TENANCY_SERVICES:
+        registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
 
 
 def trace_store(

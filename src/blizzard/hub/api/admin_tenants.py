@@ -7,6 +7,7 @@ from __future__ import annotations
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Response, status
 
 from blizzard.auth_core import Permission
@@ -16,13 +17,18 @@ from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.api.door import RequestDoor
-from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.domain.tenancy.administration import Tenant, TenantAdminUnknown, TenantNameRefused
-from blizzard.hub.domain.tenancy.teardown import LastTenant, TenantAlreadyDeleted
-from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus, reconcile_open_tenants
-from blizzard.hub.tenancy import StoreScope, TenantId, UnknownTenant
+from blizzard.hub.domain.tenancy.administration import (
+    Tenant,
+    TenantAdministration,
+    TenantAdminUnknown,
+    TenantNameRefused,
+)
+from blizzard.hub.domain.tenancy.teardown import LastTenant, TenantAlreadyDeleted, TenantTeardown
+from blizzard.hub.graph_sync import GraphReconciliations, GraphSyncStatus, reconcile_open_tenants
+from blizzard.hub.open_tenants import OpenTenants
+from blizzard.hub.tenancy import TenantId, UnknownTenant
 from blizzard.wire.graph import GraphSyncEntry
 from blizzard.wire.tenant import (
     AdminGraphSyncResponse,
@@ -50,12 +56,15 @@ def _view(tenant: Tenant) -> TenantView:
 
 
 @router.post("/tenants", response_model=TenantView, status_code=status.HTTP_201_CREATED)
-def create_tenant(body: TenantCreateRequest, actor: TenantAdmin, door: RequestDoor, services: Hub) -> TenantView:
+@inject_sync
+def create_tenant(
+    body: TenantCreateRequest, actor: TenantAdmin, door: RequestDoor, admin: FromDishka[TenantAdministration]
+) -> TenantView:
     """Create a tenant in one transaction, its packaged graphs minted, its default project created through the
     request's door and, when named, its first admin granted; it is usable the moment this answers. ``404`` when
     ``admin_user_id`` names no user, ``422`` when the name is not a tenant name's shape — nothing is created."""
     try:
-        tenant = services.tenant_admin.create(body.name, admin_user_id=body.admin_user_id, by=actor.user_id, door=door)
+        tenant = admin.create(body.name, admin_user_id=body.admin_user_id, by=actor.user_id, door=door)
     except TenantNameRefused as exc:
         raise ProblemHTTPException(partial(problems_admin.tenant_name_refused_problem, str(exc))) from exc
     except TenantAdminUnknown as exc:
@@ -64,9 +73,10 @@ def create_tenant(body: TenantCreateRequest, actor: TenantAdmin, door: RequestDo
 
 
 @router.get("/tenants", response_model=list[TenantView], dependencies=[Depends(require_hub(Permission.TENANT_ADMIN))])
-def list_tenants(services: Hub) -> list[TenantView]:
+@inject_sync
+def list_tenants(admin: FromDishka[TenantAdministration]) -> list[TenantView]:
     """Every tenant the hub holds, open or with its deletion underway, by id — creation order to the millisecond."""
-    return [_view(tenant) for tenant in services.tenant_admin.list_tenants()]
+    return [_view(tenant) for tenant in admin.list_tenants()]
 
 
 @router.patch(
@@ -74,11 +84,12 @@ def list_tenants(services: Hub) -> list[TenantView]:
     response_model=TenantView,
     dependencies=[Depends(require_hub(Permission.TENANT_ADMIN))],
 )
-def rename_tenant(tenant_id: str, body: TenantRenameRequest, services: Hub) -> TenantView:
+@inject_sync
+def rename_tenant(tenant_id: str, body: TenantRenameRequest, admin: FromDishka[TenantAdministration]) -> TenantView:
     """Rename an open tenant; ``404`` when no open tenant has the id, ``422`` when the name is not a tenant name's
     shape."""
     try:
-        return _view(services.tenant_admin.rename(TenantId(tenant_id), body.name))
+        return _view(admin.rename(TenantId(tenant_id), body.name))
     except TenantNameRefused as exc:
         raise ProblemHTTPException(partial(problems_admin.tenant_name_refused_problem, str(exc))) from exc
     except UnknownTenant as exc:
@@ -95,13 +106,16 @@ def rename_tenant(tenant_id: str, body: TenantRenameRequest, services: Hub) -> T
         status.HTTP_410_GONE: {"description": "The tenant was deleted."},
     },
 )
-def delete_tenant(tenant_id: str, actor: TenantAdmin, services: Hub, response: Response) -> TenantDeletionResponse:
+@inject_sync
+def delete_tenant(
+    tenant_id: str, actor: TenantAdmin, teardown: FromDishka[TenantTeardown], response: Response
+) -> TenantDeletionResponse:
     """Close a tenant and drain it inline under a row budget: ``200`` with the rows removed when the drain finishes
     inside it, else ``202`` while the ``tenant_teardown`` sweep carries on. A tenant whose deletion is underway answers
     ``202`` and is left as it is; one already deleted answers ``410``; the hub's only open tenant is refused ``409``."""
     tenant = TenantId(tenant_id)
     try:
-        progress = services.tenant_teardown.delete(tenant, by=actor.user_id)
+        progress = teardown.delete(tenant, by=actor.user_id)
     except UnknownTenant as exc:
         raise ProblemHTTPException(problems.tenant_not_found_problem) from exc
     except LastTenant as exc:
@@ -118,15 +132,13 @@ def delete_tenant(tenant_id: str, actor: TenantAdmin, services: Hub, response: R
     response_model=AdminGraphSyncResponse,
     dependencies=[Depends(require_hub(Permission.TENANT_ADMIN))],
 )
-def sync_every_tenant(services: Hub) -> AdminGraphSyncResponse:
+@inject_sync
+def sync_every_tenant(
+    open_tenants: FromDishka[OpenTenants], reconciliations: FromDishka[GraphReconciliations]
+) -> AdminGraphSyncResponse:
     """Reconcile the packaged graph set into every open tenant, each through its own stores, and answer per tenant.
     Always ``200``: a graph that fails is a ``failed`` row, and each ``ok`` carries its verdict."""
-
-    def reconciliation_of(tenant: TenantId) -> GraphReconciliation:
-        opened = services.tenants.open_services(StoreScope(tenant))
-        return GraphReconciliation(opened.graph_mint, opened.graphs, opened.graph_yaml)
-
-    reports = reconcile_open_tenants(services.tenants.open_tenants.refresh(), reconciliation_of)
+    reports = reconcile_open_tenants(open_tenants.refresh(), reconciliations)
     tenants = [
         TenantGraphSync(
             tenant_id=report.tenant,

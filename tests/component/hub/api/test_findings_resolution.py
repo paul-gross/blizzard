@@ -26,6 +26,8 @@ from blizzard.hub.api.auth_session import TENANT_HEADER, AdmittedTenant, tenant_
 from blizzard.hub.api.resolution import request_resolver
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
+from blizzard.hub.domain.tenancy.administration import TenantAdministration
+from blizzard.hub.domain.tenancy.teardown import TenantTeardown
 from blizzard.hub.scopes.tenants import TenantContainers
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.tenancy import StoreScope, TenantId
@@ -193,7 +195,7 @@ def _deleting_after_admission(hub: HubHarness, monkeypatch: pytest.MonkeyPatch, 
     def admitted_then_deleted(self: TenantContainers, scope: StoreScope, values: ScopeValues) -> OwnedChild:
         child = original(self, scope, values)
         if scope.tenant == tenant:
-            hub.hub_services.tenant_teardown.delete(tenant, by="usr_deleter")
+            hub.resolve_hub(TenantTeardown).delete(tenant, by="usr_deleter")
         return child
 
     monkeypatch.setattr(TenantContainers, "request", admitted_then_deleted)
@@ -269,8 +271,8 @@ def _spy_construction(monkeypatch: pytest.MonkeyPatch, constructed: list[tuple[s
 def test_an_async_routes_first_construction_and_a_sync_routes_run_off_the_event_loop(
     hub: HubHarness, monkeypatch: pytest.MonkeyPatch, constructed: list[tuple[str, bool]]
 ) -> None:
-    async_tenant = hub.hub_services.tenant_admin.create("async", admin_user_id=None, by="usr_creator").tenant_id
-    sync_tenant = hub.hub_services.tenant_admin.create("sync", admin_user_id=None, by="usr_creator").tenant_id
+    async_tenant = hub.resolve_hub(TenantAdministration).create("async", admin_user_id=None, by="usr_creator").tenant_id
+    sync_tenant = hub.resolve_hub(TenantAdministration).create("sync", admin_user_id=None, by="usr_creator").tenant_id
     superuser = _session(hub, "sue", Role.SUPERUSER, async_tenant, sync_tenant)
     _spy_construction(monkeypatch, constructed)
     client = _client(hub)

@@ -8,11 +8,14 @@ composition root."""
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import IClock, IMonotonicClock, SystemMonotonicClock
 from blizzard.foundation.registry.interface import Lifetime, Registry, port
 from blizzard.hub.delivery.action_registry import HubActions
+from blizzard.hub.domain.tenancy.administration import TenantSetChanged
 from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.open_tenants import IReadOpenTenants, OpenTenants
 from blizzard.hub.scopes.environ import HubEnviron
@@ -40,13 +43,20 @@ def register(registry: Registry) -> None:
 
 def register_tenants(registry: Registry) -> None:
     """Declare the open tenants held in memory over the store's open-tenant read — what a request's tenant is resolved
-    against."""
+    against — and the notice a change to the tenant set gives them."""
     registry.factory(open_tenants, lifetime=Lifetime.PROCESS)
+    registry.factory(tenant_set_changed, lifetime=Lifetime.PROCESS)
 
 
 def register_tenants_absent(registry: Registry) -> None:
-    """Declare the open tenants absent, for the store-free graph."""
+    """Declare the open tenants and their notice absent, for the store-free graph."""
     registry.absent(port(OpenTenants), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+    registry.absent(port(cast("type[Any]", TenantSetChanged)), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+
+
+def tenant_set_changed(tenants: OpenTenants) -> TenantSetChanged:
+    """Reads the open tenants again once a change to the tenant set commits."""
+    return tenants.refresh
 
 
 def open_tenants(reads: IReadOpenTenants) -> OpenTenants:

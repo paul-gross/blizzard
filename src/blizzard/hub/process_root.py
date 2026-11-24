@@ -49,14 +49,18 @@ from blizzard.hub.domain.observability.tracing.repository import StepHydration, 
 from blizzard.hub.domain.operations import wiring as operations_area
 from blizzard.hub.domain.projects import wiring as projects
 from blizzard.hub.domain.runners import wiring as runners
+from blizzard.hub.domain.tenancy import wiring as tenancy
+from blizzard.hub.domain.tenancy.teardown import ClosedTenantForgetting
 from blizzard.hub.domain.urgency import wiring as urgency_area
 from blizzard.hub.domain.work_items import wiring as work_items_area
 from blizzard.hub.egress import wiring as egress
 from blizzard.hub.events import wiring as events
 from blizzard.hub.forge import wiring as forge
+from blizzard.hub.graph_sync import GraphReconciliation, GraphReconciliations
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
 from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.live_config import wiring as live_config
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.scopes import wiring as scopes
 from blizzard.hub.scopes.environ import HubEnviron
 from blizzard.hub.scopes.tenants import TenantContainers
@@ -148,6 +152,7 @@ def register_hub(
         forge.register_tenant(registry)
         work_sources.register(registry)
         _register_observability(registry, hub_events=hub_events)
+        _register_tenancy(registry)
         _register_exports(registry, trace_export=trace_export, egress_export=egress_export)
     else:
         store.register_process_absent(registry)
@@ -192,6 +197,9 @@ def register_hub(
         egress.register_absent(registry)
         observability_area.register_exports_absent(registry)
         api.register_absent(registry)
+        store.register_tenancy_absent(registry)
+        tenancy.register_absent(registry)
+        api.register_graph_sync_absent(registry)
     if store_backed and settings:
         settings_wiring.register(registry)
     else:
@@ -221,6 +229,14 @@ def _register_observability(registry: LegacyRegistry, *, hub_events: Ref[HubEven
         hub_events=hub_events,
         invariants=refs.invariants,
     )
+
+
+def _register_tenancy(registry: LegacyRegistry) -> None:
+    """The tenancy adapters, the tenancy area's services over them, and the graph sync its tenant creation mints
+    through."""
+    refs = store.register_tenancy(registry)
+    tenancy.register(registry, directory=refs.directory, teardowns=refs.teardowns, units=refs.units)
+    api.register_graph_sync(registry)
 
 
 def _register_exports(registry: LegacyRegistry, *, trace_export: bool, egress_export: bool) -> None:
@@ -378,6 +394,8 @@ def store_backed_values(
         supply(port(TracingSettings), tracing if tracing is not None else TracingSettings("disabled")),
         supply(port(EgressBoot), egress_boot if egress_boot is not None else EgressBoot.off()),
         supply(port(StepHydrations), StepHydrations()),
+        supply(port(GraphReconciliations), GraphReconciliations()),
+        supply(port(ClosedTenantForgetting), ClosedTenantForgetting()),
         *process_values(
             clock=clock,
             config=config,
@@ -437,17 +455,38 @@ def build_store_backed(
 
 def store_backed_process(owner: OwnedChild) -> HubProcess:
     """The store-backed :class:`HubProcess` over its opened container, which is closed if the tenant reads fail. Its
-    step hydration accessor is bound over its tenant scopes before it is handed out."""
+    step hydration and graph reconciliation accessors are bound over its tenant scopes, and its closed-tenant
+    forgetting over them and the open tenants, before it is handed out."""
     try:
         reads = owner.resolver.get(HubScopedReads)
         hydrations = owner.resolver.get(StepHydrations)
+        reconciliations = owner.resolver.get(GraphReconciliations)
     except BaseException:
         owner.close()
         raise
     process = _process(owner, confirm_open=reads.tenants.confirm_open, open_tenants=reads.tenants.open_tenants)
     tenants = process.tenants
     hydrations.bind(lambda tenant: tenants.resolve(StoreScope(tenant), StepHydration))
+    reconciliations.bind(lambda tenant: tenants.resolve(StoreScope(tenant), GraphReconciliation))
+    bind_closed_tenant_forgetting(process)
     return process
+
+
+def bind_closed_tenant_forgetting(process: HubProcess, *, legacy: Callable[[TenantId], None] | None = None) -> None:
+    """Bind ``process``'s closed-tenant forgetting: a closed tenant's container scope goes first, whose finalizers close
+    its configured clients and drop its broker; then ``legacy``, the legacy cache's entry, when the legacy core holds
+    one; and the in-memory open set is read again last, so a request resolving the tenant meanwhile misses both caches
+    and is refused by the store. Binding again replaces the binding."""
+    tenants = process.tenants
+    open_tenants = process.resolver.get(OpenTenants)
+
+    def forget(tenant: TenantId) -> None:
+        tenants.evict(tenant)
+        if legacy is not None:
+            legacy(tenant)
+        open_tenants.refresh()
+
+    process.resolver.get(ClosedTenantForgetting).bind(forget)
 
 
 def build_store_free(

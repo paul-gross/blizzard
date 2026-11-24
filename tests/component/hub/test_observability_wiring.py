@@ -28,6 +28,7 @@ from blizzard.hub.domain.observability.transcripts import (
     TranscriptCaps,
     TranscriptIngestService,
 )
+from blizzard.hub.domain.tenancy.teardown import TenantTeardown
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.env_timeline_store import EnvTimelineStore
@@ -130,7 +131,7 @@ def test_the_hub_event_log_and_invariant_check_are_each_one_process_instance_the
 
     assert hub.hub_services.process.tenants.resolve(tenant, HubEventLogService) is event_log
     assert hub.hub_services.hub_event_log is event_log
-    assert hub.hub_services.tenant_teardown._events is event_log
+    assert hub.resolve_hub(TenantTeardown)._events is event_log
     assert process.get(EgressReset)._events is event_log
     assert event_log._events is process.get(HubEventLogStore)
     assert process.get(IReadHubEventLog) is process.get(IWriteHubEventLog) is process.get(HubEventLogStore)

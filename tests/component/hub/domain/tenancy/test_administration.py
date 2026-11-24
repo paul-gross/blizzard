@@ -100,7 +100,7 @@ def hub(tmp_path: Path) -> HubHarness:
 
 
 def test_a_created_tenant_starts_with_the_packaged_graphs_and_its_hub_sequence_at_one(hub: HubHarness) -> None:
-    created = hub.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator")
+    created = hub.resolve_hub(TenantAdministration).create("acme", admin_user_id=None, by="usr_creator")
 
     assert created.tenant_id.startswith("ten_")
     assert (created.name, created.created_by, created.state) == ("acme", "usr_creator", TenantState.OPEN)
@@ -126,7 +126,7 @@ def _projects_and_changes(hub: HubHarness, tenant: TenantId) -> tuple[list[tuple
 def test_a_created_tenant_holds_its_default_project_created_by_its_creator_through_the_door(
     hub: HubHarness, door: Door
 ) -> None:
-    created = hub.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator", door=door)
+    created = hub.resolve_hub(TenantAdministration).create("acme", admin_user_id=None, by="usr_creator", door=door)
 
     [project], changes = _projects_and_changes(hub, created.tenant_id)
     project_id = project[0]
@@ -150,7 +150,7 @@ def _standard(hub: HubHarness, tenant: TenantId) -> Urgency:
 def test_a_created_tenant_holds_standard_first_in_its_order_and_its_settings_name_it_the_default(
     hub: HubHarness,
 ) -> None:
-    created = hub.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator")
+    created = hub.resolve_hub(TenantAdministration).create("acme", admin_user_id=None, by="usr_creator")
 
     connections = scoped_connections(hub.engine, created.tenant_id)
     standard = _standard(hub, created.tenant_id)
@@ -169,7 +169,7 @@ def test_a_created_tenant_holds_standard_first_in_its_order_and_its_settings_nam
 
 
 def test_a_created_tenants_default_project_is_stored_with_a_palette_color(hub: HubHarness) -> None:
-    created = hub.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator")
+    created = hub.resolve_hub(TenantAdministration).create("acme", admin_user_id=None, by="usr_creator")
 
     assert _default_project(hub, created.tenant_id).color in set(ProjectColor)
 
@@ -181,7 +181,7 @@ def _default_project(hub: HubHarness, tenant: TenantId) -> Project:
 
 
 def test_a_created_tenant_reads_its_default_project_the_moment_its_creation_commits(hub: HubHarness) -> None:
-    created = hub.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator")
+    created = hub.resolve_hub(TenantAdministration).create("acme", admin_user_id=None, by="usr_creator")
 
     projects = hub.open_services(created.tenant_id).projects.list_all()
 
@@ -191,8 +191,8 @@ def test_a_created_tenant_reads_its_default_project_the_moment_its_creation_comm
 
 
 def test_two_tenants_each_hold_a_default_project_of_their_own(hub: HubHarness) -> None:
-    acme = hub.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator")
-    bravo = hub.hub_services.tenant_admin.create("bravo", admin_user_id=None, by="usr_creator")
+    acme = hub.resolve_hub(TenantAdministration).create("acme", admin_user_id=None, by="usr_creator")
+    bravo = hub.resolve_hub(TenantAdministration).create("bravo", admin_user_id=None, by="usr_creator")
 
     held = {tenant: _default_project(hub, tenant).project_id for tenant in (acme.tenant_id, bravo.tenant_id)}
 
@@ -202,7 +202,7 @@ def test_two_tenants_each_hold_a_default_project_of_their_own(hub: HubHarness) -
 
 
 def test_the_default_project_draws_from_the_hub_source_with_no_stored_link(hub: HubHarness) -> None:
-    created = hub.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator")
+    created = hub.resolve_hub(TenantAdministration).create("acme", admin_user_id=None, by="usr_creator")
     project = _default_project(hub, created.tenant_id)
     links = hub.open_services(created.tenant_id).project_links
 
@@ -218,7 +218,7 @@ def test_the_default_project_draws_from_the_hub_source_with_no_stored_link(hub: 
 
 
 def test_the_default_project_is_renamed_and_its_slug_moved_like_any_other(hub: HubHarness) -> None:
-    created = hub.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator")
+    created = hub.resolve_hub(TenantAdministration).create("acme", admin_user_id=None, by="usr_creator")
     services = hub.open_services(created.tenant_id)
     project = _default_project(hub, created.tenant_id)
 
@@ -236,8 +236,8 @@ def test_the_named_admin_is_granted_admin_and_the_creator_nothing(hub: HubHarnes
     creator = seed_user(hub, username="hal", role=Role.PENDING)
     admin = seed_user(hub, username="ada", role=Role.PENDING)
 
-    named = hub.hub_services.tenant_admin.create("acme", admin_user_id=admin.user_id, by=creator.user_id)
-    unnamed = hub.hub_services.tenant_admin.create("bravo", admin_user_id=None, by=creator.user_id)
+    named = hub.resolve_hub(TenantAdministration).create("acme", admin_user_id=admin.user_id, by=creator.user_id)
+    unnamed = hub.resolve_hub(TenantAdministration).create("bravo", admin_user_id=None, by=creator.user_id)
 
     memberships = hub.hub_services.memberships
     assert memberships.role_in(named.tenant_id, admin.user_id) is Role.ADMIN
@@ -249,10 +249,10 @@ def test_an_unknown_admin_creates_nothing_though_the_graphs_were_already_minted(
     before = _row_counts(hub)
 
     with pytest.raises(TenantAdminUnknown):
-        hub.hub_services.tenant_admin.create("acme", admin_user_id="usr_nobody", by="usr_creator")
+        hub.resolve_hub(TenantAdministration).create("acme", admin_user_id="usr_nobody", by="usr_creator")
 
     assert _row_counts(hub) == before
-    assert [t.name for t in hub.hub_services.tenant_admin.list_tenants()] == ["default"]
+    assert [t.name for t in hub.resolve_hub(TenantAdministration).list_tenants()] == ["default"]
 
 
 def test_a_creation_interrupted_after_its_mints_leaves_no_partial_tenant(hub: HubHarness) -> None:
@@ -263,7 +263,7 @@ def test_a_creation_interrupted_after_its_mints_leaves_no_partial_tenant(hub: Hu
         minted.append(len(mint(graphs)))
         raise _Interrupted
 
-    store = hub.hub_services.tenant_admin
+    store = hub.resolve_hub(TenantAdministration)
     interrupted = TenantAdministration(
         tenants=TenantAdministrationStore(
             hub_level_connections(hub.engine),
@@ -290,10 +290,10 @@ def test_a_creation_interrupted_after_its_mints_leaves_no_partial_tenant(hub: Hu
 
 
 def test_names_are_labels_never_refused_for_being_taken(hub: HubHarness) -> None:
-    first = hub.hub_services.tenant_admin.create("default", admin_user_id=None, by="usr_creator")
-    second = hub.hub_services.tenant_admin.create("default", admin_user_id=None, by="usr_creator")
+    first = hub.resolve_hub(TenantAdministration).create("default", admin_user_id=None, by="usr_creator")
+    second = hub.resolve_hub(TenantAdministration).create("default", admin_user_id=None, by="usr_creator")
 
-    listed = hub.hub_services.tenant_admin.list_tenants()
+    listed = hub.resolve_hub(TenantAdministration).list_tenants()
     assert first.tenant_id != second.tenant_id
     assert [t.name for t in listed] == ["default", "default", "default"]
     assert {t.tenant_id for t in listed} == {default_tenant(hub.engine), first.tenant_id, second.tenant_id}
@@ -311,17 +311,17 @@ def test_a_name_without_a_tenant_names_shape_is_refused_and_nothing_is_created(h
     before = _row_counts(hub)
 
     with pytest.raises(TenantNameRefused):
-        hub.hub_services.tenant_admin.create(name, admin_user_id=None, by="usr_creator")
+        hub.resolve_hub(TenantAdministration).create(name, admin_user_id=None, by="usr_creator")
 
     assert _row_counts(hub) == before
-    assert [t.name for t in hub.hub_services.tenant_admin.list_tenants()] == ["default"]
+    assert [t.name for t in hub.resolve_hub(TenantAdministration).list_tenants()] == ["default"]
 
 
 @_MISSHAPEN_NAMES
 def test_a_rename_to_a_name_without_a_tenant_names_shape_is_refused_and_renames_nothing(
     hub: HubHarness, name: str
 ) -> None:
-    admin = hub.hub_services.tenant_admin
+    admin = hub.resolve_hub(TenantAdministration)
     created = admin.create("acme", admin_user_id=None, by="usr_creator")
 
     with pytest.raises(TenantNameRefused):
@@ -333,7 +333,7 @@ def test_a_rename_to_a_name_without_a_tenant_names_shape_is_refused_and_renames_
 
 @pytest.mark.parametrize("name", ["x" * 64, "acme corp", "a"], ids=["64-characters", "an-inner-space", "one-character"])
 def test_a_name_of_up_to_64_characters_with_inner_whitespace_is_kept_as_given(hub: HubHarness, name: str) -> None:
-    admin = hub.hub_services.tenant_admin
+    admin = hub.resolve_hub(TenantAdministration)
 
     created = admin.create(name, admin_user_id=None, by="usr_creator")
     renamed = admin.rename(created.tenant_id, name)
@@ -348,7 +348,7 @@ def test_a_created_tenant_is_usable_and_known_in_memory_the_moment_its_creation_
     me_before = hub.client.get("/api/me").json()
     assert open_tenants.only() == sole
 
-    created = hub.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator")
+    created = hub.resolve_hub(TenantAdministration).create("acme", admin_user_id=None, by="usr_creator")
 
     assert open_tenants.only() is None
     assert open_tenants.name(created.tenant_id) == "acme"
@@ -362,7 +362,7 @@ def test_a_created_tenant_is_usable_and_known_in_memory_the_moment_its_creation_
 
 
 def test_a_rename_reaches_the_in_memory_set_and_refuses_a_tenant_that_is_not_open(hub: HubHarness) -> None:
-    admin = hub.hub_services.tenant_admin
+    admin = hub.resolve_hub(TenantAdministration)
     created = admin.create("acme", admin_user_id=None, by="usr_creator")
 
     renamed = admin.rename(created.tenant_id, "acme-renamed")
@@ -374,7 +374,7 @@ def test_a_rename_reaches_the_in_memory_set_and_refuses_a_tenant_that_is_not_ope
 
 
 def test_the_list_shows_a_tenant_whose_deletion_is_underway_as_deleting(hub: HubHarness) -> None:
-    admin = hub.hub_services.tenant_admin
+    admin = hub.resolve_hub(TenantAdministration)
     created = admin.create("acme", admin_user_id=None, by="usr_creator")
     close_tenant(hub.engine, created.tenant_id, by="usr_x", at=created.created_at)
 

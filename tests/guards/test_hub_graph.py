@@ -77,10 +77,12 @@ from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.host_enrollment import HostEnrollmentService
 from blizzard.hub.domain.runners.host_report import HostReportService
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
+from blizzard.hub.domain.tenancy.teardown import ClosedTenantForgetting
 from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.readiness import CredentialReadiness
+from blizzard.hub.graph_sync import GraphReconciliations
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
 from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.open_tenants import OpenTenants
@@ -247,6 +249,8 @@ def _process(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[OwnedCh
                 supply(port(TracingSettings), TracingSettings("disabled")),
                 supply(port(EgressBoot), boot),
                 supply(port(StepHydrations), StepHydrations()),
+                supply(port(GraphReconciliations), GraphReconciliations()),
+                supply(port(ClosedTenantForgetting), ClosedTenantForgetting()),
                 *exporting,
             )
         ),

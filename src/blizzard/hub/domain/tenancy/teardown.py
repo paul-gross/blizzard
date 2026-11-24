@@ -140,6 +140,21 @@ class IRecordHubEvents(Protocol):
         ...
 
 
+class ClosedTenantForgetting:
+    """Drops what the hub holds in memory for a tenant once its close commits, through the binding the process root
+    makes over its tenant scopes once they are built."""
+
+    def __init__(self) -> None:
+        self._forget: Callable[[TenantId], None] | None = None
+
+    def bind(self, forget: Callable[[TenantId], None]) -> None:
+        self._forget = forget
+
+    def __call__(self, tenant: TenantId) -> None:
+        assert self._forget is not None  # bound by the process root before the process is handed out
+        self._forget(tenant)
+
+
 @domain_model
 @dataclass(frozen=True)
 class DeletionProgress:

@@ -200,7 +200,7 @@ from blizzard.hub.domain.runners.host import IReadHostRegistry
 from blizzard.hub.domain.runners.host_enrollment import HostEnrollmentService
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.route import Route
-from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
+from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory, TenantAdministration
 from blizzard.hub.domain.tenancy.teardown import IReadTenantTeardowns
 from blizzard.hub.domain.urgency.mark import IconShape
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, UrgencyShape
@@ -215,6 +215,7 @@ from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
+from blizzard.hub.open_tenants import IReadOpenTenants
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.settings.model import IReadHubSettings, IReadHubSettingsAdmin
 from blizzard.hub.store import schema as s
@@ -3465,7 +3466,8 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadHubEventLog, "recent"): lambda w: _hub_events_of(w.hub).recent(50),
     (IReadTenantTeardowns, "underway"): lambda w: _teardowns_of(w.hub).underway(),
     (IReadTenantTeardowns, "deletion"): lambda w: _teardowns_of(w.hub).deletion(TenantId("ten_census_missing")),
-    (IReadTenantDirectory, "list_tenants"): lambda w: w.hub.hub_services.tenant_admin.list_tenants(),
+    (IReadTenantDirectory, "list_tenants"): lambda w: w.hub.resolve_hub(TenantAdministration).list_tenants(),
+    (IReadOpenTenants, "open_tenants"): lambda w: w.hub.resolve_hub(IReadOpenTenants).open_tenants(),
     (IReadEgressEvents, "markers_after"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.markers_after(
         EventsPosition(_HUB_BASE), _HUB_UNTIL, 50, extractor_version=EXTRACTOR_VERSION
     ),

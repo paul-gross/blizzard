@@ -1,6 +1,7 @@
 """The hub's process lifecycle owners as the container holds them: the hosted app boots over the process's one action
 loop, step wake, pass driver, open tenants, readiness and flags, and its one cleanup closes the tenant scopes while the
-loop still runs, stops the loop after, and leaves the borrowed engine open (component tier)."""
+loop still runs, stops the loop after, and leaves the borrowed engine open. A tenant's deletion through the container's
+teardown evicts its scope, refreshes the open set and refuses its next request (component tier)."""
 
 from __future__ import annotations
 
@@ -15,6 +16,7 @@ from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.foundation.registry.interface import ServiceAbsent
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.hub import app as hub_app
+from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.app import create_app
 from blizzard.hub.composition import open_hub_store
 from blizzard.hub.config import HubConfig
@@ -22,10 +24,15 @@ from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_pass import ActionPassDriver
 from blizzard.hub.delivery.flow_driver import StepWake
 from blizzard.hub.domain.execution.apply import IHubStepWake
+from blizzard.hub.domain.tenancy.administration import TenantAdministration
+from blizzard.hub.domain.tenancy.teardown import TenantTeardown
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.process_root import HubProcess
 from blizzard.hub.scopes.tenants import TenantContainers
+from blizzard.hub.tenancy import StoreScope, TenantClosed, UnknownTenant
+from blizzard.wire.tenant import TENANT_NOT_FOUND
 from tests.support.config_inputs import FLAG_REGISTRY, build_hosted_hub_app, init_hub
+from tests.support.scaffolding import build_hub
 
 # The owners hold what they were built over privately; reading it is the only way to see it is shared.
 # pyright: reportPrivateUsage=false
@@ -106,3 +113,26 @@ def test_the_store_free_app_declares_every_lifecycle_owner_absent(tmp_path: Path
     assert isinstance(resolver.get(Flags), Flags)
     with TestClient(app):
         pass
+
+
+def test_a_tenant_deletion_evicts_its_scope_refreshes_the_open_set_and_refuses_its_next_request(tmp_path: Path) -> None:
+    app = build_hub(tmp_path).wired_app
+    process: HubProcess = app.state.hub_process
+    try:
+        resolver = process.resolver
+        tenant = resolver.get(TenantAdministration).create("acme", admin_user_id=None, by="usr_creator").tenant_id
+        opened = process.tenants.open(StoreScope(tenant))
+        open_tenants = resolver.get(OpenTenants)
+        assert tenant in open_tenants.every()
+
+        resolver.get(TenantTeardown).delete(tenant, by="usr_deleter")
+
+        with pytest.raises(TenantClosed):
+            opened.resolver.get(StoreScope)
+        with pytest.raises((TenantClosed, UnknownTenant)):
+            process.tenants.open(StoreScope(tenant))
+        assert tenant not in open_tenants.every()
+        response = TestClient(app, raise_server_exceptions=False).get("/api/chunks", headers={TENANT_HEADER: tenant})
+        assert (response.status_code, response.json()["type"]) == (404, TENANT_NOT_FOUND)
+    finally:
+        process.close()

@@ -15,10 +15,13 @@ from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
-from blizzard.hub.composition import TenantCache, TenantServices
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.domain.tenancy import teardown
+from blizzard.hub.domain.tenancy.administration import TenantAdministration
+from blizzard.hub.domain.tenancy.teardown import TenantTeardown
+from blizzard.hub.graph_sync import GraphReconciliation
 from blizzard.hub.graphs import PACKAGED, GraphFile
+from blizzard.hub.scopes.tenants import TenantContainers
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support.scaffolding import (
@@ -189,7 +192,7 @@ def test_a_tenant_admin_is_refused_every_tenant_administration_route(
     resp = hub.client.request(method, path.format(tenant=tenant), json=body, headers=_bearer(session, tenant))
 
     assert resp.status_code == 403
-    assert [t.name for t in hub.hub_services.tenant_admin.list_tenants()] == ["default"]
+    assert [t.name for t in hub.resolve_hub(TenantAdministration).list_tenants()] == ["default"]
 
 
 def test_the_hub_graph_sync_answers_once_per_open_tenant(hub: HubHarness) -> None:
@@ -218,15 +221,15 @@ def test_a_tenant_closing_mid_sync_is_passed_over_and_the_later_tenants_still_sy
     first, middle, last = sorted(
         [default_tenant(hub.engine), hub.add_tenant("acme").tenant, hub.add_tenant("bolt").tenant]
     )
-    opened = TenantCache.open_services
+    resolved = TenantContainers.resolve
 
-    def open_then_close(self: TenantCache, scope: StoreScope) -> TenantServices:
-        services = opened(self, scope)
-        if scope.tenant == middle:
-            hub.hub_services.tenant_teardown.close(middle, by="usr_closer")
-        return services
+    def resolve_then_close[T](self: TenantContainers, scope: StoreScope, dependency_type: type[T]) -> T:
+        dependency = resolved(self, scope, dependency_type)
+        if dependency_type is GraphReconciliation and scope.tenant == middle:
+            hub.resolve_hub(TenantTeardown).close(middle, by="usr_closer")
+        return dependency
 
-    monkeypatch.setattr(TenantCache, "open_services", open_then_close)
+    monkeypatch.setattr(TenantContainers, "resolve", resolve_then_close)
 
     resp = hub.client.post("/api/admin/graphs/sync", headers=_bearer(session))
 

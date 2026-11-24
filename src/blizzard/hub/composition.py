@@ -66,7 +66,6 @@ from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import (
     IReadFindingRepository,
 )
-from blizzard.hub.domain.graph.actions import HubActionCatalogue
 from blizzard.hub.domain.graph.authoring import DefaultGraphService, GraphMintService
 from blizzard.hub.domain.graph.model import IReadGraphBodies, IReadGraphRepository, IReadNodeExecutors
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
@@ -83,7 +82,6 @@ from blizzard.hub.domain.observability.forge_status import (
 )
 from blizzard.hub.domain.observability.hub_events import HubEventLogService
 from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
-from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.domain.projects.targets import ChunkTargets
@@ -92,8 +90,7 @@ from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.sweeps.locks import SweepLocks
 from blizzard.hub.domain.sweeps.names import SweepName
 from blizzard.hub.domain.sweeps.roster import SweepRoster
-from blizzard.hub.domain.tenancy.administration import TenantAdministration
-from blizzard.hub.domain.tenancy.teardown import TenantTeardown, TenantTeardownSweep
+from blizzard.hub.domain.tenancy.teardown import TenantTeardownSweep
 from blizzard.hub.domain.urgency.services import (
     UrgencyReading,
 )
@@ -105,7 +102,6 @@ from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.commit_links import LandedCommitLinks
 from blizzard.hub.forge.registry import ForgeRegistry
-from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
 from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.open_tenants import OpenTenants
@@ -135,14 +131,12 @@ from blizzard.hub.store.internal.repository_record_store import RepositoryRecord
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
-from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
-from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
 from blizzard.hub.store.internal.urgency_store import UrgencyOrderStore, UrgencyStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.tenant_guard import install_tenant_guard
-from blizzard.hub.store.transactions import ClosedTenantUnits, HubTransactions
+from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import STORE_UNAVAILABLE, StoreScope, TenantClosed, TenantId, UnknownTenant
@@ -244,12 +238,6 @@ class HubServices:
     step_wake: StepWake
     #: The hub's own occurrences — its exports', its startup — recorded in ``hub_event_log``, published to no stream.
     hub_event_log: HubEventLogService
-    #: Creates, renames and lists the hub's tenants.
-    tenant_admin: TenantAdministration
-    #: Deletes tenants — closes, drains and completes them.
-    tenant_teardown: TenantTeardown
-    #: The ``tenant_teardown`` sweep, which carries on every deletion underway.
-    tenant_teardown_sweep: TenantTeardownSweep
     clock: IClock
     #: The close-intent drain sweep — one pass per hub, acting in each intent's tenant.
     close_drain: CloseDrainSweep
@@ -635,6 +623,8 @@ def build_hub_core(
 
 def hub_core_over(process: HubProcess, store_connections: HubStoreConnections, *, clock: IClock) -> HubCore:
     """The :class:`HubCore` over an opened store-backed ``process``, which the core's ``process`` then closes."""
+    from blizzard.hub.process_root import bind_closed_tenant_forgetting  # the root binds the legacy cache's step
+
     store_errors = store_connections.errors
     resolver = process.resolver
     hub_scoped_reads = resolver.get(HubScopedReads)
@@ -644,11 +634,13 @@ def hub_core_over(process: HubProcess, store_connections: HubStoreConnections, *
         # a request admitting a tenant the legacy cache already serves finds its scope open too.
         return build_tenant_stores(process.tenants.open(scope).resolver, clock=clock)
 
+    cache = TenantCache(build=build, confirm_open=hub_scoped_reads.tenants.confirm_open)
+    bind_closed_tenant_forgetting(process, legacy=cache.evict)
     return HubCore(
         store_connections=store_connections,
         store_errors=store_errors,
         hub_scoped_reads=hub_scoped_reads,
-        tenants=TenantCache(build=build, confirm_open=hub_scoped_reads.tenants.confirm_open),
+        tenants=cache,
         clock=clock,
         process=process,
     )
@@ -785,7 +777,6 @@ def build_services(
     config_source = process.get(HubConfigSource)
     action_loop = process.get(ActionLoop)
     step_wake = process.get(StepWake)
-    color_pick = process.get(ColorPick)
 
     parts = TenantServiceParts(
         clock=clock,
@@ -812,35 +803,7 @@ def build_services(
     memberships = process.get(MembershipRepository)
     auth = process.get(AuthService)
 
-    tenant_unit = core.process.resolver.get(ClosedTenantUnits)
-    tenant_admin = TenantAdministration(
-        tenants=core.process.resolver.get(TenantAdministrationStore),
-        units=tenant_unit,
-        mint_packaged=packaged_minter(
-            clock, core.process.resolver.get(IConfigCodec), core.process.resolver.get(HubActionCatalogue)
-        ),
-        changed=open_tenants.refresh,
-        pick=color_pick,
-        clock=clock,
-    )
-
-    def forget_closed(tenant: TenantId) -> None:
-        # A closed tenant's container scope, its cached stores and services, and its broker go first; the in-memory
-        # open set is read again after, so a request resolving the tenant meanwhile misses both caches and is refused
-        # by the store. The container scope's finalizers close the tenant's configured clients and drop its broker.
-        core.process.tenants.evict(tenant)
-        core.tenants.evict(tenant)
-        open_tenants.refresh()
-
-    teardown_store = core.process.resolver.get(TenantTeardownStore)
-    tenant_teardown = TenantTeardown(
-        teardowns=teardown_store,
-        units=tenant_unit,
-        closed=forget_closed,
-        events=hub_event_log,
-        clock=clock,
-    )
-    tenant_teardown_sweep = TenantTeardownSweep(teardown=tenant_teardown, teardowns=teardown_store)
+    tenant_teardown_sweep = process.get(TenantTeardownSweep)
     close_drain = CloseDrainSweep(
         corpus=core.hub_scoped_reads.corpus,
         tenant=lambda tenant: sweeps_of(tenant).close_drain,
@@ -882,9 +845,6 @@ def build_services(
         hub_scoped_reads=core.hub_scoped_reads,
         action_loop=action_loop,
         hub_event_log=hub_event_log,
-        tenant_admin=tenant_admin,
-        tenant_teardown=tenant_teardown,
-        tenant_teardown_sweep=tenant_teardown_sweep,
         clock=clock,
         close_drain=close_drain,
         cadence=cadence,

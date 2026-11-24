@@ -22,6 +22,8 @@ from blizzard.hub.api.auth_session import (
     tenant_request,
 )
 from blizzard.hub.api.resolution import request_resolver
+from blizzard.hub.domain.tenancy.administration import TenantAdministration
+from blizzard.hub.domain.tenancy.teardown import TenantTeardown
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.scopes.tenants import TenantContainers
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
@@ -62,7 +64,7 @@ def _client(hub: HubHarness) -> TestClient:
 
 
 def _created(hub: HubHarness, name: str = "acme") -> TenantId:
-    return hub.hub_services.tenant_admin.create(name, admin_user_id=None, by="usr_creator").tenant_id
+    return hub.resolve_hub(TenantAdministration).create(name, admin_user_id=None, by="usr_creator").tenant_id
 
 
 def _containers(hub: HubHarness) -> TenantContainers:
@@ -144,7 +146,7 @@ def test_a_deleted_tenant_leaves_no_scope_closes_its_clients_once_and_refuses_th
     hub.open_services(tenant)  # serve the tenant, building the configured clients its deletion closes
     deleted = id(before.resolver.get(ConfigObjectCache))
 
-    hub.hub_services.tenant_teardown.delete(tenant, by="usr_deleter")
+    hub.resolve_hub(TenantTeardown).delete(tenant, by="usr_deleter")
     # Only this tenant's cache is counted: another tenant's cache closing in the same process is not its deletion.
     closed = [identity for identity in closed if identity == deleted]
     hub.hub_services.process.tenants.close()

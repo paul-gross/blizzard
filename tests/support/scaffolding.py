@@ -394,7 +394,7 @@ def close_tenant(engine: Engine, tenant: TenantId, *, by: str = "test", at: date
     """Close ``tenant`` as a deletion's first step records it — one ``tenant_deletions`` row naming the tenant
     under its current name, ``by`` as its deleter and ``at`` as when it closed — so its scoped writes are refused
     from then on. Nothing else a close does in a running hub happens: a test closing a tenant a hub has cached
-    refreshes what it needs, or closes through ``hub_services.tenant_teardown``."""
+    refreshes what it needs, or closes through the container's ``TenantTeardown``."""
     tenants, deletions = schema.tenants, schema.tenant_deletions
     named = sa.select(
         tenants.c.tenant_id, tenants.c.name, sa.literal(by), sa.literal(at, type_=deletions.c.closed_at.type)
@@ -1608,6 +1608,10 @@ class HubHarness:
     def resolve[T](self, tenant: TenantId, dependency_type: type[T]) -> T:
         """``tenant``'s one ``dependency_type``, resolved through its container scope as a background pass would."""
         return self.hub_services.process.tenants.resolve(StoreScope(tenant), dependency_type)
+
+    def resolve_hub[T](self, dependency_type: type[T]) -> T:
+        """The hub's one process-scoped ``dependency_type``, resolved through its process container."""
+        return self.hub_services.process.resolver.get(dependency_type)
 
     def default_adapter[T](self, adapter_type: type[T]) -> T:
         """The default tenant's one ``adapter_type``, resolved through its container scope."""

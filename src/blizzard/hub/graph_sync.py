@@ -137,6 +137,21 @@ def reconcile_open_tenants(
     return reports
 
 
+class GraphReconciliations:
+    """Each tenant's :class:`GraphReconciliation`, through the typed tenant accessor the process root binds over its
+    tenant scopes once they are built; it refuses a tenant as that tenant's scope refuses."""
+
+    def __init__(self) -> None:
+        self._open: Callable[[TenantId], GraphReconciliation] | None = None
+
+    def bind(self, open: Callable[[TenantId], GraphReconciliation]) -> None:
+        self._open = open
+
+    def __call__(self, tenant: TenantId) -> GraphReconciliation:
+        assert self._open is not None  # bound by the process root before the process is handed out
+        return self._open(tenant)
+
+
 def packaged_minter(
     clock: IClock, yaml: IConfigCodec, catalogue: HubActionCatalogue
 ) -> Callable[[IWriteGraphRepository], list[GraphSyncOutcome]]:
