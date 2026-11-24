@@ -1,9 +1,10 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type ActivityView, listActivityApiActivityGet } from 'fleet';
-import { HubEventKind, openLookup, type ActivityFact, type HubEventType } from 'fleet/shell';
+import { listActivityApiActivityGet } from 'fleet';
+import type { ActivityFact } from 'fleet/shell';
 import { hubActivityKey, lensedKey } from '../../core/query-keys';
 import { injectProjectFilter } from '../../core/project-filter';
+import { translateActivityRow } from './activity.translate';
 
 /**
  * The backfill row cap for `GET /api/activity` — reconciled with
@@ -11,19 +12,6 @@ import { injectProjectFilter } from '../../core/project-filter';
  * one number, not two that happen to agree by coincidence.
  */
 export const ACTIVITY_LIMIT = 200;
-
-const activityTypes = openLookup<ActivityView['type'], HubEventType>({
-  'chunk-changed': HubEventKind.CHUNK_CHANGED,
-  'runner-changed': HubEventKind.RUNNER_CHANGED,
-  'event-logged': HubEventKind.EVENT_LOGGED,
-}, (raw) => ({ kind: 'unknown', raw }));
-
-/** Translate the durable read at the boundary into the same facts the live feed uses. */
-export function translateActivityRow(row: ActivityView): ActivityFact {
-  const { at, type, key, ...data } = row;
-  const eventType = activityTypes(type);
-  return { at: Date.parse(at), type: eventType, key, data: { ...data, key, ...(typeof eventType === 'string' ? {} : { raw: row }) } };
-}
 
 /**
  * Hub `GET /api/activity` read — the Activity feed panel's backfill-on-load,

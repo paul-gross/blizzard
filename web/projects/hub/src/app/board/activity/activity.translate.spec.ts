@@ -1,5 +1,5 @@
 import { type ActivityView } from 'fleet';
-import { translateActivityRow } from './activity.query';
+import { translateActivityRow } from './activity.translate';
 
 describe('translateActivityRow', () => {
   it('converges a durable row on the live activity fact shape', () => {
