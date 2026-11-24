@@ -15,6 +15,8 @@ from blizzard.cli.collaborators import Response
 from blizzard.cli.get_group import GetGroup
 from blizzard.cli.refusal import refusal_of
 from blizzard.foundation.toml_emit import toml_document
+from blizzard.runner.api.host_settings import HostChangesPage, HostSettingsApplyResponse, HostSettingsDocument
+from blizzard.runner.api.settings import ChangesPage, SettingsView
 from blizzard.runner.cli.control import ENV_LOCAL_API_URL
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
@@ -35,7 +37,9 @@ def _options(command: Any) -> Any:
     )(command)
 
 
-def _answer(daemon: RunnerDaemon, response: Response) -> dict[str, Any]:
+def _answer[T](daemon: RunnerDaemon, response: Response, adapter: TypeAdapter[T]) -> tuple[Any, T]:
+    """``(raw body, value)``: the body as the daemon sent it, which a verb echoes, and the value decoded against the
+    route's served model, which a verb reads."""
     if not response.is_success:
         problem = refusal_of(response)
         message = problem.message or "Settings request refused"
@@ -43,7 +47,14 @@ def _answer(daemon: RunnerDaemon, response: Response) -> dict[str, Any]:
         if errors:
             message += f": {json.dumps(errors)}"
         raise click.ClickException(f"{daemon.verb}: {message}")
-    return daemon.decode_answer(response, TypeAdapter(dict[str, Any]))[1]
+    return daemon.decode_answer(response, adapter)
+
+
+_SETTINGS = TypeAdapter(SettingsView)
+_CHANGES = TypeAdapter(ChangesPage)
+_HOST_CHANGES = TypeAdapter(HostChangesPage)
+_APPLIED = TypeAdapter(HostSettingsApplyResponse)
+_DOCUMENT = TypeAdapter(HostSettingsDocument)
 
 
 class _Record:
@@ -89,15 +100,15 @@ def get_settings(
 ) -> None:
     """Read the settings view, or one KEY."""
     with _reach(ctx, "settings get", directory, runner_url, runner, host) as (daemon, record):
-        view = _answer(daemon, record.send("get", "/settings"))
+        raw, view = _answer(daemon, record.send("get", "/settings"), _SETTINGS)
     if key is None:
-        _echo(view)
+        _echo(raw)
         return
-    if view.get("settings_error"):
-        raise click.ClickException(f"settings get: settings unavailable: {view['settings_error']}")
-    for row in view["settings"]:
-        if row["key"] == key:
-            _echo(row)
+    if view.settings_error:
+        raise click.ClickException(f"settings get: settings unavailable: {view.settings_error}")
+    for sent, row in zip(raw["settings"], view.settings, strict=True):
+        if row.key == key:
+            _echo(sent)
             return
     raise click.ClickException(f"settings get: unknown setting {key!r}")
 
@@ -106,9 +117,9 @@ def _write(
     ctx: click.Context, directory: str, runner_url: str | None, runner: str | None, host: bool, body: object
 ) -> None:
     with _reach(ctx, "settings write", directory, runner_url, runner, host) as (daemon, record):
-        view = _answer(daemon, record.send("get", "/settings"))
-        response = record.send("patch", "/settings", json_body=body, headers={"If-Match": str(view["revision"])})
-        _echo(_answer(daemon, response))
+        _, view = _answer(daemon, record.send("get", "/settings"), _SETTINGS)
+        response = record.send("patch", "/settings", json_body=body, headers={"If-Match": str(view.revision)})
+        _echo(_answer(daemon, response, _SETTINGS)[0])
 
 
 @settings_group.command("set")
@@ -147,7 +158,9 @@ def changes_settings(
 ) -> None:
     """Read the settings change history."""
     with _reach(ctx, "settings changes", directory, runner_url, runner, host) as (daemon, record):
-        _echo(_answer(daemon, record.send("get", "/settings/changes")))
+        response = record.send("get", "/settings/changes")
+        raw = _answer(daemon, response, _HOST_CHANGES)[0] if host else _answer(daemon, response, _CHANGES)[0]
+        _echo(raw)
 
 
 def _document_options(command: Any) -> Any:
@@ -173,7 +186,7 @@ def apply_settings(ctx: click.Context, file: Path, dry_run: bool, directory: str
         raise click.BadParameter(str(error), param_hint="FILE") from error
     path = "/api/host/settings/apply" + ("?dry_run=true" if dry_run else "")
     with RunnerDaemon.reach("settings apply", directory, runner_url, Door.of(ctx)) as daemon:
-        _echo(_answer(daemon, daemon.send_to_host("post", path, json_body=document)))
+        _echo(_answer(daemon, daemon.send_to_host("post", path, json_body=document), _APPLIED)[0])
 
 
 @settings_group.command("export")
@@ -182,5 +195,5 @@ def apply_settings(ctx: click.Context, file: Path, dry_run: bool, directory: str
 def export_settings(ctx: click.Context, directory: str, runner_url: str | None) -> None:
     """Print the host settings document, every entry not at its default, as TOML that applies back unchanged."""
     with RunnerDaemon.reach("settings export", directory, runner_url, Door.of(ctx)) as daemon:
-        document = _answer(daemon, daemon.send_to_host("get", "/api/host/settings/export"))
+        document, _ = _answer(daemon, daemon.send_to_host("get", "/api/host/settings/export"), _DOCUMENT)
     click.echo(toml_document(document), nl=False)

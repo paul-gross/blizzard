@@ -495,10 +495,8 @@ def routine_sweeps(cli: CliContext, name: str, since: datetime, until: datetime,
 @dataclass(frozen=True)
 class ProposalCountsDetail:
     """`routine proposal-counts`'s own render — one line per class/origin
-    pair, `created` echoed as the open/passed/accepted-with-item/accepted-without-item sum. ``sent`` is the answer as
-    the hub sent it, which each row's origin tokens read."""
+    pair, `created` echoed as the open/passed/accepted-with-item/accepted-without-item sum."""
 
-    sent: dict[str, Any]
     body: GardenProposalCountsView
 
     def lines(self) -> Iterator[str]:
@@ -508,9 +506,9 @@ class ProposalCountsDetail:
         if not body.rows:
             yield "  no proposals in this window"
             return
-        for sent, row in zip(self.sent["rows"], body.rows, strict=True):
+        for row in body.rows:
             yield (
-                f"  {row.class_}  {ProposalOrigin(sent).rendered}  created={row.created}  "
+                f"  {row.class_}  {ProposalOrigin(row.origin, row.routine_name).rendered}  created={row.created}  "
                 f"open={row.open}  passed={row.passed}  accepted(item)={row.accepted_with_item}  "
                 f"accepted(no item)={row.accepted_without_item}"
             )
@@ -536,4 +534,4 @@ def routine_proposal_counts(
     resp = cli.send("get", "/api/routines/proposal-counts", params=params)
     cli.check(resp, "GET /routines/proposal-counts")
     raw, body = cli.decode(resp, _PROPOSAL_COUNTS, "GET /routines/proposal-counts")
-    cli.show(raw, ProposalCountsDetail(raw, body))
+    cli.show(raw, ProposalCountsDetail(body))

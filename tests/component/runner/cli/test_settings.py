@@ -36,7 +36,7 @@ def test_write_sends_observed_revision(verb: str, arguments: list[str], body: ob
         if request.method == "PATCH":
             assert request.headers["If-Match"] == "7"
             assert json.loads(request.content) == body
-        return httpx2.Response(200, json={"revision": 7, "settings": []})
+        return httpx2.Response(200, json={"revision": 7, "in_force": {}, "settings": []})
 
     bound = bind_transport(answer)
     result = CliRunner().invoke(
@@ -59,7 +59,7 @@ def test_conflict_is_reported_without_retry() -> None:
             )
         if request.method == "PATCH":
             return httpx2.Response(409, json={"detail": {"code": "revision_conflict", "message": "stale revision"}})
-        return httpx2.Response(200, json={"revision": 3, "settings": []})
+        return httpx2.Response(200, json={"revision": 3, "in_force": {}, "settings": []})
 
     result = CliRunner().invoke(
         runner_group,
@@ -78,7 +78,14 @@ def test_get_aliases_read_one_key(verb: str) -> None:
             return httpx2.Response(
                 200, json={"items": [{"name": "r", "runner_id": "rn_1", "state": "serving", "served": True}]}
             )
-        return httpx2.Response(200, json={"revision": 2, "settings": [{"key": "agents", "value": 3}]})
+        return httpx2.Response(
+            200,
+            json={
+                "revision": 2,
+                "in_force": {},
+                "settings": [{"key": "agents", "value": 3, "source": "entry", "lifetime": "pass"}],
+            },
+        )
 
     result = CliRunner().invoke(
         runner_group,
@@ -97,7 +104,7 @@ def test_get_key_reports_settings_resolution_failure() -> None:
             )
         assert request.url.path == "/runners/rn_1/api/settings"
         return httpx2.Response(
-            200, json={"revision": 2, "in_force": None, "settings": [], "settings_error": "cannot read .env"}
+            200, json={"revision": 2, "in_force": {}, "settings": [], "settings_error": "cannot read .env"}
         )
 
     result = CliRunner().invoke(
@@ -142,7 +149,7 @@ def test_host_write_reaches_the_host_record_without_selecting_a_runner() -> None
         if request.method == "PATCH":
             assert request.headers["If-Match"] == "4"
             assert json.loads(request.content) == {"set": {"tick_seconds": 2}, "unset": []}
-        return httpx2.Response(200, json={"revision": 4, "settings": []})
+        return httpx2.Response(200, json={"revision": 4, "in_force": {}, "settings": []})
 
     result = CliRunner().invoke(
         runner_group,

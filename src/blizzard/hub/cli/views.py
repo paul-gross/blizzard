@@ -8,9 +8,11 @@ from datetime import datetime
 from typing import Any, ClassVar, cast
 
 from blizzard.foundation.declared_lever import DeclaredLever
+from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.runner_connection import RunnerConnection
 from blizzard.foundation.spend import SpendFigure
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.chunk import ChunkDetail, ChunkSummary, ChunkUsageTotalView, WorkItemEntry, WorkRefView
 from blizzard.wire.fleet import FleetSpendView
 from blizzard.wire.question import QuestionView
@@ -190,14 +192,15 @@ class ProposalOrigin:
     """A garden proposal's origin tokens: `origin=` always, `routine=` when named,
     `created_by=` for an operator row that carries one (a counts row does not)."""
 
-    row: dict[str, Any]
+    origin: GardenProposalOrigin | Unrecognized
+    routine_name: str | None
+    created_by: str | None = None
 
     @property
     def rendered(self) -> str:  # ast-grep-ignore: bzh:property-delegates
-        origin = self.row["origin"]
-        tokens = [f"origin={origin}"]
-        if self.row.get("routine_name") is not None:
-            tokens.append(f"routine={self.row['routine_name']}")
-        if origin == "operator" and "created_by" in self.row:
-            tokens.append(f"created_by={self.row['created_by']}")
+        tokens = [f"origin={self.origin}"]
+        if self.routine_name is not None:
+            tokens.append(f"routine={self.routine_name}")
+        if self.origin == GardenProposalOrigin.OPERATOR and self.created_by is not None:
+            tokens.append(f"created_by={self.created_by}")
         return "  ".join(tokens)

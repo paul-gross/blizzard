@@ -55,13 +55,17 @@ _ACCEPTED = TypeAdapter(GardenProposalAcceptResponse)
 
 
 class GardenProposalListing(Listing):
-    """Rows as ``(sent, decoded)`` pairs: the origin tokens read the row as sent."""
+    """Rows as ``(sent, decoded)`` pairs: ``--json`` prints the row as sent, the lines read the decoded one."""
 
     empty = "no garden proposals"
 
     def line(self, row: Any) -> str:
-        sent, proposal = cast(tuple[dict[str, Any], GardenProposalView], row)
-        return f"{proposal.proposal_id}  class={proposal.class_}  {ProposalOrigin(sent).rendered}  {proposal.title}"
+        _, proposal = cast(tuple[Any, GardenProposalView], row)
+        return f"{proposal.proposal_id}  class={proposal.class_}  {_origin(proposal).rendered}  {proposal.title}"
+
+
+def _origin(proposal: GardenProposalView) -> ProposalOrigin:
+    return ProposalOrigin(proposal.origin, proposal.routine_name, proposal.created_by)
 
 
 def _closure_lines(closure: GardenProposalClosureView | None) -> Iterator[str]:
@@ -81,14 +85,13 @@ def _closure_lines(closure: GardenProposalClosureView | None) -> Iterator[str]:
 @dto
 @dataclass(frozen=True)
 class GardenProposalDetail:
-    """One proposal: ``sent`` is its body as the hub answered it, which the origin tokens read."""
+    """One proposal, as decoded; ``--json`` prints the body as the hub answered it."""
 
-    sent: dict[str, Any]
     body: GardenProposalView
 
     def lines(self) -> Iterator[str]:
         body = self.body
-        yield f"{body.proposal_id}  class={body.class_}  {ProposalOrigin(self.sent).rendered}"
+        yield f"{body.proposal_id}  class={body.class_}  {_origin(body).rendered}"
         yield f"  {body.title}"
         yield f"  {body.body}"
         if body.findings:
@@ -102,7 +105,7 @@ def _show_proposal[P: GardenProposalView](
     cli: CliContext, resp: Response, operation: str, answer: TypeAdapter[P]
 ) -> None:
     raw, body = cli.decode(resp, answer, operation)
-    cli.show(raw, GardenProposalDetail(raw, body))
+    cli.show(raw, GardenProposalDetail(body))
 
 
 @click.group("garden-proposal", cls=GetGroup)

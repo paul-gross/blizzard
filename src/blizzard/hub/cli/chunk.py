@@ -721,8 +721,8 @@ def chunk_transcript_list(cli: CliContext, chunk_id: str) -> None:
 
     A chunk no worker has run lists none. Pass a segment id to `transcript get` to read it."""
     resp = cli.get(f"/api/chunks/{chunk_id}/transcripts", "GET /chunks/{id}/transcripts")
-    raw, _ = cli.decode(resp, _SEGMENTS, "GET /chunks/{id}/transcripts")
-    cli.show(raw, SegmentIndexLines(raw))
+    raw, body = cli.decode(resp, _SEGMENTS, "GET /chunks/{id}/transcripts")
+    cli.show(raw, SegmentIndexLines(body))
 
 
 @chunk_transcript_group.command("get", cls=FleetCommand)
@@ -734,8 +734,8 @@ def chunk_transcript_get(cli: CliContext, chunk_id: str, segment_id: str) -> Non
 
     Under --json, the segment as the hub stores it."""
     resp = cli.get(f"/api/chunks/{chunk_id}/transcripts/{segment_id}", "GET /chunks/{id}/transcripts/{segment_id}")
-    raw, _ = cli.decode(resp, _SEGMENT, "GET /chunks/{id}/transcripts/{segment_id}")
-    cli.show(raw, SegmentContentLines(raw))
+    raw, body = cli.decode(resp, _SEGMENT, "GET /chunks/{id}/transcripts/{segment_id}")
+    cli.show(raw, SegmentContentLines(body))
 
 
 @chunk_group.command("pm", hidden=True, cls=FleetCommand)
