@@ -13,11 +13,11 @@ import {
 import { machineChunkRows } from '../core/chunk-rows.model';
 import { hostPoolsFor, runnerFocus, runnerNameResolver } from '../core/host-pools.model';
 import {
-  injectHostEnvironmentsQuery,
-  injectHostRegistrationQuery,
+  injectHostEnvironmentDomainsQuery,
+  injectHostRegistrationDomainQuery,
   injectHostRunnerDomainsQuery,
   injectHostSubscriptionsQuery,
-  injectHostWorkspacesQuery,
+  injectHostWorkspaceDomainsQuery,
 } from '../core/host.query';
 import { PanelFilters } from '../core/panel-filters';
 import { injectPanelDashboards, injectPanelLeases, injectPanelProjects, injectRunnerProjects } from '../core/panel-reads';
@@ -59,11 +59,11 @@ import { HostTitle } from './host-title';
 })
 export class HostPage {
   private readonly filters = inject(PanelFilters);
-  private readonly registrationQuery = injectHostRegistrationQuery();
+  private readonly registrationQuery = injectHostRegistrationDomainQuery();
   protected readonly runnersQuery = injectHostRunnerDomainsQuery();
   private readonly subscriptionsQuery = injectHostSubscriptionsQuery();
-  private readonly workspacesQuery = injectHostWorkspacesQuery();
-  private readonly environmentsQuery = injectHostEnvironmentsQuery();
+  private readonly workspacesQuery = injectHostWorkspaceDomainsQuery();
+  private readonly environmentsQuery = injectHostEnvironmentDomainsQuery();
   private readonly dashboards = injectPanelDashboards('all');
   private readonly leases = injectPanelLeases({ scope: 'all', byProject: false });
   private readonly projects = injectPanelProjects();

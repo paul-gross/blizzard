@@ -1001,7 +1001,6 @@ const DOMAIN_BOUNDARY_EXEMPT = [
   'runner/src/app/board',
   'runner/src/app/core',
   'runner/src/app/events',
-  'runner/src/app/host',
   'runner/src/app/runners',
 ];
 
@@ -1037,6 +1036,10 @@ const DOMAIN_BOUNDARY_STRICT_SCOPES = [
   'runner/src/app/core/throttle.domain',
   'runner/src/app/core/throttle.translate',
   'runner/src/app/core/throttle.builders',
+  'runner/src/app/core/host-environment.builders',
+  'runner/src/app/core/host-registration',
+  'runner/src/app/core/host-workspace',
+  'runner/src/app/core/host-pools.model',
   'runner/src/app/shell/nav',
   'runner/src/app/shell/app',
   'runner/src/app/shell/app-scope-navigation',

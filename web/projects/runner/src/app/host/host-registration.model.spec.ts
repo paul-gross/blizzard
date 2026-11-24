@@ -1,5 +1,5 @@
-import type { runnerApi } from 'fleet';
-
+import { hostRegistration } from '../core/host-registration.builders';
+import type { KnownHostRegistrationState } from '../core/host-registration.domain';
 import { hostRegistrationSummary } from './host-registration.model';
 
 describe('hostRegistrationSummary', () => {
@@ -8,7 +8,7 @@ describe('hostRegistrationSummary', () => {
   });
 
   it('counts one held runner in the singular and carries the last answer', () => {
-    const summary = hostRegistrationSummary({
+    const summary = hostRegistrationSummary(hostRegistration({
       state: 'registered',
       host_id: 'hs_1',
       held_runner_ids: ['rn_1'],
@@ -17,7 +17,7 @@ describe('hostRegistrationSummary', () => {
       detail: null,
       host_name: null,
       tenant_id: null,
-    });
+    }));
 
     expect(summary?.tone).toBe('done');
     expect(summary?.lines).toEqual(['host hs_1', '1 runner held']);
@@ -26,7 +26,7 @@ describe('hostRegistrationSummary', () => {
 
   it('reads version refused with the hub\'s sentence naming what to upgrade', () => {
     const detail = "runner 0.1.4 is older than this hub's oldest supported line, 0.2; upgrade the runner host to 0.2 or later, up to 0.3";
-    const summary = hostRegistrationSummary({ state: 'version_refused', host_id: 'hs_1', detail, held_runner_ids: [], buffered_facts: 0, answered_at: null, host_name: null, tenant_id: null });
+    const summary = hostRegistrationSummary(hostRegistration({ state: 'version_refused', host_id: 'hs_1', detail }));
 
     expect(summary?.label).toBe('version refused');
     expect(summary?.tone).toBe('needs');
@@ -35,30 +35,13 @@ describe('hostRegistrationSummary', () => {
   });
 
   it('counts one buffered fact in the singular', () => {
-    expect(hostRegistrationSummary({
-        state: 'no_hosts',
-        buffered_facts: 1,
-        answered_at: null,
-        detail: null,
-        held_runner_ids: [],
-        host_id: null,
-        host_name: null,
-        tenant_id: null,
-      })?.lines).toEqual(['1 fact buffered']);
+    expect(hostRegistrationSummary(hostRegistration({ state: 'no_hosts', buffered_facts: 1 }))?.lines).toEqual(['1 fact buffered']);
   });
 
   it('reads a state this build does not know raw, in the idle tone, rather than throwing', () => {
-    const state = 'suspended' as runnerApi.HostRegistrationView['state'];
-    const summary = hostRegistrationSummary({
-      state,
-      buffered_facts: 0,
-      answered_at: null,
-      detail: 'held for review',
-      held_runner_ids: [],
-      host_id: 'hs_1',
-      host_name: null,
-      tenant_id: null,
-    });
+    const summary = hostRegistrationSummary(
+      hostRegistration({ state: { kind: 'unknown', raw: 'suspended' }, detail: 'held for review', host_id: 'hs_1' }),
+    );
 
     expect(summary?.label).toBe('suspended');
     expect(summary?.tone).toBe('idle');
@@ -68,7 +51,7 @@ describe('hostRegistrationSummary', () => {
 });
 
 describe('the registration tone the host light and badge both read', () => {
-  const tones: Record<runnerApi.HostRegistrationView['state'], string> = {
+  const tones: Record<KnownHostRegistrationState, string> = {
     unregistered: 'idle',
     pending: 'waiting',
     registered: 'done',
@@ -79,12 +62,10 @@ describe('the registration tone the host light and badge both read', () => {
   };
 
   it.each(Object.entries(tones))('reads %s in %s', (state, tone) => {
-    const view = { state, buffered_facts: 0, answered_at: null, detail: null, held_runner_ids: [], host_id: null, host_name: null, tenant_id: null };
-    expect(hostRegistrationSummary(view as runnerApi.HostRegistrationView)?.tone).toBe(tone);
+    expect(hostRegistrationSummary(hostRegistration({ state: state as KnownHostRegistrationState }))?.tone).toBe(tone);
   });
 
   it('reads a state it does not know in idle', () => {
-    const view = { state: 'suspended', buffered_facts: 0, answered_at: null, detail: null, held_runner_ids: [], host_id: null, host_name: null, tenant_id: null };
-    expect(hostRegistrationSummary(view as unknown as runnerApi.HostRegistrationView)?.tone).toBe('idle');
+    expect(hostRegistrationSummary(hostRegistration({ state: { kind: 'unknown', raw: 'suspended' } }))?.tone).toBe('idle');
   });
 });

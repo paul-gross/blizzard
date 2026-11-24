@@ -14,6 +14,8 @@ import { runnerSubscription } from './host-subscription.translate';
 import type { HostRunner } from './host-runner.domain';
 import { fromHostRunnerView } from './host-runner.translate';
 import { fromHostWorkspaceEnvironmentsView } from './host-environment.translate';
+import { fromHostRegistrationView } from './host-registration.translate';
+import { fromHostWorkspaceView } from './host-workspace.translate';
 
 /**
  * The host's reads — `GET /api/host/*`, at the host's root and through the generated
@@ -56,15 +58,27 @@ export async function fetchHostRunnerDomains(queryClient: QueryClient): Promise<
   return rows.map(fromHostRunnerView);
 }
 
+async function fetchHostWorkspaces(): Promise<runnerApi.HostWorkspaceView[]> {
+  const { data, error } = await runnerApi.listWorkspacesApiHostWorkspacesGet({ throwOnError: false });
+  if (error) throw error;
+  return data?.items ?? [];
+}
+
 /** `GET /api/host/workspaces` — the workspaces the host declares, each with its capacity. */
 export function injectHostWorkspacesQuery() {
   return injectQuery(() => ({
     queryKey: hostWorkspacesKey,
-    queryFn: async (): Promise<runnerApi.HostWorkspaceView[]> => {
-      const { data, error } = await runnerApi.listWorkspacesApiHostWorkspacesGet({ throwOnError: false });
-      if (error) throw error;
-      return data?.items ?? [];
-    },
+    queryFn: fetchHostWorkspaces,
+    refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
+  }));
+}
+
+/** {@link injectHostWorkspacesQuery} projected to `HostWorkspace` domains, over the same cache entry. */
+export function injectHostWorkspaceDomainsQuery() {
+  return injectQuery(() => ({
+    queryKey: hostWorkspacesKey,
+    queryFn: fetchHostWorkspaces,
+    select: (rows: runnerApi.HostWorkspaceView[]) => rows.map(fromHostWorkspaceView),
     refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
   }));
 }
@@ -111,16 +125,28 @@ export function injectHostSubscriptionsQuery() {
   }));
 }
 
+async function fetchHostRegistration(): Promise<runnerApi.HostRegistrationView> {
+  const { data, error } = await runnerApi.hostRegistrationApiHostRegistrationGet({ throwOnError: false });
+  if (error) throw error;
+  return data!;
+}
+
 /** `GET /api/host/registration` — the host's registration at its hub, as its latest
  * report found it. */
 export function injectHostRegistrationQuery() {
   return injectQuery(() => ({
     queryKey: hostRegistrationKey,
-    queryFn: async (): Promise<runnerApi.HostRegistrationView> => {
-      const { data, error } = await runnerApi.hostRegistrationApiHostRegistrationGet({ throwOnError: false });
-      if (error) throw error;
-      return data!;
-    },
+    queryFn: fetchHostRegistration,
+    refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
+  }));
+}
+
+/** {@link injectHostRegistrationQuery} projected to its `HostRegistration` domain, over the same cache entry. */
+export function injectHostRegistrationDomainQuery() {
+  return injectQuery(() => ({
+    queryKey: hostRegistrationKey,
+    queryFn: fetchHostRegistration,
+    select: fromHostRegistrationView,
     refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
   }));
 }

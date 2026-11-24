@@ -1,6 +1,9 @@
-import { compactRef, type runnerApi, type SlotBarSlot } from 'fleet/runner-shell';
+import { compactRef, type SlotBarSlot } from 'fleet/runner-shell';
+
+import type { WorkspaceEnvironments } from './host-environment.domain';
 
 import type { HostRunner } from './host-runner.domain';
+import type { HostWorkspace } from './host-workspace.domain';
 import { type PanelProject, slugForEntry } from './panel-reads.model';
 
 /** A runner id's display name off the host's runner list — the id itself for one the list
@@ -50,8 +53,8 @@ function envTitle(env: HostPanelEnv): string {
  * filter leaves — `null` for All — and dims every block another runner holds.
  */
 export function hostPanelPools(
-  workspaces: readonly runnerApi.HostWorkspaceView[],
-  groups: readonly runnerApi.HostWorkspaceEnvironmentsView[],
+  workspaces: readonly HostWorkspace[],
+  groups: readonly WorkspaceEnvironments[],
   runnerName: (runnerId: string) => string,
   projectName: (entry: string) => string,
   focus: ReadonlySet<string> | null,
@@ -72,14 +75,14 @@ export function hostPanelPools(
       )
       .map((env): HostPanelEnv => {
         const held = env.held;
-        const runnerId = env.runner_id ?? null;
+        const runnerId = env.runner_id;
         return {
           environmentId: env.environment_id,
           held,
-          chunkRef: env.chunk_id == null ? null : compactRef(env.chunk_id),
-          chunkId: env.chunk_id ?? null,
+          chunkRef: env.chunk_id === null ? null : compactRef(env.chunk_id),
+          chunkId: env.chunk_id,
           project:
-            env.project == null || env.project === ''
+            env.project === null || env.project === ''
               ? null
               : projectName(env.project),
           holder: runnerId === null ? null : runnerName(runnerId),
@@ -123,8 +126,8 @@ export function runnerFocus<T>(
 
 /** The host reads {@link hostPoolsFor} folds. */
 export interface HostPoolReads {
-  readonly workspaces: readonly runnerApi.HostWorkspaceView[];
-  readonly groups: readonly runnerApi.HostWorkspaceEnvironmentsView[];
+  readonly workspaces: readonly HostWorkspace[];
+  readonly groups: readonly WorkspaceEnvironments[];
   readonly runners: readonly Pick<HostRunner, 'runner_id' | 'name'>[];
   readonly projects: readonly PanelProject[];
 }

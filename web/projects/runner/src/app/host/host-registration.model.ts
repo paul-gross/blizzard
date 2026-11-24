@@ -1,8 +1,11 @@
-import { openLookup, type runnerApi, type Tone } from 'fleet';
+import { openLookup, type Tone } from 'fleet';
+
+import type { HostRegistration, KnownHostRegistrationState } from '../core/host-registration.domain';
 
 /** The host's registration as the host page shows it — every value resolved for display. */
 export interface HostRegistrationSummary {
-  readonly state: runnerApi.HostRegistrationView['state'];
+  /** The state as spelled — raw for one this build does not know. */
+  readonly state: string;
   readonly label: string;
   readonly tone: Tone;
   /** One line per fact the state carries: identity, held runners, detail, buffered facts. */
@@ -15,7 +18,7 @@ export interface HostRegistrationSummary {
 
 /** Each registration state's label and tone — the one tone the host's badge and light both read; a state this
  * build does not know reads raw, in `idle`. */
-const LABEL = openLookup<runnerApi.HostRegistrationView['state'], readonly [string, Tone]>(
+const LABEL = openLookup<KnownHostRegistrationState, readonly [string, Tone]>(
   {
     unregistered: ['unregistered', 'idle'],
     pending: ['pending', 'waiting'],
@@ -29,9 +32,10 @@ const LABEL = openLookup<runnerApi.HostRegistrationView['state'], readonly [stri
 );
 
 /** Folds the host's registration read into its display summary — `null` before the read lands. */
-export function hostRegistrationSummary(view: runnerApi.HostRegistrationView | undefined): HostRegistrationSummary | null {
+export function hostRegistrationSummary(view: HostRegistration | undefined): HostRegistrationSummary | null {
   if (!view) return null;
-  const [label, tone] = LABEL(view.state);
+  const state = typeof view.state === 'string' ? view.state : view.state.raw;
+  const [label, tone] = LABEL(state);
   const lines: string[] = [];
   if (view.state === 'unregistered') {
     lines.push('this host holds no host token — each runner signs in and reports on its own');
@@ -42,13 +46,13 @@ export function hostRegistrationSummary(view: runnerApi.HostRegistrationView | u
   if (view.tenant_id) lines.push(`tenant ${view.tenant_id}`);
   if (view.host_name) lines.push(`named ${view.host_name}`);
   if (view.state === 'registered') {
-    const held = view.held_runner_ids?.length ?? 0;
+    const held = view.held_runner_ids.length;
     lines.push(`${held} runner${held === 1 ? '' : 's'} held`);
   }
   if (view.detail) lines.push(view.detail);
   if (view.state === 'no_hosts') {
-    const buffered = view.buffered_facts ?? 0;
+    const buffered = view.buffered_facts;
     lines.push(`${buffered} fact${buffered === 1 ? '' : 's'} buffered`);
   }
-  return { state: view.state, label, tone, lines, detail: view.detail ?? null, answeredAt: view.answered_at ?? null };
+  return { state, label, tone, lines, detail: view.detail, answeredAt: view.answered_at };
 }
