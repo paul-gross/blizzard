@@ -26,6 +26,7 @@ from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnknownHarnessError
 from blizzard.runner.hub.client import HubQuestion
+from blizzard.runner.leases.asks import QuestionPark
 from blizzard.runner.leases.model import NewLease, ParkResume
 from blizzard.runner.leases.record import ClosureFact
 from blizzard.runner.lifecycle.attempt import Attempt
@@ -35,6 +36,7 @@ from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.store.internal import lease_liveness_store, lease_record_store
+from blizzard.runner.throttle.pause import RunnerBrakes
 from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
@@ -254,6 +256,15 @@ def _missing_park_resumes() -> Table:
     )
 
 
+_BRAKES = RunnerBrakes(local=False, hub=False)
+
+
+def _park(store: SqlAlchemyRunnerStore) -> QuestionPark:
+    park = store.open_park("lease_1")
+    assert park is not None
+    return park
+
+
 def _seed_parked(store: SqlAlchemyRunnerStore) -> None:
     _seed_lease(store)
     store.record_ask(
@@ -389,7 +400,7 @@ def test_the_answer_wake_reaches_its_own_points_and_closes_the_park(tmp_path: Pa
 
 def test_on_answer_replayed_after_the_record_finds_the_receipt_durable_and_wakes_nothing(tmp_path: Path):
     """The crash-after-record state: the woken pid, the park resume and the ``answer.delivered`` receipt are
-    durable together. The next pass reads no open park, wakes nothing and enqueues nothing."""
+    durable together. The next pass's park read omits the lease, so nothing is woken or enqueued."""
     store = _store(tmp_path)
     _seed_parked(store)
     store.record_spawn(
@@ -402,14 +413,8 @@ def test_on_answer_replayed_after_the_record_finds_the_receipt_durable_and_wakes
     )
     before = [f.seq for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED]
     assert len(before) == 1
-    harness = FakeHarness(handle=_HANDLE, verdict="pass")
-    ctx = _ctx(store, hub=_answered_hub(), harness=harness)
-    lease = store.active_lease("lease_1")
-    assert lease is not None
-
-    DormantSession(ctx, lease).on_answer()
-
-    assert harness.resumed == []
+    # The sweep hands each ask-parked lease its park from this read; the resumed one is absent, so no wake runs.
+    assert store.open_parks() == {}
     assert [f.seq for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED] == before
 
 
@@ -432,7 +437,7 @@ def test_the_receipt_is_published_only_after_the_resume_commits(tmp_path: Path, 
     lease = store.active_lease("lease_1")
     assert lease is not None
 
-    DormantSession(ctx, lease).on_answer()
+    DormantSession(ctx, lease).on_answer(_park(store), brakes=_BRAKES)
 
     receipts = [f.seq for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED]
     assert published == [(receipts[0], True)]
@@ -457,7 +462,7 @@ def test_a_failed_record_publishes_no_receipt_and_buffers_none(tmp_path: Path, m
     assert lease is not None
 
     with pytest.raises(Exception, match="no_such_park_resumes"):
-        DormantSession(ctx, lease).on_answer()
+        DormantSession(ctx, lease).on_answer(_park(store), brakes=_BRAKES)
 
     assert ANSWER_DELIVERED not in published
     assert not [f for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED]

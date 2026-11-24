@@ -92,7 +92,7 @@ class AdvanceSweep:
         """
         ctx = self.ctx
         pending = ctx.stores.outbound.pending_submission_lease_ids()
-        ask_parked = ctx.stores.asks.ask_parked_lease_ids()
+        ask_parks = ctx.stores.asks.open_parks()  # hoisted: each ask-parked lease's open park, one read per tick
         open_parks = ctx.stores.pause.open_pause_parks()  # hoisted: the parks' teardown facts, one read per tick
         in_flight_elicitations = ctx.stores.elicitations.in_flight_elicitations_by_lease()  # hoisted: same, by lease id
         bindings_by_chunk = group_bindings_by_chunk(
@@ -112,7 +112,7 @@ class AdvanceSweep:
                 resume_marked=lease.lease_id in resume_intents,
                 pending_submission=lease.lease_id in pending,
                 pause_parked=park is not None,
-                ask_parked=lease.lease_id in ask_parked,
+                ask_parked=lease.lease_id in ask_parks,
                 backing_off=lease.lease_id in backing_off,
                 alive=lease.pid is not None and ctx.process.is_alive(lease.pid, lease.process_start_time or ""),
             )
@@ -126,13 +126,19 @@ class AdvanceSweep:
                         park,
                         in_flight_elicitations.get(lease.lease_id),
                         bindings=bindings_by_chunk.get(lease.chunk_id, []),
-                        ask_parked=lease.lease_id in ask_parked,
+                        ask_parked=lease.lease_id in ask_parks,
                         brakes=brakes,
                     )
-                elif move is AdvanceMove.ON_ANSWER:
-                    DormantSession(ctx, lease).on_answer()
+                elif move is AdvanceMove.ON_ANSWER and lease.lease_id in ask_parks:
+                    if brakes is None:
+                        brakes = Spawner(ctx).brakes()
+                    DormantSession(ctx, lease).on_answer(ask_parks[lease.lease_id], brakes=brakes)
                 elif move is AdvanceMove.ON_OVERLOAD_BACKOFF:
-                    DormantSession(ctx, lease).on_overload_backoff(backing_off[lease.lease_id])
+                    fact = backing_off[lease.lease_id]
+                    if fact.due(ctx.clock.now()):  # a not-due lease reads no brakes
+                        if brakes is None:
+                            brakes = Spawner(ctx).brakes()
+                        DormantSession(ctx, lease).on_overload_backoff(fact, brakes=brakes)
                 elif move is AdvanceMove.EXITED:
                     self._advance_exited_worker(
                         lease, bindings_by_chunk.get(lease.chunk_id, []), in_flight_elicitations.get(lease.lease_id)

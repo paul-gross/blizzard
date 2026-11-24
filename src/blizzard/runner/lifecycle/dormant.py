@@ -22,7 +22,7 @@ from blizzard.runner.harness.registry import (
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError
 from blizzard.runner.hub.outbound import OutboundFacts
-from blizzard.runner.leases.asks import OpenAsk
+from blizzard.runner.leases.asks import OpenAsk, QuestionPark
 from blizzard.runner.leases.elicitation import PendingElicitation
 from blizzard.runner.leases.lease_lock import IWriteLeaseLock
 from blizzard.runner.leases.model import Lease, ParkResume
@@ -262,19 +262,21 @@ class DormantSession:
         else:
             Attempt(self.ctx, lease).abandon(via="resume")
 
-    def on_answer(self) -> None:
-        """Poll a parked lease's question; on an answer, resume the dormant session.
+    def on_answer(self, park: QuestionPark, *, brakes: RunnerBrakes) -> None:
+        """Poll a parked lease's question — ``park`` is the sweep's read of its open park — and on an
+        answer, resume the dormant session.
 
         Crash-safe and re-runnable: an unanswered question polls as a no-op and the reap clock
         stays stopped. Once answered the agent is reconstituted under the same session and step."""
         lease = self.lease
         if Spawner(self.ctx).suppressed(
-            start=StartKind.CONTINUATION, via="answer-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id
+            start=StartKind.CONTINUATION,
+            via="answer-resume",
+            chunk_id=lease.chunk_id,
+            lease_id=lease.lease_id,
+            brakes=brakes,
         ):
             return
-        park = self.ctx.stores.asks.open_park(lease.lease_id)
-        if park is None:
-            return  # not actually parked (raced with a resume)
         try:
             question = self.ctx.hub.get_question(park.question_id)
         except HubClientError:
@@ -492,7 +494,7 @@ class DormantSession:
         )
         return True if not leader_alive else not process.is_alive(pid, process_start_time)
 
-    def on_overload_backoff(self, fact: OverloadExit) -> None:
+    def on_overload_backoff(self, fact: OverloadExit, *, brakes: RunnerBrakes) -> None:
         """No-op until ``fact.resume_after`` has passed, then resume the same
         lease/epoch/session in place — no retry consumed, no epoch bumped.
 
@@ -510,6 +512,7 @@ class DormantSession:
             via="overload-backoff-resume",
             chunk_id=lease.chunk_id,
             lease_id=lease.lease_id,
+            brakes=brakes,
         )
         if suppressed:
             return

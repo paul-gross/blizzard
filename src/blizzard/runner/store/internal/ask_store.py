@@ -13,13 +13,15 @@ from sqlalchemy import Row
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.asks import IWriteAskRepository, OpenAsk, QuestionPark, newest_unforwarded, open_asks_of
-from blizzard.runner.store.internal.base import Unclosed, pause_parked_lease_ids
+from blizzard.runner.store.internal.base import Unclosed, Unsuperseded, pause_parked_lease_ids
 from blizzard.runner.store.schema import asks, lease_closures, park_facts, park_resumes
 from blizzard.runner.store.scoped import RunnerStoreConnections
 
 # `bzh:open-facts-declare-closure`: a hub-terminal chunk retires its lease (`lease_closures`) without a resume,
 # so a park on a closed lease stands no longer.
 _ASK_PARK_LEASE_UNCLOSED = Unclosed(park_facts.c.lease_id, lease_closures.c.lease_id)
+
+_LATER_PARK = park_facts.alias("later_park_facts")
 
 _log = get_logger("blizzard.runner.store")
 
@@ -67,13 +69,38 @@ class AskStore:
         rows = self._store.all(stmt)
         if not rows:
             return None
-        r = rows[0]
+        return self._row_to_park(rows[0])
+
+    @staticmethod
+    def _row_to_park(r: Row[Any]) -> QuestionPark:
         return QuestionPark(
             lease_id=str(r.lease_id),
             chunk_id=str(r.chunk_id),
             question_id=str(r.question_id),
             parked_at=r.parked_at,
         )
+
+    def open_parks(self) -> dict[str, QuestionPark]:
+        # Each lease's newest open park, kept in SQL (`bzh:newest-per-key-read`): the anti-join form, since
+        # the newest row is picked from the filtered subset — the competing park carries the same open filter.
+        st = self._store
+        unresumed = st.select(park_resumes, park_resumes.c.question_id)
+        # The competing park shares the lease, so the lease-closure half of the open filter already holds for it.
+        newest = Unsuperseded(
+            _LATER_PARK.c.id,
+            (
+                _LATER_PARK.c.lease_id == park_facts.c.lease_id,
+                _LATER_PARK.c.id > park_facts.c.id,
+                _LATER_PARK.c.question_id.not_in(unresumed),
+            ),
+        )
+        stmt = (
+            st.select(park_facts)
+            .where(park_facts.c.question_id.not_in(unresumed))
+            .where(_ASK_PARK_LEASE_UNCLOSED.clause(st))
+            .where(newest.clause(st))
+        )
+        return {str(r.lease_id): self._row_to_park(r) for r in self._store.all(stmt)}
 
     def open_asks(self) -> list[OpenAsk]:
         # An ask whose lease has closed is never open — a backstop independent of which

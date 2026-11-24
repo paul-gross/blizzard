@@ -1022,6 +1022,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadAskRepository, "parked_lease_ids"): lambda w: w.read.asks.parked_lease_ids(),
     (IReadAskRepository, "ask_parked_lease_ids"): lambda w: w.read.asks.ask_parked_lease_ids(),
     (IReadAskRepository, "open_park"): lambda w: w.read.asks.open_park(w.lease_3),
+    (IReadAskRepository, "open_parks"): lambda w: w.read.asks.open_parks(),
     (IReadAskRepository, "open_asks"): lambda w: w.read.asks.open_asks(),
     (IReadPauseRepository, "hub_contact_at"): lambda w: w.read.pause.hub_contact_at(),
     (IReadPauseRepository, "hub_paused"): lambda w: w.read.pause.hub_paused(),
@@ -1048,6 +1049,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadEscalationRepository, "open_escalation_for_chunk"): lambda w: w.read.escalations.open_escalation_for_chunk(
         w.chunk_3
     ),
+    (IReadEscalationRepository, "open_escalation_chunk_ids"): lambda w: w.read.escalations.open_escalation_chunk_ids(),
     (IReadEscalationRepository, "open_escalations_for"): lambda w: w.read.escalations.open_escalations_for(
         [w.chunk_3, w.chunk_4]
     ),

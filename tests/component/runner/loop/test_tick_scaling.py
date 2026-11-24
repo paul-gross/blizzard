@@ -11,6 +11,7 @@ import json
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import Engine
 
@@ -21,7 +22,9 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.hub.client import HubQuestion
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
+from blizzard.runner.lifecycle.ownership_reconcile import OwnershipReconcile
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkState
@@ -48,7 +51,8 @@ _SIZES = (1, 2, 4)
 class _Run:
     """One fresh store at one N: its engine, hub and the context a tick runs against."""
 
-    def __init__(self, tick_once: Callable[[], None], engine: Engine, hub: FakeHub) -> None:
+    def __init__(self, tick_once: Callable[[], None], engine: Engine, hub: FakeHub, ctx: Any = None) -> None:
+        self.ctx = ctx
         self.tick_once = tick_once
         self.engine = engine
         self.hub = hub
@@ -109,7 +113,7 @@ def _run(tmp_path: Path, n: int, seed: Callable[[SqlAlchemyRunnerStore, FakeHub,
         clock=FixedClock(_NOW),
         config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=n),
     )
-    return _Run(lambda: tick(ctx), engine, hub)
+    return _Run(lambda: tick(ctx), engine, hub, ctx)
 
 
 def _counts(
@@ -199,6 +203,9 @@ def test_the_ask_parked_arm_is_linear_in_statements_and_in_question_reads(tmp_pa
 
     _assert_linear(statements)
     _assert_linear(questions)
+    # Each lease costs `get_question` plus its own wake reads; the pass's brakes and each lease's park arrive
+    # from one read apiece, so the per-lease statement slope holds at this measured value.
+    assert statements[1] - statements[0] == 2, statements
 
 
 # --- adopt-candidate ---------------------------------------------------------------------------
@@ -210,3 +217,58 @@ def _seed_adopt_candidate(store: SqlAlchemyRunnerStore, hub: FakeHub, i: int) ->
 
 def test_the_adopt_arm_is_linear_in_held_chunks(tmp_path: Path) -> None:
     _assert_linear(_counts(tmp_path, _seed_adopt_candidate, warm_up=False))
+
+
+# --- the ownership reconcile ----------------------------------------------------------------
+
+
+def test_the_ownership_reconcile_reads_open_takeovers_once_per_pass(tmp_path: Path) -> None:
+    run = _run(tmp_path, 2, _seed_ask_parked)
+    run.ctx.identity.hold(RunnerIdentity(FIXTURE_RUNNER_ID, "r1", _NOW))  # registered: every phase runs
+
+    with support.capture_statements(run.engine) as statements:
+        OwnershipReconcile(run.ctx).run()
+
+    takeover_reads = [text for text, _ in statements if "FROM takeovers " in text]
+    assert len(takeover_reads) == 1, takeover_reads
+
+
+# --- overload backoff ------------------------------------------------------------------------
+
+
+def _seeder_backing_off(resume_after: datetime) -> Callable[[SqlAlchemyRunnerStore, FakeHub, int], None]:
+    def seed(store: SqlAlchemyRunnerStore, hub: FakeHub, i: int) -> None:
+        _seed_lease(store, i)
+        store.record_overload(
+            lease_id=f"lease_{i}",
+            chunk_id=f"ch_{i}",
+            epoch=1,
+            generation=1,
+            invocation_kind="worker",
+            invocation_identity="1",
+            streak_ordinal=1,
+            observed_at=_NOW - timedelta(minutes=5),
+            resume_after=resume_after,
+        )
+
+    return seed
+
+
+def _brake_reads(tmp_path: Path, seed: Callable[[SqlAlchemyRunnerStore, FakeHub, int], None], n: int) -> int:
+    run = _run(tmp_path, n, seed)
+    with support.capture_statements(run.engine) as statements:
+        run.tick_once()
+    return sum(1 for text, _ in statements if "FROM local_pause_facts" in text or "FROM hub_control" in text)
+
+
+def test_the_backoff_wakes_read_the_brakes_per_pass_not_per_lease(tmp_path: Path) -> None:
+    due = _seeder_backing_off(_NOW - timedelta(minutes=1))
+    not_due = _seeder_backing_off(_NOW + timedelta(hours=1))
+
+    due_reads = [_brake_reads(tmp_path / f"due{n}", due, n) for n in _SIZES]
+    not_due_reads = [_brake_reads(tmp_path / f"idle{n}", not_due, n) for n in _SIZES]
+
+    _assert_flat(due_reads)
+    _assert_flat(not_due_reads)
+    # A not-due pass reads no brakes for the wake: it reads fewer than a due pass does.
+    assert not_due_reads[0] < due_reads[0], (not_due_reads, due_reads)

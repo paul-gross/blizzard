@@ -113,7 +113,7 @@ def _primed_chunk_ids(ctx: LoopContext) -> set[str]:
     anyway — primed in one batch call so their own first ``get()`` each is a cache hit."""
     return (
         ctx.stores.lease_record.active_lease_chunk_ids()
-        | {escalation.chunk_id for escalation in ctx.stores.escalations.open_escalations()}
+        | ctx.stores.escalations.open_escalation_chunk_ids()
         | ctx.stores.takeover.open_takeover_chunk_ids()
         | set(ctx.stores.environments.live_tenure_chunk_ids())
     )
