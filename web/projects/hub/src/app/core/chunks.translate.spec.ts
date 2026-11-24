@@ -1,5 +1,6 @@
 import type { hubApi } from 'fleet';
-import { fromBoardPage, fromGraphProgressNode, fromGraphProgressState } from './chunks.translate';
+import { chunkSummary } from 'fleet/testing';
+import { fromBoardPage, fromBoardSummary, fromGraphProgressNode, fromGraphProgressState } from './chunks.translate';
 
 describe('graph progress translation', () => {
   it('carries known node states and identifiers', () => {
@@ -31,5 +32,22 @@ describe('board page metadata translation', () => {
       board_done_policy: policy,
     });
     expect(fromBoardPage({ chunks: [], next_cursor: null, board_done_policy: null }).board_done_policy).toBeNull();
+  });
+});
+
+describe('board summary translation', () => {
+  it('retains server judgments and translates open states', () => {
+    const wire = chunkSummary({
+      chunk_id: 'ch_1', graph_id: 'gr_1', status: 'future' as hubApi.ChunkStatus,
+      terminal: true, promotable: false,
+      graph_progress: [{ node_id: 'nd_1', name: 'build', state: 'future' as hubApi.GraphProgressState }],
+    });
+    const result = fromBoardSummary(wire);
+    expect(result).toMatchObject({
+      chunk_id: 'ch_1', status: 'future', laneStatus: { kind: 'unknown', raw: 'future' },
+      terminal: true, promotable: false,
+      graphProgress: [{ nodeId: 'nd_1', name: 'build', state: { kind: 'unknown', raw: 'future' } }],
+    });
+    expect(result).not.toHaveProperty('graph_progress');
   });
 });

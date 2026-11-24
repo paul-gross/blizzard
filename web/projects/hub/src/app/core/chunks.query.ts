@@ -6,7 +6,7 @@ import { DRAIN_LIMIT, drainPages } from './paginated-read';
 import type { BoardChunksRead } from './chunks.model';
 import { hubBoardChunksKey, lensedKey } from './query-keys';
 import { injectProjectFilter } from './project-filter';
-import { fromBoardPage, fromGraphProgressNode, fromRunnerClaimChunk } from './chunks.translate';
+import { fromBoardPage, fromBoardSummary, fromGraphProgressNode, fromRunnerClaimChunk } from './chunks.translate';
 
 /**
  * The board's chunk list as one query, for the project `project` names (`null` for the whole tenant): `GET
@@ -49,6 +49,25 @@ export function runnerChunksQueryOptions() {
     ...boardChunksQueryOptions(null),
     select: (read: BoardChunksRead) => ({ chunks: read.chunks.map(fromRunnerClaimChunk) }),
   };
+}
+
+/** Domain observer over the same lensed cache as the remaining wire consumers. */
+export function domainBoardChunksQueryOptions(project: string | null) {
+  return {
+    ...boardChunksQueryOptions(project),
+    select: (read: BoardChunksRead) => ({
+      chunks: read.chunks.map(fromBoardSummary),
+      pages: read.pages.map(fromBoardPage),
+    }),
+  };
+}
+
+export function injectDomainBoardChunksQuery() {
+  const projectFilter = injectProjectFilter();
+  return injectQuery(() => ({
+    ...domainBoardChunksQueryOptions(projectFilter()),
+    refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
+  }));
 }
 
 /**

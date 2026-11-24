@@ -17,7 +17,7 @@ import {
   stubError,
   stubHubClient,
 } from 'fleet/testing';
-import { boardChunksQueryOptions, injectHubBoardChunksQuery, runnerChunksQueryOptions } from './chunks.query';
+import { boardChunksQueryOptions, domainBoardChunksQueryOptions, injectHubBoardChunksQuery, runnerChunksQueryOptions } from './chunks.query';
 import type { BoardChunksRead } from './chunks.model';
 
 @Component({
@@ -120,6 +120,25 @@ describe('injectHubBoardChunksQuery', () => {
     });
     expect(client.getQueryData(board.queryKey)).toEqual(raw);
     expect(stub.forRoute('/api/chunks', 'GET')).toHaveLength(1);
+  });
+
+  it('projects board summaries and metadata without changing the lensed raw cache', async () => {
+    const policy = { done_since: '2026-11-01T00:00:00Z', floor: 3, window_seconds: 7200 };
+    const row = { ...chunk('ch_1'), terminal: true, promotable: false };
+    stub = stubHubClient({
+      'GET /api/chunks': () => ({ chunks: [row], next_cursor: null, board_done_policy: policy }),
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const legacy = boardChunksQueryOptions('alpha');
+    const domain = domainBoardChunksQueryOptions('alpha');
+    const raw = await client.fetchQuery(legacy);
+    expect(domain.queryKey).toEqual(legacy.queryKey);
+    expect(domain.select(raw)).toMatchObject({
+      chunks: [{ chunk_id: 'ch_1', terminal: true, promotable: false, laneStatus: { kind: 'ready' } }],
+      pages: [{ next_cursor: null, board_done_policy: policy }],
+    });
+    expect(domain.select(raw).pages[0]).not.toHaveProperty('chunks');
+    expect(client.getQueryData(legacy.queryKey)).toEqual(raw);
   });
 
   it('drains every page of a multi-page response and concatenates them in order', async () => {

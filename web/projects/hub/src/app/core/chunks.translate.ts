@@ -1,6 +1,7 @@
 import type { hubApi } from 'fleet';
+import { fromFlowState } from 'fleet';
 import { laneStatus } from 'fleet/shell';
-import type { BoardPageMetadata, GraphProgressNode, GraphProgressState, RunnerClaimChunk } from './chunks.domain';
+import type { BoardPageMetadata, BoardSummary, GraphProgressNode, GraphProgressState, RunnerClaimChunk } from './chunks.domain';
 
 export function fromRunnerClaimChunk(chunk: hubApi.ChunkSummary): RunnerClaimChunk {
   return {
@@ -13,6 +14,29 @@ export function fromRunnerClaimChunk(chunk: hubApi.ChunkSummary): RunnerClaimChu
     workspace_id: chunk.workspace_id,
     project_id: chunk.project_id,
     project_slug: chunk.project_slug,
+  };
+}
+
+export function fromBoardSummary(chunk: hubApi.ChunkSummary): BoardSummary {
+  return {
+    ...fromRunnerClaimChunk(chunk),
+    status: chunk.status,
+    awaiting_external_merge: chunk.awaiting_external_merge,
+    blocked: chunk.blocked && { ...chunk.blocked },
+    cost: { ...chunk.cost },
+    completed_at: chunk.completed_at,
+    flow_places: chunk.flow_places.map((place) => ({ ...place, state: fromFlowState(place.state) })),
+    graph_id: chunk.graph_id,
+    graph_name: chunk.graph_name,
+    graphProgress: chunk.graph_progress.map(fromGraphProgressNode),
+    landed_repos: chunk.landed_repos.map((repo) => ({ ...repo })),
+    open_prs: chunk.open_prs.map((pr) => ({ ...pr })),
+    project_name: chunk.project_name,
+    promotable: chunk.promotable,
+    runner_name: chunk.runner_name,
+    terminal: chunk.terminal,
+    urgency: chunk.urgency && { ...chunk.urgency },
+    work_refs: chunk.work_refs.map((ref) => ({ ...ref })),
   };
 }
 
