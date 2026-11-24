@@ -10,8 +10,8 @@ from collections.abc import Mapping
 from blizzard.foundation.registry.internal.recording import Kind, RecordingRegistry
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.flow_driver import StepWake
+from blizzard.hub.domain.cadence.services import CadenceAttention, CadenceReading
 from blizzard.hub.domain.delivery.lines import FlowLineFactory
-from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.open_tenants import OpenTenants
 
 #: Each legacy key the hub registry declares (a class or a callable alias), and the area that owns it until adopted.
@@ -19,7 +19,8 @@ LEGACY_INVENTORY: Mapping[object, str] = {
     OpenTenants: "hub lifecycle",
     ActionLoop: "hub lifecycle",
     StepWake: "hub lifecycle",
-    GardenProposalDeliveryResolution: "garden authoring",
+    CadenceAttention: "cadence",
+    CadenceReading: "cadence",
     FlowLineFactory: "flow execution",
 }
 

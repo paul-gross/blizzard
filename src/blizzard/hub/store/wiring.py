@@ -79,15 +79,11 @@ from blizzard.hub.tenancy import STORE_UNAVAILABLE, StoreScope
 
 #: Every other tenant adapter built as a service over the tenant's connections (one also takes the link port).
 _TENANT_SERVICES: tuple[type[Any], ...] = (
-    GardenProposalStore,
-    GardenProposalClosureStore,
     TranscriptSegmentStore,
     TranscriptEventStore,
     AnalyticsEventQueryStore,
     AnalyticsOperationalStore,
     ErrandRunsStore,
-    FindingSetStore,
-    RunContextStore,
     GardenDeliveryStore,
     ReviewFindingsStore,
     GardenTrendStore,
@@ -113,11 +109,19 @@ class StoreRefs:
 #: The tenant services a legacy-bridge alias targets, registered apart so their ``Ref`` is handed back.
 _TENANT_ALIASED: tuple[type[Any], ...] = (
     HubTransactions,
+    CadenceStore,
+    InvitationStore,
+)
+
+#: The garden authoring adapters, whose ``Ref`` the garden area aliases its ports onto.
+_GARDEN_AUTHORING_SERVICES: tuple[type[Any], ...] = (
     ScopeStore,
     RoutineStore,
     RoutineScopeStore,
-    CadenceStore,
-    InvitationStore,
+    GardenProposalStore,
+    GardenProposalClosureStore,
+    FindingSetStore,
+    RunContextStore,
 )
 
 #: The configured-record adapters, whose ``Ref`` the config area aliases its ports onto.
@@ -184,6 +188,41 @@ def register_chunk_operations(registry: Registry) -> ChunkOperationsRefs:
 def register_chunk_operations_absent(registry: Registry) -> None:
     """Declare the chunk operations' adapters absent, for the store-free graph."""
     for missing in (ChunkStores, WorkItemStore, FlowStore):
+        registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
+
+
+@adapter_model
+@dataclass(frozen=True)
+class GardenAuthoringRefs:
+    """The ``Ref`` of each garden authoring adapter, named for the garden area's port family it fills."""
+
+    scopes: Ref[ScopeStore]
+    routines: Ref[RoutineStore]
+    routine_scopes: Ref[RoutineScopeStore]
+    proposals: Ref[GardenProposalStore]
+    closures: Ref[GardenProposalClosureStore]
+    finding_sets: Ref[FindingSetStore]
+    run_contexts: Ref[RunContextStore]
+
+
+def register_garden_authoring(registry: Registry) -> GardenAuthoringRefs:
+    """Declare the tenant's garden authoring adapters, handing back the ``Ref`` of each, which the garden area's ports
+    alias."""
+    refs = StoreRefs({each: registry.service(each, lifetime=Lifetime.TENANT) for each in _GARDEN_AUTHORING_SERVICES})
+    return GardenAuthoringRefs(
+        scopes=refs.of(ScopeStore),
+        routines=refs.of(RoutineStore),
+        routine_scopes=refs.of(RoutineScopeStore),
+        proposals=refs.of(GardenProposalStore),
+        closures=refs.of(GardenProposalClosureStore),
+        finding_sets=refs.of(FindingSetStore),
+        run_contexts=refs.of(RunContextStore),
+    )
+
+
+def register_garden_authoring_absent(registry: Registry) -> None:
+    """Declare the tenant's garden authoring adapters absent, for the store-free graph."""
+    for missing in _GARDEN_AUTHORING_SERVICES:
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
 
 

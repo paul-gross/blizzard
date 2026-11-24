@@ -15,12 +15,13 @@ import httpx2
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.platform_tracing import wiring as platform_tracing_wiring
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing
-from blizzard.foundation.registry.interface import port
+from blizzard.foundation.registry.interface import Ref, port
 from blizzard.foundation.registry.internal.translation import HUB_LIFETIMES, build_container
 from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import OwnedChild, Resolver, ScopeValue, ScopeValues, supply
 from blizzard.foundation.roles import collaborator
 from blizzard.hub.api import wiring as api
+from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.auth import wiring as auth
 from blizzard.hub.auth.wiring import BorrowedOAuthClient
@@ -114,7 +115,7 @@ def register_hub(
         findings.register(registry, store.register_findings(registry))
         graph_area.register(registry, store.register_graphs(registry))
         _register_urgency(registry)
-        garden_area.register(registry)
+        _register_garden(registry, formats=api.register(registry))
         cadence_area.register(registry)
         _register_config(registry)
         _register_projects(registry)
@@ -123,7 +124,6 @@ def register_hub(
         live_config.register(registry)
         forge.register_tenant(registry)
         work_sources.register(registry)
-        api.register(registry)
     else:
         register_legacy_absent(registry)
         store.register_chunk_operations_absent(registry)
@@ -138,6 +138,7 @@ def register_hub(
         graph_area.register_absent(registry)
         store.register_urgency_absent(registry)
         urgency_area.register_absent(registry)
+        store.register_garden_authoring_absent(registry)
         garden_area.register_absent(registry)
         cadence_area.register_absent(registry)
         store.register_config_absent(registry)
@@ -190,6 +191,23 @@ def _register_fleet(registry: LegacyRegistry, *, versions: bool) -> None:
     else:
         api.register_version_window_absent(registry)
         execution.register(registry, versions=None)
+
+
+def _register_garden(registry: LegacyRegistry, *, formats: Ref[GardenFormats]) -> None:
+    """The garden authoring adapters, and the garden area's ports and services over them and the API edge's artifact
+    formats."""
+    refs = store.register_garden_authoring(registry)
+    garden_area.register(
+        registry,
+        scopes=refs.scopes,
+        routines=refs.routines,
+        routine_scopes=refs.routine_scopes,
+        run_contexts=refs.run_contexts,
+        proposals=refs.proposals,
+        closures=refs.closures,
+        finding_sets=refs.finding_sets,
+        formats=formats,
+    )
 
 
 def _register_urgency(registry: LegacyRegistry) -> None:
