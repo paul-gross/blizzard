@@ -7451,10 +7451,14 @@
         "type": "object"
       },
       "RunnerAuthSessionView": {
-        "description": "An own-identity read (``GET /api/auth/session``): whether the human surface is gated\nat all, and if so the signed-in hub username. ``auth_enabled`` false is a ``none``-mode hub, whose\nsurface is authless; ``username`` is ``None`` when gated but no valid session is presented.",
+        "description": "An own-identity read (``GET /api/auth/session``): whether the human surface is gated\nat all, and if so the signed-in hub username. ``auth_enabled`` false is a ``none``-mode hub, whose\nsurface is authless; ``username`` is ``None`` when gated but no valid session is presented.\n``superuser`` is whether the resolved identity holds superuser authority \u2014 the same judgment the\nsuperuser gate makes, so the page never re-derives it from a role.",
         "properties": {
           "auth_enabled": {
             "title": "Auth Enabled",
+            "type": "boolean"
+          },
+          "superuser": {
+            "title": "Superuser",
             "type": "boolean"
           },
           "username": {
@@ -7471,7 +7475,8 @@
         },
         "required": [
           "auth_enabled",
-          "username"
+          "username",
+          "superuser"
         ],
         "title": "RunnerAuthSessionView",
         "type": "object"

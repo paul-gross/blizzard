@@ -15,7 +15,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
-from blizzard.auth_core import Role
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.origin import Origin
 from blizzard.foundation.platform_tracing.attributes import annotate_caller
@@ -28,6 +27,7 @@ from blizzard.runner.auth.session import (
     CookieNames,
     RunnerSession,
     SessionCookie,
+    is_superuser,
     resolve_human_session,
 )
 from blizzard.runner.auth.validate import FederationToken, FederationTokenError
@@ -255,7 +255,7 @@ def superuser_required_response(request: Request, exc: Exception) -> JSONRespons
 
 def require_superuser(session: Annotated[RunnerSession, Depends(require_human_api)]) -> RunnerSession:
     """Require human superuser authority without changing the other human-lane gates."""
-    if session.role is not Role.SUPERUSER:
+    if not is_superuser(session):
         raise SuperuserRequired
     return session
 
@@ -370,10 +370,13 @@ def logout(request: Request, response: Response) -> Response:
 class RunnerAuthSessionView(BaseModel):
     """An own-identity read (``GET /api/auth/session``): whether the human surface is gated
     at all, and if so the signed-in hub username. ``auth_enabled`` false is a ``none``-mode hub, whose
-    surface is authless; ``username`` is ``None`` when gated but no valid session is presented."""
+    surface is authless; ``username`` is ``None`` when gated but no valid session is presented.
+    ``superuser`` is whether the resolved identity holds superuser authority — the same judgment the
+    superuser gate makes, so the page never re-derives it from a role."""
 
     auth_enabled: bool
     username: str | None
+    superuser: bool
 
 
 @router.get("/session", response_model=RunnerAuthSessionView)
@@ -383,10 +386,14 @@ def read_session(request: Request) -> RunnerAuthSessionView:
     surface is authless; under oauth it carries the signed-in username, or ``None`` when none rode
     along."""
     lane = HumanLane(request)
-    if not lane.gated:
-        return RunnerAuthSessionView(auth_enabled=False, username=None)
     session = lane.session
-    return RunnerAuthSessionView(auth_enabled=True, username=session.username if session is not None else None)
+    if not lane.gated:
+        return RunnerAuthSessionView(auth_enabled=False, username=None, superuser=is_superuser(session))
+    return RunnerAuthSessionView(
+        auth_enabled=True,
+        username=session.username if session is not None else None,
+        superuser=is_superuser(session),
+    )
 
 
 HumanSession = Annotated[RunnerSession, Depends(require_human_session)]

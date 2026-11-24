@@ -1,8 +1,17 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource, runnerApi, runnerClient } from 'fleet';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
+import {
+  EVENT_SOURCE_FACTORY,
+  type EventSourceFactory,
+  type FleetEventSource,
+  runnerApi,
+  runnerClient,
+} from 'fleet';
 import { settle, stubError, stubRunnerClient } from 'fleet/testing';
 import { SessionRecovery } from '../core/identity/session-recovery';
 import { vi } from 'vitest';
@@ -46,7 +55,11 @@ function refusedReads(detail: string): RunnerRoutes {
  * every other read is a no-session 401. */
 const NO_SESSION: RunnerRoutes = {
   ...refusedReads('no session'),
-  'GET /api/auth/session': () => ({ auth_enabled: true, username: null }),
+  'GET /api/auth/session': () => ({
+    auth_enabled: true,
+    username: null,
+    superuser: false,
+  }),
   'GET /api/flags': () => ({ flags: {}, overridden: [] }),
 };
 
@@ -54,12 +67,15 @@ const NO_SESSION: RunnerRoutes = {
  * case actually leaves jsdom — see `core/identity/session-recovery.spec.ts`
  * for why each case owns (and ejects) its own registration. */
 async function setUp(stubRoutes: RunnerRoutes) {
-  const factory: EventSourceFactory = () => new FakeEventSource() as unknown as FleetEventSource;
+  const factory: EventSourceFactory = () =>
+    new FakeEventSource() as unknown as FleetEventSource;
   await TestBed.configureTestingModule({
     imports: [App],
     providers: [
       provideZonelessChangeDetection(),
-      provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      provideTanStackQuery(
+        new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+      ),
       provideFlags(runnerFlagsRead),
       provideRouter(routes),
       { provide: EVENT_SOURCE_FACTORY, useValue: factory },
@@ -69,7 +85,9 @@ async function setUp(stubRoutes: RunnerRoutes) {
   const navigateSpy = vi
     .spyOn(recovery as unknown as { navigate(url: string): void }, 'navigate')
     .mockImplementation(() => undefined);
-  const interceptorId = runnerClient.interceptors.response.use((response, request) => recovery.handle(response, request));
+  const interceptorId = runnerClient.interceptors.response.use(
+    (response, request) => recovery.handle(response, request),
+  );
   const stub = stubRunnerClient(stubRoutes);
   return {
     recovery,
@@ -100,7 +118,11 @@ describe('runner App session-recovery fork', () => {
   it('renders app-panel through an upstream 401 whose session resolves a username', async () => {
     const { restore: r } = await setUp({
       ...refusedReads('upstream'),
-      'GET /api/auth/session': () => ({ auth_enabled: true, username: 'alice' }),
+      'GET /api/auth/session': () => ({
+        auth_enabled: true,
+        username: 'alice',
+        superuser: false,
+      }),
     });
     restore = r;
 
@@ -119,10 +141,16 @@ describe('runner App session-recovery fork', () => {
     restore = r;
 
     // First no-session 401: mark set, the (mocked) bounce is "attempted".
-    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
+      path: { runner_id: 'rn_1' },
+      throwOnError: false,
+    });
     expect(recovery.recovering()).toBe(false);
     // A further no-session 401 while the mark still stands: sets `recovering`.
-    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
+      path: { runner_id: 'rn_1' },
+      throwOnError: false,
+    });
     expect(recovery.recovering()).toBe(true);
 
     const fixture = TestBed.createComponent(App);
@@ -137,15 +165,23 @@ describe('runner App session-recovery fork', () => {
     const { recovery, navigateSpy, restore: r } = await setUp(NO_SESSION);
     restore = r;
 
-    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
-    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
+      path: { runner_id: 'rn_1' },
+      throwOnError: false,
+    });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
+      path: { runner_id: 'rn_1' },
+      throwOnError: false,
+    });
     expect(recovery.recovering()).toBe(true);
     expect(navigateSpy).toHaveBeenCalledTimes(1);
 
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
-    el.querySelector<HTMLButtonElement>('[data-testid="session-recovery-retry"]')?.click();
+    el.querySelector<HTMLButtonElement>(
+      '[data-testid="session-recovery-retry"]',
+    )?.click();
     await fixture.whenStable();
 
     expect(navigateSpy).toHaveBeenCalledTimes(2);
@@ -159,34 +195,52 @@ describe('runner App session-recovery fork', () => {
     const pendingSession = new Promise<Response>((resolve) => {
       resolveSession = () =>
         resolve(
-          new Response(JSON.stringify({ auth_enabled: true, username: null }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
+          new Response(
+            JSON.stringify({
+              auth_enabled: true,
+              username: null,
+              superuser: false,
+            }),
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          ),
         );
     });
 
-    const factory: EventSourceFactory = () => new FakeEventSource() as unknown as FleetEventSource;
+    const factory: EventSourceFactory = () =>
+      new FakeEventSource() as unknown as FleetEventSource;
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideTanStackQuery(
+          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+        ),
         provideFlags(runnerFlagsRead),
         provideRouter(routes),
         { provide: EVENT_SOURCE_FACTORY, useValue: factory },
       ],
     }).compileComponents();
     const recovery = TestBed.inject(SessionRecovery);
-    vi.spyOn(recovery as unknown as { navigate(url: string): void }, 'navigate').mockImplementation(() => undefined);
-    const interceptorId = runnerClient.interceptors.response.use((response, request) => recovery.handle(response, request));
+    vi.spyOn(
+      recovery as unknown as { navigate(url: string): void },
+      'navigate',
+    ).mockImplementation(() => undefined);
+    const interceptorId = runnerClient.interceptors.response.use(
+      (response, request) => recovery.handle(response, request),
+    );
     const previousConfig = runnerClient.getConfig();
     runnerClient.setConfig({
       baseUrl: 'http://localhost',
       fetch: (async (input: Request) => {
         const path = new URL(input.url).pathname;
         if (path === '/api/auth/session') return pendingSession;
-        if (path === '/api/flags') return new Response(JSON.stringify({ flags: {}, overridden: [] }), { status: 200 });
+        if (path === '/api/flags')
+          return new Response(JSON.stringify({ flags: {}, overridden: [] }), {
+            status: 200,
+          });
         return new Response(JSON.stringify({ detail: 'not authenticated' }), {
           status: 401,
           headers: { 'Content-Type': 'application/json' },
@@ -200,7 +254,10 @@ describe('runner App session-recovery fork', () => {
 
     // Fire-and-forget — the shape a concurrent query's own interceptor call
     // takes, never awaited by the test body itself.
-    void runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
+    void runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
+      path: { runner_id: 'rn_1' },
+      throwOnError: false,
+    });
 
     resolveSession();
     // Exercised directly (not just via `afterEach`), mirroring exactly what
@@ -211,6 +268,8 @@ describe('runner App session-recovery fork', () => {
     await restore();
     restore = undefined;
 
-    expect(sessionStorage.getItem('blizzard.runner.session-renewal-attempted')).not.toBeNull();
+    expect(
+      sessionStorage.getItem('blizzard.runner.session-renewal-attempted'),
+    ).not.toBeNull();
   });
 });

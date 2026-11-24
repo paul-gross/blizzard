@@ -5,7 +5,9 @@ import { lacksSession, resolvesUser, signedInUsername } from './session.domain';
 
 describe('signedInUsername', () => {
   it('reads the username of a signed-in session', () => {
-    expect(signedInUsername(runnerSession({ username: 'alice' }))).toBe('alice');
+    expect(signedInUsername(runnerSession({ username: 'alice' }))).toBe(
+      'alice',
+    );
   });
 
   it('reads null while signed out — auth on, no username', () => {
@@ -13,7 +15,11 @@ describe('signedInUsername', () => {
   });
 
   it('reads null with auth off, whatever the username', () => {
-    expect(signedInUsername(runnerSession({ auth_enabled: false, username: 'alice' }))).toBeNull();
+    expect(
+      signedInUsername(
+        runnerSession({ auth_enabled: false, username: 'alice' }),
+      ),
+    ).toBeNull();
   });
 
   it('reads null before the session resolves', () => {
@@ -33,7 +39,15 @@ describe('resolvesUser and lacksSession', () => {
   });
 
   it('an authless surface neither resolves a user nor lacks a session', () => {
-    expect(resolvesUser(runnerSession({ auth_enabled: false, username: null }))).toBe(false);
-    expect(lacksSession(runnerSession({ auth_enabled: false, username: null }))).toBe(false);
+    expect(
+      resolvesUser(
+        runnerSession({ auth_enabled: false, username: null, superuser: true }),
+      ),
+    ).toBe(false);
+    expect(
+      lacksSession(
+        runnerSession({ auth_enabled: false, username: null, superuser: true }),
+      ),
+    ).toBe(false);
   });
 });

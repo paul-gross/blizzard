@@ -119,6 +119,12 @@ IMPLICIT_SESSION = RunnerSession(
 )
 
 
+def is_superuser(session: RunnerSession | None) -> bool:
+    """Whether ``session`` carries superuser authority — the one judgment the superuser gate and the
+    session read share. ``None`` (gated, with no session presented) is never a superuser."""
+    return session is not None and session.role is Role.SUPERUSER
+
+
 def resolve_human_session(
     *, socket_peer: bool, gated: Callable[[], bool], presented: Callable[[], RunnerSession | None]
 ) -> RunnerSession | None:

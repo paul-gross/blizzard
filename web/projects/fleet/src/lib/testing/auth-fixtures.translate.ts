@@ -1,4 +1,11 @@
-import { type FlagsResponse, type MeResponse, type MeTenant, Permission, type ProviderSummary, Role } from '../api/hub';
+import {
+  type FlagsResponse,
+  type MeResponse,
+  type MeTenant,
+  Permission,
+  type ProviderSummary,
+  Role,
+} from '../api/hub';
 import type { RunnerAuthSessionView } from '../api/runner';
 
 /** The operator's permissions in its tenant. */
@@ -26,14 +33,29 @@ export const OPERATOR_ME_RESPONSE: MeResponse = {
   display_name: 'operator',
   role: Role.ADMIN,
   permissions: OPERATOR_PERMISSIONS,
-  assignable_roles: Object.values(Role).filter((role) => role !== Role.SUPERUSER),
-  tenants: [{ tenant_id: 'ten_operator', name: 'operator', role: Role.ADMIN, permissions: OPERATOR_PERMISSIONS }],
+  assignable_roles: Object.values(Role).filter(
+    (role) => role !== Role.SUPERUSER,
+  ),
+  tenants: [
+    {
+      tenant_id: 'ten_operator',
+      name: 'operator',
+      role: Role.ADMIN,
+      permissions: OPERATOR_PERMISSIONS,
+    },
+  ],
   hub_admin: true,
 };
 
 /** A `GET /api/me` membership — an `admin` of tenant `ten_a`, `Acme` — with `overrides` applied. */
 export function meTenant(overrides: Partial<MeTenant> = {}): MeTenant {
-  return { tenant_id: 'ten_a', name: 'Acme', role: Role.ADMIN, permissions: [Permission.FLEET_VIEW], ...overrides };
+  return {
+    tenant_id: 'ten_a',
+    name: 'Acme',
+    role: Role.ADMIN,
+    permissions: [Permission.FLEET_VIEW],
+    ...overrides,
+  };
 }
 
 /** A `GET /api/me` answer — a `contributor` holding no membership — with `overrides` applied. */
@@ -52,16 +74,32 @@ export function meResponse(overrides: Partial<MeResponse> = {}): MeResponse {
 }
 
 /** One `GET /api/auth/providers` entry — GitHub — with `overrides` applied. */
-export function providerSummary(overrides: Partial<ProviderSummary> = {}): ProviderSummary {
-  return { name: 'github', display_name: 'GitHub', type: 'github', ...overrides };
+export function providerSummary(
+  overrides: Partial<ProviderSummary> = {},
+): ProviderSummary {
+  return {
+    name: 'github',
+    display_name: 'GitHub',
+    type: 'github',
+    ...overrides,
+  };
 }
 
 /** A `GET /api/flags` answer — no flag set, none overridden — with `overrides` applied. */
-export function flagsResponse(overrides: Partial<FlagsResponse> = {}): FlagsResponse {
+export function flagsResponse(
+  overrides: Partial<FlagsResponse> = {},
+): FlagsResponse {
   return { flags: {}, overridden: [], ...overrides };
 }
 
 /** A runner `GET /api/auth/session` answer — an oauth-mode hub with `alice` signed in — with `overrides` applied. */
-export function runnerAuthSessionView(overrides: Partial<RunnerAuthSessionView> = {}): RunnerAuthSessionView {
-  return { auth_enabled: true, username: 'alice', ...overrides };
+export function runnerAuthSessionView(
+  overrides: Partial<RunnerAuthSessionView> = {},
+): RunnerAuthSessionView {
+  return {
+    auth_enabled: true,
+    username: 'alice',
+    superuser: false,
+    ...overrides,
+  };
 }

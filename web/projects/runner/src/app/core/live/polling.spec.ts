@@ -1,8 +1,24 @@
-import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  provideZonelessChangeDetection,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { QueryClient, injectQuery, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, injectChunkDetailQuery, runnerClient } from 'fleet';
-import { type RequestClientStub, runnerDashboardView, stubRunnerClient } from 'fleet/testing';
+import {
+  QueryClient,
+  injectQuery,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
+import {
+  RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
+  injectChunkDetailQuery,
+  runnerClient,
+} from 'fleet';
+import {
+  type RequestClientStub,
+  runnerDashboardView,
+  stubRunnerClient,
+} from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { injectRunnerSessionQuery } from '../identity/auth.query';
@@ -34,7 +50,7 @@ class PollingHost {
  * and chunk-detail's backstop is gated on a selection this host never
  * makes, so it never even issues its one initial read.
  */
-describe('the panel\'s poll floors, idle and unselected', () => {
+describe("the panel's poll floors, idle and unselected", () => {
   let stub: RequestClientStub | undefined;
 
   afterEach(() => {
@@ -47,13 +63,19 @@ describe('the panel\'s poll floors, idle and unselected', () => {
     stub = stubRunnerClient({
       'GET /runners/{runner_id}/api/dashboard': () => runnerDashboardView(),
       'GET /runners/{runner_id}/api/leases': () => ({ items: [] }),
-      'GET /api/auth/session': () => ({ auth_enabled: true, username: 'alice' }),
+      'GET /api/auth/session': () => ({
+        auth_enabled: true,
+        username: 'alice',
+        superuser: false,
+      }),
     });
     await TestBed.configureTestingModule({
       imports: [PollingHost],
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideTanStackQuery(
+          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+        ),
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(PollingHost);
@@ -64,18 +86,32 @@ describe('the panel\'s poll floors, idle and unselected', () => {
     expect(stub.forRoute('/runners/rn_1/api/dashboard', 'GET')).toHaveLength(1);
     expect(stub.forRoute('/runners/rn_1/api/leases', 'GET')).toHaveLength(1);
     expect(stub.forRoute('/api/auth/session', 'GET')).toHaveLength(1);
-    expect(stub.requests.filter((r) => /^\/runners\/rn_1\/api\/chunks\//.test(r.path))).toHaveLength(0);
+    expect(
+      stub.requests.filter((r) =>
+        /^\/runners\/rn_1\/api\/chunks\//.test(r.path),
+      ),
+    ).toHaveLength(0);
 
     // Idle for a window spanning two backstop intervals — no SSE event ever fires.
-    await vi.advanceTimersByTimeAsync(RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS * 2 + 1_000);
+    await vi.advanceTimersByTimeAsync(
+      RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS * 2 + 1_000,
+    );
 
     // Dashboard and leases: the backstop kept firing.
-    expect(stub.forRoute('/runners/rn_1/api/dashboard', 'GET').length).toBeGreaterThanOrEqual(3);
-    expect(stub.forRoute('/runners/rn_1/api/leases', 'GET').length).toBeGreaterThanOrEqual(3);
+    expect(
+      stub.forRoute('/runners/rn_1/api/dashboard', 'GET').length,
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      stub.forRoute('/runners/rn_1/api/leases', 'GET').length,
+    ).toBeGreaterThanOrEqual(3);
     // Session: no refetch interval — just the one mount-time read.
     expect(stub.forRoute('/api/auth/session', 'GET')).toHaveLength(1);
     // Chunk-detail: disabled the whole time — never issued even its first read.
-    expect(stub.requests.filter((r) => /^\/runners\/rn_1\/api\/chunks\//.test(r.path))).toHaveLength(0);
+    expect(
+      stub.requests.filter((r) =>
+        /^\/runners\/rn_1\/api\/chunks\//.test(r.path),
+      ),
+    ).toHaveLength(0);
     expect(fixture.componentInstance.chunkDetail.isPending()).toBe(true);
   });
 });

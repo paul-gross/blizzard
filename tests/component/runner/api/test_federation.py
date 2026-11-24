@@ -77,6 +77,7 @@ class _ClientOptions(TypedDict, total=False):
 class _ClaimOverrides(TypedDict, total=False):
     aud: str
     jti: str
+    role: str
 
 
 def _sign(private_key: rsa.RSAPrivateKey, **claim_overrides: Unpack[_ClaimOverrides]) -> str:
@@ -324,14 +325,16 @@ def test_a_token_without_exp_is_refused_at_the_callback(tmp_path: Path) -> None:
     assert _NAMES.session not in resp.cookies
 
 
-def _bounce_in(client: TestClient, private_key: rsa.RSAPrivateKey, *, jti: str, runner_id: str = _RUNNER_ID) -> None:
+def _bounce_in(
+    client: TestClient, private_key: rsa.RSAPrivateKey, *, jti: str, runner_id: str = _RUNNER_ID, role: str = "contributor"
+) -> None:
     """Drive the full SSO bounce so ``client`` holds a live runner session cookie."""
     names = CookieNames(runner_id)
     login_resp = client.get("/api/auth/login?return_to=/", follow_redirects=False)
     state = login_resp.cookies[names.bounce_state]
     client.cookies.set(names.bounce_state, state)
     client.cookies.set(names.bounce_return, "/")
-    token = _sign(private_key, jti=jti, aud=runner_id)
+    token = _sign(private_key, jti=jti, aud=runner_id, role=role)
     callback_resp = client.post(
         "/api/auth/callback",
         content=f"token={token}&state={state}",
@@ -384,7 +387,19 @@ def test_session_read_reports_the_signed_in_username_under_oauth(tmp_path: Path)
 
     resp = client.get("/api/auth/session")
     assert resp.status_code == 200
-    assert resp.json() == {"auth_enabled": True, "username": "alice"}
+    assert resp.json() == {"auth_enabled": True, "username": "alice", "superuser": False}
+
+
+def test_session_read_reports_a_superuser_session_under_oauth(tmp_path: Path) -> None:
+    """A signed-in session whose resolved role is superuser reads `superuser` true — the
+    same judgment the superuser gate makes."""
+    private_key, jwk = _keypair()
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
+    _bounce_in(client, private_key, jti="jti-session-su", role="superuser")
+
+    resp = client.get("/api/auth/session")
+    assert resp.status_code == 200
+    assert resp.json() == {"auth_enabled": True, "username": "alice", "superuser": True}
 
 
 def test_session_read_reports_no_username_without_a_session_under_oauth(tmp_path: Path) -> None:
@@ -394,7 +409,7 @@ def test_session_read_reports_no_username_without_a_session_under_oauth(tmp_path
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
     resp = client.get("/api/auth/session")
     assert resp.status_code == 200
-    assert resp.json() == {"auth_enabled": True, "username": None}
+    assert resp.json() == {"auth_enabled": True, "username": None, "superuser": False}
 
 
 def test_session_read_reports_authless_under_a_none_mode_hub(tmp_path: Path) -> None:
@@ -403,7 +418,7 @@ def test_session_read_reports_authless_under_a_none_mode_hub(tmp_path: Path) -> 
     client = _build_app(tmp_path, oauth_enabled=False)
     resp = client.get("/api/auth/session")
     assert resp.status_code == 200
-    assert resp.json() == {"auth_enabled": False, "username": None}
+    assert resp.json() == {"auth_enabled": False, "username": None, "superuser": True}
 
 
 # --- forwarded-header trust behind a reverse proxy --------------------

@@ -1,9 +1,25 @@
-import { type Provider, provideZonelessChangeDetection, signal } from '@angular/core';
+import {
+  type Provider,
+  provideZonelessChangeDetection,
+  signal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
 import { type SseStatus } from 'fleet';
-import { type RequestClientStub, hiddenAtContainerWidth, hostEnvironmentView, hostRunnerView, runnerAuthSessionView, settle, stubError, stubRunnerClient } from 'fleet/testing';
+import {
+  type RequestClientStub,
+  hiddenAtContainerWidth,
+  hostEnvironmentView,
+  hostRunnerView,
+  runnerAuthSessionView,
+  settle,
+  stubError,
+  stubRunnerClient,
+} from 'fleet/testing';
 import { RunnerLogout } from '../../core/identity/runner-logout';
 import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';
 import { vi } from 'vitest';
@@ -16,7 +32,10 @@ import { runnerFlagsRead } from '../../core/flags.query';
  * `connection` fold without opening a real stream — the header
  * only ever reads `status`/`authFailed`, never starts or restarts it. */
 function fakeLiveUpdates(status: SseStatus, authFailed = false): Provider {
-  return { provide: RunnerLiveUpdates, useValue: { status: signal(status), authFailed: signal(authFailed) } };
+  return {
+    provide: RunnerLiveUpdates,
+    useValue: { status: signal(status), authFailed: signal(authFailed) },
+  };
 }
 
 type RunnerRoutes = Parameters<typeof stubRunnerClient>[0];
@@ -26,7 +45,11 @@ function headerRoutes(overrides: RunnerRoutes = {}): RunnerRoutes {
   return {
     'GET /api/host/runners': () => ({ items: [] }),
     'GET /api/host/environments': () => ({ workspaces: [] }),
-    'GET /api/auth/session': () => ({ auth_enabled: false, username: null }),
+    'GET /api/auth/session': () => ({
+      auth_enabled: false,
+      username: null,
+      superuser: true,
+    }),
     'GET /api/flags': () => ({ flags: {}, overridden: [] }),
     ...overrides,
   };
@@ -37,7 +60,9 @@ async function render(extraProviders: Provider[] = []) {
     imports: [AppHeader],
     providers: [
       provideZonelessChangeDetection(),
-      provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      provideTanStackQuery(
+        new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+      ),
       provideFlags(runnerFlagsRead),
       provideRouter([]),
       ...extraProviders,
@@ -62,29 +87,41 @@ describe('AppHeader', () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('ok');
+    expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain(
+      'ok',
+    );
   });
 
   it('shows offline in the header when the runner local API is unreachable', async () => {
-    stub = stubRunnerClient(headerRoutes({ 'GET /api/host/runners': () => stubError(503, { detail: 'down' }) }));
+    stub = stubRunnerClient(
+      headerRoutes({
+        'GET /api/host/runners': () => stubError(503, { detail: 'down' }),
+      }),
+    );
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('offline');
+    expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain(
+      'offline',
+    );
   });
 
   it('shows reconnecting… while the live stream retries a drop, even though the host read is ok', async () => {
     const fixture = await render([fakeLiveUpdates('reconnecting')]);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('reconnecting…');
+    expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain(
+      'reconnecting…',
+    );
   });
 
   it('shows degraded once the stream has exhausted its bounded re-arm, even though the host read is ok', async () => {
     const fixture = await render([fakeLiveUpdates('closed', true)]);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('degraded');
+    expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain(
+      'degraded',
+    );
   });
 
   it('folds the host’s runner and environment reads into the header stat cells', async () => {
@@ -92,8 +129,18 @@ describe('AppHeader', () => {
       headerRoutes({
         'GET /api/host/runners': () => ({
           items: [
-            hostRunnerView({ runner_id: 'rn_1', name: 'r-claude', agents_in_use: 1, max_agents: 2 }),
-            hostRunnerView({ runner_id: 'rn_2', name: 'r-chatgpt', agents_in_use: 0, max_agents: 1 }),
+            hostRunnerView({
+              runner_id: 'rn_1',
+              name: 'r-claude',
+              agents_in_use: 1,
+              max_agents: 2,
+            }),
+            hostRunnerView({
+              runner_id: 'rn_2',
+              name: 'r-chatgpt',
+              agents_in_use: 0,
+              max_agents: 1,
+            }),
           ],
         }),
         'GET /api/host/environments': () => ({
@@ -101,11 +148,22 @@ describe('AppHeader', () => {
             {
               workspace_id: 'ws-a',
               items: [
-                hostEnvironmentView({ environment_id: 'alpha', held: true, chunk_id: 'ch_1', runner_id: 'rn_1' }),
+                hostEnvironmentView({
+                  environment_id: 'alpha',
+                  held: true,
+                  chunk_id: 'ch_1',
+                  runner_id: 'rn_1',
+                }),
                 hostEnvironmentView({ environment_id: 'beta', held: false }),
               ],
             },
-            { workspace_id: 'ws-b', items: [hostEnvironmentView({ environment_id: 'gamma' }), hostEnvironmentView({ environment_id: 'delta' })] },
+            {
+              workspace_id: 'ws-b',
+              items: [
+                hostEnvironmentView({ environment_id: 'gamma' }),
+                hostEnvironmentView({ environment_id: 'delta' }),
+              ],
+            },
           ],
         }),
       }),
@@ -113,14 +171,27 @@ describe('AppHeader', () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="stat-envs"]')?.textContent?.trim()).toBe('1/4');
-    expect(el.querySelector('[data-testid="stat-agents"]')?.textContent?.trim()).toBe('1/3');
+    expect(
+      el.querySelector('[data-testid="stat-envs"]')?.textContent?.trim(),
+    ).toBe('1/4');
+    expect(
+      el.querySelector('[data-testid="stat-agents"]')?.textContent?.trim(),
+    ).toBe('1/3');
   });
 
   it('shows the overridden-flags marker in the Runner cell, naming the flags, when the host’s answer overrides any', async () => {
-    stub = stubRunnerClient(headerRoutes({ 'GET /api/flags': () => ({ flags: { alpha: true }, overridden: ['alpha'] }) }));
+    stub = stubRunnerClient(
+      headerRoutes({
+        'GET /api/flags': () => ({
+          flags: { alpha: true },
+          overridden: ['alpha'],
+        }),
+      }),
+    );
     const fixture = await render();
-    const marker = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="conn"] [data-testid="flags-overridden"]');
+    const marker = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-testid="conn"] [data-testid="flags-overridden"]',
+    );
 
     expect(marker).not.toBeNull();
     expect(marker?.getAttribute('title')).toContain('alpha');
@@ -130,7 +201,11 @@ describe('AppHeader', () => {
     stub = stubRunnerClient(headerRoutes());
     const fixture = await render();
 
-    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="flags-overridden"]')).toBeNull();
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '[data-testid="flags-overridden"]',
+      ),
+    ).toBeNull();
   });
 
   it('narrows the header stat cells to the runner the Runner filter names', async () => {
@@ -138,8 +213,18 @@ describe('AppHeader', () => {
       headerRoutes({
         'GET /api/host/runners': () => ({
           items: [
-            hostRunnerView({ runner_id: 'rn_1', name: 'r-claude', agents_in_use: 1, max_agents: 2 }),
-            hostRunnerView({ runner_id: 'rn_2', name: 'r-chatgpt', agents_in_use: 1, max_agents: 1 }),
+            hostRunnerView({
+              runner_id: 'rn_1',
+              name: 'r-claude',
+              agents_in_use: 1,
+              max_agents: 2,
+            }),
+            hostRunnerView({
+              runner_id: 'rn_2',
+              name: 'r-chatgpt',
+              agents_in_use: 1,
+              max_agents: 1,
+            }),
           ],
         }),
         'GET /api/host/environments': () => ({
@@ -147,8 +232,18 @@ describe('AppHeader', () => {
             {
               workspace_id: 'ws-a',
               items: [
-                hostEnvironmentView({ environment_id: 'alpha', held: true, chunk_id: 'ch_1', runner_id: 'rn_1' }),
-                hostEnvironmentView({ environment_id: 'beta', held: true, chunk_id: 'ch_2', runner_id: 'rn_2' }),
+                hostEnvironmentView({
+                  environment_id: 'alpha',
+                  held: true,
+                  chunk_id: 'ch_1',
+                  runner_id: 'rn_1',
+                }),
+                hostEnvironmentView({
+                  environment_id: 'beta',
+                  held: true,
+                  chunk_id: 'ch_2',
+                  runner_id: 'rn_2',
+                }),
                 hostEnvironmentView({ environment_id: 'gamma', held: false }),
               ],
             },
@@ -158,20 +253,32 @@ describe('AppHeader', () => {
     );
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="stat-envs"]')?.textContent?.trim()).toBe('2/3');
-    expect(el.querySelector('[data-testid="stat-agents"]')?.textContent?.trim()).toBe('2/3');
+    expect(
+      el.querySelector('[data-testid="stat-envs"]')?.textContent?.trim(),
+    ).toBe('2/3');
+    expect(
+      el.querySelector('[data-testid="stat-agents"]')?.textContent?.trim(),
+    ).toBe('2/3');
 
     await TestBed.inject(Router).navigateByUrl('/?runner=r-chatgpt');
     await settle(fixture);
 
-    expect(el.querySelector('[data-testid="stat-envs"]')?.textContent?.trim()).toBe('1/3');
-    expect(el.querySelector('[data-testid="stat-agents"]')?.textContent?.trim()).toBe('1/1');
+    expect(
+      el.querySelector('[data-testid="stat-envs"]')?.textContent?.trim(),
+    ).toBe('1/3');
+    expect(
+      el.querySelector('[data-testid="stat-agents"]')?.textContent?.trim(),
+    ).toBe('1/1');
   });
 
   it('carries no pause control — each runner’s sits beside it on the host page', async () => {
     const fixture = await render();
 
-    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="pause-control"]')).toBeNull();
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '[data-testid="pause-control"]',
+      ),
+    ).toBeNull();
   });
 
   it('withholds the header stat cells before the first read resolves, rather than a misleading 0/0', async () => {
@@ -180,7 +287,9 @@ describe('AppHeader', () => {
       imports: [AppHeader],
       providers: [
         provideZonelessChangeDetection(),
-          provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideTanStackQuery(
+          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+        ),
         provideFlags(runnerFlagsRead),
         provideRouter([]),
       ],
@@ -203,7 +312,9 @@ describe('AppHeader', () => {
 
   it('keeps the stat cells withheld while the environments read is still pending, though the runners have landed', async () => {
     let releaseEnvironments!: () => void;
-    const environmentsHeld = new Promise<void>((resolve) => (releaseEnvironments = resolve));
+    const environmentsHeld = new Promise<void>(
+      (resolve) => (releaseEnvironments = resolve),
+    );
     stub = stubRunnerClient(
       headerRoutes({
         'GET /api/host/environments': async () => {
@@ -216,7 +327,9 @@ describe('AppHeader', () => {
       imports: [AppHeader],
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideTanStackQuery(
+          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+        ),
         provideFlags(runnerFlagsRead),
         provideRouter([]),
       ],
@@ -248,20 +361,28 @@ describe('AppHeader', () => {
 
     // The CDK renders the menu into an overlay on `document.body`,
     // outside the fixture's own element.
-    expect(document.body.querySelector('[data-testid="local-panel-appearance"]')).toBeNull();
+    expect(
+      document.body.querySelector('[data-testid="local-panel-appearance"]'),
+    ).toBeNull();
 
     el.querySelector<HTMLElement>('[data-testid="local-panel-menu"]')?.click();
     await fixture.whenStable();
 
     expect(
-      document.body.querySelector('[data-testid="local-panel-menu-panel"] [data-testid="local-panel-appearance"]'),
+      document.body.querySelector(
+        '[data-testid="local-panel-menu-panel"] [data-testid="local-panel-appearance"]',
+      ),
     ).not.toBeNull();
 
-    document.body.querySelector<HTMLElement>('[data-testid="local-panel-appearance"]')?.click();
+    document.body
+      .querySelector<HTMLElement>('[data-testid="local-panel-appearance"]')
+      ?.click();
     await fixture.whenStable();
 
     expect(
-      document.body.querySelector('[data-testid="local-panel-appearance-panel"] [data-testid="viewport-menu-auto"]'),
+      document.body.querySelector(
+        '[data-testid="local-panel-appearance-panel"] [data-testid="viewport-menu-auto"]',
+      ),
     ).not.toBeNull();
   });
 
@@ -270,7 +391,9 @@ describe('AppHeader', () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="local-panel-menu"] fleet-kit-avatar')).not.toBeNull();
+    expect(
+      el.querySelector('[data-testid="local-panel-menu"] fleet-kit-avatar'),
+    ).not.toBeNull();
   });
 
   /*
@@ -282,41 +405,58 @@ describe('AppHeader', () => {
     const withSession = (session: ReturnType<typeof runnerAuthSessionView>) => {
       stub.restore();
       stub = stubRunnerClient(
-        headerRoutes({ 'GET /api/auth/session': () => session, 'POST /api/auth/logout': () => undefined }),
+        headerRoutes({
+          'GET /api/auth/session': () => session,
+          'POST /api/auth/logout': () => undefined,
+        }),
       );
     };
 
     const openMenu = async (fixture: Awaited<ReturnType<typeof render>>) => {
-      (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="local-panel-menu"]')?.click();
+      (fixture.nativeElement as HTMLElement)
+        .querySelector<HTMLElement>('[data-testid="local-panel-menu"]')
+        ?.click();
       await settle(fixture);
-      return document.body.querySelector('[data-testid="local-panel-menu-panel"]')!;
+      return document.body.querySelector(
+        '[data-testid="local-panel-menu-panel"]',
+      )!;
     };
 
     it('carries Log out as a menu item, so it survives the header cell collapsing', async () => {
-      withSession({ auth_enabled: true, username: 'alice' });
+      withSession({ auth_enabled: true, username: 'alice', superuser: false });
       const fixture = await render();
 
-      expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="identity-logout"]')).toBeNull();
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector(
+          '[data-testid="identity-logout"]',
+        ),
+      ).toBeNull();
 
       const panel = await openMenu(fixture);
-      const items = Array.from(panel.querySelectorAll('[role="menuitem"]')).map((i) =>
-        i.getAttribute('data-testid'),
+      const items = Array.from(panel.querySelectorAll('[role="menuitem"]')).map(
+        (i) => i.getAttribute('data-testid'),
       );
       expect(items).toEqual(['local-panel-logout', 'local-panel-appearance']);
     });
 
     it('logs out through that item', async () => {
-      withSession({ auth_enabled: true, username: 'alice' });
+      withSession({ auth_enabled: true, username: 'alice', superuser: false });
       const reload = vi
-        .spyOn(RunnerLogout.prototype as unknown as { reload: () => void }, 'reload')
+        .spyOn(
+          RunnerLogout.prototype as unknown as { reload: () => void },
+          'reload',
+        )
         .mockImplementation(() => undefined);
       const fixture = await render();
       const panel = await openMenu(fixture);
 
-      panel.querySelector<HTMLElement>('[data-testid="local-panel-logout"]')?.click();
+      panel
+        .querySelector<HTMLElement>('[data-testid="local-panel-logout"]')
+        ?.click();
       // Triggering an item tears the overlay down mid-flight, so the fixture
       // never restabilizes — plain macrotask ticks rather than `settle`.
-      for (let i = 0; i < 8; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+      for (let i = 0; i < 8; i += 1)
+        await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(stub.forRoute('/api/auth/logout', 'POST')).toHaveLength(1);
       expect(reload).toHaveBeenCalledTimes(1);
@@ -326,28 +466,42 @@ describe('AppHeader', () => {
       stub.restore();
       stub = stubRunnerClient(
         headerRoutes({
-          'GET /api/auth/session': () => ({ auth_enabled: true, username: 'alice' }),
+          'GET /api/auth/session': () => ({
+            auth_enabled: true,
+            username: 'alice',
+            superuser: false,
+          }),
           'POST /api/auth/logout': () => stubError(500, { detail: 'nope' }),
         }),
       );
       const fixture = await render();
       const el = fixture.nativeElement as HTMLElement;
-      expect(el.querySelector('[data-testid="local-panel-logout-error"]')).toBeNull();
+      expect(
+        el.querySelector('[data-testid="local-panel-logout-error"]'),
+      ).toBeNull();
 
       await TestBed.inject(RunnerLogout).logout();
       await settle(fixture);
 
       expect(el.querySelectorAll('[role="alert"]')).toHaveLength(1);
-      expect(el.querySelector('[data-testid="local-panel-logout-error"]')).not.toBeNull();
-      expect(el.querySelector('[data-testid="identity-logout-error"]')).toBeNull();
+      expect(
+        el.querySelector('[data-testid="local-panel-logout-error"]'),
+      ).not.toBeNull();
+      expect(
+        el.querySelector('[data-testid="identity-logout-error"]'),
+      ).toBeNull();
     });
 
     it('offers no Log out under a none-mode hub, where the surface is authless', async () => {
-      withSession({ auth_enabled: false, username: null });
+      withSession({ auth_enabled: false, username: null, superuser: true });
       const panel = await openMenu(await render());
 
-      expect(panel.querySelector('[data-testid="local-panel-logout"]')).toBeNull();
-      expect(panel.querySelector('[data-testid="local-panel-appearance"]')).not.toBeNull();
+      expect(
+        panel.querySelector('[data-testid="local-panel-logout"]'),
+      ).toBeNull();
+      expect(
+        panel.querySelector('[data-testid="local-panel-appearance"]'),
+      ).not.toBeNull();
     });
   });
 
@@ -362,7 +516,10 @@ describe('AppHeader', () => {
    */
   describe('trailing-cluster collapse at narrow header widths', () => {
     const at = (el: HTMLElement, selector: string, width: number) =>
-      hiddenAtContainerWidth(el.querySelector(selector)!, { containerName: 'board-header', width });
+      hiddenAtContainerWidth(el.querySelector(selector)!, {
+        containerName: 'board-header',
+        width,
+      });
 
     beforeEach(() => {
       stub = stubRunnerClient(headerRoutes());
@@ -384,17 +541,24 @@ describe('AppHeader', () => {
       expect(at(el, '[data-testid="local-panel-menu"]', 390)).toBe(false);
     });
 
-    it('steers the cluster\'s shrink into the username, never into the menu', async () => {
+    it("steers the cluster's shrink into the username, never into the menu", async () => {
       const el = (await render()).nativeElement as HTMLElement;
 
-      expect(getComputedStyle(el.querySelector<HTMLElement>('app-identity')!).minWidth).toBe('0px');
-      expect(getComputedStyle(el.querySelector<HTMLElement>('.menu')!).flexShrink).toBe('0');
+      expect(
+        getComputedStyle(el.querySelector<HTMLElement>('app-identity')!)
+          .minWidth,
+      ).toBe('0px');
+      expect(
+        getComputedStyle(el.querySelector<HTMLElement>('.menu')!).flexShrink,
+      ).toBe('0');
     });
 
     it('rides the same named container the header declares, not a viewport media query', async () => {
       const el = (await render()).nativeElement as HTMLElement;
 
-      expect(getComputedStyle(el.querySelector('.mc-header')!).containerName).toBe('board-header');
+      expect(
+        getComputedStyle(el.querySelector('.mc-header')!).containerName,
+      ).toBe('board-header');
       expect(at(el, 'app-identity', 700)).toBe(false);
       expect(at(el, 'app-identity', 699)).toBe(true);
     });
