@@ -8,6 +8,7 @@ from http import HTTPStatus
 from typing import Any
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.collaborators import CliCollaborators
 from blizzard.cli.get_group import GetGroup
@@ -27,6 +28,10 @@ from blizzard.runner.harness.wiring import load_published_harness_bundle, select
 from blizzard.runner.host_config import HostConfigError
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.transcripts.backfill import TranscriptReshipError
+from blizzard.wire.transcript_segment import TranscriptSegmentContentView, TranscriptSegmentIndexView
+
+_SEGMENTS = TypeAdapter(TranscriptSegmentIndexView)
+_SEGMENT = TypeAdapter(TranscriptSegmentContentView)
 
 # The local API's own door override; `traces` and `control` declare the same variable.
 _ENV_LOCAL_API_URL = "BZ_RUNNER_URL"
@@ -55,7 +60,7 @@ def _daemon_options(command: Any) -> Any:
     )(command)
 
 
-def _show(body: dict[str, Any], as_json: bool, view: SegmentIndexLines | SegmentContentLines) -> None:
+def _show(body: Any, as_json: bool, view: SegmentIndexLines | SegmentContentLines) -> None:
     if as_json:
         click.echo(json.dumps(body, indent=2))
         return
@@ -77,8 +82,8 @@ def transcript_list(
     Reads the running runner, so the host must be up. A chunk this runner never ran lists none. Pass a segment id to
     `transcript get` to read it."""
     with RunnerDaemon.reach("transcript list", directory, runner_url, Door.of(ctx), runner) as daemon:
-        body = daemon.get(f"/api/chunks/{chunk_id}/transcripts").json()
-    _show(body, as_json, SegmentIndexLines(body))
+        raw, body = daemon.decode_answer(daemon.get(f"/api/chunks/{chunk_id}/transcripts"), _SEGMENTS)
+    _show(raw, as_json, SegmentIndexLines(body))
 
 
 @transcript_group.command("get")
@@ -110,8 +115,8 @@ def transcript_get(
             f"segment {segment_id} cannot be read here: {resp.json().get('detail', 'unavailable')}"
         )
     resp.raise_for_status()
-    body = resp.json()
-    _show(body, as_json, SegmentContentLines(body))
+    raw, body = daemon.decode_answer(resp, _SEGMENT)
+    _show(raw, as_json, SegmentContentLines(body))
 
 
 @contextmanager

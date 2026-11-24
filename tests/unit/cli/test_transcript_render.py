@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from blizzard.cli.transcript_render import SegmentContentLines, SegmentIndexLines
+from blizzard.wire.transcript_segment import TranscriptSegmentContentView, TranscriptSegmentIndexView
 from tests.support.transcript_bodies import content_body, index_body, tool, turn
 
 
 def _lines(body: dict[str, object]) -> list[str]:
-    return list(SegmentContentLines(body).lines())
+    return list(SegmentContentLines(TranscriptSegmentContentView.model_validate(body)).lines())
 
 
 def test_a_segment_reads_turn_by_turn_with_a_late_result_folded_onto_its_call() -> None:
@@ -103,11 +104,15 @@ def test_an_empty_segment_says_so() -> None:
 
 
 def test_the_index_lists_each_segment_id_first_and_an_empty_one_says_so() -> None:
-    listed = list(SegmentIndexLines(index_body("ch_1", "sg_1", "sg_2")).lines())
+    listed = list(
+        SegmentIndexLines(TranscriptSegmentIndexView.model_validate(index_body("ch_1", "sg_1", "sg_2"))).lines()
+    )
 
     assert (
         listed[0]
         == "sg_1  build  epoch 1  generation 0  turns 0-4  final  321 bytes  claude-code  2026-10-09T12:05:00Z"
     )
     assert listed[1].startswith("sg_2  ")
-    assert list(SegmentIndexLines(index_body("ch_1")).lines()) == ["no transcript segments"]
+    assert list(SegmentIndexLines(TranscriptSegmentIndexView.model_validate(index_body("ch_1"))).lines()) == [
+        "no transcript segments"
+    ]
