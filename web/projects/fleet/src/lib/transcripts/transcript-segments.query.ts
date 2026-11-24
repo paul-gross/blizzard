@@ -83,12 +83,15 @@ export function injectChunkTranscriptsQuery(target: () => DaemonTarget | null, c
     return {
       queryKey: chunkTranscriptsKey(active === null ? '' : targetKeyRoot(active), id),
       enabled: id !== null && active !== null,
-      queryFn: async (): Promise<TranscriptSegmentIndex> => {
+      queryFn: async () => {
         const { data, error, response } = await fetchSegmentIndex(active!, id!);
         if (error) throw new TranscriptFetchError(response?.status ?? 0);
+        return data!;
+      },
+      select: (data: NonNullable<Awaited<ReturnType<typeof fetchSegmentIndex>>['data']>): TranscriptSegmentIndex => {
         return {
-          chunk_id: data!.chunk_id,
-          segments: data!.segments.map((segment) => ({
+          chunk_id: data.chunk_id,
+          segments: data.segments.map((segment) => ({
             segment_id: segment.segment_id,
             node_id: segment.node_id,
             epoch: segment.epoch,
@@ -143,10 +146,12 @@ export function injectChunkTranscriptSegmentQuery(
     return {
       queryKey: chunkTranscriptSegmentKey(active === null ? '' : targetKeyRoot(active), cid, sid, isFinal ?? false),
       enabled: active !== null && cid !== null && sid !== null && isFinal !== null,
-      queryFn: async (): Promise<TranscriptSegmentContent> => {
+      queryFn: async () => {
         const { data, error, response } = await fetchSegment(active!, cid!, sid!);
         if (error) throw new TranscriptFetchError(response?.status ?? 0);
-        const content = data!;
+        return data!;
+      },
+      select: (content: NonNullable<Awaited<ReturnType<typeof fetchSegment>>['data']>): TranscriptSegmentContent => {
         return {
           segment_id: content.segment_id,
           final: content.final,
