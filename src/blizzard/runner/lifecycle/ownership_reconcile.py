@@ -16,7 +16,12 @@ from blizzard.runner.lifecycle.attempt import Attempt, AttemptContext
 from blizzard.runner.lifecycle.model import Fenced, LeaseReconcileMove, TakeoverHolds, lease_reconcile_move
 from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.spawn import SpawnStores
-from blizzard.runner.lifecycle.takeover import IWriteTakeoverRepository, TakeoverCloser, TakeoverCloseScope
+from blizzard.runner.lifecycle.takeover import (
+    IWriteTakeoverRepository,
+    OpenTakeover,
+    TakeoverCloser,
+    TakeoverCloseScope,
+)
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -51,11 +56,12 @@ class OwnershipReconcile:
 
     def run(self) -> None:
         """Reconcile leases, then escalations, then takeovers against the hub's per-chunk views."""
-        self._reconcile_leases()
-        self._reconcile_escalations()
-        self._reconcile_takeovers()
+        takeovers = self.ctx.stores.takeover.open_takeovers()  # one read, shared by all three phases
+        self._reconcile_leases(takeovers)
+        self._reconcile_escalations(takeovers)
+        self._reconcile_takeovers(takeovers)
 
-    def _reconcile_leases(self) -> None:
+    def _reconcile_leases(self, takeovers: list[OpenTakeover]) -> None:
         """Reconcile every active lease against its chunk's view (``lease_reconcile_move``), from
         one ``ctx.chunk_views.get`` per lease. A transport failure leaves the lease as it is."""
         ctx = self.ctx
@@ -63,7 +69,7 @@ class OwnershipReconcile:
         if runner_id is None:
             return  # no route can be judged ours before the first registration — every lease holds
         pause_parked = ctx.stores.pause.pause_parked_lease_ids()  # hoisted: the park guard, one read per tick
-        fenced = Fenced(TakeoverHolds.of(ctx.stores.takeover.open_takeovers()))
+        fenced = Fenced(TakeoverHolds.of(takeovers))
         for lease in ctx.stores.lease_record.list_active_leases():
             try:
                 view = ctx.chunk_views.get(lease.chunk_id)
@@ -88,7 +94,7 @@ class OwnershipReconcile:
             elif move is LeaseReconcileMove.PREEMPT:
                 Attempt(ctx, lease).preempt(via="pull")
 
-    def _reconcile_escalations(self) -> None:
+    def _reconcile_escalations(self, takeovers: list[OpenTakeover]) -> None:
         """Close every open local escalation its chunk's view supersedes, from one
         ``ctx.chunk_views.get`` each; an unreadable chunk leaves it open. Supersession is owned by
         ``blizzard-context:/domain/humans/escalation.md`` §Supersession."""
@@ -96,7 +102,7 @@ class OwnershipReconcile:
         runner_id = registered_runner_id(ctx.identity)
         if runner_id is None:
             return  # supersession reads the route's holder — every escalation stays open until the first registration
-        fenced = Fenced(TakeoverHolds.of(ctx.stores.takeover.open_takeovers()))
+        fenced = Fenced(TakeoverHolds.of(takeovers))
         for escalation in ctx.stores.escalations.open_escalations():
             try:
                 view = ctx.chunk_views.get(escalation.chunk_id)
@@ -118,7 +124,7 @@ class OwnershipReconcile:
                     lease_id=escalation.lease_id,
                 )
 
-    def _reconcile_takeovers(self) -> None:
+    def _reconcile_takeovers(self, takeovers: list[OpenTakeover]) -> None:
         """Close an open takeover whose chunk the hub has ended — one
         ``ctx.chunk_views.get`` each, the same per-tick cache read the other two reconcile
         sweeps make. The takeover fact now authorizes the resumed session's
@@ -126,7 +132,7 @@ class OwnershipReconcile:
         authorization standing forever; this is the second, no-person-drives closer alongside
         the CLI's own end-PATCH. The mark is what keeps the read hub-free (``bzh:facts-not-status``)."""
         ctx = self.ctx
-        for takeover in ctx.stores.takeover.open_takeovers():
+        for takeover in takeovers:
             try:
                 view = ctx.chunk_views.get(takeover.chunk_id)
             except HubClientError as exc:

@@ -172,6 +172,11 @@ class IReadAskRepository(Protocol):
         """The lease's open park (park fact, no resume), or None — its question_id."""
         ...
 
+    def open_parks(self) -> dict[str, QuestionPark]:
+        """:meth:`open_park` for every active lease in one read, keyed by lease id; a lease with
+        no open park is absent (`bzh:bulk-reconstitution`)."""
+        ...
+
     def open_asks(self) -> list[OpenAsk]:
         """Every open ask (:func:`open_asks_of`), newest first."""
         ...

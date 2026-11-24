@@ -122,6 +122,11 @@ class IReadEscalationRepository(Protocol):
         See :class:`ParkedEscalation` for what "open" means here."""
         ...
 
+    def open_escalation_chunk_ids(self) -> set[str]:
+        """The chunk ids :meth:`open_escalations` would return, and nothing else — the open filter alone,
+        for a caller that needs membership, not the escalation rows."""
+        ...
+
     def closed_escalations(self, limit: int) -> list[ParkedEscalation]:
         """The newest ``limit`` escalations the hub ended, newest closure first, one per chunk —
         each the chunk's latest escalation carrying the newest hub closure recorded after it."""

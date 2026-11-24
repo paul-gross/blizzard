@@ -25,6 +25,7 @@ from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.hub.client import HubQuestion
 from blizzard.runner.leases.model import NewLease
+from blizzard.runner.leases.overload import OverloadExit
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.model import AdvanceMove
@@ -343,8 +344,20 @@ def test_an_overload_backoff_wake_refused_escalates_through_the_per_lease_catch(
     store, _hub, _harness, ctx = _rig(tmp_path)
     lease_id = _seed_spawned(store, _REFUSED, env="e1")
 
-    def backing_off(*_: object) -> dict[str, object]:
-        return {lease_id: object()}
+    due = OverloadExit(
+        lease_id=lease_id,
+        chunk_id=_REFUSED,
+        epoch=1,
+        generation=1,
+        invocation_kind="worker",
+        invocation_identity="1",
+        streak_ordinal=1,
+        observed_at=_NOW,
+        resume_after=_NOW,
+    )
+
+    def backing_off(*_: object) -> dict[str, OverloadExit]:
+        return {lease_id: due}
 
     monkeypatch.setattr("blizzard.runner.lifecycle.advance.backing_off_facts", backing_off)
     monkeypatch.setattr(DormantSession, "on_overload_backoff", _refuse)

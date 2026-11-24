@@ -42,6 +42,18 @@ class EscalationStore:
         )
         return [self._row_to_escalation(r) for r in self._store.all(stmt)]
 
+    def open_escalation_chunk_ids(self) -> set[str]:
+        stmt = (
+            self._store.select(
+                sa.join(lease_closures, leases, leases.c.lease_id == lease_closures.c.lease_id),
+                lease_closures.c.chunk_id,
+            )
+            .where(lease_closures.c.reason.in_(sorted(ESCALATION_REASONS)))
+            .where(LIVE_ESCALATION.clause(self._store))
+            .where(UNRESOLVED_ESCALATION.clause(self._store))
+        )
+        return {str(r.chunk_id) for r in self._store.all(stmt)}
+
     def closed_escalations(self, limit: int) -> list[ParkedEscalation]:
         # Each chunk's newest closure, kept in SQL (`bzh:newest-per-key-read`), joined to the
         # escalation it closed — the strict `>` mirrors `UNRESOLVED_ESCALATION`.
