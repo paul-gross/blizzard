@@ -5,55 +5,33 @@ in the directory its binding names (component tier)."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
-from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.transcript import TranscriptBatch, TranscriptPosition
-from blizzard.runner.leases.model import NewLease
-from blizzard.runner.loop.context import LoopConfig, LoopContext
+from blizzard.runner.harness.transcript import TranscriptBatch
+from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.transcripts.transcript_pump import TranscriptPump
-from tests.support.runner_fakes import (
-    FakeHarness,
-    FakeHub,
-    FakeProbe,
-    FakeProvider,
-    FakeTranscriptSource,
-    SqlAlchemyRunnerStore,
-    make_context,
-    make_store,
+from tests.support.runner_fakes import FakeTranscriptSource, SqlAlchemyRunnerStore
+from tests.support.scaffolding import count_rows_read
+from tests.support.transcript_pump_world import (
+    PUMP_NOW,
+    lease_segment,
+    mint_lease,
+    one_turn_batches,
+    pump_context,
+    read_in_windows,
+    statements_touching,
 )
-from tests.support.runner_mint import new_mint
-from tests.support.scaffolding import capture_statements, count_rows_read
-from tests.support.transcript_batches import incomplete_batch, normalized_turn, transcript_batch
-
-_NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
 
 def _ctx(
     sessions: list[str], *, batches: dict[str, TranscriptBatch] | None = None
 ) -> tuple[LoopContext, FakeTranscriptSource, SqlAlchemyRunnerStore]:
-    store = make_store("sqlite://")
-    source = FakeTranscriptSource(
-        batches_by_session=batches
-        or {s: transcript_batch([normalized_turn(0, "hi")], next_token="p") for s in sessions}
-    )
-    harness = FakeHarness(
-        handle=WorkerHandle(session_id="s", pid=1, process_start_time="1", pgid=1),
-        verdict=None,
-        transcript_source=source,
-    )
-    ctx = make_context(
-        store,
-        hub=FakeHub(),
-        provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=harness,
-        probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", runner_id="rn_1", transcripts_ship=True),
-    )
+    source = FakeTranscriptSource(batches_by_session=batches or one_turn_batches(sessions))
+    ctx, store = pump_context(source)
     return ctx, source, store
 
 
@@ -63,41 +41,24 @@ def _open_segment(
     n = chunk_id.removeprefix("ch_")
     if bind:
         ctx.stores.environments.record_binding(
-            chunk_id=chunk_id, environment_id=f"env-{n}", workdir=f"/ws/{n}", bound_at=_NOW, workspace_id=None
+            chunk_id=chunk_id, environment_id=f"env-{n}", workdir=f"/ws/{n}", bound_at=PUMP_NOW, workspace_id=None
         )
-    ctx.stores.lease_record.record_mint(
-        new_mint(
-            NewLease(
-                lease_id=f"lease_{n}",
-                chunk_id=chunk_id,
-                graph_id="gr_1",
-                node_id="nd_build",
-                node_name="build",
-                epoch=1,
-                retries_max=2,
-                created_at=_NOW,
-            )
-        )
-    )
+    mint_lease(ctx, f"lease_{n}", chunk_id)
     ctx.stores.liveness.record_spawn(
         f"lease_{n}",
         pid=1,
         process_start_time="1",
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
-        spawned_at=_NOW,
+        spawned_at=PUMP_NOW,
         spawn_cwd=spawn_cwd,
     )
     if bind and not held:
-        ctx.stores.environments.record_release(chunk_id=chunk_id, environment_id=f"env-{n}", released_at=_NOW)
-    return next(
-        s.segment_id for s in ctx.stores.transcript_ledger.open_transcript_segments() if s.lease_id == f"lease_{n}"
-    )
+        ctx.stores.environments.record_release(chunk_id=chunk_id, environment_id=f"env-{n}", released_at=PUMP_NOW)
+    return lease_segment(ctx, f"lease_{n}")
 
 
 def _binding_statements(store: SqlAlchemyRunnerStore, fn: Callable[[], object]) -> int:
-    with capture_statements(store.engine) as statements:
-        fn()
-    return sum(1 for statement, _ in statements if "env_bindings" in statement)
+    return statements_touching(store, "env_bindings", fn)
 
 
 def _world(n: int, *, held: bool) -> tuple[LoopContext, FakeTranscriptSource, SqlAlchemyRunnerStore, list[str]]:
@@ -130,28 +91,12 @@ def test_drain_segment_resolves_bindings_once_across_read_windows() -> None:
     for windows in (1, 4):
         ctx, source, store = _ctx(["sess-0"])
         segment_id = _open_segment(ctx, "ch_0", "sess-0", held=False)
-        calls = {"n": 0}
-
-        def windowed(
-            session_id: str,
-            *,
-            spawn_cwd: str | None,
-            since: TranscriptPosition | None,
-            calls: dict[str, int] = calls,
-            windows: int = windows,
-        ) -> TranscriptBatch:
-            calls["n"] += 1
-            token = f"p{calls['n']}"
-            if calls["n"] < windows:
-                return incomplete_batch([normalized_turn(calls["n"], "more")], next_token=token)
-            return transcript_batch([normalized_turn(calls["n"], "end")], next_token=token)
-
-        source.turns_since = windowed
+        calls = read_in_windows(source, windows)
         measured.append(
             _binding_statements(
                 store,
                 lambda ctx=ctx, segment_id=segment_id: TranscriptPump(ctx).drain_segment(
-                    segment_id, deadline=_NOW + timedelta(hours=1)
+                    segment_id, deadline=PUMP_NOW + timedelta(hours=1)
                 ),
             )
         )
@@ -166,7 +111,7 @@ def test_run_rows_read_from_bindings_are_flat_as_unrelated_held_bindings_grow() 
         _open_segment(ctx, "ch_0", "sess-0", held=True)
         for i in range(unrelated):
             ctx.stores.environments.record_binding(
-                chunk_id=f"ch_other{i}", environment_id=f"env-o{i}", workdir=f"/ws/o{i}", bound_at=_NOW
+                chunk_id=f"ch_other{i}", environment_id=f"env-o{i}", workdir=f"/ws/o{i}", bound_at=PUMP_NOW
             )
         measured.append(count_rows_read(store.engine, lambda ctx=ctx: TranscriptPump(ctx).run()))
     assert measured[0] == measured[1]

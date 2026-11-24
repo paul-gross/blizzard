@@ -17,6 +17,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
+from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
 from blizzard.runner.transcripts.backfill import (
     SegmentOpening,
@@ -92,6 +93,9 @@ class TranscriptBackfillStores(TranscriptPumpStores, Protocol):
 class TranscriptBackfillContext(TranscriptDrainContext, Protocol):
     @property
     def stores(self) -> TranscriptBackfillStores: ...
+    def invocation_transcript_source(
+        self, session: SessionReference, lease_id: str, generation: int
+    ) -> IHarnessTranscriptSource: ...
 
 
 @dataclass(frozen=True)

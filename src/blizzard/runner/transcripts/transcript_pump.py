@@ -88,9 +88,6 @@ class TranscriptPumpContext(OutboundContext, Protocol):
     @property
     def workspaces(self) -> IWorkspaceSpawnRoots: ...
     def transcript_source_for(self, session: SessionReference) -> IHarnessTranscriptSource: ...
-    def invocation_transcript_source(
-        self, session: SessionReference, lease_id: str, generation: int
-    ) -> IHarnessTranscriptSource: ...
     def invocation_transcript_source_at_root(
         self, session: SessionReference, lease_id: str, generation: int, root: str | None
     ) -> IHarnessTranscriptSource: ...
@@ -173,9 +170,8 @@ class TranscriptPump:
         read."""
         if not self.ctx.config.transcripts_ship or not self.ctx.transcripts_wired:
             return
-        # Unpaged: at most one segment is open per open lease — a spawn finalizes its
-        # predecessor and a closure finalizes its own — and the runner's agent cap bounds the
-        # open leases, so this read is bounded by the live working set.
+        # Unpaged: the open segments are a live set, never history — an open lease's generations (closure finalizes
+        # them) and those a backfill or reship left open on a closed lease, which its rerun resumes and finalizes.
         segments = self.ctx.stores.transcript_ledger.open_transcript_segments()
         # One store read each for the whole run — each segment this run
         # ships advances `budget`/`shipped` locally, so a later segment sees the current
@@ -300,13 +296,22 @@ class TranscriptPump:
         newest = environments.newest_bindings_for([c for c in chunk_ids if all_newest or not held.get(c)])
         return ResolvedBindings(held, newest)
 
-    def spawn_settings_for(self, segments: list[TranscriptSegmentState]) -> Mapping[tuple[str, int], SpawnSettings]:
-        """The recorded spawn settings of every invocation ``segments`` read, in one read for the
-        whole call. Skipped entirely with no segments."""
+    def spawn_settings_for(
+        self, segments: list[TranscriptSegmentState]
+    ) -> Mapping[tuple[str, int], SpawnSettings] | None:
+        """The recorded spawn settings of every invocation ``segments`` read, in one read for the whole call; skipped
+        with no segments. ``None`` when that read fails: each segment then reads its own inside its per-segment
+        isolation, so the failure is caught and marked per segment rather than escaping the entry point."""
         keys = sorted({(segment.lease_id, segment.generation) for segment in segments})
         if not keys:
             return {}
-        return self.ctx.stores.liveness.spawn_settings_for(keys)
+        try:
+            return self.ctx.stores.liveness.spawn_settings_for(keys)
+        except Exception:
+            _log.exception(
+                "transcript pump: spawn settings read failed — each segment reads its own", segments=len(keys)
+            )
+            return None
 
     def _pump_one_safe(
         self,
@@ -315,7 +320,7 @@ class TranscriptPump:
         budget: _OutstandingBudget,
         shipped: _ShippedBytesMirror,
         bindings_by_chunk: ResolvedBindings,
-        settings: Mapping[tuple[str, int], SpawnSettings],
+        settings: Mapping[tuple[str, int], SpawnSettings] | None,
     ) -> PumpOutcome:
         """One segment's own failure must not abort the loop. Returns
         ``"not_attempted"`` on a caught exception — a raising segment must
@@ -340,7 +345,7 @@ class TranscriptPump:
         budget: _OutstandingBudget,
         shipped: _ShippedBytesMirror,
         bindings_by_chunk: ResolvedBindings,
-        settings: Mapping[tuple[str, int], SpawnSettings],
+        settings: Mapping[tuple[str, int], SpawnSettings] | None,
     ) -> PumpOutcome:
         """Advance ``segment`` one read window forward and return its ``PumpOutcome``.
         :func:`~blizzard.runner.transcripts.shipping.pre_read` and ``plan_window`` decide; this carries it out."""
@@ -371,7 +376,11 @@ class TranscriptPump:
                 binding.workdir if binding else None,
             ).path
         try:
-            stamp = settings.get((segment.lease_id, segment.generation))
+            stamp = (
+                settings.get((segment.lease_id, segment.generation))
+                if settings is not None
+                else self.ctx.stores.liveness.spawn_settings(segment.lease_id, segment.generation)
+            )
             source = self.ctx.invocation_transcript_source_at_root(
                 segment.session, segment.lease_id, segment.generation, stamp.transcripts_root if stamp else None
             )

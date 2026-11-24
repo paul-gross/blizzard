@@ -1084,7 +1084,7 @@ def _fact_insert_breaches(src_root: Path) -> list[str]:
 
 def test_every_outbox_row_is_inserted_through_the_seam() -> None:
     """Every outbox ``seq`` comes from the runner's durable counter (``src/blizzard/runner/store/internal/base.py``'s
-    ``insert_outbox_rows``, which ``insert_outbox_row`` wraps), advanced in the transaction that writes the row: an adapter that inserts into
+    ``insert_outbox_rows``), advanced in the transaction that writes the rows: an adapter that inserts into
     ``outbound_buffer`` or ``transcript_outbound_buffer`` any other way would mint a ``seq`` the counter never saw."""
     breaches = _outbox_insert_breaches(_SRC_DIR)
     assert not breaches, f"outbox inserts — a row written around its counter: {breaches}"
@@ -1166,7 +1166,8 @@ def test_outbox_insert_check_catches_a_bypass(tmp_path: Path, rel: str, text: st
         ),
         (
             "runner/store/internal/transcript_ledger_store.py",
-            "def f(self, conn):\n    insert_outbox_rows(self._store, conn, transcript_outbound_buffer, [{'final': False}])\n",
+            "def f(self, conn):\n"
+            "    insert_outbox_rows(self._store, conn, transcript_outbound_buffer, [{'final': False}])\n",
         ),
         (
             "runner/store/internal/pause_store.py",

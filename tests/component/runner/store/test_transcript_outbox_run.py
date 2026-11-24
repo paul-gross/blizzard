@@ -8,18 +8,15 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
-from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
-from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store.schema import OUTBOX_LANE_TRANSCRIPT, outbox_counters
 from blizzard.runner.store.scoped import RUNNER_UNSCOPED_OPTION
 from blizzard.tools.invariants import runner_invariants
-from tests.support.config_inputs import init_host
-from tests.support.pin_store import NOW
-from tests.support.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, runner_store_errors
-from tests.support.runner_mint import new_mint
+from tests.support.runner_fakes import FIXTURE_RUNNER_ID
 from tests.support.scaffolding import capture_statements
+from tests.support.transcript_outbox import head_runner_store, open_segment, record_window
+
+#: More rows than one multi-row INSERT can bind on SQLite (eight columns a row against its 32766-variable limit).
+_OVER_BIND_LIMIT_ROWS = 4200
 
 
 def _counter(engine: sa.Engine) -> int:
@@ -31,52 +28,13 @@ def _counter(engine: sa.Engine) -> int:
         ).scalar_one()
 
 
-def _open_segment(store: SqlAlchemyRunnerStore) -> str:
-    store.record_mint(
-        new_mint(
-            NewLease(
-                lease_id="lease_1",
-                chunk_id="ch_1",
-                graph_id="gr_1",
-                node_id="nd_build",
-                node_name="build",
-                epoch=1,
-                retries_max=2,
-                created_at=NOW,
-            )
-        )
-    )
-    store.record_spawn(
-        "lease_1", pid=1, process_start_time="1", session=SessionReference(CLAUDE_CODE_HARNESS_ID, "s"), spawned_at=NOW
-    )
-    return store.open_transcript_segments()[0].segment_id
-
-
-def _window(store: SqlAlchemyRunnerStore, segment_id: str, payloads: list[str], *, cursor: str) -> list[int]:
-    return store.record_transcript_deltas(
-        segment_id=segment_id,
-        chunk_id="ch_1",
-        cursor=cursor,
-        shipped_bytes=1,
-        shipped_turns=1,
-        normalizer_version="v1",
-        harness_version=None,
-        payloads=payloads,
-        created_at=NOW,
-    )
-
-
 def _window_statements(tmp_path: Path, size: int) -> tuple[int, int]:
-    """The (``outbox_counters``, outbox INSERT) statement counts of one window of ``size`` payloads, after a prior one."""
-    engine = create_engine_from_url(init_host(tmp_path).db_url)
-    try:
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors())
-        segment_id = _open_segment(store)
-        _window(store, segment_id, ["{}"], cursor="c0")
+    """One window's ``outbox_counters`` and outbox INSERT statement counts at ``size`` payloads, after a prior one."""
+    with head_runner_store(tmp_path) as (engine, store):
+        segment_id = open_segment(store)
+        record_window(store, segment_id, ["{}"], cursor="c0")
         with capture_statements(engine) as statements:
-            _window(store, segment_id, [f'{{"i":{i}}}' for i in range(size)], cursor="c1")
-    finally:
-        engine.dispose()
+            record_window(store, segment_id, [f'{{"i":{i}}}' for i in range(size)])
     texts = [text for text, _ in statements]
     return (
         sum("outbox_counters" in text for text in texts),
@@ -92,33 +50,37 @@ def test_a_windows_counter_statements_are_flat_in_its_payload_count(tmp_path: Pa
 
 
 def test_a_windows_seqs_are_one_contiguous_run_in_payload_order_above_earlier_rows(tmp_path: Path) -> None:
-    engine = create_engine_from_url(init_host(tmp_path).db_url)
-    try:
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors())
-        segment_id = _open_segment(store)
-        earlier = _window(store, segment_id, ["{}", "{}"], cursor="c0")
+    with head_runner_store(tmp_path) as (_engine, store):
+        segment_id = open_segment(store)
+        earlier = record_window(store, segment_id, ["{}", "{}"], cursor="c0")
         payloads = ['{"i":0}', '{"i":1}', '{"i":2}']
-        seqs = _window(store, segment_id, payloads, cursor="c1")
+        seqs = record_window(store, segment_id, payloads)
         stored = {
             delta.seq: delta.payload for delta in store.pending_transcript_outbound(limit=10) if delta.seq in seqs
         }
-    finally:
-        engine.dispose()
     assert seqs == list(range(max(earlier) + 1, max(earlier) + 1 + len(payloads)))
     assert [stored[seq] for seq in seqs] == payloads
 
 
 @pytest.mark.parametrize("size", [1, 4])
 def test_a_first_allocation_of_n_rows_answers_one_through_n(tmp_path: Path, size: int) -> None:
-    engine = create_engine_from_url(init_host(tmp_path).db_url)
-    try:
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors())
-        segment_id = _open_segment(store)
-        seqs = _window(store, segment_id, ["{}"] * size, cursor="c0")
+    with head_runner_store(tmp_path) as (engine, store):
+        segment_id = open_segment(store)
+        seqs = record_window(store, segment_id, ["{}"] * size, cursor="c0")
         counter = _counter(engine)
         violations = [v for v in runner_invariants(engine).run() if v.invariant == "runner:outbox-counter-above-seq"]
-    finally:
-        engine.dispose()
     assert seqs == list(range(1, size + 1))
     assert counter == size
     assert violations == []
+
+
+def test_a_window_past_the_bind_limit_lands_whole_under_one_counter_advance(tmp_path: Path) -> None:
+    with head_runner_store(tmp_path) as (engine, store):
+        segment_id = open_segment(store)
+        with capture_statements(engine) as statements:
+            seqs = record_window(store, segment_id, ["{}"] * _OVER_BIND_LIMIT_ROWS, cursor="c0")
+        counter = _counter(engine)
+        pending = len(store.pending_transcript_outbound(limit=_OVER_BIND_LIMIT_ROWS + 1))
+    assert seqs == list(range(1, _OVER_BIND_LIMIT_ROWS + 1))
+    assert counter == pending == _OVER_BIND_LIMIT_ROWS
+    assert sum(text.lstrip().upper().startswith("UPDATE OUTBOX_COUNTERS") for text, _ in statements) == 1

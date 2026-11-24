@@ -18,6 +18,7 @@ from sqlalchemy import ColumnElement, Connection, Row, Select, Table, and_, join
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.leases.lease_lock import ILeaseUnit, LeaseUnitMisuse
 from blizzard.runner.leases.model import Lease, WorkRefStamp
 from blizzard.runner.lifecycle.takeover import ITakeoverUnit, TakeoverUnitMisuse
@@ -272,19 +273,18 @@ _OUTBOX_LANES: dict[Table, str] = {
 def insert_outbox_rows(
     store: RunnerStoreConnections, conn: Connection, table: Table, rows: Sequence[dict[str, Any]]
 ) -> list[int]:
-    """Insert ``rows`` into an outbox table, ``outbound_buffer`` or ``transcript_outbound_buffer``, on ``conn`` — the
-    caller's transaction — under one contiguous run of ``seq``s of the bound runner's lane; answer the seqs, in order.
-
-    The one door every outbox write passes through: the lane's counter in ``outbox_counters`` advances once, by
-    ``len(rows)``, in the same transaction as the rows' single INSERT, so a rollback returns the whole run, and a
-    counter never moves backwards, so a pruned row's seq is never issued again. An empty ``rows`` makes no statement.
-    ``tests/guards/test_layering.py`` fails an insert into either table that goes around it."""
+    """The one door into ``outbound_buffer`` or ``transcript_outbound_buffer``: on ``conn``, the bound runner's lane
+    advances once, by ``len(rows)``, and the rows take that contiguous run of ``seq``s, answered in order, inserted in
+    :func:`id_batches` slices so no statement outgrows a backend's bind limit. A rollback returns the whole run; an
+    empty ``rows`` makes no statement. ``tests/guards/test_layering.py`` fails an insert that goes around it."""
     if not rows:
         return []
     lane = _OUTBOX_LANES[table]
     last = _advance_counter(store, conn, outbox_counters, outbox_counters.c.lane == lane, by=len(rows), lane=lane)
     seqs = list(range(last - len(rows) + 1, last + 1))
-    conn.execute(store.insert_rows(table, [{**row, "seq": seq} for row, seq in zip(rows, seqs, strict=True)]))
+    stamped = [{**row, "seq": seq} for row, seq in zip(rows, seqs, strict=True)]
+    for batch in id_batches(stamped):
+        conn.execute(store.insert_rows(table, batch))
     return seqs
 
 

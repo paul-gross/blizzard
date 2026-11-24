@@ -1,8 +1,5 @@
-"""transcript payload bytes — a ``transcript_outbound_buffer.payload_bytes``: each buffered payload's UTF-8 byte
-length, ``NOT NULL`` with a server default of 0. Every existing row, pending or acked, is filled from
-``length(payload)`` in bounded pages; the payloads are ASCII-escaped JSON, so their character length is their byte
-length. No other table changes, and a rerun skips the column and every row already filled. ``downgrade()`` drops the
-column.
+"""transcript payload bytes — ``transcript_outbound_buffer.payload_bytes``, ``NOT NULL`` default 0, each existing row
+filled from ``length(payload)`` (ASCII-escaped JSON) in ``(runner_id, seq)`` keyset pages; a rerun skips filled rows.
 
 Revision ID: 20261124_1000_transcript_payload_bytes
 Revises: 20261120_1000_host_records
@@ -40,21 +37,24 @@ def _columns(bind: sa.Connection) -> set[str]:
 
 
 def _fill(bind: sa.Connection) -> None:
-    """Each row still at the default takes its payload's length, one bounded page per runner at a time."""
+    """Each row still at the default takes its payload's length, one bounded page at a time, each page starting past
+    the last key the one before it read."""
     unfilled = (_buffer.c[_COLUMN] == 0) & (sa.func.length(_buffer.c.payload) > 0)
-    page = (
-        sa.select(_buffer.c.runner_id, _buffer.c.seq)
-        .where(unfilled)
-        .order_by(_buffer.c.runner_id, _buffer.c.seq)
-        .limit(_BATCH_ROWS)
-    )
-    while keys := list(bind.execute(page)):
-        runner_id = keys[0].runner_id
-        seqs = [key.seq for key in keys if key.runner_id == runner_id]
-        bind.execute(
-            sa.update(_buffer)
-            .where(_buffer.c.runner_id == runner_id, _buffer.c.seq.in_(seqs))
-            .values({_COLUMN: sa.func.length(_buffer.c.payload)})
+    page = sa.select(_buffer.c.runner_id, _buffer.c.seq).order_by(_buffer.c.runner_id, _buffer.c.seq).limit(_BATCH_ROWS)
+    after: sa.ColumnElement[bool] = sa.true()
+    while keys := list(bind.execute(page.where(unfilled, after))):
+        seqs_by_runner: dict[str, list[int]] = {}
+        for key in keys:
+            seqs_by_runner.setdefault(key.runner_id, []).append(key.seq)
+        for runner_id, seqs in seqs_by_runner.items():
+            bind.execute(
+                sa.update(_buffer)
+                .where(_buffer.c.runner_id == runner_id, _buffer.c.seq.in_(seqs))
+                .values({_COLUMN: sa.func.length(_buffer.c.payload)})
+            )
+        last = keys[-1]
+        after = (_buffer.c.runner_id > last.runner_id) | (
+            (_buffer.c.runner_id == last.runner_id) & (_buffer.c.seq > last.seq)
         )
 
 

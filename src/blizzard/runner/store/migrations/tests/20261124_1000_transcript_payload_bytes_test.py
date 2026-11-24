@@ -1,6 +1,6 @@
 """The transcript-payload-bytes revision adds a required ``transcript_outbound_buffer.payload_bytes`` and fills every
-existing row, pending or acked, with its payload's byte length across more than one page; its downgrade drops the
-column with every row kept, and a second upgrade restores it.
+existing row of every runner, pending or acked, with its payload's byte length across pages that split between runners;
+its downgrade drops the column with every row kept, and a second upgrade restores it.
 
 Stores are seeded from SQL written against the parent revision's shape, never from
 ``src/blizzard/runner/store/schema.py``, whose tables keep changing shape after this revision."""
@@ -25,28 +25,36 @@ _PARENT = "20261120_1000_host_records"
 
 _REVISION = "20261124_1000_transcript_payload_bytes"
 
-_RUNNER_ID = "runner_id-1"
+#: Each runner's pending row count: the first page ends inside the second runner's rows, and a third page follows.
+_PENDING_ROWS = {"runner_id-1": 700, "runner_id-2": 1503}
 
-#: More rows than the revision fills in one page.
-_PENDING_ROWS = 1203
+_TOTAL_ROWS = sum(_PENDING_ROWS.values()) + 1
 
 #: A non-ASCII payload as the buffer stores it: ASCII-escaped JSON, so its length is its byte length.
 _ESCAPED = json.dumps({"text": "café ☃"})
 
 
 def _store_at_parent(tmp_path: Path) -> tuple[MigrationRunner, sa.Engine]:
-    """A parent-revision store holding pending rows over several pages, one escaped non-ASCII, and one acked marker."""
+    """A parent-revision store holding two runners' pending rows over several pages, the last one escaped non-ASCII,
+    and one acked marker."""
     config = init_host(tmp_path)
     migration = runner_runtime.migration_runner(config)
     migration.downgrade(_PARENT)
     engine = create_engine_from_url(config.db_url)
     rows: list[dict[str, object]] = [
-        {"seq": seq, "final": False, "payload": json.dumps({"i": seq}), "acked_at": None}
-        for seq in range(1, _PENDING_ROWS)
+        {"runner": runner, "seq": seq, "final": False, "payload": json.dumps({"i": seq}), "acked_at": None}
+        for runner, count in _PENDING_ROWS.items()
+        for seq in range(1, count + 1)
     ]
-    rows.append({"seq": _PENDING_ROWS, "final": False, "payload": _ESCAPED, "acked_at": None})
+    rows[-1]["payload"] = _ESCAPED
     rows.append(
-        {"seq": _PENDING_ROWS + 1, "final": True, "payload": json.dumps({"segment_id": "seg_1"}), "acked_at": T0}
+        {
+            "runner": "runner_id-1",
+            "seq": _PENDING_ROWS["runner_id-1"] + 1,
+            "final": True,
+            "payload": json.dumps({"segment_id": "seg_1"}),
+            "acked_at": T0,
+        }
     )
     with engine.begin() as conn:
         conn.execute(
@@ -54,10 +62,7 @@ def _store_at_parent(tmp_path: Path) -> tuple[MigrationRunner, sa.Engine]:
                 "INSERT INTO transcript_outbound_buffer (seq, segment_id, chunk_id, final, payload, created_at,"
                 " acked_at, runner_id) VALUES (:seq, 'seg_1', 'ch_1', :final, :payload, :at, :acked_at, :runner)"
             ),
-            [
-                {**row, "at": T0.isoformat(), "acked_at": row["acked_at"] and T0.isoformat(), "runner": _RUNNER_ID}
-                for row in rows
-            ],
+            [{**row, "at": T0.isoformat(), "acked_at": row["acked_at"] and T0.isoformat()} for row in rows],
         )
     return migration, engine
 
@@ -68,12 +73,12 @@ def _columns(engine: sa.Engine) -> dict[str, tuple[str, bool]]:
     }
 
 
-def _sizes(engine: sa.Engine) -> dict[int, tuple[str, int]]:
+def _sizes(engine: sa.Engine) -> dict[tuple[str, int], tuple[str, int]]:
     with engine.connect() as conn:
         return {
-            seq: (payload, size)
-            for seq, payload, size in conn.execute(
-                sa.text("SELECT seq, payload, payload_bytes FROM transcript_outbound_buffer")
+            (runner, seq): (payload, size)
+            for runner, seq, payload, size in conn.execute(
+                sa.text("SELECT runner_id, seq, payload, payload_bytes FROM transcript_outbound_buffer")
             )
         }
 
@@ -85,10 +90,9 @@ def test_the_upgrade_fills_every_pending_and_acked_row_with_its_payload_byte_len
 
         assert _columns(engine)["payload_bytes"] == ("INTEGER", False)
         sizes = _sizes(engine)
-        assert len(sizes) == _PENDING_ROWS + 1
+        assert len(sizes) == _TOTAL_ROWS
         assert all(size == len(payload.encode()) > 0 for payload, size in sizes.values())
-        assert sizes[_PENDING_ROWS] == (_ESCAPED, len(_ESCAPED.encode()))
-        assert "\\u00e9" in _ESCAPED
+        assert sizes[("runner_id-2", _PENDING_ROWS["runner_id-2"])] == (_ESCAPED, len(_ESCAPED.encode()))
     finally:
         engine.dispose()
 
@@ -104,9 +108,7 @@ def test_the_downgrade_drops_the_column_and_a_second_upgrade_restores_it(tmp_pat
         assert migration.current_revision() == _PARENT
         assert _columns(engine) == before
         with engine.connect() as conn:
-            assert conn.execute(sa.text("SELECT count(*) FROM transcript_outbound_buffer")).scalar_one() == (
-                _PENDING_ROWS + 1
-            )
+            assert conn.execute(sa.text("SELECT count(*) FROM transcript_outbound_buffer")).scalar_one() == _TOTAL_ROWS
 
         migration.upgrade(_REVISION)
 
