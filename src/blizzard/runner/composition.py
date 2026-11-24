@@ -134,6 +134,7 @@ from blizzard.runner.host_settings_reader import (
 from blizzard.runner.hosting.ports import IHostRunnerHub, IRunnerAdmission
 from blizzard.runner.hosting.reconcile import RunnerStartFailure, RunnerStartFailures, reconcile
 from blizzard.runner.hosting.retirement import HubNoticedRetirement, RetirementNotices
+from blizzard.runner.hosting.roster import HostRoster, beside_the_file_of
 from blizzard.runner.hosting.service import HostedRunnerService
 from blizzard.runner.hub.client import HostReport, HostReportedWorkspace, IHostHubClient
 from blizzard.runner.hub.client import SubscriptionDeclaration as HubSubscriptionDeclaration
@@ -2488,6 +2489,19 @@ class RunnerStoreFiles:
     def named_runners(self, url: str) -> tuple[str, ...]:
         with _engine(url) as engine:
             return build_host_stores(engine, errors=self.errors, clock=self.clock).runner_audit.named_runners()
+
+    def host_roster(self, url: str) -> HostRoster:
+        """The store at ``url``'s runners, read once: its identity rows, hosted runners and their stored names."""
+        with _engine(url) as engine:
+            stores = build_host_stores(engine, errors=self.errors, clock=self.clock)
+            hosted = stores.hosted_runners
+            return HostRoster(
+                named=stores.runner_audit.named_runners(),
+                hosted=hosted.hosted_runner_ids(),
+                split=hosted.roster(),
+                names=stores.runner_audit.stored_names(),
+                beside_the_file=beside_the_file_of(hosted.all_hosted()),
+            )
 
     def host_identity(self, url: str) -> HostIdentity | None:
         with _engine(url) as engine:

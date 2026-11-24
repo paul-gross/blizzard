@@ -4111,11 +4111,6 @@ _RUNNER_STORE_WIRING_ALLOWED = (
     "runner/cli/runtime.py::seed_host",
     "runner/cli/runtime.py::seed_host_records",
     "runner/cli/runtime.py::seed_hosted_runners",
-    "runner/cli/store_guard.py::hosted_runner_ids",
-    "runner/cli/store_guard.py::named_runners",
-    "runner/cli/store_guard.py::retired_runner_ids",
-    "runner/cli/store_guard.py::store_hosted_runner_ids",
-    "runner/cli/store_guard.py::store_only_entries",
     "runner/cli/token.py::_set_on_stopped_host",
 )
 

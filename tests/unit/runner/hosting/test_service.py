@@ -57,6 +57,9 @@ class _Hosted:
     def facts(self, runner_id: str) -> tuple[HostedRunnerFact, ...]:
         return tuple(self.held.get(runner_id, ()))
 
+    def all_hosted(self) -> tuple[HostedRunner, ...]:
+        return tuple(HostedRunner(runner_id, tuple(facts)) for runner_id, facts in self.held.items() if facts)
+
     def host(self, runner_ids: Sequence[str], hosting: HostingFact) -> tuple[str, ...]:
         raise NotImplementedError
 

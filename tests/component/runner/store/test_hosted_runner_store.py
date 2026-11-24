@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.secrets.sealing import SealedValue
 from blizzard.foundation.settings_record.vocabulary import Entry
-from blizzard.runner.composition import build_runner_admission
+from blizzard.runner.composition import build_runner_admission, build_runner_store_files
 from blizzard.runner.hosting.model import CLI, OPERATOR, SEED, HostedRunnerOp, HostingFact, RunnerAdmission
 from blizzard.runner.hosting.ports import IRunnerAdmission
 from blizzard.runner.hub.identity import RunnerIdentity
@@ -134,3 +134,39 @@ def test_the_admission_passes_the_runner_statement_guard(tmp_path: Path) -> None
     make_store(url, "rn_other").record_runner_identity(RunnerIdentity("rn_other", "other", _AT))
     _admission(url, "rn_new").admit(_added("rn_new", "night-1"), _TOKEN)
     assert HostHostedRunnerStore(make_store(url).connections).hosted_runner_ids() == {"rn_other", "rn_new"}
+
+
+def test_all_hosted_reads_every_runner_with_its_facts_in_the_order_it_was_first_hosted(tmp_path: Path) -> None:
+    hosted = HostHostedRunnerStore(make_store(_url(tmp_path)).connections)
+    hosted.host(["rn_z"], _SEEDED)
+    later = HostingFact(actor=OPERATOR, door=CLI, at=_AT + timedelta(minutes=1))
+    hosted.host(["rn_a"], later)
+    hosted.append_fact("rn_z", HostedRunnerOp.RETIRED, later)
+
+    everyone = hosted.all_hosted()
+
+    assert [runner.runner_id for runner in everyone] == ["rn_z", "rn_a"]
+    assert [fact.op for fact in everyone[0].facts] == [HostedRunnerOp.ADDED, HostedRunnerOp.RETIRED]
+    assert everyone[0].facts == hosted.facts("rn_z")
+    assert everyone[1].facts == hosted.facts("rn_a")
+
+    (tmp_path / "empty").mkdir()
+    assert HostHostedRunnerStore(make_store(_url(tmp_path / "empty")).connections).all_hosted() == ()
+
+
+def test_the_host_roster_reads_names_hosting_and_the_store_doors_of_a_store_file_once(tmp_path: Path) -> None:
+    url = _url(tmp_path)
+    _admission(url, "rn_added").admit(_added("rn_added", "added"), _TOKEN)
+    hosted = HostHostedRunnerStore(make_store(url).connections)
+    hosted.host(["rn_file"], _SEEDED)
+    hosted.append_fact("rn_file", HostedRunnerOp.RETIRED, HostingFact(actor=OPERATOR, door=CLI, at=_AT))
+
+    roster = build_runner_store_files(FixedClock(_AT)).host_roster(url)
+
+    assert roster.named == ("rn_added",)
+    assert roster.hosted == {"rn_added", "rn_file"}
+    assert roster.active == ("rn_added",)
+    assert roster.retired == {"rn_file"}
+    assert roster.name_of("rn_added") == "added"
+    assert roster.name_of("rn_file") == "rn_file"
+    assert roster.through_a_door() == {"rn_added", "rn_file"}

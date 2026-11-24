@@ -1100,6 +1100,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadHostedRunnerRepository, "active"): lambda w: w.host_read.hosted_runners.active(),
     (IReadHostedRunnerRepository, "retired"): lambda w: w.host_read.hosted_runners.retired(),
     (IReadHostedRunnerRepository, "facts"): lambda w: w.host_read.hosted_runners.facts("rn_x"),
+    (IReadHostedRunnerRepository, "all_hosted"): lambda w: w.host_read.hosted_runners.all_hosted(),
     (IReadSubscriptionUsageLimitRepository, "latest_usage_limit_mark"): lambda w: (
         w.host_read.usage_limits.latest_usage_limit_mark(w.usage_slug)
     ),

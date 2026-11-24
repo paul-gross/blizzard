@@ -18,6 +18,7 @@ from blizzard.runner.hosting.model import (
     OPERATOR,
     SEED,
     HostedRoster,
+    HostedRunner,
     HostedRunnerFact,
     HostedRunnerOp,
     HostingFact,
@@ -60,6 +61,27 @@ class HostHostedRunnerStore:
                 .order_by(hosted_runner_facts.c.id)
             )
             return tuple(_fact(row) for row in rows)
+
+    def all_hosted(self) -> tuple[HostedRunner, ...]:
+        with self._store.connect() as conn:
+            order = {
+                str(row.runner_id): position
+                for position, row in enumerate(
+                    conn.execute(
+                        select(hosted_runners.c.runner_id).order_by(
+                            hosted_runners.c.added_at, hosted_runners.c.runner_id
+                        )
+                    )
+                )
+            }
+            facts: dict[str, list[HostedRunnerFact]] = {}
+            for row in conn.execute(select(hosted_runner_facts).order_by(hosted_runner_facts.c.id)):
+                facts.setdefault(str(row.runner_id), []).append(_fact(row))
+        return tuple(
+            HostedRunner(runner_id=runner_id, facts=tuple(held))
+            for runner_id, held in sorted(facts.items(), key=lambda item: order.get(item[0], len(order)))
+            if runner_id in order
+        )
 
     def host(self, runner_ids: Sequence[str], hosting: HostingFact) -> tuple[str, ...]:
         with self._store.begin() as conn:

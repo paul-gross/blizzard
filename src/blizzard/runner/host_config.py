@@ -86,6 +86,7 @@ from blizzard.runner.host_layout import (
 )
 from blizzard.runner.host_records.model import HostRecord
 from blizzard.runner.host_records.prompt import EffectiveWorkspacePrompt
+from blizzard.runner.hosting.roster import HostRoster
 from blizzard.runner.hub.sealed_tokens import FIRST_REVISION, StoredToken, StoredTokenState
 from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token
 from blizzard.runner.loop.mode import LoopMode
@@ -498,6 +499,45 @@ class HostConfig:
                 (f"{self.layout.config_path} declares several runners ({held}); name one with --runner",)
             )
         return first
+
+    def resolve_runner(self, roster: HostRoster | None, runner: str | None = None) -> RunnerEntry:
+        """The runner a stopped-host verb acts on, by name or id, else the host's only one: a ``[[runner]]``, or a
+        runner the store hosts that no ``[[runner]]`` names, by its stored ``name``. A ``[[runner]]`` the store holds
+        retired yields to an active store-hosted runner of that name, or — with no ``runner`` — to the store's only
+        one. ``roster`` is the store as read once, ``None`` when there is none to consult. Raises
+        :class:`ConfigError` as :meth:`sole_runner` does when neither holds it."""
+        try:
+            declared = self.sole_runner(runner)
+        except ConfigError:
+            if roster is None or (found := self._sole_match(self._store_matches(roster, runner, None))) is None:
+                raise
+            return found
+        if roster is None:
+            return declared
+        return self._sole_match(self._store_matches(roster, runner, declared)) or declared
+
+    def _store_matches(self, roster: HostRoster, runner: str | None, declared: RunnerEntry | None) -> list[RunnerEntry]:
+        """The active store-hosted runners ``runner`` may mean in place of ``declared`` — none while ``declared`` is a
+        ``[[runner]]`` the store does not hold retired."""
+        if declared is not None and declared.id not in roster.retired:
+            return []
+        named = {entry.id for entry in self.runners if entry.id is not None}
+        stored = [
+            self.hosted_entry(runner_id, roster.name_of(runner_id))
+            for runner_id in roster.active
+            if runner_id not in named
+        ]
+        if runner is not None:
+            return [entry for entry in stored if runner in (entry.name, entry.id)]
+        if declared is not None or not self.runners:
+            return stored
+        return []
+
+    def _sole_match(self, matched: list[RunnerEntry]) -> RunnerEntry | None:
+        if len(matched) > 1:
+            held = ", ".join(f"{entry.name} ({entry.id})" for entry in matched)
+            raise ConfigError(f"the store at {self.db_url} hosts several runners ({held}); name one with --runner")
+        return matched[0] if matched else None
 
     def bindings_for(self, projects: tuple[str, ...], workspaces: tuple[str, ...]) -> tuple[ProjectBinding, ...]:
         """One binding per project of ``projects``, each to its workspace. Raises :class:`HostConfigError` when a
