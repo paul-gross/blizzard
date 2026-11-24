@@ -1836,8 +1836,9 @@ export const editGardenProposalApiGardenProposalsProposalIdPatch = <ThrowOnError
  *
  * Accept the proposal. `mint_work_item` mints a linked hub item from `body` (or the proposal's own), wrapped in
  * the "Related findings" template when it names findings; false records the decline. Promotes nothing; a blank
- * reason is stored as none. 404 unknown; 422 `body` or `urgency` without a mint, `urgency_unknown`/`urgency_retired`,
- * or a blank minted title or body; 409 closed or a raced ingest; 503 the default graph retired.
+ * reason is stored as none. A closed proposal is refused 409 first, whatever the request states. 404 unknown; 422
+ * `body` or `urgency` without a mint, a minting accept's `urgency_unknown`/`urgency_retired`, or a blank minted title
+ * or body; 409 closed or a raced ingest; 503 the default graph retired.
  */
 export const acceptGardenProposalApiGardenProposalsProposalIdAcceptPost = <ThrowOnError extends boolean = false>(options: Options<AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostData, ThrowOnError>): RequestResult<AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponses, AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors, ThrowOnError> => (options.client ?? client).post<AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponses, AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors, ThrowOnError>({
     url: '/api/garden-proposals/{proposal_id}/accept',

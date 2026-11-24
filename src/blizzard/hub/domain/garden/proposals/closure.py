@@ -29,7 +29,8 @@ from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.projects.model import ProjectId
-from blizzard.hub.domain.urgency.model import Urgency
+from blizzard.hub.domain.urgency.chain import URGENCY_FIELD
+from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 
 
@@ -96,12 +97,12 @@ class GardenProposalClosure:
         body: str | None,
         by: str,
         at: datetime,
-        urgency: Urgency | None = None,
+        urgency: str | None = None,
     ) -> GardenProposalClosure:
-        """The closure of an accept that mints no item. Refuses a closed proposal first,
-        then a `body` override or an `urgency` (:class:`GardenProposalMintFieldWithoutMint`) —
-        what only a minted item could carry. The reason is optional: stored stripped, a blank
-        one as none."""
+        """The closure of an accept that mints no item. Refuses a closed proposal first, then a
+        `body` override or a stated `urgency` key (:class:`GardenProposalMintFieldWithoutMint`) —
+        what only a minted item could carry, so the key is never resolved. The reason is
+        optional: stored stripped, a blank one as none."""
         proposal.require_legal(GardenProposalVerb.ACCEPT, existing)
         if body is not None:
             raise GardenProposalMintFieldWithoutMint(proposal.proposal_id, "body")
@@ -301,8 +302,10 @@ class GardenProposalClosureService:
         default_graph: DefaultGraphEnsurer,
         clock: IClock,
         transactions: IHubTransactions,
+        urgencies: UrgencyReading,
     ) -> None:
         self._transactions = transactions
+        self._urgencies = urgencies
         self._closures = closures
         self._items = items
         self._default_graph = default_graph
@@ -339,12 +342,14 @@ class GardenProposalClosureService:
         body: str | None,
         mint: bool,
         findings: Sequence[Finding],
-        urgency: Urgency | None = None,
+        urgency: str | None = None,
     ) -> AcceptedGardenProposal:
         """Accept ``proposal`` — ``blizzard-context:/domain/findings-and-proposals.md`` §Closing a proposal.
-        ``mint=True`` resolves the default graph once the proposal is known open; its chunk carries the stated
-        ``urgency`` or the tenant's default. Raises :class:`GardenProposalAlreadyClosed`,
-        :class:`GardenProposalMintFieldWithoutMint` for a body or urgency on a non-minting accept, and
+        A closed proposal is refused first (:class:`GardenProposalAlreadyClosed`), whatever else the accept states.
+        ``mint=True`` then resolves the stated ``urgency`` key (by id or slug) and the default graph; its chunk
+        carries that urgency or the tenant's default. Raises :class:`GardenProposalMintFieldWithoutMint` for a body
+        or urgency on a non-minting accept, :class:`~blizzard.hub.domain.urgency.model.UrgencyUnknown` or
+        :class:`~blizzard.hub.domain.urgency.model.UrgencyRetired` for a minting accept's urgency, and
         :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` on a raced ref."""
         if not mint:
             return self._accept_declining(proposal, reason=reason, by=by, body=body, urgency=urgency)
@@ -353,13 +358,14 @@ class GardenProposalClosureService:
         early = MintingAccept.of(
             proposal, self._closures.get(proposal.proposal_id), reason=reason, body=body, findings=findings
         )
+        stated = self._urgencies.live(URGENCY_FIELD, urgency) if urgency is not None else None
         drafted = self._items.draft_mint(
             RESERVED_HUB_SOURCE_NAME,
             title=early.title,
             body=early.body,
             graph=self._default_graph(),
             project_id=ProjectId(proposal.project_id),
-            urgency=urgency,
+            urgency=stated,
         )
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(keys=[*drafted.lock_keys(), garden_proposal_lock(proposal.proposal_id)])
@@ -387,7 +393,7 @@ class GardenProposalClosureService:
         )
 
     def _accept_declining(
-        self, proposal: GardenProposal, *, reason: str | None, by: str, body: str | None, urgency: Urgency | None
+        self, proposal: GardenProposal, *, reason: str | None, by: str, body: str | None, urgency: str | None
     ) -> AcceptedGardenProposal:
         """Accept ``proposal`` minting no item (:meth:`GardenProposalClosure.accepted_declining`)."""
         with self._transactions.begin() as transaction:

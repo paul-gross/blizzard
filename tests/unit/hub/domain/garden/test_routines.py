@@ -363,6 +363,11 @@ def test_stating_neither_handle_is_refused_naming_the_slug() -> None:
         resolved_handle(None, None)
 
 
+def test_resolved_handle_refuses_a_stated_slug_with_a_final_newline() -> None:
+    with pytest.raises(RoutineSlugError):
+        resolved_handle("nightly\n", None)
+
+
 def test_resolved_handle_fills_the_missing_one_from_the_other() -> None:
     assert resolved_handle("s", None) == ("s", "s")
     assert resolved_handle(None, "n") == ("n", "n")

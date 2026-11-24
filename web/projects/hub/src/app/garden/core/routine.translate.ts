@@ -72,14 +72,15 @@ export const ROUTINE_CREATE_REFUSALS: RefusalMap<RoutineCreateDraft> = {
   kinds: { 'urn:blizzard:problem:scope-slug-invalid': 'scope' },
 };
 
-/** The create body a draft states: the definition trimmed, a blank name stated as `null`, and a blank urgency as `null`,
- * the tenant default. */
+/** The create body a draft states: the slug and default scope exactly as typed — the hub refuses a malformed slug, it is
+ * never normalized here — the graph trimmed, a blank name stated as `null`, and a blank urgency as `null`, the tenant
+ * default. */
 export function toCreateRequest(draft: RoutineCreateDraft): hubApi.RoutineCreateRequest {
   return {
-    slug: draft.slug.trim(),
+    slug: draft.slug,
     name: draft.name.trim() || null,
     graph_name: draft.graph.trim(),
-    default_scope_slug: draft.scope.trim(),
+    default_scope_slug: draft.scope,
     default_urgency: draft.urgency || null,
   };
 }

@@ -4,8 +4,10 @@ supersede never names a non-live absorber."""
 
 from __future__ import annotations
 
+from collections.abc import Callable, Generator
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -27,7 +29,7 @@ from blizzard.hub.domain.garden.findings.model import (
     FindingExitService,
 )
 from blizzard.hub.domain.garden.run_context import RunContext
-from blizzard.hub.domain.kernel.transactions import TransactionMisuse
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction, TransactionMisuse
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.schema import artifacts, finding_facts
 from blizzard.hub.store.transactions import HubTransactions
@@ -269,3 +271,58 @@ def test_crossing_supersedes_land_exactly_one(tmp_path: Path) -> None:
 
     assert _kinds(engine, "fin_a") == ["add", "superseded"]
     assert _kinds(engine, "fin_b") == ["add"]
+
+
+class _WinnerFirst:
+    """Transactions whose first unit runs ``winner`` before it opens — a write that commits between the
+    loser's read and its first lock."""
+
+    def __init__(self, inner: IHubTransactions, winner: Callable[[], None]) -> None:
+        self._inner = inner
+        self._winner: Callable[[], None] | None = winner
+
+    def begin(self) -> AbstractContextManager[Transaction]:
+        return self._begin()
+
+    @contextmanager
+    def _begin(self) -> Generator[Transaction]:
+        if self._winner is not None:
+            winner, self._winner = self._winner, None
+            winner()
+        with self._inner.begin() as unit:
+            yield unit
+
+
+def test_a_verb_retried_after_a_later_winner_is_stamped_newest(tmp_path: Path) -> None:
+    """`fin_1` is gone; P1's resolve reads it, P2's reopen commits at a later instant inside P1's first
+    attempt. P1 loses the guard, retries on the reopened finding, and its `resolved` is the newest fact."""
+    findings, _, engine = _world(tmp_path)
+    connections = hub_store_connections(engine)
+    _add_finding(findings, default_project(engine), "fin_1")
+    seed_fact(connections, "fin_1", kind="gone", at=_NOW, note="fixed")
+    loser = findings.get("fin_1")
+    assert loser is not None and loser.state == "gone"
+    clock = FixedClock(instant=_NOW + timedelta(minutes=1))
+    winner_at = _NOW + timedelta(minutes=2)
+
+    def reopen() -> None:
+        seed_fact(connections, "fin_1", kind="reopened", at=winner_at, note="regressed", actor="u2")
+        clock.advance(timedelta(minutes=2))
+
+    service = FindingExitService(
+        repo=findings, clock=clock, transactions=_WinnerFirst(HubTransactions(connections), reopen)
+    )
+
+    service.resolve([loser], note="landed", actor="u1")
+
+    assert _kinds(engine, "fin_1") == ["add", "gone", "reopened", "resolved"]
+    with engine.connect() as conn:
+        newest = conn.execute(
+            connections.select(finding_facts, finding_facts.c.kind)
+            .where(finding_facts.c.finding_id == "fin_1")
+            .order_by(finding_facts.c.recorded_at.desc(), finding_facts.c.id.desc())
+            .limit(1)
+        ).scalar_one()
+    assert newest == "resolved"
+    resolved = findings.get("fin_1")
+    assert resolved is not None and resolved.state == "resolved"

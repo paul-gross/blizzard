@@ -430,6 +430,18 @@ def test_declining_accept_refuses_closed_before_a_body_override() -> None:
         GardenProposalClosure.accepted_declining(_proposal(), None, reason=None, body="b", by="u1", at=_T1)
 
 
+def test_declining_accept_refuses_closed_before_a_stated_urgency() -> None:
+    with pytest.raises(GardenProposalAlreadyClosed):
+        GardenProposalClosure.accepted_declining(
+            _proposal(), _PASSED, reason=None, body=None, by="u1", at=_T1, urgency="no-such"
+        )
+    with pytest.raises(GardenProposalMintFieldWithoutMint) as excinfo:
+        GardenProposalClosure.accepted_declining(
+            _proposal(), None, reason=None, body=None, by="u1", at=_T1, urgency="no-such"
+        )
+    assert excinfo.value.field == "urgency"
+
+
 def test_minting_accept_wraps_the_override_or_the_proposals_own_body() -> None:
     findings = [_finding("fin_1")]
 

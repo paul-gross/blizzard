@@ -57,7 +57,7 @@ export class GardeningRoutinesPage {
 
   /** Saves the create draft; once it settles, closes the form and opens the created routine. */
   protected async onCreate(): Promise<void> {
-    const slug = this.createDraft().slug.trim();
+    const slug = this.createDraft().slug;
     if (await submitForm(this.createForm, (draft) => this.routineService.create(draft))) {
       this.creating.set(false);
       this.selectRoutine(slug);

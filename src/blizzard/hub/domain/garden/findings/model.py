@@ -645,9 +645,9 @@ class FindingExitService:
     def deliver(self, findings: Sequence[Finding], *, note: str, actor: str, proposal_id: str | None = None) -> None:
         """Delivery-triggered closure — `resolved`'s provisional sibling
         (blizzard-context:/domain/findings-and-proposals.md §Liveness is derived, and reversible)."""
-        at = self._clock.now()
         self._record(
-            findings, lambda batch, _: deliver_facts(batch, note=note, actor=actor, at=at, proposal_id=proposal_id)
+            findings,
+            lambda batch, _, at: deliver_facts(batch, note=note, actor=actor, at=at, proposal_id=proposal_id),
         )
 
     def confirm_gone(self, findings: Sequence[Finding], *, note: str, actor: str) -> None:
@@ -660,10 +660,9 @@ class FindingExitService:
         self._exit(findings, kind="not-a-finding", note=note, actor=actor)
 
     def supersede(self, findings: Sequence[Finding], absorber: Finding, *, note: str, actor: str) -> None:
-        at = self._clock.now()
         self._record(
             findings,
-            lambda batch, companions: supersede_facts(batch, companions[0], note=note, actor=actor, at=at),
+            lambda batch, companions, at: supersede_facts(batch, companions[0], note=note, actor=actor, at=at),
             companions=[absorber],
         )
 
@@ -673,33 +672,35 @@ class FindingExitService:
     def _exit(
         self, findings: Sequence[Finding], *, kind: str, note: str, actor: str, proposal_id: str | None = None
     ) -> None:
-        at = self._clock.now()
         self._record(
-            findings, lambda batch, _: exit_facts(batch, kind, note=note, actor=actor, at=at, proposal_id=proposal_id)
+            findings,
+            lambda batch, _, at: exit_facts(batch, kind, note=note, actor=actor, at=at, proposal_id=proposal_id),
         )
 
     def _record(
         self,
         findings: Sequence[Finding],
-        facts_for: Callable[[Sequence[Finding], Sequence[Finding]], list[FactEntry]],
+        facts_for: Callable[[Sequence[Finding], Sequence[Finding], datetime], list[FactEntry]],
         *,
         companions: Sequence[Finding] = (),
     ) -> None:
         """`companions` receive no fact, but `facts_for` read their state: they are guarded on it and
-        reloaded with the batch, so a retry re-asks the model against a fresh one."""
+        reloaded with the batch, so a retry re-asks the model against a fresh one. Each attempt reads the
+        clock after its lock graduates, so its facts are never older than a write that committed first."""
         batch = list(findings)
         others = list(companions)
         for _ in range(GUARD_ATTEMPTS):
             expect = {f.finding_id: f.state for f in (*batch, *others)}
             with self._transactions.begin() as transaction:
                 locked = transaction.lock_set(keys=[finding_lock(fid) for fid in sorted(expect)])
-                moved = self._repo.record_facts(facts_for(batch, others), expect=expect, transaction=locked)
+                at = self._clock.now()
+                moved = self._repo.record_facts(facts_for(batch, others, at), expect=expect, transaction=locked)
             if not moved:
                 return
             reloaded = self._repo.get_many(list(expect))
             batch = [reloaded.get(f.finding_id, f) for f in batch]
             others = [reloaded.get(f.finding_id, f) for f in others]
-        facts_for(batch, others)
+        facts_for(batch, others, self._clock.now())
         raise FindingWriteContended([f.finding_id for f in batch])
 
 

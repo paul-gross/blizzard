@@ -58,7 +58,7 @@ class ScopeSlug:
 
     @classmethod
     def parse(cls, raw: str) -> ScopeSlug:
-        if not raw or not _SLUG_PATTERN.match(raw):
+        if not raw or not _SLUG_PATTERN.fullmatch(raw):
             raise ScopeSlugError(f"scope slug must match [a-z0-9-]+, got {raw!r}")
         return cls(raw)
 

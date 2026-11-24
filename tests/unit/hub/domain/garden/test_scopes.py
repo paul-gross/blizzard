@@ -29,11 +29,16 @@ from blizzard.hub.domain.projects.model import Project, ProjectId
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-@pytest.mark.parametrize("raw", ["Blizzard", "blizzard_ops", "blizzard ops", "blizzard!", "  "])
+@pytest.mark.parametrize("raw", ["Blizzard", "blizzard_ops", "blizzard ops", "blizzard!", "  ", " valid "])
 def test_parse_rejects_a_slug_outside_the_pattern_naming_it(raw: str) -> None:
     with pytest.raises(ScopeSlugError) as exc_info:
         ScopeSlug.parse(raw)
     assert raw in str(exc_info.value)
+
+
+def test_parse_rejects_a_slug_with_a_final_newline() -> None:
+    with pytest.raises(ScopeSlugError):
+        ScopeSlug.parse("valid\n")
 
 
 def test_parse_rejects_an_empty_slug() -> None:

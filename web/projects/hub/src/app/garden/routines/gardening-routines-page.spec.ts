@@ -193,12 +193,12 @@ describe('GardeningRoutinesPage', () => {
     await settle(fixture);
   }
 
-  it('creates a routine with the trimmed definition and opens its detail', async () => {
+  it('creates a routine with the definition as typed and opens its detail', async () => {
     const { fixture, q, router } = await render();
 
     q('gardening-routine-new')!.click();
     await settle(fixture);
-    await type(fixture, q, 'slug', ' weekly ');
+    await type(fixture, q, 'slug', 'weekly');
     await type(fixture, q, 'graph', 'garden-routine');
     await type(fixture, q, 'scope', 'blizzard');
     q('gardening-routine-create-save')!.click();

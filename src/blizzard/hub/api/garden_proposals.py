@@ -23,7 +23,7 @@ from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import PathProject, QueryProject, project_of_call
-from blizzard.hub.api.urgencies import stated_urgency, urgency_refusal
+from blizzard.hub.api.urgencies import urgency_refusal
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.garden.findings.model import Finding, IReadFindingRepository
@@ -58,7 +58,6 @@ from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, Malf
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.model import IReadProjectRepository, Project
 from blizzard.hub.domain.urgency.model import UrgencyRetired, UrgencyUnknown
-from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.domain.work_items.model import WorkItemFieldBlank
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
@@ -84,7 +83,6 @@ Authoring = FromDishka[GardenProposalAuthoring]
 Findings = FromDishka[IReadFindingRepository]
 Routines = FromDishka[IReadRoutineRepository]
 ProjectReads = FromDishka[IReadProjectRepository]
-Urgencies = FromDishka[UrgencyReading]
 Sources = FromDishka[IWorkSourceRegistry]
 Frames = FromDishka[ChunkFrameLoader]
 Events = FromDishka[EventBroker]
@@ -272,7 +270,6 @@ def accept_garden_proposal(
     proposals: Proposals,
     closing: Closing,
     findings: Findings,
-    urgencies: Urgencies,
     sources: Sources,
     frames: Frames,
     events: Events,
@@ -281,10 +278,10 @@ def accept_garden_proposal(
 ) -> object:
     """Accept the proposal. `mint_work_item` mints a linked hub item from `body` (or the proposal's own), wrapped in
     the "Related findings" template when it names findings; false records the decline. Promotes nothing; a blank
-    reason is stored as none. 404 unknown; 422 `body` or `urgency` without a mint, `urgency_unknown`/`urgency_retired`,
-    or a blank minted title or body; 409 closed or a raced ingest; 503 the default graph retired."""
+    reason is stored as none. A closed proposal is refused 409 first, whatever the request states. 404 unknown; 422
+    `body` or `urgency` without a mint, a minting accept's `urgency_unknown`/`urgency_retired`, or a blank minted title
+    or body; 409 closed or a raced ingest; 503 the default graph retired."""
     proposal = _get_or_404(proposal_id, proposals)
-    urgency = stated_urgency(request.urgency, urgencies)
     proposal_findings = resolve_proposal_findings(findings, proposal.findings)
     try:
         accepted = closing.accept(
@@ -294,9 +291,9 @@ def accept_garden_proposal(
             body=request.body,
             mint=request.mint_work_item,
             findings=proposal_findings,
-            urgency=urgency,
+            urgency=request.urgency,
         )
-    except (UrgencyUnknown, UrgencyRetired) as exc:  # retired after the edge's check
+    except (UrgencyUnknown, UrgencyRetired) as exc:
         raise urgency_refusal(exc) from exc
     except (GardenProposalMintFieldWithoutMint, WorkItemFieldBlank) as exc:
         raise ProblemHTTPException(partial(problems_garden.garden_proposal_invalid_problem, str(exc))) from exc
