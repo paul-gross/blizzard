@@ -1,5 +1,5 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
-import { runnerApi } from 'fleet';
+import { fromWorkItemsView, runnerApi } from 'fleet';
 
 import { runnerChunkWorkItemsKey } from '../../core/query-keys';
 
@@ -46,6 +46,7 @@ export function injectChunkTitleQuery(runnerId: () => string, chunkId: () => str
       queryKey: runnerChunkWorkItemsKey(runner, id),
       enabled: !!id,
       queryFn: () => fetchWorkItems(runner, id),
+      select: fromWorkItemsView,
       refetchInterval: false as const,
       staleTime: 5 * 60_000,
       gcTime: 30 * 60_000,

@@ -1,4 +1,4 @@
-import { type ChunkCardView, compactRef, type runnerApi } from 'fleet';
+import { type ChunkCardView, compactRef, type WorkItem } from 'fleet';
 
 import type { MachineChunkRow } from '../../core/chunk-rows.model';
 import { showsChunkStatus } from '../app-panel.model';
@@ -9,7 +9,7 @@ import { showsChunkStatus } from '../app-panel.model';
  * linked work items, each named by its label — or its ref, where it has none — over its title. The status is named
  * only where the live worker's own line does not already say it ({@link showsChunkStatus}).
  */
-export function machineChunkCardView(row: MachineChunkRow, linkedItems: readonly runnerApi.WorkItemEntry[]): ChunkCardView {
+export function machineChunkCardView(row: MachineChunkRow, linkedItems: readonly WorkItem[]): ChunkCardView {
   const { lease, status } = row;
   const shown = showsChunkStatus(row) ? status.label : null;
   return {

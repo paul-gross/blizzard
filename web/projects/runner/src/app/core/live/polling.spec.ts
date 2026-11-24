@@ -7,7 +7,7 @@ import { vi } from 'vitest';
 
 import { injectRunnerSessionQuery } from '../identity/auth.query';
 import { runnerLeasesQueryOptions } from '../leases.query';
-import { injectRunnerDashboardQuery } from '../status.query';
+import { injectRunnerDashboardStatusQuery } from '../status.query';
 
 /** A minimal host mounting all four backstop-governed reads in one injection context —
  * `chunkId` is fixed `null` (unselected), the gating {@link injectChunkDetailQuery}
@@ -18,7 +18,7 @@ import { injectRunnerDashboardQuery } from '../status.query';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 class PollingHost {
-  readonly dashboard = injectRunnerDashboardQuery(() => 'rn_1');
+  readonly dashboard = injectRunnerDashboardStatusQuery(() => 'rn_1');
   readonly leases = injectQuery(() => runnerLeasesQueryOptions('rn_1'));
   readonly session = injectRunnerSessionQuery();
   readonly chunkDetail = injectChunkDetailQuery(

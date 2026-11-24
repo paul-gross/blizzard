@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { runnerApi } from 'fleet';
+import type { Escalation } from '../../core/escalation.domain';
 
 import { MachineDetailView } from './chunk-detail-view';
 import type { Lease } from '../../core/lease.domain';
@@ -35,7 +35,7 @@ const LEASE: Lease = {
   project_id: null,
 };
 
-async function render(overrides: Partial<{ lease: Lease | null; escalation: runnerApi.EscalationView | null }> = {}) {
+async function render(overrides: Partial<{ lease: Lease | null; escalation: Escalation | null }> = {}) {
   await TestBed.configureTestingModule({
     imports: [MachineDetailView],
     providers: [provideZonelessChangeDetection()],
@@ -152,7 +152,7 @@ describe('MachineDetailView', () => {
   });
 
   describe('the wrapped takeover command', () => {
-    const escalation = (wrapped: string | null = null): runnerApi.EscalationView => ({
+    const escalation = (wrapped: string | null = null): Escalation => ({
       chunk_id: LEASE.chunk_id,
       lease_id: LEASE.lease_id,
       node_id: LEASE.node_id,
@@ -196,7 +196,7 @@ describe('MachineDetailView', () => {
   });
 
   describe('the Requeue control', () => {
-    const ESC: runnerApi.EscalationView = {
+    const ESC: Escalation = {
       chunk_id: LEASE.chunk_id, lease_id: LEASE.lease_id, node_id: LEASE.node_id, epoch: LEASE.epoch,
       closed_at: '2026-07-16T11:00:00.000Z', resume_command: 'claude --resume sess-new', wrapped_takeover_command: null,
       closure: null, cause: null, effort: null, harness_id: null, harness_version: null, model: null, project_id: null, session_name: null,

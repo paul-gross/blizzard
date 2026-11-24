@@ -29,7 +29,7 @@ import { fromDashboardView } from './runner-status.translate';
  * that can be `null` — a hub outage or an unwired runner, never a
  * client-visible error for that case). TanStack's query-key dedupe folds every
  * injection of one runner's {@link runnerDashboardKey} — the single-runner
- * {@link injectRunnerDashboardQuery} and the panel's fan-out (`panel-reads.ts`)
+ * {@link injectRunnerDashboardStatusQuery} and the panel's fan-out (`panel-reads.ts`)
  * alike — into one network request.
  */
 export function runnerDashboardQueryOptions(runnerId: string) {
@@ -46,15 +46,6 @@ export function runnerDashboardQueryOptions(runnerId: string) {
     // See RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS.
     refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
   };
-}
-
-/** One runner's dashboard ({@link runnerDashboardQueryOptions}) — for a section that shows
- * a single runner; held while `runnerId` gives `null`. */
-export function injectRunnerDashboardQuery(runnerId: () => string | null) {
-  return injectQuery(() => {
-    const id = runnerId();
-    return { ...runnerDashboardQueryOptions(id ?? ''), enabled: id !== null };
-  });
 }
 
 /** {@link runnerDashboardQueryOptions} read as its status sections (`DashboardStatus`) — the same key, cache

@@ -2,7 +2,6 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type runnerApi } from 'fleet';
 import {
   chunkDetail,
   chunkSummary,
@@ -20,12 +19,13 @@ import {
 } from 'fleet/testing';
 import { vi } from 'vitest';
 
+import type { Escalation } from '../../core/escalation.domain';
 import type { PanelLease } from '../../core/panel-reads.model';
 import { MachineDetail } from './chunk-detail';
 
 /** A `ChunkDetail` fixture — the runner's own `GET /api/chunks/{id}` pass-through
  * proxy response the header renders off. */
-const HEADER = (overrides: Partial<runnerApi.ChunkDetail> = {}): runnerApi.ChunkDetail =>
+const HEADER = (overrides: Parameters<typeof chunkDetail>[0] = {}) =>
   chunkDetail({
     chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
     graph_id: 'gr_1',
@@ -101,16 +101,16 @@ const PROJECT_DASHBOARD = runnerDashboardView({
 });
 
 /** What a pause or resume answers: the chunk's summary, or a {@link stubError} refusal. */
-type PauseResult = runnerApi.ChunkSummary | StubHttpError<number, StubDetailBody>;
+type PauseResult = ReturnType<typeof chunkSummary> | StubHttpError<number, StubDetailBody>;
 
-const PAUSED_SUMMARY = (): runnerApi.ChunkSummary =>
+const PAUSED_SUMMARY = () =>
   chunkSummary({ chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', graph_id: 'gr_1', status: 'paused' });
 
 /** The header's own severable read + mutation routes — `header` answers
  * `GET .../chunks/{id}`, `pauseResult` answers both `POST .../pause` and
  * `POST .../resume` (a `ChunkSummary`, or a {@link stubError} to exercise the
  * 409 refusal). */
-function routes(header: runnerApi.ChunkDetail = HEADER(), pauseResult: PauseResult = PAUSED_SUMMARY()) {
+function routes(header: ReturnType<typeof HEADER> = HEADER(), pauseResult: PauseResult = PAUSED_SUMMARY()) {
   return {
     'GET /runners/{runner_id}/api/chunks/{chunk_id}': () => header,
     'POST /runners/{runner_id}/api/chunks/{chunk_id}/pause': () => pauseResult,
@@ -120,7 +120,7 @@ function routes(header: runnerApi.ChunkDetail = HEADER(), pauseResult: PauseResu
 
 async function render(
   leases: readonly PanelLease[],
-  header: runnerApi.ChunkDetail = HEADER(),
+  header: ReturnType<typeof HEADER> = HEADER(),
   pauseResult: PauseResult = PAUSED_SUMMARY(),
 ): Promise<{
   el: HTMLElement;
@@ -558,7 +558,7 @@ describe('MachineDetail heartbeat label ticking', () => {
 });
 
 /** An open escalation on `chunkId`'s newest lease. */
-const escalation = (chunkId: string): runnerApi.EscalationView => ({
+const escalation = (chunkId: string): Escalation => ({
   chunk_id: chunkId,
   lease_id: NEW_LEASE,
   node_id: 'nd_build',
@@ -584,7 +584,7 @@ describe('MachineDetail Requeue', () => {
   const REQUEUE_ROUTE = '/runners/rn_2/api/chunks/ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9/requeues';
 
   /** The dock over an escalated chunk owned by `rn_2`, the requeue POST answered by `result`. */
-  async function mountEscalated(result: runnerApi.RequeueResponse | StubHttpError<number, StubDetailBody>) {
+  async function mountEscalated(result: { chunk_id: string; requeued: boolean } | StubHttpError<number, StubDetailBody>) {
     stub = stubRunnerClient({ 'POST /runners/{runner_id}/api/chunks/{chunk_id}/requeues': () => result });
     await TestBed.configureTestingModule({
       imports: [MachineDetail],

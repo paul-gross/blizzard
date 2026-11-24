@@ -25,23 +25,13 @@ import { fromHostWorkspaceView } from './host-workspace.translate';
  */
 
 /** `GET /api/host/runners` — every runner the host serves, and every one it holds halted. */
-export async function fetchHostRunners(): Promise<runnerApi.HostRunnerView[]> {
+async function fetchHostRunners(): Promise<runnerApi.HostRunnerView[]> {
   const { data, error } = await runnerApi.listRunnersApiHostRunnersGet({ throwOnError: false });
   if (error) throw error;
   return data?.items ?? [];
 }
 
-/** {@link fetchHostRunners} as a live query. */
-export function injectHostRunnersQuery() {
-  return injectQuery(() => ({
-    queryKey: hostRunnersKey,
-    queryFn: fetchHostRunners,
-    // See RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS.
-    refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
-  }));
-}
-
-/** {@link injectHostRunnersQuery} projected to {@link HostRunner} domains, over the same cache entry. */
+/** {@link fetchHostRunners} as a live query, projected to {@link HostRunner} domains. */
 export function injectHostRunnerDomainsQuery() {
   return injectQuery(() => ({
     queryKey: hostRunnersKey,
@@ -64,16 +54,8 @@ async function fetchHostWorkspaces(): Promise<runnerApi.HostWorkspaceView[]> {
   return data?.items ?? [];
 }
 
-/** `GET /api/host/workspaces` — the workspaces the host declares, each with its capacity. */
-export function injectHostWorkspacesQuery() {
-  return injectQuery(() => ({
-    queryKey: hostWorkspacesKey,
-    queryFn: fetchHostWorkspaces,
-    refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
-  }));
-}
-
-/** {@link injectHostWorkspacesQuery} projected to `HostWorkspace` domains, over the same cache entry. */
+/** `GET /api/host/workspaces` — the workspaces the host declares, each with its capacity, as `HostWorkspace`
+ * domains. */
 export function injectHostWorkspaceDomainsQuery() {
   return injectQuery(() => ({
     queryKey: hostWorkspacesKey,
@@ -90,17 +72,7 @@ async function fetchHostEnvironments(): Promise<runnerApi.HostWorkspaceEnvironme
 }
 
 /** `GET /api/host/environments` — the host's environments grouped by workspace, each held
- * one naming its runner and its chunk's project. */
-export function injectHostEnvironmentsQuery() {
-  return injectQuery(() => ({
-    queryKey: hostEnvironmentsKey,
-    queryFn: fetchHostEnvironments,
-    refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
-  }));
-}
-
-/** {@link injectHostEnvironmentsQuery} projected to `WorkspaceEnvironments` domains, over the same cache
- * entry. */
+ * one naming its runner and its chunk's project, as `WorkspaceEnvironments` domains. */
 export function injectHostEnvironmentDomainsQuery() {
   return injectQuery(() => ({
     queryKey: hostEnvironmentsKey,
@@ -132,16 +104,7 @@ async function fetchHostRegistration(): Promise<runnerApi.HostRegistrationView> 
 }
 
 /** `GET /api/host/registration` — the host's registration at its hub, as its latest
- * report found it. */
-export function injectHostRegistrationQuery() {
-  return injectQuery(() => ({
-    queryKey: hostRegistrationKey,
-    queryFn: fetchHostRegistration,
-    refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
-  }));
-}
-
-/** {@link injectHostRegistrationQuery} projected to its `HostRegistration` domain, over the same cache entry. */
+ * report found it, projected to its `HostRegistration` domain. */
 export function injectHostRegistrationDomainQuery() {
   return injectQuery(() => ({
     queryKey: hostRegistrationKey,

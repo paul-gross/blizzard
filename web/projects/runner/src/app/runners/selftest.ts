@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
-import { asyncState, errorMessage, injectPendingMutationVariables, type runnerApi } from 'fleet';
+import { asyncState, errorMessage, injectPendingMutationVariables } from 'fleet';
 
 import { selftestStartMutationKey } from '../core/mutation-keys';
-import { injectRunnerDashboardQuery } from '../core/status.query';
+import { injectRunnerDashboardStatusQuery } from '../core/status.query';
+import type { SelftestRun } from './selftest.domain';
 import { pendingHarnesses, selftestRows, selftestRunRefs } from './selftest.model';
 import { injectSelftestStartMutation, type SelftestStartVars } from './selftest.mutations';
 import { injectSelftestRunsQuery } from './selftest.query';
@@ -21,8 +22,8 @@ import { SelftestView } from './selftest-view';
 })
 export class LocalSelftest {
   readonly runnerId = input.required<string>();
-  private readonly dashboard = injectRunnerDashboardQuery(() => this.runnerId());
-  private readonly started = signal<ReadonlyMap<string, runnerApi.SelfTestView>>(new Map());
+  private readonly dashboard = injectRunnerDashboardStatusQuery(() => this.runnerId());
+  private readonly started = signal<ReadonlyMap<string, SelftestRun>>(new Map());
   private readonly startErrors = signal<ReadonlyMap<string, string>>(new Map());
   private readonly mutation = injectSelftestStartMutation(() => this.runnerId(), {
     onSuccess: (run, vars) => this.started.update((runs) => new Map(runs).set(vars.harness, run)),
@@ -32,7 +33,7 @@ export class LocalSelftest {
   /** Every start pending for this runner (`bzh:frontend-pending-override`). */
   private readonly pendingStarts = injectPendingMutationVariables<SelftestStartVars>(() => selftestStartMutationKey(this.runnerId()));
   private readonly reads = injectSelftestRunsQuery(() => this.runnerId(), () => selftestRunRefs(this.started()));
-  private readonly health = computed(() => this.dashboard.data()?.harness_health.items ?? []);
+  private readonly health = computed(() => this.dashboard.data()?.harness_health ?? []);
   protected readonly state = computed(() => asyncState(this.dashboard, this.health().length === 0));
   protected readonly rows = computed(() =>
     selftestRows(this.health(), this.started(), this.reads(), pendingHarnesses(this.pendingStarts()), this.startErrors()));

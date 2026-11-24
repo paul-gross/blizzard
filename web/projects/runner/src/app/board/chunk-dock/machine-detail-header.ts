@@ -10,11 +10,12 @@ import {
   KitMenuItemSubtitle,
   KitMenuPanel,
   ageMs,
+  type ChunkPause,
+  type ChunkWorkRef,
   formatHeldFor,
   injectNowSignal,
   pauseCopy,
   resumeCopy,
-  type runnerApi,
   type Tone,
   WorkRefLink,
 } from 'fleet';
@@ -53,7 +54,7 @@ export class MachineDetailHeader {
 
   /** The chunk's work refs — each linked to its source's web address, or plain text
    * when `web_url` is null. */
-  readonly workRefs = input<readonly runnerApi.WorkRefView[]>([]);
+  readonly workRefs = input<readonly ChunkWorkRef[]>([]);
 
   /** The derived machine-side status label and tone. */
   readonly statusLabel = input<string | null>(null);
@@ -92,7 +93,7 @@ export class MachineDetailHeader {
 
   /** The chunk's open operator pause, if any — non-null renders Resume, null renders
    * Pause (subject to {@link pausable}). */
-  readonly pause = input<runnerApi.PauseView | null>(null);
+  readonly pause = input<ChunkPause | null>(null);
 
   /** Whether an **unpaused** chunk may be paused. */
   readonly pausable = input<boolean>(false);

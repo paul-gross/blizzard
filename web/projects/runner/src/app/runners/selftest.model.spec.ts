@@ -1,14 +1,15 @@
-import type { runnerApi } from 'fleet';
-
+import type { HarnessHealth } from '../core/runner-status.domain';
+import { selftestRun } from './selftest.builders';
+import type { SelftestRun, SelftestStatus } from './selftest.domain';
 import { checkTone, pendingHarnesses, selftestPhase, selftestRows, selftestRunRefs, selftestTone } from './selftest.model';
 
-const health = (harness_id: string, available = true): runnerApi.HarnessHealthView => ({
+const health = (harness_id: string, available = true): HarnessHealth => ({
   harness_id, available, admitted_range: null, cause: null, degradations: [], version: null,
 });
-const run = (harness: string, status: string, settled?: boolean): runnerApi.SelfTestView => ({
-  id: `st_${harness}`, harness, status: status as runnerApi.SelfTestStatus, checks: [], error: null,
-  ...(settled === undefined ? {} : { settled }),
-} as runnerApi.SelfTestView);
+const status = (raw: string): SelftestStatus =>
+  raw === 'running' || raw === 'passed' || raw === 'failed' ? raw : { kind: 'unknown', raw };
+const run = (harness: string, raw: string, settled?: boolean): SelftestRun =>
+  selftestRun({ id: `st_${harness}`, harness, status: status(raw), settled: settled ?? null });
 const none = new Set<string>();
 
 describe('selftestPhase', () => {
@@ -81,7 +82,7 @@ describe('selftestRunRefs', () => {
 
 describe('selftestTone', () => {
   it('tones each status, an unlisted one idle', () => {
-    expect(['running', 'passed', 'failed', 'queued'].map((status) => selftestTone(status))).toEqual(['spawning', 'done', 'needs', 'idle']);
+    expect(['running', 'passed', 'failed', 'queued'].map((raw) => selftestTone(status(raw)))).toEqual(['spawning', 'done', 'needs', 'idle']);
   });
 });
 

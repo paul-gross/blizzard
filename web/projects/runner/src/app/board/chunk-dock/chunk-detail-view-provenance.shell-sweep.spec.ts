@@ -1,6 +1,7 @@
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { KitPanel, type runnerApi } from 'fleet';
+import { KitPanel } from 'fleet';
+import type { Escalation } from '../../core/escalation.domain';
 import { commands, page } from 'vitest/browser';
 
 import { MachineDetailView } from './chunk-detail-view';
@@ -47,7 +48,7 @@ const LEASE: Lease = {
   project_id: null,
 };
 
-const ESCALATION: runnerApi.EscalationView = {
+const ESCALATION: Escalation = {
   chunk_id: LEASE.chunk_id,
   lease_id: LEASE.lease_id,
   node_id: LEASE.node_id,

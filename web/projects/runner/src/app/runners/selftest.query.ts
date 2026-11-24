@@ -4,22 +4,12 @@ import { injectQueries } from '@tanstack/angular-query-experimental/inject-queri
 import { errorMessage, runnerApi } from 'fleet';
 
 import { runnerDashboardKey, runnerSelftestKey } from '../core/query-keys';
-import { selftestPhase } from './selftest.model';
+import type { SelftestRun } from './selftest.domain';
+import { selftestPhase, type SelftestRunRead, type SelftestRunRef } from './selftest.model';
+import { fromSelfTestView } from './selftest.translate';
 
 /** How often a still-running selftest run is re-read. */
 export const SELFTEST_POLL_MS = 1000;
-
-/** One harness's latest selftest run, by id. */
-export interface SelftestRunRef {
-  readonly harness: string;
-  readonly id: string;
-}
-
-/** A harness's latest run as last read, or the read's failure. */
-export interface SelftestRunRead {
-  readonly run: runnerApi.SelfTestView | null;
-  readonly error: string | null;
-}
 
 /**
  * `GET /runners/{runner_id}/api/selftests/{selftest_id}` — one run's current state, through the
@@ -39,7 +29,7 @@ export function selftestQueryOptions(runnerId: string, selftestId: string) {
       return data!;
     },
     refetchInterval: (query: { state: { data?: runnerApi.SelfTestView } }) =>
-      query.state.data !== undefined && selftestPhase(query.state.data) === 'running' ? SELFTEST_POLL_MS : false,
+      query.state.data !== undefined && selftestPhase(fromSelfTestView(query.state.data)) === 'running' ? SELFTEST_POLL_MS : false,
   };
 }
 
@@ -52,10 +42,10 @@ export function injectSelftestRunsQuery(runnerId: () => string, runs: () => read
   const reads = injectQueries(() => ({
     queries: runs().map((ref) => ({
       ...selftestQueryOptions(runnerId(), ref.id),
-      select: (run: runnerApi.SelfTestView) => ({ harness: ref.harness, run }),
+      select: (run: runnerApi.SelfTestView) => ({ harness: ref.harness, run: fromSelfTestView(run) }),
     })),
     combine: (results) => {
-      const plain = results as unknown as readonly QueryObserverResult<{ harness: string; run: runnerApi.SelfTestView }>[];
+      const plain = results as unknown as readonly QueryObserverResult<{ harness: string; run: SelftestRun }>[];
       return new Map<string, SelftestRunRead>(runs().map((ref, i) => {
         const result = plain[i];
         return [ref.harness, {

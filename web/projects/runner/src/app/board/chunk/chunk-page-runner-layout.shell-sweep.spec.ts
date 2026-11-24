@@ -3,7 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type runnerApi } from 'fleet';
 import {
   assetArtifactView,
   chunkDetail,
@@ -51,7 +50,7 @@ import { RunnerChunkPage } from './runner-chunk-page';
  */
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 
-const DETAIL: runnerApi.ChunkDetail = chunkDetail({
+const DETAIL = chunkDetail({
   chunk_id: CHUNK_ID,
   graph_id: 'gr_1',
   graph_name: 'default',
@@ -101,12 +100,12 @@ const DETAIL: runnerApi.ChunkDetail = chunkDetail({
 });
 
 /** The host's one runner — the chunk page finds the chunk's runner off its leases. */
-const HOST_RUNNERS: runnerApi.HostRunnerListResponse = {
+const HOST_RUNNERS = {
   items: [hostRunnerView({ bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }], agents_in_use: 1, max_agents: 4 })],
 };
 
 /** `rn_1`'s lease on the chunk — what makes it the chunk's owner. */
-const LEASES: runnerApi.LeaseListResponse = {
+const LEASES = {
   items: [
     runnerLeaseView({
       lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',

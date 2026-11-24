@@ -1,13 +1,26 @@
-import { openLookup, type runnerApi, type Tone } from 'fleet';
+import type { Tone } from 'fleet';
 
-import type { SelftestRunRead, SelftestRunRef } from './selftest.query';
+import type { HarnessHealth } from '../core/runner-status.domain';
+import type { KnownSelftestStatus, SelftestRun, SelftestStatus } from './selftest.domain';
+
+/** One harness's latest selftest run, by id. */
+export interface SelftestRunRef {
+  readonly harness: string;
+  readonly id: string;
+}
+
+/** A harness's latest run as last read, or the read's failure. */
+export interface SelftestRunRead {
+  readonly run: SelftestRun | null;
+  readonly error: string | null;
+}
 
 /** One harness's selftest row — its health, its latest run as last read, and whether a Run is
  * in flight for it (its start pending, or its run still running). */
 export interface SelftestRow {
   readonly harness: string;
   readonly available: boolean;
-  readonly run: runnerApi.SelfTestView | null;
+  readonly run: SelftestRun | null;
   readonly busy: boolean;
   readonly error: string | null;
 }
@@ -18,8 +31,8 @@ export type SelftestPhase = 'running' | 'settled' | 'unclassified';
 
 /** A run's {@link SelftestPhase}, read from the runner's `settled` alone; its raw `status`
  * never decides it. A run without the field is `unclassified`. */
-export function selftestPhase(run: { readonly settled?: boolean }): SelftestPhase {
-  if (run.settled === undefined) return 'unclassified';
+export function selftestPhase(run: { readonly settled: boolean | null }): SelftestPhase {
+  if (run.settled === null) return 'unclassified';
   return run.settled ? 'settled' : 'running';
 }
 
@@ -30,8 +43,8 @@ export function selftestPhase(run: { readonly settled?: boolean }): SelftestPhas
  * start's failure, else the run read's.
  */
 export function selftestRows(
-  health: readonly runnerApi.HarnessHealthView[],
-  started: ReadonlyMap<string, runnerApi.SelfTestView>,
+  health: readonly HarnessHealth[],
+  started: ReadonlyMap<string, SelftestRun>,
   reads: ReadonlyMap<string, SelftestRunRead>,
   pending: ReadonlySet<string>,
   startErrors: ReadonlyMap<string, string>,
@@ -56,15 +69,16 @@ export function pendingHarnesses(pending: readonly { readonly harness: string }[
 }
 
 /** Each started run as the ref its read polls by. */
-export function selftestRunRefs(started: ReadonlyMap<string, runnerApi.SelfTestView>): readonly SelftestRunRef[] {
+export function selftestRunRefs(started: ReadonlyMap<string, SelftestRun>): readonly SelftestRunRef[] {
   return [...started.values()].map((run) => ({ harness: run.harness, id: run.id }));
 }
 
-/** A run's status as a badge tone — an unlisted status reads as idle. */
-export const selftestTone = openLookup<runnerApi.SelfTestStatus, Tone>(
-  { running: 'spawning', passed: 'done', failed: 'needs' },
-  () => 'idle',
-);
+const SELFTEST_TONES: Readonly<Record<KnownSelftestStatus, Tone>> = { running: 'spawning', passed: 'done', failed: 'needs' };
+
+/** A run's status as a badge tone — an unknown status reads as idle. */
+export function selftestTone(status: SelftestStatus): Tone {
+  return typeof status === 'string' ? SELFTEST_TONES[status] : 'idle';
+}
 
 /** A check's outcome as a badge tone, in {@link selftestTone}'s terminal tones. */
 export function checkTone(passed: boolean): Tone {

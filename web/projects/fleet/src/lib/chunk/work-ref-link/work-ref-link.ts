@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import type { WorkRefView } from '../../api/hub';
+import type { ChunkWorkRef } from '../chunk-page/chunk-detail.model';
 
 /** How a {@link WorkRefLink} looks: `inline` and `wrapping` are the identity line's two header looks — one
  * clipped with an ellipsis, one breaking mid-token for a phone-width page — and `chip` is the row/card chip. */
@@ -9,7 +9,7 @@ export type WorkRefLinkAppearance = 'inline' | 'wrapping' | 'chip';
 /**
  * One work ref as a link out to its work source — the single place a chunk's work item is written as a link,
  * for the dock headers, the routed page header, and the runner's row and card views. Presentational, no
- * injection: the ref comes in as the wire's `WorkRefView`, and any `WorkItemEntry` satisfies it structurally.
+ * injection: the ref comes in as the domain's `ChunkWorkRef`, which any ref with its fields satisfies structurally.
  *
  * With a `web_url` it is an anchor opening in a new tab; without one (an unconfigured source) it degrades to
  * plain text, no broken link. The text is the ref's `label`, else `source#ref`. A click on the anchor stops
@@ -24,7 +24,7 @@ export type WorkRefLinkAppearance = 'inline' | 'wrapping' | 'chip';
 })
 export class WorkRefLink {
   /** The work ref to render. */
-  readonly workRef = input.required<WorkRefView>();
+  readonly workRef = input.required<ChunkWorkRef>();
 
   /** Which look to wear. */
   readonly appearance = input<WorkRefLinkAppearance>('inline');

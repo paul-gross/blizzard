@@ -2,9 +2,9 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type runnerApi } from 'fleet';
 import {
   capacitiesView,
+  hostRunnerView,
   type RequestClientStub,
   runnerDashboardView,
   runnerStatusView,
@@ -16,7 +16,11 @@ import {
 import { HostPanel } from './host-panel';
 
 /** Two runners as the host reports them: one binding two workspaces, one held by its own brake. */
-const RUNNERS: runnerApi.HostRunnerView[] = [
+
+/** The wire bodies the stubbed transport answers, shaped by their fixture builders. */
+type HostRunnerBody = ReturnType<typeof hostRunnerView>;
+
+const RUNNERS: HostRunnerBody[] = [
   {
     runner_id: 'rn_1',
     name: 'r-claude',
@@ -70,7 +74,7 @@ const DASHBOARD_RN_2 = runnerDashboardView({
   },
 });
 
-const ENVIRONMENTS: runnerApi.HostEnvironmentListResponse = {
+const ENVIRONMENTS = {
   workspaces: [
     {
       workspace_id: 'workspace-local',
@@ -88,7 +92,7 @@ afterEach(() => stub.restore());
 
 async function render(
   options: {
-    runners?: () => runnerApi.HostRunnerListResponse | ReturnType<typeof stubError<502, { detail: string }>>;
+    runners?: () => { items: HostRunnerBody[] } | ReturnType<typeof stubError<502, { detail: string }>>;
     subscriptionsFail?: boolean;
     workspacesFail?: boolean;
     environmentsFail?: boolean;

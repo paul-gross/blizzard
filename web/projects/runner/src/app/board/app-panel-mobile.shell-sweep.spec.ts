@@ -2,7 +2,6 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { provideRouter } from '@angular/router';
-import { type runnerApi } from 'fleet';
 import {
   capacitiesView,
   hostRunnerView,
@@ -82,7 +81,10 @@ const FIVE_WORK_ITEMS = {
  * spaces alone, so the long token has to be proven to break rather than push the panel
  * sideways.
  */
-const LONG_ASK: runnerApi.AskListResponse = {
+/** An asks section body, as the dashboard carries it. */
+interface AskSection { items: ReturnType<typeof runnerAskView>[] }
+
+const LONG_ASK: AskSection = {
   items: [
     runnerAskView({
       question_id: 'qn_long',
@@ -104,7 +106,7 @@ const LONG_ASK: runnerApi.AskListResponse = {
 /** A full `DashboardView` body, `asks` set to `asks` and every other section a
  * plausible/empty default, so the shell's default fallback cannot
  * leave the dashboard readers pending/malformed. */
-function dashboardBody(asks: runnerApi.AskListResponse): runnerApi.DashboardView {
+function dashboardBody(asks: AskSection) {
   return runnerDashboardView({
     runner: runnerStatusView({
       runner_id: 'runner-local',
@@ -127,7 +129,7 @@ const HOST_RUNNERS = {
   ],
 };
 
-async function render(asks: runnerApi.AskListResponse = { items: [] }) {
+async function render(asks: AskSection = { items: [] }) {
   const stub = stubRunnerClient({
     'GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items': (_request, { runner_id }) =>
       runner_id === 'rn_1' ? FIVE_WORK_ITEMS : { items: [] },

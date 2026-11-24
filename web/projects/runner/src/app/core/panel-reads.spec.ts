@@ -2,10 +2,9 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type runnerApi } from 'fleet';
 import {
-  type RequestClientStub,
   hostRunnerView,
+  type RequestClientStub,
   runnerAskView,
   runnerDashboardView,
   runnerFactView,
@@ -31,7 +30,12 @@ class PanelReadsHost {
   readonly facts = injectPanelFacts();
 }
 
-function hostRunner(runnerId: string, name: string, overrides: Partial<runnerApi.HostRunnerView> = {}): runnerApi.HostRunnerView {
+
+/** The wire bodies the stubbed transport answers, shaped by their fixture builders. */
+type HostRunnerBody = ReturnType<typeof hostRunnerView>;
+type DashboardBody = ReturnType<typeof runnerDashboardView>;
+
+function hostRunner(runnerId: string, name: string, overrides: Partial<HostRunnerBody> = {}): HostRunnerBody {
   return hostRunnerView({
     runner_id: runnerId,
     name,
@@ -45,7 +49,7 @@ function projectOf(runnerId: string): string {
   return `proj-of-r${runnerId.slice('rn_'.length)}`;
 }
 
-function dashboard(runnerId: string): runnerApi.DashboardView {
+function dashboard(runnerId: string): DashboardBody {
   const project_id = projectOf(runnerId);
   return runnerDashboardView({
     runner: runnerStatusView({ runner_id: runnerId }),

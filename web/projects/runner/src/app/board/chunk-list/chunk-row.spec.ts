@@ -1,7 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type runnerApi } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubRunnerClient, workItemEntry } from 'fleet/testing';
 
 import { type MachineChunkRow, machineChunkRows } from '../../core/chunk-rows.model';
@@ -55,7 +54,7 @@ let stub: RequestClientStub | undefined;
 afterEach(() => stub?.restore());
 
 async function render(
-  workItemsResponse: () => runnerApi.WorkItemsView | ReturnType<typeof stubError<502, { detail: string }>> = () => ({ items: [] }),
+  workItemsResponse: () => { items: ReturnType<typeof workItemEntry>[] } | ReturnType<typeof stubError<502, { detail: string }>> = () => ({ items: [] }),
   inputs: { row?: MachineChunkRow; layout?: 'board' | 'list' } = {},
 ) {
   stub = stubRunnerClient({ 'GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items': () => workItemsResponse() });
@@ -73,7 +72,7 @@ async function render(
   return { fixture, el: fixture.nativeElement as HTMLElement };
 }
 
-const WORK_ITEMS: runnerApi.WorkItemsView = {
+const WORK_ITEMS = {
   items: [
     workItemEntry({
       source: 'blizzard',

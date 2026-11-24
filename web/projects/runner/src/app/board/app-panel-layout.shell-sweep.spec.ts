@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type KitAsyncStateValue, type runnerApi } from 'fleet';
+import { type KitAsyncStateValue } from 'fleet';
 import {
   capacitiesView,
   hostEnvironmentView,
@@ -113,7 +113,7 @@ const HOST_RUNNERS = {
   ],
 };
 
-function dashboard(runnerId: string): runnerApi.DashboardView {
+function dashboard(runnerId: string) {
   return runnerDashboardView({
     fleet_summary: { ready: 12, running: 9, waiting: 3, needs: 2 },
     runner: runnerStatusView({
