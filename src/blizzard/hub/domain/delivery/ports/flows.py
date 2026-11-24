@@ -243,6 +243,10 @@ class IWriteFlows(IReadFlows, Protocol):
         ...
 
 
+class IFlowStore(IWriteFlows, IReadFlowViews, Protocol):
+    """The tenant's one flow store: the reads, the views and the writes of its delivery lines."""
+
+
 @domain_model
 @dataclass(frozen=True)
 class LineSignature:

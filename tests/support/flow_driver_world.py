@@ -10,17 +10,17 @@ from sqlalchemy import Table, func, select
 
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_driver import FlowLineStores, TickResult
+from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.domain.actions.effects import IEffectSink, Pass
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.delivery.flows import Submission
-from blizzard.hub.domain.delivery.reconcile import (
-    FlowLineReconciler,
-)
+from blizzard.hub.domain.delivery.ports.flows import IFlowChangePublisher
+from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.landing import VisitForges
 from blizzard.hub.store import schema as s
-from blizzard.hub.tenancy import StoreScope, TenantId
+from blizzard.hub.tenancy import TenantId
 from tests.support.scaffolding import (
     TEST_HUB_ACTIONS,
     build_hub,
@@ -99,15 +99,13 @@ class World:
             corpus=self.hub.hub_services.hub_scoped_reads.corpus,
             tenants=lambda: self.hub.hub_services.tenants.open_tenants.every().keys(),
             lines=self.lines,
-            turns=lambda tenant: self.hub.open_services(tenant).turns,
-            notices=lambda tenant: BudgetNoticeDrain(
-                self.hub.open_services(tenant).forge_budgets, self.hub.open_services(tenant).event_log
-            ),
-            publishers=lambda tenant: self.hub.open_services(tenant).events,
+            turns=lambda tenant: self.hub.resolve(tenant, TurnRunner),
+            notices=lambda tenant: self.hub.resolve(tenant, BudgetNoticeDrain),
+            publishers=lambda tenant: self.hub.resolve(tenant, IFlowChangePublisher),
         )
 
     def lines(self, tenant: TenantId) -> FlowLineReconciler:
-        return self.hub.hub_services.tenants.open_services(StoreScope(tenant)).flow_lines
+        return self.hub.resolve(tenant, FlowLineReconciler)
 
     def tick(self) -> TickResult:
         """One tick, its turns run to their end."""

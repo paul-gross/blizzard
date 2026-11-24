@@ -15,6 +15,7 @@ from sqlalchemy import select, update
 from blizzard.hub.domain.chunk.model import OperationalEvent, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.graph.validation import ValidationResult, Validator
 from blizzard.hub.store import schema as s
@@ -200,11 +201,11 @@ def test_the_boot_pass_escalates_a_chunk_standing_at_a_node_with_no_action(tmp_p
     _strip_action(hub, graph_id, _LEGACY_RUN)
     _park_at_merge(hub, chunk_id, build_node_id, graph_id)
 
-    assert hub.services.flow_lines.escalate_actionless() == 1
+    assert hub.default_adapter(FlowLineReconciler).escalate_actionless() == 1
 
     _assert_escalated_once(hub, chunk_id, naming="./ship.sh --now")
     # A second boot, and a tick after it, write nothing.
-    assert hub.services.flow_lines.escalate_actionless() == 0
+    assert hub.default_adapter(FlowLineReconciler).escalate_actionless() == 0
     hub.settle_turns()
     _assert_escalated_once(hub, chunk_id, naming="./ship.sh --now")
 
@@ -214,7 +215,7 @@ def test_the_boot_pass_leaves_a_chunk_pinned_to_the_graph_but_standing_elsewhere
     chunk_id, _build_node_id, graph_id = _claimed(hub)
     _strip_action(hub, graph_id, _LEGACY_RUN)
 
-    assert hub.services.flow_lines.escalate_actionless() == 0
+    assert hub.default_adapter(FlowLineReconciler).escalate_actionless() == 0
 
     assert _escalations(hub, chunk_id) == []
 

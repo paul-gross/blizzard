@@ -28,6 +28,7 @@ from blizzard.hub.domain.config.credentials import CredentialDraft, CredentialUn
 from blizzard.hub.domain.config.repositories import RepositoryEdit, ResolvedRepository
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.delivery.flows import Submission
+from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
@@ -186,7 +187,7 @@ class _World:
 
     @property
     def turns(self) -> TurnRunner:
-        return self.hub.services.turns
+        return self.hub.default_adapter(TurnRunner)
 
     def at_step(self, action: str, args: str = "") -> str:
         """A chunk standing at ``step``, which names ``action``."""
@@ -481,7 +482,7 @@ def test_a_chunk_stopped_mid_turn_keeps_its_branch_busy_and_closes_stopped_at_th
             return
         stopped = visit.chunk.chunk_id
         assert world.hub.client.post(f"/api/chunks/{stopped}/stop", json={}).status_code in (200, 202)
-        lines = world.hub.services.flow_lines
+        lines = world.hub.default_adapter(FlowLineReconciler)
         lines.reconcile(0)
         seen.update(chunk=stopped, admitted=lines.admit(0, world.hub.clock.now()))
         seen["closed"] = world.submission(stopped).closed

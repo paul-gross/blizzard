@@ -47,6 +47,7 @@ from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository, IWr
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.chunk.ports.usage import IReadChunkUsageRepository, IWriteChunkUsageRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, IWriteChunkWorkRefsRepository
+from blizzard.hub.domain.delivery.ports.flows import IReadFlows, IReadFlowViews, IWriteFlows
 from blizzard.hub.domain.garden.delivery.materialize import (
     IReadGardenDeliveryRepository,
     IWriteGardenDeliveryRepository,
@@ -144,7 +145,7 @@ ADAPTER_PORTS: Mapping[type[Any], tuple[type[Any], ...]] = {
     RepositoryRecordStore: (),
     ForgeRecordStore: (),
     CredentialRecordStore: (),
-    FlowStore: (IReadChunkFlowSubmissions,),
+    FlowStore: (IReadChunkFlowSubmissions, IReadFlows, IReadFlowViews, IWriteFlows),
     SecretReferrersStore: (),
     ForgeReferrersStore: (),
     CredentialReferrersStore: (),
@@ -202,7 +203,6 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantStores.repository_records", stores.repository_records, RepositoryRecordStore),
         ("TenantStores.forge_records", stores.forge_records, ForgeRecordStore),
         ("TenantStores.credential_records", stores.credential_records, CredentialRecordStore),
-        ("TenantStores.flows", stores.flows, FlowStore),
         ("TenantStores.secret_referrers", stores.secret_referrers, SecretReferrersStore),
         ("TenantStores.forge_referrers", stores.forge_referrers, ForgeReferrersStore),
         ("TenantStores.credential_referrers", stores.credential_referrers, CredentialReferrersStore),
@@ -237,6 +237,7 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantServices.hosts", services.hosts, IReadHostRegistry),
         ("TenantStores.work_item_edits", stores.work_item_edits, WorkItemEditService),
         ("TenantServices.event_log", services.event_log, EventLogService),
+        ("TenantServices.flows", services.flows, FlowStore),
     )
     problems = [
         f"{name} is not its container instance" for name, field, key in retained if field is not tenant.get(key)

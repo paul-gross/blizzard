@@ -38,6 +38,8 @@ NARROWED_MODULES: tuple[Path, ...] = tuple(
     Path("hub/api") / name
     for name in (
         "findings.py",
+        "flows.py",
+        "flow_submissions.py",
         "graphs.py",
         "admin_settings.py",
         "config.py",

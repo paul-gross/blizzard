@@ -58,7 +58,7 @@ from blizzard.hub.api.auth_session import refuse_closed_tenant
 from blizzard.hub.api.cadences import project_router as project_cadences_router
 from blizzard.hub.api.cadences import router as cadences_router
 from blizzard.hub.api.chunk_dependencies import router as chunk_dependencies_router
-from blizzard.hub.api.chunk_events import AnnouncedTurns, announce_minted
+from blizzard.hub.api.chunk_events import announce_minted
 from blizzard.hub.api.chunks import router as chunks_router
 from blizzard.hub.api.clock import clock_router
 from blizzard.hub.api.config import router as config_router
@@ -156,6 +156,7 @@ from blizzard.hub.domain.config.forge_check import ForgeCheck
 from blizzard.hub.domain.config.oauth_providers import ProvidersOrphaned, require_providers_configured
 from blizzard.hub.domain.config.secrets import KeysUncovered, require_keys_covered
 from blizzard.hub.domain.config.work_sources import BuiltInWorkSource
+from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.observability.analytics.extraction import shipped_extractors
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
@@ -829,7 +830,6 @@ def build_hosted_app(
         services = build_services(
             core,
             public_url=config.public_url,
-            follow_latest_default=config.follow_latest,
             transcript_caps=config.transcripts.transcript_caps(),
             # No exporter is built unless OpenTelemetry's own variables enable tracing.
             trace_exporter=(
@@ -896,9 +896,9 @@ def build_hosted_app(
             # Before the hub serves, in each open tenant: the actionless escalations first, so the flow driver's boot
             # reconcile finds those chunks escalated and submits none of them, then the turns the last process
             # left open.
-            flow_driver = build_flow_driver(services, AnnouncedTurns)
+            flow_driver = build_flow_driver(core.process)
             for stores in tenants:
-                services.tenants.open_services(stores.scope).flow_lines.escalate_actionless()
+                core.process.tenants.resolve(stores.scope, FlowLineReconciler).escalate_actionless()
                 try:
                     flow_driver.recover_turns(stores.scope.tenant)
                 except Exception:

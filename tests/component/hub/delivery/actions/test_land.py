@@ -21,6 +21,7 @@ from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.actions.land import Land
+from blizzard.hub.delivery.hub_node import HubNodeRouter
 from blizzard.hub.domain.actions.declarations import GitCommits
 from blizzard.hub.domain.actions.effects import (
     ActionEscalation,
@@ -1317,7 +1318,7 @@ def test_a_forge_lacking_what_land_requires_escalates_once_before_the_pass(tmp_p
     )
     forge = hub.services.forge_records.get(target.fields.forge_id)
     assert forge is not None
-    hub.services.turns.router.escalate_capability_missing(
+    hub.default_adapter(HubNodeRouter).escalate_capability_missing(
         chunk,
         node,
         resolved,
@@ -1395,7 +1396,7 @@ def test_a_refused_credential_records_one_forge_auth_event_and_none_for_a_duplic
         forge=record.fields.forge_id,
     )
     escalation = ActionEscalation(EscalationCause.FORGE_AUTH, "refused", auth=reason)
-    assert not hub.services.turns.router.escalate_forge_auth(chunk, node, escalation, reason, epoch=1)
+    assert not hub.default_adapter(HubNodeRouter).escalate_forge_auth(chunk, node, escalation, reason, epoch=1)
     assert _event_kinds(hub).count("forge-auth-refused") == 1
 
 

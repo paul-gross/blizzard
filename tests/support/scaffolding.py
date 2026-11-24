@@ -60,7 +60,7 @@ from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.hub.api.auth_session import TENANT_HEADER
-from blizzard.hub.api.chunk_events import AnnouncedTurns, announce_minted
+from blizzard.hub.api.chunk_events import announce_minted
 from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.auth.invitations import InvitationToken
 from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
@@ -1530,7 +1530,7 @@ class HubHarness:
     def flow_driver(self) -> FlowDriver:
         """The hub's flow driver, built on first use as the hosted hub builds it — an in-process hub runs none."""
         if self._driver is None:
-            self._driver = build_flow_driver(self.hub_services, AnnouncedTurns)
+            self._driver = build_flow_driver(self.hub_services.process)
         return self._driver
 
     def take_turns(self, *, ticks: int = 1) -> list[TickResult]:
@@ -1929,6 +1929,7 @@ def build_hub(
         tracing=tracing or TracingConfig(),
         egress=egress or EgressConfig(),
         action_pass_seconds=action_pass_seconds,
+        public_url=public_url,
     )
     # A second build over the same ``tmp_path`` reopens the store the first one wrote;
     # copying over it would discard that state, so only a fresh directory takes the copy.
@@ -1993,6 +1994,7 @@ def build_hub(
             forges=forges,
             work_sources=tenant_work_sources,
             oauth_providers=OAuthProviderRegistry(oauth_providers) if oauth_providers is not None else None,
+            action_pass_grace=action_pass_grace,
         ),
     )
     default_stores = core.open(default)
@@ -2010,13 +2012,11 @@ def build_hub(
     hub_services = build_services(
         core,
         public_url=public_url,
-        follow_latest_default=config.follow_latest,
         transcript_caps=transcript_caps,
         trace_exporter=trace_exporter,
         tracing_settings=tracing_settings,
         egress_path_key=egress_path_key,
         extractors=extractors,
-        action_pass_grace=action_pass_grace,
         cadences_on=lambda: (flags or HUB_FLAGS).on("cadences"),
         announce_minted=announce_minted,
     )

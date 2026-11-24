@@ -264,7 +264,6 @@ def _hosted(
     )
     services = build_services(
         core,
-        follow_latest_default=False,
         extractors=shipped_extractors(),
         cadences_on=lambda: False,
         announce_minted=announce_minted,
