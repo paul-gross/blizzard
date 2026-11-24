@@ -23,7 +23,6 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.foundation.registry.internal.overrides import OverrideSet
 from blizzard.foundation.registry.internal.recording import RecordingRegistry
-from blizzard.hub.api.chunk_events import announce_minted
 from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.composition import HubCore, HubServices, build_services, connections_for_engine
 from blizzard.hub.config import HubConfig
@@ -267,7 +266,6 @@ def _hosted(
         follow_latest_default=False,
         extractors=shipped_extractors(),
         cadences_on=lambda: False,
-        announce_minted=announce_minted,
     )
     return core, services, StoreScope(default_tenant(engine))
 

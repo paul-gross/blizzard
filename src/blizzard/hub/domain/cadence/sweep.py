@@ -77,6 +77,11 @@ class CadenceTally:
         }
 
 
+#: The key the tenant's cadence takes its mint announcement under: publishes a committed mint's frames, supplied by the
+#: API edge's wiring, which holds the frame loader this area cannot import.
+MintAnnouncement = Callable[[MintedErrand], None]
+
+
 class TenantCadence:
     """One tenant's half of the cadence sweep: judge its errands, and mint the due ones it is handed."""
 
@@ -88,7 +93,7 @@ class TenantCadence:
         runs: IReadErrandRunsRepository,
         planning: ErrandPlanning,
         mint: CadenceMint,
-        announce: Callable[[MintedErrand], None],
+        announce: MintAnnouncement,
         clock: IClock,
     ) -> None:
         self._cadences = cadences

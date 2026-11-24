@@ -22,7 +22,6 @@ from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.foundation.registry.interface import Lifetime, port
 from blizzard.foundation.registry.scopes import ScopeValues, open_child, supply
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.api.chunk_events import announce_minted
 from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.composition import (
     HubCore,
@@ -241,7 +240,6 @@ def _served(core: HubCore) -> HubServices:
         follow_latest_default=False,
         extractors=shipped_extractors(),
         cadences_on=lambda: False,
-        announce_minted=announce_minted,
     )
 
 

@@ -116,7 +116,7 @@ def register_hub(
         graph_area.register(registry, store.register_graphs(registry))
         _register_urgency(registry)
         _register_garden(registry, formats=api.register(registry))
-        cadence_area.register(registry)
+        _register_cadence(registry)
         _register_config(registry)
         _register_projects(registry)
         _register_fleet(registry, versions=versions)
@@ -142,6 +142,7 @@ def register_hub(
         store.register_garden_materialization_absent(registry)
         store.register_garden_runs_absent(registry)
         garden_area.register_absent(registry)
+        store.register_cadence_absent(registry)
         cadence_area.register_absent(registry)
         store.register_config_absent(registry)
         config_wiring.register_absent(registry)
@@ -217,6 +218,12 @@ def _register_garden(registry: LegacyRegistry, *, formats: Ref[GardenFormats]) -
         sweeps=runs.sweeps,
         runs=runs.runs,
     )
+
+
+def _register_cadence(registry: LegacyRegistry) -> None:
+    """The cadence adapters, and the cadence area's ports and services over them."""
+    refs = store.register_cadence(registry)
+    cadence_area.register(registry, cadences=refs.cadences, runs=refs.runs)
 
 
 def _register_urgency(registry: LegacyRegistry) -> None:

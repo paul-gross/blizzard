@@ -6,6 +6,7 @@ holds it, and while the ``cadences`` flag is off a pass mints nothing."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -195,6 +196,22 @@ def test_a_refused_errand_counts_as_refused_and_the_pass_mints_the_others(
     assert refused == ["retired", "taken"]
     tallied = next(log for log in logs if log["event"] == "cadence tenant pass tallied")
     assert (tallied["due"], tallied["minted"], tallied["refused"], tallied["failed"]) == (3, 1, 2, 0)
+
+
+def test_a_sweep_mint_publishes_its_minted_frame_and_the_queue_change_on_the_tenants_broker(tmp_path: Path) -> None:
+    hub = _hub(tmp_path)
+    tenant = default_tenant(hub.engine)
+    project = _project(hub, hub.services, tenant)
+    _routine(hub, tenant, hub.services, project, "sweep", "runner")
+    _cadence(hub.services, project, ChoreShape("plain", "sweep"))
+    before = hub.services.events.latest_id()
+
+    _sweep(hub)
+
+    published = hub.services.events.replay_since(before)
+    chunks = [json.loads(each.data) for each in published if each.type == "chunk-changed"]
+    assert [(each["cause"], each["status"]) for each in chunks] == [("minted", ChunkStatus.READY.value)]
+    assert [each.type for each in published].count("queue-changed") == 1
 
 
 def test_a_failed_announcement_is_logged_and_the_committed_mint_still_counts(
