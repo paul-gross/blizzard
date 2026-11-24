@@ -43,18 +43,30 @@ def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
     }
 
 
-def test_the_garden_run_keys_share_identity_within_a_tenant_and_differ_across_tenants(tmp_path: Path) -> None:
+def _hub_with_two_tenants(tmp_path: Path) -> tuple[HubHarness, StoreScope, StoreScope]:
     hub = build_hub(tmp_path)
     first = StoreScope(default_tenant(hub.engine))
     second = StoreScope(add_tenant(hub.engine, "second"))
     hub.hub_services.tenants.open_tenants.refresh()
+    return hub, first, second
 
+
+def test_each_garden_run_key_is_one_instance_within_a_tenant(tmp_path: Path) -> None:
+    hub, first, second = _hub_with_two_tenants(tmp_path)
+
+    for tenant in (first, second):
+        for name, held in _shared(hub, tenant).items():
+            assert all(each is held[0] for each in held), name
+
+
+def test_the_garden_run_instances_differ_across_tenants_but_for_the_stateless_formats(tmp_path: Path) -> None:
+    hub, first, second = _hub_with_two_tenants(tmp_path)
+
+    shared_across = {name for name, (mine, theirs) in _pairs(hub, first, second) if mine is theirs}
+
+    assert shared_across == {"formats"}
+
+
+def _pairs(hub: HubHarness, first: StoreScope, second: StoreScope) -> list[tuple[str, tuple[object, object]]]:
     mine, theirs = _shared(hub, first), _shared(hub, second)
-
-    for name, held in (*mine.items(), *theirs.items()):
-        assert all(each is held[0] for each in held), name
-    for (name, held), (_, other) in zip(mine.items(), theirs.items(), strict=True):
-        if name == "formats":
-            assert held[0] is other[0], name
-        else:
-            assert held[0] is not other[0], name
+    return [(name, (held[0], theirs[name][0])) for name, held in mine.items()]
