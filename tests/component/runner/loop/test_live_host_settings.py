@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from structlog.testing import capture_logs
 
 import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import SystemClock
@@ -138,9 +139,13 @@ def test_a_trace_sweep_keeps_its_last_good_tracing_when_a_revision_does_not_reso
             raise ValueError("revision does not resolve")
 
         monkeypatch.setattr(reader, "resolve_pair", unresolvable)
-        stepper.timed_trace_sweep()
-        stepper.timed_trace_sweep()
+        with capture_logs() as logs:
+            stepper.timed_trace_sweep()
+            stepper.timed_trace_sweep()
         assert [config.batch_limit for config in spy.seen] == [10, 10, 10]
+        assert [entry["event"] for entry in logs if entry["log_level"] == "error"] == [
+            "trace sweep settings did not resolve"
+        ]
     finally:
         stepper.close()
         host.close()

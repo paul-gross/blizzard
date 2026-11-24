@@ -442,7 +442,7 @@ class RunnerStepper:
         self._logged_failure: int | None = None
         self._trace_interval = config.tracing.sweep_seconds
         self._trace_config = config.tracing
-        self._logged_trace_failure: int | None = None
+        self._logged_trace_failure: tuple[int | None] | None = None
         self._next_recovery_retry = 0.0
 
     @property
@@ -558,9 +558,9 @@ class RunnerStepper:
                 self._trace_config = config
                 self._logged_trace_failure = None
             except Exception as exc:
-                if self._logged_trace_failure != revision:
+                if self._logged_trace_failure != (revision,):
                     _log.error("trace sweep settings did not resolve", revision=revision, detail=str(exc))
-                    self._logged_trace_failure = revision
+                    self._logged_trace_failure = (revision,)
         self._trace_interval = config.sweep_seconds
         sweep.sweep(config)
 
