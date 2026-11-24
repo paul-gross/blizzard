@@ -34,6 +34,14 @@ from tests.support.runner_cli_home import (
 )
 from tests.support.runner_fakes import make_store, migrated_store_at
 
+pytestmark = pytest.mark.usefixtures("short_tmp_path")
+
+
+@pytest.fixture
+def tmp_path(short_tmp_path: None, tmp_path: Path) -> Path:
+    return tmp_path
+
+
 _RUNNER = "rn_one"
 _NEW = "tok-new-value"
 

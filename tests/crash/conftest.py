@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
@@ -20,6 +21,11 @@ from tests.support.fleet_world import mint_world
 from tests.support.scaffolding import url_of
 
 pytestmark = pytest.mark.crash_sweep
+
+
+@pytest.fixture
+def tmp_path(short_tmp_path: None, tmp_path: Path) -> Path:
+    return tmp_path
 
 
 @pytest.fixture(scope="session")

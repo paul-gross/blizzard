@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
+import _pytest.tmpdir as pytest_tmpdir
 import pytest
 from _pytest.fixtures import SubRequest
 
@@ -71,8 +72,25 @@ SHARD_BY_FILE = "file"
 @pytest.fixture
 def short_host_runtime() -> Iterator[Path]:
     """A private, short-lived directory for test host sockets."""
-    with tempfile.TemporaryDirectory(prefix="bz-sock-", dir="/tmp") as runtime:
+    with tempfile.TemporaryDirectory(prefix="s-") as runtime:
         yield Path(runtime)
+
+
+@pytest.fixture
+def short_tmp_path(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Keep real host paths short, including in subprocesses, without replacing pytest's tmp_path finalizer."""
+    original = pytest_tmpdir._mk_tmp  # pyright: ignore[reportPrivateUsage]
+    node: object = request.node  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]  # pytest leaves node untyped
+    with tempfile.TemporaryDirectory(prefix="t-") as directory:
+
+        def make_tmp(inner: pytest.FixtureRequest, factory: pytest.TempPathFactory) -> Path:
+            inner_node: object = inner.node  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]  # pytest leaves node untyped
+            if inner_node is node:
+                return Path(directory)
+            return original(inner, factory)
+
+        monkeypatch.setattr(pytest_tmpdir, "_mk_tmp", make_tmp)
+        yield
 
 
 @pytest.fixture
