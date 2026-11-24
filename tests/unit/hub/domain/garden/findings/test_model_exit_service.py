@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
 import pytest
@@ -244,6 +244,28 @@ def test_a_supersede_retry_reloads_and_guards_on_the_absorber() -> None:
 
     assert repo.expects == [{"fin_1": "live", "fin_2": "live"}]
     assert repo.reloads == [["fin_1", "fin_2"]]
+
+
+def test_a_retry_stamps_its_facts_at_the_instant_read_under_its_own_lock() -> None:
+    clock = FixedClock(instant=_T0)
+    later = _T0 + timedelta(minutes=5)
+
+    @dataclass
+    class _AdvancingRepo(_FakeFindingRepo):
+        def record_facts(
+            self, entries: list[FactEntry], *, transaction: LockedTransaction, expect: Mapping[str, str] | None = None
+        ) -> list[str]:
+            lost = super().record_facts(entries, transaction=transaction, expect=expect)
+            if lost:
+                clock.advance(later - _T0)
+            return lost
+
+    repo = _AdvancingRepo(conflicts=[["fin_1"]], reloaded={"fin_1": _finding("fin_1", state="delivered")})
+    service = FindingExitService(repo=_as_write_repo(repo), clock=clock, transactions=FakeTransactions())
+
+    service.resolve([_finding("fin_1")], note="fixed", actor="u1")
+
+    assert [[fact.at for fact in batch] for batch in repo.batches] == [[_T0], [later]]
 
 
 def test_a_guard_lost_on_every_attempt_refuses_as_contended() -> None:

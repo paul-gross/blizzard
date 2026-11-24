@@ -475,17 +475,20 @@ class GardenDelivery:
         parallel — neither carries its own artifact id.
         `chunk`/`node`/`epoch` identify the delivering node-step, the idempotence
         marker's own key."""
-        plan = build_delivery_plan(
-            validated,
-            chunk=chunk,
-            node=node,
-            epoch=epoch,
-            delta_artifact_ids=delta_artifact_ids,
-            proposal_artifact_ids=proposal_artifact_ids,
-            at=self._clock.now(),
-        )
         with self._transactions.begin() as unit:
-            locked = unit.lock_set(chunks=[plan.chunk_id], keys=[finding_lock(fid) for fid in sorted(plan.expect)])
+            locked = unit.lock_set(
+                chunks=[chunk.chunk_id], keys=[finding_lock(fid) for fid in sorted(validated.expect)]
+            )
+            # Stamped after the lock graduates, so no fact a concurrent write committed before it is newer.
+            plan = build_delivery_plan(
+                validated,
+                chunk=chunk,
+                node=node,
+                epoch=epoch,
+                delta_artifact_ids=delta_artifact_ids,
+                proposal_artifact_ids=proposal_artifact_ids,
+                at=self._clock.now(),
+            )
             return write_delivery_plan(
                 plan,
                 delivery=self._delivery,
