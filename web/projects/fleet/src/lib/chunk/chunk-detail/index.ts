@@ -19,7 +19,6 @@ export { chunkGraphLabel } from './graph-label';
 export { ChunkIssuePane } from './chunk-issue-pane';
 export { deriveWorkItemsState } from './work-items-state';
 export type { WorkItemsState, WorkItemsQuery } from './work-items-state';
-export type { WorkItem } from './work-item.model';
 export { ChunkTimeline } from './chunk-timeline';
 export type { TransitionView, ArtifactView, DecisionView, ChunkUsageTotalView } from '../../api/hub';
 export { ChunkUrgency } from './chunk-urgency';
