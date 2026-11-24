@@ -6,7 +6,7 @@ import {
 } from '@tanstack/angular-query-experimental';
 import { injectQueries } from '@tanstack/angular-query-experimental/inject-queries-experimental';
 
-import { FLEET_CLOCK, getBulkWorkItemsApiWorkItemsGet, type ChunkWorkItemsView, type WorkItemsView } from 'fleet';
+import { FLEET_CLOCK, fromWorkItemsView, type WorkItem, getBulkWorkItemsApiWorkItemsGet, type ChunkWorkItemsView, type WorkItemsView } from 'fleet';
 import {
   mergeWorkItemBatches,
   withinHold,
@@ -94,6 +94,32 @@ async function readWorkItemsBatch(
   return found;
 }
 
+/** The batch queries both projections read, so they share one cache entry per batch. */
+function workItemBatchQueries(
+  chunkIds: readonly string[],
+  queryClient: QueryClient,
+  clock: () => number,
+) {
+  return workItemBatches(chunkIds).map((batch) => ({
+    queryKey: hubWorkItemsBatchKey(batch),
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
+      readWorkItemsBatch(queryClient, clock(), batch, signal),
+    staleTime: WORK_ITEMS_HOLD_MS,
+    refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
+  }));
+}
+
+/** The merged wire views of the batches' results. `combine` is handed the observers' plain
+ * results; the experimental typing names them signal proxies, so they are read as what they are. */
+function mergeBatchResults(results: unknown): ReadonlyMap<string, WorkItemsView> {
+  return mergeWorkItemBatches(
+    (
+      results as readonly QueryObserverResult<ReadonlyMap<string, WorkItemsView>>[]
+    ).map((result) => result.data),
+  );
+}
+
 /**
  * The board's second stage: every chunk's work items, read after the chunk list has answered
  * so the lanes never wait on a work source. The ids go out in batches
@@ -106,23 +132,26 @@ export function injectBoardWorkItemsQuery(
   const queryClient = inject(QueryClient);
   const clock = inject(FLEET_CLOCK);
   return injectQueries(() => ({
-    queries: workItemBatches(chunkIds()).map((batch) => ({
-      queryKey: hubWorkItemsBatchKey(batch),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        readWorkItemsBatch(queryClient, clock(), batch, signal),
-      staleTime: WORK_ITEMS_HOLD_MS,
-      refetchOnWindowFocus: false,
-      placeholderData: keepPreviousData,
-    })),
-    // `combine` is handed the observers' plain results; the experimental typing names them
-    // signal proxies, so the results are read as what they are.
+    queries: workItemBatchQueries(chunkIds(), queryClient, clock),
+    combine: mergeBatchResults,
+  }));
+}
+
+/** {@link injectBoardWorkItemsQuery} over the same batch queries and cache, each merged view
+ * translated to the domain's work items. */
+export function injectBoardWorkItemDomainsQuery(
+  chunkIds: () => readonly string[],
+): Signal<ReadonlyMap<string, { items: WorkItem[] }>> {
+  const queryClient = inject(QueryClient);
+  const clock = inject(FLEET_CLOCK);
+  return injectQueries(() => ({
+    queries: workItemBatchQueries(chunkIds(), queryClient, clock),
     combine: (results) =>
-      mergeWorkItemBatches(
-        (
-          results as unknown as readonly QueryObserverResult<
-            ReadonlyMap<string, WorkItemsView>
-          >[]
-        ).map((result) => result.data),
+      new Map(
+        [...mergeBatchResults(results)].map(([chunkId, view]) => [
+          chunkId,
+          fromWorkItemsView(view),
+        ]),
       ),
   }));
 }

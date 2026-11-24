@@ -8,3 +8,4 @@ export {
   injectHubChunkDetailQuery,
   injectHubChunkWorkItemsQuery,
 } from './chunk-detail.query';
+export { fromWorkItemsView } from './work-items.translate';

@@ -1,4 +1,4 @@
-import type { ChunkStatus, LandedRepoView, PrView, WorkItemsView, WorkRefView } from '../../api/hub';
+import type { ChunkStatus, LandedRepoView, PrView } from '../../api/hub';
 import { compactRef } from '../../core/compact-ref';
 import type { Tone } from '../../kit';
 
@@ -21,6 +21,25 @@ export interface WorkLine {
   readonly url?: string | null;
 }
 
+/** The work pointer `workLines` reads — satisfied by the wire and the domain alike. */
+interface WorkRefShape {
+  readonly source: string;
+  readonly ref: string;
+  readonly label: string | null;
+  readonly web_url: string | null;
+}
+
+/** The read items `workLines` matches pointers against. */
+interface WorkItemsShape {
+  readonly items: readonly {
+    readonly source: string;
+    readonly ref: string;
+    readonly title: string | null;
+    readonly label: string | null;
+    readonly web_url: string | null;
+  }[];
+}
+
 /** Every work item as a label-and-title pair, in pointer order, each pointer matched to its read
  * item by source and ref. Every pointer holds its line from the start, so a card keeps its
  * height as the titles arrive: a labeled one names its label, its title `null` until read and
@@ -28,9 +47,9 @@ export interface WorkLine {
  * unlabeled one holds an empty line until read, then names its item by its title or else the
  * item's own label, and drops out if it has neither. An item read under no pointer at all still
  * names itself, so nothing the chunk carries goes unsaid. */
-export function workLines(refs: readonly WorkRefView[], view: WorkItemsView | undefined): readonly WorkLine[] {
+export function workLines(refs: readonly WorkRefShape[], view: WorkItemsShape | undefined): readonly WorkLine[] {
   const items = view?.items ?? [];
-  const matched = (ref: WorkRefView) => items.find((each) => each.source === ref.source && each.ref === ref.ref);
+  const matched = (ref: WorkRefShape) => items.find((each) => each.source === ref.source && each.ref === ref.ref);
   const lines: WorkLine[] = refs.flatMap((ref): WorkLine[] => {
     const item = matched(ref);
     const url = ref.web_url ?? item?.web_url ?? null;
