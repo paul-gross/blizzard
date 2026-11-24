@@ -107,6 +107,12 @@ class IReadLeaseLivenessRepository(Protocol):
         """Provenance of one invocation generation, or None when absent."""
         ...
 
+    def spawn_settings_for(self, keys: Sequence[tuple[str, int]]) -> dict[tuple[str, int], SpawnSettings]:
+        """:meth:`spawn_settings` for every ``(lease_id, generation)`` in ``keys``, in one grouped
+        read per batch (``bzh:bulk-reconstitution``). A key with no such generation is absent. The
+        rows read are bounded by the key count, not by how many generations each lease has."""
+        ...
+
     def latest_spawn_settings(self, lease_ids: Sequence[str]) -> dict[str, SpawnSettings]:
         """Newest generation provenance per lease, in bounded batches."""
         ...
