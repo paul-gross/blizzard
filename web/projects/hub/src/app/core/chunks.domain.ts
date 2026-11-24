@@ -1,4 +1,4 @@
-import type { ChunkDetailAggregate, LaneStatus } from 'fleet';
+import type { ChunkDetailAggregate, LaneStatus, UrgencyReference } from 'fleet';
 
 /** A node's latest visit in a chunk's graph. Unknown states retain the server's value. */
 export type GraphProgressState =
@@ -39,9 +39,10 @@ export interface RunnerClaimChunk {
 export type BoardSummary = RunnerClaimChunk & Pick<ChunkDetailAggregate,
   'awaiting_external_merge' | 'blocked' | 'cost' | 'current_node_id' | 'current_node_name' |
   'flow_places' | 'graph_id' | 'graph_name' | 'landed_repos' | 'open_prs' |
-  'project_id' | 'project_name' | 'project_slug' | 'promotable' | 'terminal' | 'urgency' | 'work_refs'> & {
+  'project_id' | 'project_name' | 'project_slug' | 'promotable' | 'terminal' | 'work_refs'> & {
   readonly status: string;
   readonly completed_at: string | null;
   readonly runner_name: string | null;
   readonly graphProgress: readonly GraphProgressNode[];
+  readonly urgency: UrgencyReference | null;
 };

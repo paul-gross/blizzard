@@ -1,4 +1,3 @@
-import { fromUrgencyRef } from '../../core/urgency.translate';
 import { withPendingUrgencies } from '../chunks/urgency.model';
 import type { ChunkUrgencyVars } from '../chunks/urgency.mutations';
 import { chunkUrgencyMutationKey } from '../../core/mutation-keys';
@@ -13,7 +12,7 @@ import { injectDomainBoardChunksQuery } from '../../core/chunks.query';
 import { injectFleetSpendDays } from '../fleet-spend/fleet-spend-days';
 import { injectHubBacklogQuery, injectHubQueueQuery } from '../queue/queue.query';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { injectProjectsQuery } from '../../core/projects.query';
+import { injectProjectDomainsQuery } from '../../core/projects.query';
 import { orderedChunkIds } from '../board-page.model';
 import { injectHubQuestionsQuery } from '../questions/questions.query';
 import { injectHubDecisionsQuery } from '../gates/gates.query';
@@ -49,7 +48,7 @@ export class GlanceBoard {
   private readonly decisionsQuery = injectHubDecisionsQuery();
   private readonly runnersQuery = injectHubRunnersQuery();
   private readonly runnerHosts = injectRunnerHostNames();
-  private readonly projectsQuery = injectProjectsQuery();
+  private readonly projectsQuery = injectProjectDomainsQuery();
   private readonly showProjectColors = injectShowProjectColors();
   private readonly projectColors = computed(() =>
     projectColorMap(this.showProjectColors(), this.projectsQuery.data()),
@@ -63,7 +62,7 @@ export class GlanceBoard {
 
   private readonly chunks = computed(() => withPendingUrgencies(this.chunksQuery.data()?.chunks ?? [], this.pendingUrgencies(), this.urgenciesQuery.data() ?? []));
   /** The image marks the glance banners show, read once per digest. */
-  protected readonly urgencyIconUrls = injectUrgencyIconUrls(() => bannerUrgencyIcons(this.chunks().map((chunk) => ({ terminal: chunk.terminal, urgency: chunk.urgency ? fromUrgencyRef(chunk.urgency) : null })), this.urgenciesQuery.data()));
+  protected readonly urgencyIconUrls = injectUrgencyIconUrls(() => bannerUrgencyIcons(this.chunks(), this.urgenciesQuery.data()));
   protected readonly donePolicy = computed(() => boardDonePolicy(this.chunksQuery.data()?.pages ?? []));
   private readonly runners = computed(() => liveRunners(this.runnersQuery.data() ?? []));
 

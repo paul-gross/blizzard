@@ -1,4 +1,3 @@
-import { fromUrgencyRef } from '../core/urgency.translate';
 import { withPendingUrgencies } from './chunks/urgency.model';
 import { injectHubChunkControl } from './chunks/hub-chunk-control';
 import type { ChunkUrgencyVars } from './chunks/urgency.mutations';
@@ -35,7 +34,7 @@ import { injectPromoteChunkMutation, type PromoteVars } from './chunks/promote.m
 import { injectRepositionBacklogMutation, injectRepositionQueueMutation, type RepositionVars } from './queue/queue.mutations';
 import { foldRepositions, gatedChunkIds, orderedChunkIds, placedMoves, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
 import { laneSkeletonCounts, listSkeletonCount } from './board-shell/board-skeletons.model';
-import { injectProjectsQuery } from '../core/projects.query';
+import { injectProjectDomainsQuery } from '../core/projects.query';
 import { injectBoardWorkItemsQuery } from '../core/work-items/board-work-items.query';
 import { injectScrollSelectionIntoView } from '../core/scroll-selection-into-view';
 import { injectShowProjectColors, projectColorMap } from '../core/project-lens-colors';
@@ -249,7 +248,7 @@ export class BoardPage {
   }
 
   /** The tenant's projects, shared with the shell's own read of them; the cards take their tint from it. */
-  private readonly projectsQuery = injectProjectsQuery();
+  private readonly projectsQuery = injectProjectDomainsQuery();
   private readonly showProjectColors = injectShowProjectColors();
 
   /** The cards' project colours — none unless they tell projects apart ({@link injectShowProjectColors}). */
@@ -261,7 +260,7 @@ export class BoardPage {
   protected readonly runnerHosts = injectRunnerHostNames();
 
   /** The image marks the board's banners show, read once per digest. */
-  protected readonly urgencyIconUrls = injectUrgencyIconUrls(() => bannerUrgencyIcons(this.boardChunks().map((chunk) => ({ terminal: chunk.terminal, urgency: chunk.urgency ? fromUrgencyRef(chunk.urgency) : null })), this.urgenciesQuery.data()));
+  protected readonly urgencyIconUrls = injectUrgencyIconUrls(() => bannerUrgencyIcons(this.boardChunks(), this.urgenciesQuery.data()));
 
   /** Every chunk's work items, read once the chunk list has answered. */
   protected readonly workItems = injectBoardWorkItemsQuery(() => orderedChunkIds(this.boardChunks()));

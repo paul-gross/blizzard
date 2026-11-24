@@ -40,12 +40,14 @@ describe('board summary translation', () => {
     const wire = chunkSummary({
       chunk_id: 'ch_1', graph_id: 'gr_1', status: 'future' as hubApi.ChunkStatus,
       terminal: true, promotable: false,
+      urgency: { urgency_id: 'u1', slug: 'urgent' },
       graph_progress: [{ node_id: 'nd_1', name: 'build', state: 'future' as hubApi.GraphProgressState }],
     });
     const result = fromBoardSummary(wire);
     expect(result).toMatchObject({
       chunk_id: 'ch_1', status: 'future', laneStatus: { kind: 'unknown', raw: 'future' },
       terminal: true, promotable: false,
+      urgency: { id: 'u1', slug: 'urgent' },
       graphProgress: [{ nodeId: 'nd_1', name: 'build', state: { kind: 'unknown', raw: 'future' } }],
     });
     expect(result).not.toHaveProperty('graph_progress');

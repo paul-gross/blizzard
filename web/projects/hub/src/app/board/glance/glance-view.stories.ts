@@ -53,5 +53,5 @@ export const EmptyBlocker: Story = { args: { list: emptyBlockerList, vitals: gla
 
 const urgencyProviders = applicationConfig({ providers: [provideTanStackQuery(new QueryClient()), { provide: TenantContext, useValue: { current: signal(null) } }] });
 const urgent = { id: 'u', slug: 'urgent', name: 'Urgent', color: 'red', emoji: '🔥', icon: null, default: false, retired: false, place: 1, revision: 1, openChunks: 0, createdAt: '2026-01-01T00:00:00Z', createdBy: 'u' } satisfies UrgencyRecord;
-const urgentList = glanceListGroups([boardChunk({ chunk_id: 'ch_urgent', graph_id: 'gr_1', status: 'ready', laneStatus: { kind: 'ready' }, urgency: { urgency_id: 'u', slug: 'urgent' } })], [], [], [], [], new Map(), new Map(), new Map());
+const urgentList = glanceListGroups([boardChunk({ chunk_id: 'ch_urgent', graph_id: 'gr_1', status: 'ready', laneStatus: { kind: 'ready' }, urgency: { id: 'u', slug: 'urgent' } })], [], [], [], [], new Map(), new Map(), new Map());
 export const Urgency: Story = { decorators: [urgencyProviders], args: { list: urgentList, vitals: glanceVitals([], urgentList), urgencies: [urgent] } };

@@ -1,4 +1,3 @@
-import { fromUrgencyRef } from '../../core/urgency.translate';
 import { domainLaneCounts } from 'fleet';
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
@@ -172,7 +171,7 @@ export class BoardShell {
         status: chunk.status,
         laneStatus: chunk.laneStatus,
         terminal: chunk.terminal ?? false,
-        urgency: chunk.urgency ? fromUrgencyRef(chunk.urgency) : null,
+        urgency: chunk.urgency,
         promotable: chunk.promotable ?? false,
         node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
         nodeId: chunk.current_node_id ?? '',

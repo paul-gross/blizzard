@@ -2,6 +2,7 @@ import type { hubApi } from 'fleet';
 import { fromFlowState } from 'fleet';
 import { laneStatus } from 'fleet/shell';
 import type { BoardPageMetadata, BoardSummary, GraphProgressNode, GraphProgressState, RunnerClaimChunk } from './chunks.domain';
+import { fromUrgencyRef } from './urgency.translate';
 
 export function fromRunnerClaimChunk(chunk: hubApi.ChunkSummary): RunnerClaimChunk {
   return {
@@ -35,7 +36,7 @@ export function fromBoardSummary(chunk: hubApi.ChunkSummary): BoardSummary {
     promotable: chunk.promotable,
     runner_name: chunk.runner_name,
     terminal: chunk.terminal,
-    urgency: chunk.urgency && { ...chunk.urgency },
+    urgency: chunk.urgency && fromUrgencyRef(chunk.urgency),
     work_refs: chunk.work_refs.map((ref) => ({ ...ref })),
   };
 }
