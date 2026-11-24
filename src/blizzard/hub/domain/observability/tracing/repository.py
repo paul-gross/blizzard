@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.graph.model import IReadManyGraphs
 from blizzard.hub.domain.observability.hub_events import HubEventKind
@@ -77,6 +78,31 @@ class StepHydration:
     projects: IReadProjectLabels
     label: WorkRefLabel
     source_label: Callable[[str], str]
+
+
+class StepHydrations:
+    """Each tenant's :class:`StepHydration`, through the typed tenant accessor the process root binds over its tenant
+    scopes once they are built; it refuses a tenant as that tenant's scope refuses."""
+
+    def __init__(self) -> None:
+        self._open: Callable[[TenantId], StepHydration] | None = None
+
+    def bind(self, open: Callable[[TenantId], StepHydration]) -> None:
+        self._open = open
+
+    def __call__(self, tenant: TenantId) -> StepHydration:
+        assert self._open is not None  # bound by the process root before the process is handed out
+        return self._open(tenant)
+
+
+class LiveTracingConfig:
+    """The ``[tracing]`` config the running pass bound, else the live resolution."""
+
+    def __init__(self, read: Callable[[], TracingConfig]) -> None:
+        self._read = read
+
+    def current(self) -> TracingConfig:
+        return self._read()
 
 
 @domain_model

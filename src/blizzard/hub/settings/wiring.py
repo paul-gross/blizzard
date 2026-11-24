@@ -2,12 +2,14 @@
 
 A graph without settings declares each port absent. Every graph holds the borrowed boot ``HubConfig``, the transcript
 caps it resolves, and one :class:`HubConfigSource` over it, reading the settings graph's resolution when one is
-borrowed."""
+borrowed, and the live ``[tracing]`` and ``[egress]`` configs read through that source."""
 
 from __future__ import annotations
 
 from blizzard.foundation.registry.interface import Lifetime, Registry, port
 from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.observability.egress.boot import LiveEgressConfig
+from blizzard.hub.domain.observability.tracing.repository import LiveTracingConfig
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from blizzard.hub.settings.footing import HubSettingsFooting
 from blizzard.hub.settings.graph import HubSettingsGraph
@@ -53,10 +55,22 @@ def boot_transcript_caps(boot: HubConfig) -> TranscriptCaps:
     return boot.transcripts.transcript_caps()
 
 
+def live_tracing(source: HubConfigSource) -> LiveTracingConfig:
+    """The ``[tracing]`` config read live through ``source``."""
+    return LiveTracingConfig(lambda: source.current().tracing)
+
+
+def live_egress(source: HubConfigSource) -> LiveEgressConfig:
+    """The ``[egress]`` config read live through ``source``."""
+    return LiveEgressConfig(lambda: source.current().egress)
+
+
 def register_boot(registry: Registry) -> None:
-    """Declare the borrowed boot config and the transcript caps it resolves."""
+    """Declare the borrowed boot config, the transcript caps it resolves, and the live tracing and egress configs."""
     registry.context(port(HubConfig), lifetime=Lifetime.PROCESS)
     registry.factory(boot_transcript_caps, lifetime=Lifetime.PROCESS)
+    registry.factory(live_tracing, lifetime=Lifetime.PROCESS)
+    registry.factory(live_egress, lifetime=Lifetime.PROCESS)
 
 
 def register(registry: Registry) -> None:

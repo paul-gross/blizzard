@@ -21,6 +21,7 @@ from blizzard.foundation.lane_retry import BACKOFF_CAP
 from blizzard.hub import app as hub_app
 from blizzard.hub.app import Sweep
 from blizzard.hub.domain.execution.fleet import FleetService
+from blizzard.hub.domain.observability.egress.boot import EgressBoot
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.ports import (
     DatasetSchema,
@@ -70,6 +71,7 @@ from tests.support.scaffolding import (
     count_queries,
     count_rows_read,
     default_tenant,
+    egress_sweep_of,
     hub_level_connections,
     hub_scoped,
     hub_store_connections,
@@ -109,8 +111,8 @@ def test_no_directory_yields_no_sweep_and_writes_no_cursor_row(tmp_path: Path) -
     hub, graph = egress_hub(tmp_path)
     closed_step(hub, graph, 1)
 
-    assert hub.hub_services.egress_export is None
-    assert hub.hub_services.egress_unavailable is None
+    assert egress_sweep_of(hub.hub_services) is None
+    assert hub.hub_services.process.resolver.get(EgressBoot).rejected is None
     assert [s.logger_name for s in Sweep.all(_app(hub)) if "egress" in s.logger_name] == []
     assert egress_cursor_rows(hub) == 0
 
@@ -872,7 +874,7 @@ def test_a_real_directory_holds_files_and_manifests_that_agree(tmp_path: Path) -
     (tmp_path / "out").mkdir()
     config = EgressConfig(directory=tmp_path / "out", settle_seconds=0, min_free_bytes=0)
     hub, graph = egress_hub(tmp_path, config)
-    sweep = hub.hub_services.egress_export
+    sweep = egress_sweep_of(hub.hub_services)
     assert sweep is not None
     sweep.sweep()
     closed_step(hub, graph, 1, usage=2)
@@ -895,7 +897,7 @@ def test_a_real_directory_holds_files_and_manifests_that_agree(tmp_path: Path) -
 def test_a_missing_directory_fails_the_first_write_not_startup(tmp_path: Path) -> None:
     config = EgressConfig(directory=tmp_path / "never-made", settle_seconds=0, min_free_bytes=0)
     hub, graph = egress_hub(tmp_path, config)
-    sweep = hub.hub_services.egress_export
+    sweep = egress_sweep_of(hub.hub_services)
     assert sweep is not None
     sweep.sweep()
     closed_step(hub, graph, 1)
@@ -908,16 +910,14 @@ def test_a_missing_directory_fails_the_first_write_not_startup(tmp_path: Path) -
 def test_parquet_without_its_extra_keeps_the_hub_serving_and_records_one_rejection(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def without_pyarrow(
-        format: Literal["ndjson", "parquet"], directory: Path, settings: EgressWriterSettings, token: str
-    ) -> EgressUnavailable:
+    def without_pyarrow(format: Literal["ndjson", "parquet"]) -> EgressUnavailable:
         return EgressUnavailable("parquet needs pyarrow")
 
-    monkeypatch.setattr("blizzard.hub.composition.build_egress_writer", without_pyarrow)
+    monkeypatch.setattr("blizzard.hub.egress.factory.writer_unavailable", without_pyarrow)
     config = EgressConfig(directory=tmp_path / "out", format="parquet")
     hub, _graph = egress_hub(tmp_path, config)
 
-    assert hub.hub_services.egress_export is None
+    assert egress_sweep_of(hub.hub_services) is None
     assert [s for s in Sweep.all(_app(hub)) if "egress" in s.logger_name] == []
     hub_app.announce_rejected_egress(config, hub.hub_services)
     assert kinds(hub) == ["egress-config-rejected"]

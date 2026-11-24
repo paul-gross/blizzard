@@ -67,10 +67,17 @@ from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents, IWriteTranscriptEvents
 from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
 from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
+from blizzard.hub.domain.observability.egress.repository import IReadEgress, IWriteEgressCursor
 from blizzard.hub.domain.observability.env_timeline import IReadEnvTimelineFacts
 from blizzard.hub.domain.observability.forge_status import IReadAnnotatedSources, IWriteAnnotatedSources
 from blizzard.hub.domain.observability.hub_events import HubEventLogService, IReadHubEventLog, IWriteHubEventLog
 from blizzard.hub.domain.observability.invariants import IHubInvariantChecker
+from blizzard.hub.domain.observability.tracing.repository import (
+    IReadProjectLabels,
+    IReadTraceStatus,
+    IReadTraceSteps,
+    IWriteTraceCursor,
+)
 from blizzard.hub.domain.observability.transcripts import (
     IReadTranscriptSegments,
     IWriteTranscriptSegments,
@@ -108,6 +115,7 @@ from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
 from blizzard.hub.store.internal.credential_referrers import CredentialReferrersStore
+from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.env_timeline_store import EnvTimelineStore
 from blizzard.hub.store.internal.errand_runs_store import ErrandRunsStore
 from blizzard.hub.store.internal.finding_store import FindingStore
@@ -133,6 +141,7 @@ from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStor
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
+from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.urgency_chunks_store import UrgencyChunksStore
@@ -187,6 +196,7 @@ ADAPTER_PORTS: Mapping[type[Any], tuple[type[Any], ...]] = {
     AnalyticsOperationalStore: (IReadOperationalAnalytics,),
     EnvTimelineStore: (IReadEnvTimelineFacts,),
     ForgeAnnotationStore: (IReadAnnotatedSources, IWriteAnnotatedSources),
+    ProjectLabels: (IReadProjectLabels,),
 }
 
 
@@ -291,6 +301,11 @@ def process_identity_violations(core: HubCore, services: HubServices) -> list[st
         ("IReadHubEventLog", process.get(IReadHubEventLog), HubEventLogStore),
         ("IWriteHubEventLog", process.get(IWriteHubEventLog), HubEventLogStore),
         ("IHubInvariantChecker", process.get(IHubInvariantChecker), HubInvariants),
+        ("IReadTraceSteps", process.get(IReadTraceSteps), TraceStore),
+        ("IReadTraceStatus", process.get(IReadTraceStatus), TraceStore),
+        ("IWriteTraceCursor", process.get(IWriteTraceCursor), TraceStore),
+        ("IReadEgress", process.get(IReadEgress), EgressStore),
+        ("IWriteEgressCursor", process.get(IWriteEgressCursor), EgressStore),
         ("HubActions.catalogue", process.get(HubActions).catalogue, HubActionCatalogue),
         ("HubServices.action_loop", services.action_loop, ActionLoop),
         ("HubServices.step_wake", services.step_wake, StepWake),

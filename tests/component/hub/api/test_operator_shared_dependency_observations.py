@@ -145,6 +145,15 @@ def test_tenant_refusals_match_each_operation(tmp_path: Path) -> None:
     assert unknown + mismatched + required == []
 
 
+_SPAN = {"since": "2026-01-01T00:00:00Z", "until": "2026-02-01T00:00:00Z"}
+#: A body each hub-level operation validates before it resolves its service, so the store's absence is reached.
+_STORE_REQUESTS: dict[Operation, dict[str, Any]] = {
+    ("POST", "/api/egress/backfill"): {"json": _SPAN},
+    ("POST", "/api/egress/reset"): {"json": {"dataset": "steps", "to": _SPAN["since"]}},
+    ("POST", "/api/traces/replay"): {"json": _SPAN},
+}
+
+
 def test_store_unavailable_refusals_match_each_operation(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     assert hub.app is not None
@@ -154,12 +163,13 @@ def test_store_unavailable_refusals_match_each_operation(tmp_path: Path) -> None
             _declaring(503, HubStoreUnavailableProblem),
             503,
             HubStoreUnavailableProblem,
-            lambda client, method, path: client.request(method, _url(path), json={}),
+            lambda client, method, path: client.request(
+                method, _url(path), **_STORE_REQUESTS.get((method, path), {"json": {}})
+            ),
         )
     assert mismatches == []
 
 
-_SPAN = {"since": "2026-01-01T00:00:00Z", "until": "2026-02-01T00:00:00Z"}
 #: A request reaching the project requirement, for each operation that needs more than its path to reach it.
 _PROJECT_REQUESTS: dict[Operation, dict[str, Any]] = {
     ("GET", "/api/findings"): {"params": {"routine": "r"}},

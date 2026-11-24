@@ -22,7 +22,9 @@ from blizzard.hub.auth.invitations import IInvitationTokenReads
 from blizzard.hub.auth.service import InvitationWriters
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus
-from blizzard.hub.domain.observability.egress.repository import IReadUsageCorpus
+from blizzard.hub.domain.observability.egress.repository import IReadEgressEvents, IReadUsageCorpus
+from blizzard.hub.domain.observability.tracing.repository import StepHydrations
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
@@ -70,6 +72,7 @@ from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
 from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
 from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
+from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.urgency_chunks_store import UrgencyChunksStore
@@ -363,7 +366,6 @@ def register_observability_absent(registry: Registry) -> None:
 _PROCESS_SERVICES: tuple[type[Any], ...] = (
     TenantAdministrationStore,
     TenantTeardownStore,
-    EgressStore,
     ClosedTenantUnits,
 )
 
@@ -418,6 +420,56 @@ def register_process_absent(registry: Registry) -> None:
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
     # A callable alias keys the opener, so it is named as its key rather than as a class.
     registry.absent(port(cast("type[Any]", InvitationWriters)), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+
+
+def trace_store(
+    connections: HubStoreConnections,
+    hub_events: HubEventLogStore,
+    reads: HubScopedReads,
+    hydration: StepHydrations,
+    tenants: OpenTenants,
+) -> TraceStore:
+    """The trace export's store over the hub's corpus, completing each chunk's facts through its tenant's hydration."""
+    return TraceStore(
+        connections, hub_events=hub_events, corpus=reads.corpus, hydration=hydration, tenant_name=tenants.name
+    )
+
+
+def egress_events(reads: HubScopedReads) -> IReadEgressEvents:
+    """The hub-scoped reads' egress event corpus, as its port."""
+    return reads.corpus
+
+
+@adapter_model
+@dataclass(frozen=True)
+class ExportRefs:
+    """The ``Ref`` of each trace and egress adapter, named for the observability area's port it fills."""
+
+    trace: Ref[TraceStore]
+    egress: Ref[EgressStore]
+    project_labels: Ref[ProjectLabels]
+
+
+#: The process keys the export registrations declare.
+_EXPORT_PROCESS_KEYS: tuple[type[Any], ...] = (TraceStore, EgressStore, IReadEgressEvents)
+
+
+def register_exports(registry: Registry) -> ExportRefs:
+    """Declare the trace and egress stores and the egress event corpus once per process, and each tenant's project
+    labels, handing back the ``Ref`` of each the observability area aliases."""
+    registry.factory(egress_events, lifetime=Lifetime.PROCESS)
+    return ExportRefs(
+        trace=registry.factory(trace_store, lifetime=Lifetime.PROCESS),
+        egress=registry.service(EgressStore, lifetime=Lifetime.PROCESS),
+        project_labels=registry.service(ProjectLabels, lifetime=Lifetime.TENANT),
+    )
+
+
+def register_exports_absent(registry: Registry) -> None:
+    """Declare the trace and egress adapters absent, for the store-free graph."""
+    for missing in _EXPORT_PROCESS_KEYS:
+        registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+    registry.absent(port(ProjectLabels), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
 
 
 @adapter_model

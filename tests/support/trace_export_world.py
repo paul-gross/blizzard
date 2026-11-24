@@ -5,13 +5,15 @@ from __future__ import annotations
 from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
 from tests.support.scaffolding import (
     HubHarness,
+    trace_sweep_of,
 )
 from tests.support.trace_hub import transitioned_and_stopped
 
 
 def trace_export_sweep(hub: HubHarness) -> TraceExportSweep:
-    assert hub.hub_services.trace_export is not None
-    return hub.hub_services.trace_export
+    sweep = trace_sweep_of(hub.hub_services)
+    assert sweep is not None
+    return sweep
 
 
 def closed_pair(hub: HubHarness, ref: int = 1) -> tuple[str, str]:

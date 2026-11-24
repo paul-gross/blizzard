@@ -1,26 +1,51 @@
 """The observability area's registrations: the transcript, analytics, env-timeline, annotation, hub event log and
-invariant ports over the adapters it is handed, and the services over them.
+invariant ports over the adapters it is handed, and the services over them; and the trace and egress exports.
 
 Each port aliases the one adapter instance the root hands in, so a reader and a writer in one tenant share it; the area
 names no adapter. The tenant's transcript ingest and event derivation are built by explicit factory, since their
 constructors default what the graph supplies: the ingest's fallback caps are the boot config's ``TranscriptCaps``, and
 the derivation's extractors the shipped set this area registers. The hub event log and the invariant check are one
-instance per process. The store-free graph declares each registration absent, from the same rosters."""
+instance per process. The store-free graph declares each registration absent, from the same rosters.
+
+The trace and egress exports are one instance per process each, over the stores and writers handed in. Whether each
+export's sweep runs is decided once, at registration, from a switch the root holds: its sweep is a ``T | None`` the
+roster reads. Their status, replay, reset and backfill are always registered, and read the boot decision from the
+borrowed :class:`EgressBoot`. The process-scoped trace store reaches a tenant's reads only through the
+:class:`StepHydrations` accessor the root binds over its tenant scopes, each tenant's :class:`StepHydration` built
+here."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol, cast
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
+from blizzard.foundation.trace_export.exporter import ITraceExporter
+from blizzard.foundation.trace_export.settings import TracingSettings
+from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.work_sources import IWorkAnnotators
+from blizzard.hub.domain.graph.model import IReadManyGraphs
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.observability.analytics.derivation import EventDerivationService, TenantEventDerivation
 from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents, IWriteTranscriptEvents
 from blizzard.hub.domain.observability.analytics.extraction import TurnEventExtractors, shipped_extractors
 from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
 from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
+from blizzard.hub.domain.observability.egress.backfill import EgressBackfill
+from blizzard.hub.domain.observability.egress.boot import (
+    EgressBoot,
+    IConfiguredEgressWriter,
+    IEgressBackfillWriters,
+    IEgressFreeSpace,
+    LiveEgressConfig,
+)
+from blizzard.hub.domain.observability.egress.ports import IEgressWriter
+from blizzard.hub.domain.observability.egress.repository import IReadEgress, IReadEgressEvents, IWriteEgressCursor
+from blizzard.hub.domain.observability.egress.reset import EgressReset
+from blizzard.hub.domain.observability.egress.status import EgressStatusReader
+from blizzard.hub.domain.observability.egress.sweep import EgressSweep
 from blizzard.hub.domain.observability.env_timeline import EnvTimelineReading, IReadEnvTimelineFacts
 from blizzard.hub.domain.observability.forge_status import (
     IReadAnnotatedSources,
@@ -29,13 +54,25 @@ from blizzard.hub.domain.observability.forge_status import (
 )
 from blizzard.hub.domain.observability.hub_events import HubEventLogService, IReadHubEventLog, IWriteHubEventLog
 from blizzard.hub.domain.observability.invariants import HubInvariantCheck, IHubInvariantChecker
+from blizzard.hub.domain.observability.tracing.replay import TraceReplay
+from blizzard.hub.domain.observability.tracing.repository import (
+    IReadProjectLabels,
+    IReadTraceStatus,
+    IReadTraceSteps,
+    IWriteTraceCursor,
+    LiveTracingConfig,
+    StepHydration,
+    StepHydrations,
+)
+from blizzard.hub.domain.observability.tracing.status import TraceStatusReader
+from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
 from blizzard.hub.domain.observability.transcripts import (
     IReadTranscriptSegments,
     IWriteTranscriptSegments,
     TranscriptCaps,
     TranscriptIngestService,
 )
-from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.tenancy import STORE_UNAVAILABLE
 
 
@@ -133,3 +170,243 @@ def register_absent(registry: Registry) -> None:
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
     for missing in (*_PROCESS_PORTS, *_PROCESS_SERVICES, TurnEventExtractors):
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+
+
+#: Why an export's sweep or writer is absent: the root booted it off.
+EXPORT_OFF = "the export is off"
+
+
+def step_hydration(
+    graphs: IReadManyGraphs,
+    names: IReadRunnerRegistry,
+    projects: IReadProjectLabels,
+    label: WorkRefLabel,
+    sources: IWorkAnnotators,
+) -> StepHydration:
+    """The tenant's reads a chunk's step facts are completed through."""
+    return StepHydration(graphs=graphs, names=names, projects=projects, label=label, source_label=sources.source_label)
+
+
+def trace_export_sweep(
+    steps: IWriteTraceCursor,
+    exporter: ITraceExporter,
+    events: HubEventLogService,
+    clock: IClock,
+    config: LiveTracingConfig,
+) -> TraceExportSweep:
+    """The fleet-trace export sweep over the exporter the root lends, reading the live ``[tracing]`` config."""
+    return TraceExportSweep(steps=steps, exporter=exporter, events=events, clock=clock, config=config.current)
+
+
+def trace_replay(
+    steps: IReadTraceSteps, exporter: ITraceExporter | None, clock: IClock, config: LiveTracingConfig
+) -> TraceReplay:
+    """Tells a past window again over the sweep's own exporter, or none with tracing off."""
+    return TraceReplay(steps=steps, exporter=exporter, clock=clock, config=config.current)
+
+
+def trace_status(
+    settings: TracingSettings,
+    status: IReadTraceStatus,
+    steps: IReadTraceSteps,
+    clock: IClock,
+    config: LiveTracingConfig,
+) -> TraceStatusReader:
+    """The operator's read of fleet tracing, answering with tracing off too."""
+    return TraceStatusReader(
+        settings=settings,
+        status=status,
+        steps=steps,
+        clock=clock,
+        replay_max_window=lambda: config.current().replay_max_window,
+    )
+
+
+def egress_status(
+    boot: EgressBoot,
+    config: LiveEgressConfig,
+    egress: IReadEgress,
+    event_reads: IReadEgressEvents,
+    steps: IReadTraceSteps,
+    clock: IClock,
+    free_space: IEgressFreeSpace,
+) -> EgressStatusReader:
+    """The operator's read of the fact export, answering with the export off too."""
+    exported = boot.live(config)
+    return EgressStatusReader(
+        config=lambda: exported().config,
+        rejected=boot.rejected is not None,
+        missing_path_key=boot.missing_path_key(),
+        exported_paths=exported,
+        egress=egress,
+        event_reads=event_reads,
+        steps=steps,
+        clock=clock,
+        free_space=free_space,
+    )
+
+
+def egress_sweep(
+    boot: EgressBoot,
+    config: LiveEgressConfig,
+    steps: IReadTraceSteps,
+    egress: IWriteEgressCursor,
+    event_reads: IReadEgressEvents,
+    writer: IEgressWriter,
+    configured: IConfiguredEgressWriter,
+    events: HubEventLogService,
+    clock: IClock,
+) -> EgressSweep:
+    """The fact-egress export sweep over the running export's writer."""
+    exported = boot.live(config)
+    return EgressSweep(
+        steps=steps,
+        egress=egress,
+        event_reads=event_reads,
+        paths=boot.exported.policy,
+        writer=writer,
+        events=events,
+        clock=clock,
+        config=lambda: exported().config,
+        writer_for=configured.for_config,
+    )
+
+
+def egress_reset(
+    boot: EgressBoot, config: LiveEgressConfig, egress: IWriteEgressCursor, events: HubEventLogService, clock: IClock
+) -> EgressReset:
+    """Moves a dataset's cursor; it refuses while the export is off."""
+    exported = boot.live(config)
+    return EgressReset(
+        egress=egress,
+        events=events,
+        clock=clock,
+        config=lambda: exported().config,
+        active=boot.on(),
+        missing_path_key=boot.missing_path_key(),
+        exported_paths=exported,
+    )
+
+
+def egress_backfill(
+    boot: EgressBoot,
+    config: LiveEgressConfig,
+    steps: IReadTraceSteps,
+    egress: IReadEgress,
+    event_reads: IReadEgressEvents,
+    writers: IEgressBackfillWriters | None,
+    clock: IClock,
+) -> EgressBackfill:
+    """Writes a past window through a fresh writer per backfill; it refuses while the export is off."""
+    exported = boot.live(config)
+    return EgressBackfill(
+        steps=steps,
+        egress=egress,
+        event_reads=event_reads,
+        paths=boot.exported.policy,
+        clock=clock,
+        config=lambda: exported().config,
+        writers=None,
+        writer_for=writers,
+        missing_path_key=boot.missing_path_key(),
+        exported_paths=exported,
+    )
+
+
+class ITraceStorePorts(IWriteTraceCursor, IReadTraceStatus, Protocol):
+    """Every trace port the one trace store fills."""
+
+
+#: The running export's writers the area aliases its writer roles onto: the kept writer, then the backfill's factory.
+type EgressWriterRefs = tuple[Ref[IConfiguredEgressWriter], Ref[IEgressBackfillWriters]]
+
+
+def _optional(missing: Any) -> Any:
+    """The ``T | None`` key :meth:`Registry.optional` registers ``missing`` under."""
+    return cast("Any", missing | None)
+
+
+#: The process keys the exports always register, past the ports they alias.
+_EXPORT_SERVICES: tuple[type[Any], ...] = (
+    TraceReplay,
+    TraceStatusReader,
+    EgressStatusReader,
+    EgressReset,
+    EgressBackfill,
+)
+
+#: The process ports the exports alias onto the adapters they are handed.
+_EXPORT_PORTS: tuple[type[Any], ...] = (
+    IReadTraceSteps,
+    IReadTraceStatus,
+    IWriteTraceCursor,
+    IReadEgress,
+    IWriteEgressCursor,
+    IEgressFreeSpace,
+)
+
+#: The borrowed values the root supplies the exports.
+_EXPORT_CONTEXT: tuple[type[Any], ...] = (TracingSettings, EgressBoot, StepHydrations)
+
+#: The keys registered only while their export is on.
+_TRACE_ON_KEYS: tuple[type[Any], ...] = (ITraceExporter, TraceExportSweep)
+_EGRESS_ON_KEYS: tuple[type[Any], ...] = (IConfiguredEgressWriter, IEgressBackfillWriters, EgressSweep)
+
+
+def register_exports(
+    registry: Registry,
+    *,
+    trace: Ref[ITraceStorePorts],
+    egress: Ref[IWriteEgressCursor],
+    project_labels: Ref[IReadProjectLabels],
+    free_space: Ref[IEgressFreeSpace],
+    trace_export: bool,
+    egress_writers: EgressWriterRefs | None,
+) -> None:
+    """Declare the trace and egress ports over the stores handed in, their services once per process and each
+    tenant's step hydration. The trace sweep and its exporter are present only with ``trace_export``, and the egress
+    sweep and its writers only with ``egress_writers``; each is otherwise absent, and its ``T | None`` is ``None``."""
+    registry.alias(port(IReadTraceSteps), trace)
+    registry.alias(port(IReadTraceStatus), trace)
+    registry.alias(port(IWriteTraceCursor), trace)
+    registry.alias(port(IReadEgress), egress)
+    registry.alias(port(IWriteEgressCursor), egress)
+    registry.alias(port(IReadProjectLabels), project_labels)
+    registry.alias(port(IEgressFreeSpace), free_space)
+    for borrowed in _EXPORT_CONTEXT:
+        registry.context(port(borrowed), lifetime=Lifetime.PROCESS)
+    registry.factory(step_hydration, lifetime=Lifetime.TENANT)
+    for build in (trace_replay, trace_status, egress_status, egress_reset, egress_backfill):
+        registry.factory(build, lifetime=Lifetime.PROCESS)
+    if trace_export:
+        exporter = registry.context(port(ITraceExporter), lifetime=Lifetime.PROCESS)
+        registry.optional(port(ITraceExporter), exporter, lifetime=Lifetime.PROCESS)
+        sweep = registry.factory(trace_export_sweep, lifetime=Lifetime.PROCESS)
+        registry.optional(port(TraceExportSweep), sweep, lifetime=Lifetime.PROCESS)
+    else:
+        for missing in _TRACE_ON_KEYS:
+            registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=EXPORT_OFF)
+            registry.optional(port(missing), None, lifetime=Lifetime.PROCESS)
+    if egress_writers is not None:
+        configured, backfill = egress_writers
+        registry.alias(port(IConfiguredEgressWriter), configured)
+        registry.alias(port(IEgressBackfillWriters), backfill)
+        registry.optional(port(IEgressBackfillWriters), backfill, lifetime=Lifetime.PROCESS)
+        egress_sweep_ref = registry.factory(egress_sweep, lifetime=Lifetime.PROCESS)
+        registry.optional(port(EgressSweep), egress_sweep_ref, lifetime=Lifetime.PROCESS)
+    else:
+        for missing in _EGRESS_ON_KEYS:
+            registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=EXPORT_OFF)
+        for missing in (IEgressBackfillWriters, EgressSweep):
+            registry.optional(port(missing), None, lifetime=Lifetime.PROCESS)
+
+
+def register_exports_absent(registry: Registry) -> None:
+    """Declare the exports' ports, services, borrowed values, sweeps and step hydration absent, for the store-free
+    graph."""
+    for missing in (*_EXPORT_PORTS, *_EXPORT_SERVICES, *_EXPORT_CONTEXT, *_TRACE_ON_KEYS, *_EGRESS_ON_KEYS):
+        registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+    for missing in (ITraceExporter, TraceExportSweep, IEgressBackfillWriters, EgressSweep):
+        registry.absent(port(_optional(missing)), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+    registry.absent(port(IReadProjectLabels), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
+    registry.absent(port(StepHydration), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)

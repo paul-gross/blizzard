@@ -156,6 +156,7 @@ from blizzard.hub.domain.config.oauth_providers import ProvidersOrphaned, requir
 from blizzard.hub.domain.config.secrets import KeysUncovered, require_keys_covered
 from blizzard.hub.domain.config.work_sources import BuiltInWorkSource
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
+from blizzard.hub.domain.observability.egress.boot import EgressBoot, EgressPathKey
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
 from blizzard.hub.domain.observability.tracing.attributes import (
@@ -799,6 +800,7 @@ def build_hosted_app(
         reader = SqlAlchemyStoreStatusReader(engine)
         expected = migration_runner(config).script_head()
         readiness = ReadinessService(reader=reader, expected_revision=expected)
+        tracing = TracingSettings.of(os.environ)
 
         core = build_hub_core(
             connections,
@@ -810,24 +812,6 @@ def build_hosted_app(
             platform_tracing=platform_tracing,
             environ=os.environ,
             oauth_http_client=oauth_http_client,
-        )
-        # Closed after everything registered below: the tenant scopes, then the process scope; the engine, tracing
-        # and settings stay borrowed from `hub host`.
-        cleanup.callback(core.process.close)
-        # Minted here on first start when no key source exists yet.
-        secret_keys = core.process.resolver.get(IRotatableKeyProvider)
-        remove_retired_workdirs(config.data_dir)
-        tracing = TracingSettings.of(os.environ)
-
-        # Resolved before serving, so a misconfigured provider or an unusable signing-keys directory fails boot rather
-        # than the first request. Both are built only under `oauth`: under `none` there is no login mechanism to serve.
-        core.process.resolver.get(IOAuthProviderRegistry)
-        core.process.resolver.get(SigningKeyService | None)
-
-        flags = build_hub_flags(config)
-        services = build_services(
-            core,
-            public_url=config.public_url,
             # No exporter is built unless OpenTelemetry's own variables enable tracing.
             trace_exporter=(
                 OtlpTraceExporter(
@@ -838,8 +822,25 @@ def build_hosted_app(
                 if tracing.enabled()
                 else None
             ),
-            tracing_settings=tracing,
+            tracing=tracing,
             egress_path_key=_egress_path_key(config.egress),
+        )
+        # Closed after everything registered below: the tenant scopes, then the process scope; the engine, tracing
+        # and settings stay borrowed from `hub host`.
+        cleanup.callback(core.process.close)
+        # Minted here on first start when no key source exists yet.
+        secret_keys = core.process.resolver.get(IRotatableKeyProvider)
+        remove_retired_workdirs(config.data_dir)
+
+        # Resolved before serving, so a misconfigured provider or an unusable signing-keys directory fails boot rather
+        # than the first request. Both are built only under `oauth`: under `none` there is no login mechanism to serve.
+        core.process.resolver.get(IOAuthProviderRegistry)
+        core.process.resolver.get(SigningKeyService | None)
+
+        flags = build_hub_flags(config)
+        services = build_services(
+            core,
+            public_url=config.public_url,
             cadences_on=lambda: flags.on("cadences"),
         )
         # Closed before the action loop stops: each tenant scope's finalizer closes the configured clients its
@@ -961,10 +962,10 @@ def announce_rejected_egress(egress: EgressConfig, services: HubServices) -> Non
     hub's own event log per start. Without its format's extra the export is off and the event names the format;
     without the path hash key a hashing file path policy needs, only the events dataset is off and the event names the
     variable — never a key value."""
-    unavailable = services.egress_unavailable
-    variable = services.egress_missing_path_key
-    if unavailable is not None:
-        message = f"fact egress is off: {unavailable.reason}"
+    boot = services.process.resolver.get(EgressBoot)
+    variable = boot.missing_path_key()
+    if boot.rejected is not None:
+        message = f"fact egress is off: {boot.rejected}"
         detail = {"setting": "egress.format", "value": egress.format}
     elif variable is not None:
         message = f"fact egress: {missing_key_reason(variable)}"
@@ -979,10 +980,10 @@ def announce_rejected_egress(egress: EgressConfig, services: HubServices) -> Non
     )
 
 
-def _egress_path_key(egress: EgressConfig) -> bytes | None:
+def _egress_path_key(egress: EgressConfig) -> EgressPathKey:
     """The file path hash key, read once here from the variable ``egress.path_key_env`` names; empty is unset."""
     value = os.environ.get(egress.path_key_env, "")
-    return value.encode() if value else None
+    return EgressPathKey(value.encode() if value else None)
 
 
 def create_app_for_export(flag_registry: FlagRegistry) -> FastAPI:

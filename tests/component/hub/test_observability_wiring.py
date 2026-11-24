@@ -13,6 +13,7 @@ from blizzard.hub.domain.observability.analytics.derivation import EventDerivati
 from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents, IWriteTranscriptEvents
 from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
 from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
+from blizzard.hub.domain.observability.egress.reset import EgressReset
 from blizzard.hub.domain.observability.env_timeline import EnvTimelineReading, IReadEnvTimelineFacts
 from blizzard.hub.domain.observability.forge_status import (
     IReadAnnotatedSources,
@@ -130,7 +131,7 @@ def test_the_hub_event_log_and_invariant_check_are_each_one_process_instance_the
     assert hub.hub_services.process.tenants.resolve(tenant, HubEventLogService) is event_log
     assert hub.hub_services.hub_event_log is event_log
     assert hub.hub_services.tenant_teardown._events is event_log
-    assert hub.hub_services.egress_reset._events is event_log
+    assert process.get(EgressReset)._events is event_log
     assert event_log._events is process.get(HubEventLogStore)
     assert process.get(IReadHubEventLog) is process.get(IWriteHubEventLog) is process.get(HubEventLogStore)
 

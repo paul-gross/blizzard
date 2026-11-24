@@ -134,6 +134,7 @@ from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.observability.analytics.extraction import ITurnEventExtractor
+from blizzard.hub.domain.observability.egress.boot import EgressBoot, EgressPathKey
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.ports import (
     EgressBatch,
@@ -144,6 +145,8 @@ from blizzard.hub.domain.observability.egress.ports import (
     ManifestCommitted,
     PlacedFile,
 )
+from blizzard.hub.domain.observability.egress.sweep import EgressSweep
+from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
 from blizzard.hub.domain.observability.transcripts import (
     EncodedTurns,
     TranscriptCaps,
@@ -164,6 +167,7 @@ from blizzard.hub.domain.urgency.order import FIRST_POSITION
 from blizzard.hub.domain.urgency.settings import TenantSettings
 from blizzard.hub.domain.work_items.editing import WorkItemEditService, mint_item
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
+from blizzard.hub.egress.factory import egress_boot
 from blizzard.hub.egress.writer import validate_batch
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.auth import IForgeAuthorizations
@@ -665,11 +669,20 @@ def overridden_core(
     overrides: Callable[[RecordingRegistry], Rewrites],
     settings: HubSettingsGraph | None = None,
     versions: HubVersionWindow | None = None,
+    trace_exporter: ITraceExporter | None = None,
+    tracing: TracingSettings | None = None,
+    egress: EgressBoot | None = None,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> HubCore:
     """A store-backed hub core whose registered graph carries the test root's ``overrides``, over an empty
-    environment."""
-    registry = registered(store_backed=True, settings=settings is not None, versions=versions is not None)
+    environment; its trace export runs over a lent ``trace_exporter``, and its fact export as ``egress`` booted."""
+    registry = registered(
+        store_backed=True,
+        settings=settings is not None,
+        versions=versions is not None,
+        trace_export=trace_exporter is not None,
+        egress_export=egress is not None and egress.on(),
+    )
     values = store_backed_values(
         connections,
         clock=clock,
@@ -679,6 +692,9 @@ def overridden_core(
         actions=actions,
         settings=settings,
         versions=versions,
+        trace_exporter=trace_exporter,
+        tracing=tracing,
+        egress_boot=egress,
         system_artifacts=system_artifacts,
     )
     owner = build_container(registry, HUB_LIFETIMES, owner=HUB_OWNER, values=values, overrides=overrides(registry))
@@ -1999,6 +2015,9 @@ def build_hub(
         actions=actions,
         settings=settings,
         versions=HubVersionWindow(hub_version or __version__, version_window),
+        trace_exporter=trace_exporter,
+        tracing=tracing_settings,
+        egress=egress_boot(config.egress, EgressPathKey(egress_path_key)),
         overrides=lambda registry: replaced_adapters(
             registry,
             probes=credential_probes,
@@ -2024,9 +2043,6 @@ def build_hub(
     hub_services = build_services(
         core,
         public_url=public_url,
-        trace_exporter=trace_exporter,
-        tracing_settings=tracing_settings,
-        egress_path_key=egress_path_key,
         cadences_on=lambda: (flags or HUB_FLAGS).on("cadences"),
     )
     hub_services.tenants.open_tenants.refresh()
@@ -3131,3 +3147,13 @@ def seed_drainable_history(
                 for n in range(open_refs)
             ],
         )
+
+
+def trace_sweep_of(services: HubServices) -> TraceExportSweep | None:
+    """The process container's fleet-trace export sweep, ``None`` while the trace export is off."""
+    return services.process.resolver.get(TraceExportSweep | None)
+
+
+def egress_sweep_of(services: HubServices) -> EgressSweep | None:
+    """The process container's fact-egress export sweep, ``None`` while the export is off."""
+    return services.process.resolver.get(EgressSweep | None)
