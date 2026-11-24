@@ -45,7 +45,8 @@ def replaced_adapters(
 ) -> OverrideSet:
     """Replacements supplying ``probes`` as every forge kind's credential check, borrowed, and building each tenant's
     forge and work-source registries with ``forges`` and ``work_sources``, and serving ``oauth_providers`` as the
-    hub's OAuth provider registry, and letting each action pass go ``action_pass_grace`` past its live bound; each left ``None`` stays registered."""
+    hub's OAuth provider registry, and letting each action pass go ``action_pass_grace`` past its live bound; each left
+    ``None`` stays registered."""
     overrides = OverrideSet(registry)
     if probes is not None:
         overrides.replace_value(owned_ref(registry, Mapping[str, ICredentialProbe]), probes)
