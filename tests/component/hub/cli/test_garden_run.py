@@ -12,8 +12,8 @@ from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.garden.routines import Routine
-from blizzard.hub.domain.garden.scopes import ScopeSlug
+from blizzard.hub.domain.garden.routines import Routine, RoutineAuthoring
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
@@ -31,7 +31,7 @@ def _default_graph(hub: HubHarness) -> Graph:
 
 def _routine(hub: HubHarness) -> Routine:
     graph = _default_graph(hub)
-    return hub.services.routine_authoring.create(
+    return hub.default_adapter(RoutineAuthoring).create(
         ctx=_CTX,
         name="gardening",
         graph_name=graph.name,
@@ -55,7 +55,7 @@ def _relay(hub: HubHarness) -> Bound:
 def test_run_list_and_show_work_end_to_end_against_a_real_app(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine = _routine(hub)
-    scope = hub.services.scopes.get(routine.project_id, routine.default_scope_slug)
+    scope = hub.default_adapter(IReadScopeRepository).get(routine.project_id, routine.default_scope_slug)
     assert scope is not None
     result = hub.services.routine_run.run(
         routine,

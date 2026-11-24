@@ -14,7 +14,8 @@ from blizzard.auth_core import Permission, Role
 from blizzard.hub.api import auth_session
 from blizzard.hub.auth.permissions import permissions_for
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.garden.scopes import ScopeSlug
+from blizzard.hub.domain.garden.routines import RoutineAuthoring
+from blizzard.hub.domain.garden.scopes import ScopeRegistry, ScopeSlug
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.wire.cadence import REVISION_CONFLICT, RevisionConflictProblem
@@ -44,7 +45,7 @@ def _routine(hub: HubHarness, slug: str, scope: str = "blizzard") -> None:
     graph = hub.services.default_graph.ensure_default(
         PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
-    hub.services.routine_authoring.create(
+    hub.default_adapter(RoutineAuthoring).create(
         project=project_record(hub, _project(hub)),
         ctx=_CTX,
         slug=slug,
@@ -280,7 +281,7 @@ def test_a_promoting_write_needs_chunk_control_and_retire_never_asks_it(hub: Hub
 
 def _seed(hub: HubHarness, count: int) -> None:
     for scope in ("blizzard", "other"):
-        hub.services.scope_registry.ensure(project_record(hub, _project(hub)), ScopeSlug.parse(scope), _CTX)
+        hub.default_adapter(ScopeRegistry).ensure(project_record(hub, _project(hub)), ScopeSlug.parse(scope), _CTX)
     for index in range(count):
         _routine(hub, f"routine-{index}")
         _create(

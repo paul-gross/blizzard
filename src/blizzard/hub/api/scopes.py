@@ -14,6 +14,7 @@ from __future__ import annotations
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from blizzard.auth_core import Permission
@@ -21,23 +22,35 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems, problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import CallProject, PathProject, QueryProject
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
-from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit, ScopeSlug, ScopeSlugError
-from blizzard.hub.domain.projects.model import Project
+from blizzard.hub.domain.garden.routines import IReadRoutineScopeRepository
+from blizzard.hub.domain.garden.scopes import (
+    IReadScopeRepository,
+    Scope,
+    ScopeEdit,
+    ScopeLifecycle,
+    ScopeRegistry,
+    ScopeSlug,
+    ScopeSlugError,
+)
+from blizzard.hub.domain.projects.model import IReadProjectRepository, Project
 from blizzard.wire.scope import ScopeCreateRequest, ScopeEditRequest, ScopeLifecycleRequest, ScopeView
 
 _GUARDS = [Depends(reject_runner_principal), Depends(tenant_bound)]
 router = APIRouter(prefix="/api", tags=["scopes"], dependencies=_GUARDS)
 project_router = APIRouter(prefix="/api/projects/{project}", tags=["scopes"], dependencies=_GUARDS)
 _VIEW = Depends(require(Permission.FLEET_VIEW))
+Scopes = FromDishka[IReadScopeRepository]
+Registry = FromDishka[ScopeRegistry]
+Lifecycle = FromDishka[ScopeLifecycle]
+RoutineScopes = FromDishka[IReadRoutineScopeRepository]
+ProjectReads = FromDishka[IReadProjectRepository]
 
 
 def scope_view(scope: Scope, labels: ProjectLabelFields | None = None) -> ScopeView:
@@ -65,8 +78,8 @@ def _revision_conflict(exc: ConfigRevisionConflict) -> HTTPException:
     return ProblemHTTPException(partial(problems.revision_conflict_problem, str(exc)))
 
 
-def _scope_or_404(project: Project, slug: str, services: TenantServices) -> Scope:
-    scope = services.scopes.get(project.project_id, slug)
+def _scope_or_404(project: Project, slug: str, scopes: IReadScopeRepository) -> Scope:
+    scope = scopes.get(project.project_id, slug)
     if scope is None:
         raise ProblemHTTPException(partial(problems_garden.scope_not_found_problem, f"unknown scope {slug}", 404))
     return scope
@@ -76,16 +89,14 @@ def _create(
     request: ScopeCreateRequest,
     identity: ResolvedIdentity,
     door: RequestDoor,
-    services: TenantServices,
+    registry: ScopeRegistry,
     project: Project,
 ) -> ScopeView:
     try:
         slug = ScopeSlug.parse(request.slug)
     except ScopeSlugError as exc:
         raise ProblemHTTPException(partial(problems_garden.scope_slug_invalid_problem, str(exc))) from exc
-    scope = services.scope_registry.ensure(
-        project, slug, change_context(identity, door), description=request.description
-    )
+    scope = registry.ensure(project, slug, change_context(identity, door), description=request.description)
     return _labelled(scope, project)
 
 
@@ -94,7 +105,8 @@ def _edit(
     request: ScopeEditRequest,
     identity: ResolvedIdentity,
     door: RequestDoor,
-    services: TenantServices,
+    registry: ScopeRegistry,
+    scopes: IReadScopeRepository,
     project: Project,
     if_match: int | None,
 ) -> ScopeView:
@@ -102,10 +114,10 @@ def _edit(
         parsed = ScopeSlug.parse(slug)
     except ScopeSlugError as exc:
         raise ProblemHTTPException(partial(problems_garden.scope_slug_invalid_problem, str(exc))) from exc
-    scope = _scope_or_404(project, parsed.value, services)
+    scope = _scope_or_404(project, parsed.value, scopes)
     edit = ScopeEdit(**{name: getattr(request, name) for name in request.model_fields_set})
     try:
-        edited = services.scope_registry.edit(scope, edit, change_context(identity, door), if_match=if_match)
+        edited = registry.edit(scope, edit, change_context(identity, door), if_match=if_match)
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except ConfigRevisionConflict as exc:
@@ -119,12 +131,13 @@ def _set_retired(
     request: ScopeLifecycleRequest,
     identity: ResolvedIdentity,
     door: RequestDoor,
-    services: TenantServices,
+    lifecycle: ScopeLifecycle,
+    scopes: IReadScopeRepository,
     project: Project,
     if_match: int | None,
 ) -> ScopeView:
-    scope = _scope_or_404(project, slug, services)
-    verb = services.scope_lifecycle.retire if retire else services.scope_lifecycle.enable
+    scope = _scope_or_404(project, slug, scopes)
+    verb = lifecycle.retire if retire else lifecycle.enable
     try:
         changed = verb(scope, change_context(identity, door), by=request.by, if_match=if_match)
     except ConfigRevisionConflict as exc:
@@ -132,58 +145,64 @@ def _set_retired(
     return _labelled(changed, project)
 
 
-def _listing(services: TenantServices, project_id: str | None) -> list[ScopeView]:
-    scopes = services.scopes.list_all(project_id)
-    labels = ProjectLabels.read(services.projects, (s.project_id for s in scopes))
-    return [scope_view(s, labels.fields(s.project_id)) for s in scopes]
+def _listing(scopes: IReadScopeRepository, projects: IReadProjectRepository, project_id: str | None) -> list[ScopeView]:
+    listed = scopes.list_all(project_id)
+    labels = ProjectLabels.read(projects, (s.project_id for s in listed))
+    return [scope_view(s, labels.fields(s.project_id)) for s in listed]
 
 
 # --- the un-nested routes: the tenant-wide listing, and the deprecated by-slug aliases ---
 
 
 @router.post("/scopes", response_model=ScopeView, status_code=status.HTTP_201_CREATED, deprecated=True)
+@inject_sync
 def create_scope(
     request: ScopeCreateRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Services,
+    registry: Registry,
     project: CallProject,
 ) -> ScopeView:
     """Mint a scope in the call's project, or no-op onto the project's existing one of the same slug; 422 on a
     malformed slug, naming the rejected value. Deprecated: `POST /api/projects/{project}/scopes`."""
-    return _create(request, identity, door, services, project)
+    return _create(request, identity, door, registry, project)
 
 
 @router.get("/scopes", response_model=list[ScopeView], dependencies=[_VIEW])
-def list_scopes(services: Services, project: QueryProject) -> list[ScopeView]:
+@inject_sync
+def list_scopes(scopes: Scopes, projects: ProjectReads, project: QueryProject) -> list[ScopeView]:
     """Every scope, newest first, each marked retired or not — of the project `?project=` names, else of every
     project."""
-    return _listing(services, project)
+    return _listing(scopes, projects, project)
 
 
 @router.get("/scopes/{slug}", response_model=ScopeView, dependencies=[_VIEW], deprecated=True)
-def get_scope(slug: str, services: Services, project: CallProject) -> ScopeView:
+@inject_sync
+def get_scope(slug: str, scopes: Scopes, project: CallProject) -> ScopeView:
     """One scope of the call's project; 404 on an unknown slug. Deprecated: `GET
     /api/projects/{project}/scopes/{slug}`."""
-    return _labelled(_scope_or_404(project, slug, services), project)
+    return _labelled(_scope_or_404(project, slug, scopes), project)
 
 
 @router.get("/scopes/{slug}/routines", response_model=list[str], dependencies=[_VIEW], deprecated=True)
-def list_scope_routines(slug: str, services: Services, project: CallProject) -> list[str]:
+@inject_sync
+def list_scope_routines(slug: str, scopes: Scopes, routine_scopes: RoutineScopes, project: CallProject) -> list[str]:
     """Every routine id linked to `slug` in the call's project — the reverse direction of
     `GET /api/routines/{routine_id}/scopes`. 404 on an unknown slug. Deprecated: `GET
     /api/projects/{project}/scopes/{slug}/routines`."""
-    scope = _scope_or_404(project, slug, services)
-    return services.routine_scopes.list_routines(scope.scope_id)
+    scope = _scope_or_404(project, slug, scopes)
+    return routine_scopes.list_routines(scope.scope_id)
 
 
 @router.patch("/scopes/{slug}", response_model=ScopeView, deprecated=True)
+@inject_sync
 def edit_scope(
     slug: str,
     request: ScopeEditRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Services,
+    registry: Registry,
+    scopes: Scopes,
     project: CallProject,
     if_match: Annotated[int | None, Header()] = None,
 ) -> ScopeView:
@@ -191,114 +210,130 @@ def edit_scope(
     malformed slug naming the rejected value or on a `null` field, 404 on a well-formed but
     unknown slug, 409 on a stale `If-Match` naming the current revision. Deprecated: `PATCH
     /api/projects/{project}/scopes/{slug}`."""
-    return _edit(slug, request, identity, door, services, project, if_match)
+    return _edit(slug, request, identity, door, registry, scopes, project, if_match)
 
 
 @router.post("/scopes/{slug}/retire", response_model=ScopeView, status_code=status.HTTP_202_ACCEPTED, deprecated=True)
+@inject_sync
 def retire_scope(
     slug: str,
     request: ScopeLifecycleRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Services,
+    lifecycle: Lifecycle,
+    scopes: Scopes,
     project: CallProject,
     if_match: Annotated[int | None, Header()] = None,
 ) -> ScopeView:
     """Retire a scope — a reversible brake; retiring a retired scope writes nothing. 404 on
     an unknown slug, 409 on a stale `If-Match`. Deprecated: `POST /api/projects/{project}/scopes/{slug}/retire`."""
-    return _set_retired(True, slug, request, identity, door, services, project, if_match)
+    return _set_retired(True, slug, request, identity, door, lifecycle, scopes, project, if_match)
 
 
 @router.post("/scopes/{slug}/enable", response_model=ScopeView, status_code=status.HTTP_202_ACCEPTED, deprecated=True)
+@inject_sync
 def enable_scope(
     slug: str,
     request: ScopeLifecycleRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Services,
+    lifecycle: Lifecycle,
+    scopes: Scopes,
     project: CallProject,
     if_match: Annotated[int | None, Header()] = None,
 ) -> ScopeView:
     """Re-enable a retired scope; enabling an enabled one writes nothing. 404 on an unknown
     slug, 409 on a stale `If-Match`. Deprecated: `POST /api/projects/{project}/scopes/{slug}/enable`."""
-    return _set_retired(False, slug, request, identity, door, services, project, if_match)
+    return _set_retired(False, slug, request, identity, door, lifecycle, scopes, project, if_match)
 
 
 # --- under /api/projects/{project} ---
 
 
 @project_router.post("/scopes", response_model=ScopeView, status_code=status.HTTP_201_CREATED)
+@inject_sync
 def create_project_scope(
     request: ScopeCreateRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Services,
+    registry: Registry,
     project: PathProject,
 ) -> ScopeView:
     """Mint a scope in the project, or no-op onto its existing one of the same slug; 422 on a malformed slug,
     naming the rejected value; 404 on an unknown project."""
-    return _create(request, identity, door, services, project)
+    return _create(request, identity, door, registry, project)
 
 
 @project_router.get("/scopes", response_model=list[ScopeView], dependencies=[_VIEW])
-def list_project_scopes(services: Services, project: PathProject) -> list[ScopeView]:
+@inject_sync
+def list_project_scopes(scopes: Scopes, projects: ProjectReads, project: PathProject) -> list[ScopeView]:
     """Every scope of the project, newest first, each marked retired or not; 404 on an unknown project."""
-    return _listing(services, project.project_id)
+    return _listing(scopes, projects, project.project_id)
 
 
 @project_router.get("/scopes/{slug}", response_model=ScopeView, dependencies=[_VIEW])
-def get_project_scope(slug: str, services: Services, project: PathProject) -> ScopeView:
+@inject_sync
+def get_project_scope(slug: str, scopes: Scopes, project: PathProject) -> ScopeView:
     """One scope of the project; 404 on an unknown project or slug."""
-    return _labelled(_scope_or_404(project, slug, services), project)
+    return _labelled(_scope_or_404(project, slug, scopes), project)
 
 
 @project_router.get("/scopes/{slug}/routines", response_model=list[str], dependencies=[_VIEW])
-def list_project_scope_routines(slug: str, services: Services, project: PathProject) -> list[str]:
+@inject_sync
+def list_project_scope_routines(
+    slug: str, scopes: Scopes, routine_scopes: RoutineScopes, project: PathProject
+) -> list[str]:
     """Every routine id linked to the project's scope `slug`; 404 on an unknown project or slug."""
-    scope = _scope_or_404(project, slug, services)
-    return services.routine_scopes.list_routines(scope.scope_id)
+    scope = _scope_or_404(project, slug, scopes)
+    return routine_scopes.list_routines(scope.scope_id)
 
 
 @project_router.patch("/scopes/{slug}", response_model=ScopeView)
+@inject_sync
 def edit_project_scope(
     slug: str,
     request: ScopeEditRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Services,
+    registry: Registry,
+    scopes: Scopes,
     project: PathProject,
     if_match: Annotated[int | None, Header()] = None,
 ) -> ScopeView:
     """Apply only the fields present to the project's scope `slug`; an edit that changes nothing writes nothing.
     422 on a malformed slug or a `null` field, 404 on an unknown project or slug, 409 on a stale `If-Match`."""
-    return _edit(slug, request, identity, door, services, project, if_match)
+    return _edit(slug, request, identity, door, registry, scopes, project, if_match)
 
 
 @project_router.post("/scopes/{slug}/retire", response_model=ScopeView, status_code=status.HTTP_202_ACCEPTED)
+@inject_sync
 def retire_project_scope(
     slug: str,
     request: ScopeLifecycleRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Services,
+    lifecycle: Lifecycle,
+    scopes: Scopes,
     project: PathProject,
     if_match: Annotated[int | None, Header()] = None,
 ) -> ScopeView:
     """Retire the project's scope `slug`; retiring a retired scope writes nothing. 404 on an unknown project or
     slug, 409 on a stale `If-Match`."""
-    return _set_retired(True, slug, request, identity, door, services, project, if_match)
+    return _set_retired(True, slug, request, identity, door, lifecycle, scopes, project, if_match)
 
 
 @project_router.post("/scopes/{slug}/enable", response_model=ScopeView, status_code=status.HTTP_202_ACCEPTED)
+@inject_sync
 def enable_project_scope(
     slug: str,
     request: ScopeLifecycleRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Services,
+    lifecycle: Lifecycle,
+    scopes: Scopes,
     project: PathProject,
     if_match: Annotated[int | None, Header()] = None,
 ) -> ScopeView:
     """Re-enable the project's retired scope `slug`; enabling an enabled one writes nothing. 404 on an unknown
     project or slug, 409 on a stale `If-Match`."""
-    return _set_retired(False, slug, request, identity, door, services, project, if_match)
+    return _set_retired(False, slug, request, identity, door, lifecycle, scopes, project, if_match)

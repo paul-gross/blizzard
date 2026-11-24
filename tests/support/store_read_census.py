@@ -128,7 +128,10 @@ from blizzard.hub.domain.garden.delivery.materialize import (
 )
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository, IReadFindingSetRepository
 from blizzard.hub.domain.garden.findings.trend import IReadGardenTrendRepository
-from blizzard.hub.domain.garden.proposals.closure import IReadGardenProposalClosureRepository
+from blizzard.hub.domain.garden.proposals.closure import (
+    GardenProposalClosureService,
+    IReadGardenProposalClosureRepository,
+)
 from blizzard.hub.domain.garden.proposals.model import IReadGardenProposalRepository
 from blizzard.hub.domain.garden.proposals.resolution import resolve_proposal_findings
 from blizzard.hub.domain.garden.review.materialize import (
@@ -138,11 +141,16 @@ from blizzard.hub.domain.garden.review.materialize import (
     ReviewFindingsPlan,
     write_review_plan,
 )
-from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository
+from blizzard.hub.domain.garden.routines import (
+    IReadRoutineRepository,
+    IReadRoutineScopeRepository,
+    RoutineAuthoring,
+    RoutineScopeMembership,
+)
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository, RunContext
 from blizzard.hub.domain.garden.runs.history import IReadGardenRunRepository
 from blizzard.hub.domain.garden.runs.sweeps import IReadGardenSweepsRepository
-from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.domain.graph.model import (
     Graph,
@@ -1571,16 +1579,16 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     operator = ChangeContext(actor="operator", door=Door.API)
     garden_project = default_project(hub.engine)
     garden_project_record = project_record(hub, garden_project)
-    scope_a = hub.services.scope_registry.ensure(
+    scope_a = hub.default_adapter(ScopeRegistry).ensure(
         garden_project_record, ScopeSlug.parse("blizzard"), operator, description="core"
     )
-    scope_b = hub.services.scope_registry.ensure(
+    scope_b = hub.default_adapter(ScopeRegistry).ensure(
         garden_project_record, ScopeSlug.parse("runner-scope"), operator, description="runner side"
     )
-    scope_c = hub.services.scope_registry.ensure(
+    scope_c = hub.default_adapter(ScopeRegistry).ensure(
         garden_project_record, ScopeSlug.parse("legacy"), operator, description="retired"
     )
-    hub.services.scope_lifecycle.retire(scope_c, operator, by="operator")
+    hub.default_adapter(ScopeLifecycle).retire(scope_c, operator, by="operator")
 
     # --- secrets ----------------------------------------------------------------------------
     secret_store = SecretStore(store_connections)
@@ -1647,7 +1655,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         operator,
     )
 
-    routine = hub.services.routine_authoring.create(
+    routine = hub.default_adapter(RoutineAuthoring).create(
         project=garden_project_record,
         ctx=operator,
         name="gardening",
@@ -1656,8 +1664,8 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         default_model=["opus"],
         default_effort="high",
     )
-    hub.services.routine_scope_membership.link(routine, scope_b, operator)
-    routine_2 = hub.services.routine_authoring.create(
+    hub.default_adapter(RoutineScopeMembership).link(routine, scope_b, operator)
+    routine_2 = hub.default_adapter(RoutineAuthoring).create(
         project=garden_project_record,
         ctx=operator,
         name="nightly",
@@ -1774,12 +1782,12 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
 
     proposal_1 = garden_proposal_store.get(garden_proposal_1)
     assert proposal_1 is not None
-    hub.services.garden_proposal_closure.pass_(proposal_1, reason="not worth it", by="operator")
+    hub.default_adapter(GardenProposalClosureService).pass_(proposal_1, reason="not worth it", by="operator")
 
     proposal_2 = garden_proposal_store.get(garden_proposal_2)
     assert proposal_2 is not None
     resolved_findings = resolve_proposal_findings(hub.services.findings, proposal_2.findings)
-    accepted = hub.services.garden_proposal_closure.accept(
+    accepted = hub.default_adapter(GardenProposalClosureService).accept(
         proposal_2, reason=None, by="operator", body=None, mint=True, findings=resolved_findings
     )
     assert accepted.closure.source is not None
@@ -2529,9 +2537,9 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
 
     # --- cadence errand runs: the census cadence's `all` chore minted once per errand ----------
     census_facts = CadenceAttention(
-        routines=hub.services.routines,
-        routine_scopes=hub.services.routine_scopes,
-        scopes=hub.services.scopes,
+        routines=hub.default_adapter(IReadRoutineRepository),
+        routine_scopes=hub.default_adapter(IReadRoutineScopeRepository),
+        scopes=hub.default_adapter(IReadScopeRepository),
         graphs=hub.services.graphs,
     ).facts([cadence])[cadence.project_id]
     census_errands = [e for e in errands(cadence, census_facts) if e.chore.spec.key == "every"]
@@ -3038,38 +3046,42 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFindingSetRepository, "newest_by_scope_for_routine"): lambda w: w.hub.default_adapter(
         FindingSetStore
     ).newest_by_scope_for_routine(w.project_id, "gardening"),
-    (IReadGardenProposalClosureRepository, "get"): lambda w: w.hub.services.garden_proposal_closures.get(
+    (IReadGardenProposalClosureRepository, "get"): lambda w: w.hub.default_adapter(
+        IReadGardenProposalClosureRepository
+    ).get(w.garden_proposal_1),
+    (IReadGardenProposalClosureRepository, "get_many"): lambda w: w.hub.default_adapter(
+        IReadGardenProposalClosureRepository
+    ).get_many([w.garden_proposal_1, w.garden_proposal_2]),
+    (IReadGardenProposalClosureRepository, "find_by_item"): lambda w: w.hub.default_adapter(
+        IReadGardenProposalClosureRepository
+    ).find_by_item(w.materialized_source, w.materialized_ref),
+    (IReadGardenProposalClosureRepository, "find_by_items"): lambda w: w.hub.default_adapter(
+        IReadGardenProposalClosureRepository
+    ).find_by_items(
+        [
+            WorkRef(source=w.materialized_source, ref=w.materialized_ref),
+            WorkRef(source=w.materialized_source, ref="unminted"),
+        ]
+    ),
+    (IReadGardenProposalRepository, "get"): lambda w: w.hub.default_adapter(IReadGardenProposalRepository).get(
         w.garden_proposal_1
     ),
-    (IReadGardenProposalClosureRepository, "get_many"): lambda w: w.hub.services.garden_proposal_closures.get_many(
-        [w.garden_proposal_1, w.garden_proposal_2]
-    ),
-    (IReadGardenProposalClosureRepository, "find_by_item"): lambda w: (
-        w.hub.services.garden_proposal_closures.find_by_item(w.materialized_source, w.materialized_ref)
-    ),
-    (IReadGardenProposalClosureRepository, "find_by_items"): lambda w: (
-        w.hub.services.garden_proposal_closures.find_by_items(
-            [
-                WorkRef(source=w.materialized_source, ref=w.materialized_ref),
-                WorkRef(source=w.materialized_source, ref="unminted"),
-            ]
-        )
-    ),
-    (IReadGardenProposalRepository, "get"): lambda w: w.hub.services.garden_proposals.get(w.garden_proposal_1),
-    (IReadGardenProposalRepository, "get_many"): lambda w: w.hub.services.garden_proposals.get_many(
-        [w.garden_proposal_1, w.garden_proposal_2]
-    ),
-    (IReadGardenProposalRepository, "list_all"): lambda w: w.hub.services.garden_proposals.list_all(),
+    (IReadGardenProposalRepository, "get_many"): lambda w: w.hub.default_adapter(
+        IReadGardenProposalRepository
+    ).get_many([w.garden_proposal_1, w.garden_proposal_2]),
+    (IReadGardenProposalRepository, "list_all"): lambda w: w.hub.default_adapter(
+        IReadGardenProposalRepository
+    ).list_all(),
     (IReadGardenProposalRepository, "list_page"): lambda w: (
-        w.hub.services.garden_proposals.list_page(limit=50),
-        w.hub.services.garden_proposals.list_page(limit=50, project_id=w.project_id),
+        w.hub.default_adapter(IReadGardenProposalRepository).list_page(limit=50),
+        w.hub.default_adapter(IReadGardenProposalRepository).list_page(limit=50, project_id=w.project_id),
     ),
-    (IReadGardenProposalRepository, "list_for_routine"): lambda w: w.hub.services.garden_proposals.list_for_routine(
-        w.project_id, "gardening"
-    ),
-    (IReadGardenProposalRepository, "counts_by_class"): lambda w: w.hub.services.garden_proposals.counts_by_class(
-        since=_ht(11), until=_ht(14)
-    ),
+    (IReadGardenProposalRepository, "list_for_routine"): lambda w: w.hub.default_adapter(
+        IReadGardenProposalRepository
+    ).list_for_routine(w.project_id, "gardening"),
+    (IReadGardenProposalRepository, "counts_by_class"): lambda w: w.hub.default_adapter(
+        IReadGardenProposalRepository
+    ).counts_by_class(since=_ht(11), until=_ht(14)),
     (IReadGardenRunRepository, "runs_in_window"): lambda w: (
         w.garden_run.runs_in_window(since=_HUB_BASE, until=_HUB_UNTIL),
         w.garden_run.runs_in_window(since=_HUB_BASE, until=_HUB_UNTIL, project_id=w.project_id),
@@ -3153,24 +3165,36 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadRunnerRegistry, "names_for"): lambda w: w.hub.services.registry.names_for([HUB_RUNNER_ID]),
     (IReadRunnerNames, "names_for"): lambda w: w.hub.services.registry.names_for([HUB_RUNNER_ID]),
     (IReadProjectLabels, "labels_for"): lambda w: ProjectLabels(w.hub.services.projects).labels_for([w.project_id]),
-    (IReadRoutineRepository, "get"): lambda w: w.hub.services.routines.get(w.routine_id),
-    (IReadRoutineRepository, "get_by_slug"): lambda w: w.hub.services.routines.get_by_slug(w.project_id, "gardening"),
-    (IReadRoutineRepository, "get_many_by_slug"): lambda w: w.hub.services.routines.get_many_by_slug(
-        w.project_id, ["gardening"]
+    (IReadRoutineRepository, "get"): lambda w: w.hub.default_adapter(IReadRoutineRepository).get(w.routine_id),
+    (IReadRoutineRepository, "get_by_slug"): lambda w: w.hub.default_adapter(IReadRoutineRepository).get_by_slug(
+        w.project_id, "gardening"
     ),
+    (IReadRoutineRepository, "get_many_by_slug"): lambda w: w.hub.default_adapter(
+        IReadRoutineRepository
+    ).get_many_by_slug(w.project_id, ["gardening"]),
     (IReadRoutineRepository, "list_all"): lambda w: (
-        w.hub.services.routines.list_all(),
-        w.hub.services.routines.list_all(w.project_id),
+        w.hub.default_adapter(IReadRoutineRepository).list_all(),
+        w.hub.default_adapter(IReadRoutineRepository).list_all(w.project_id),
     ),
-    (IReadRoutineRepository, "is_retired"): lambda w: w.hub.services.routines.is_retired(w.routine_id),
-    (IReadRoutineRepository, "retired_ids"): lambda w: w.hub.services.routines.retired_ids(),
-    (IReadRoutineScopeRepository, "list_scopes"): lambda w: w.hub.services.routine_scopes.list_scopes(w.routine_id),
-    (IReadRoutineScopeRepository, "list_scopes_for"): lambda w: w.hub.services.routine_scopes.list_scopes_for(
+    (IReadRoutineRepository, "is_retired"): lambda w: w.hub.default_adapter(IReadRoutineRepository).is_retired(
+        w.routine_id
+    ),
+    (IReadRoutineRepository, "retired_ids"): lambda w: w.hub.default_adapter(IReadRoutineRepository).retired_ids(),
+    (IReadRoutineScopeRepository, "list_scopes"): lambda w: w.hub.default_adapter(
+        IReadRoutineScopeRepository
+    ).list_scopes(w.routine_id),
+    (IReadRoutineScopeRepository, "list_scopes_for"): lambda w: w.hub.default_adapter(
+        IReadRoutineScopeRepository
+    ).list_scopes_for([w.routine_id]),
+    (IReadRoutineScopeRepository, "links_for"): lambda w: w.hub.default_adapter(IReadRoutineScopeRepository).links_for(
         [w.routine_id]
     ),
-    (IReadRoutineScopeRepository, "links_for"): lambda w: w.hub.services.routine_scopes.links_for([w.routine_id]),
-    (IReadRoutineScopeRepository, "list_routines"): lambda w: w.hub.services.routine_scopes.list_routines(w.scope_a_id),
-    (IReadRunContextRepository, "for_chunk"): lambda w: w.hub.services.run_context.for_chunk(w.run_chunk_1_chunk),
+    (IReadRoutineScopeRepository, "list_routines"): lambda w: w.hub.default_adapter(
+        IReadRoutineScopeRepository
+    ).list_routines(w.scope_a_id),
+    (IReadRunContextRepository, "for_chunk"): lambda w: w.hub.default_adapter(IReadRunContextRepository).for_chunk(
+        w.run_chunk_1_chunk
+    ),
     (ISecretCatalog, "get"): lambda w: w.secrets.get("gh-token"),
     (ISecretCatalog, "get_many"): lambda w: w.secrets.get_many(["gh-token", "old-token"]),
     (ISecretCatalog, "list_all"): lambda w: w.secrets.list_all(),
@@ -3302,8 +3326,8 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadConfigChanges, "count"): lambda w: w.hub.services.config_changes.count(
         record_kind=None, record_key=None, project_id=w.project_id
     ),
-    (IReadScopeRepository, "get"): lambda w: w.hub.services.scopes.get(w.project_id, w.scope_a),
-    (IReadScopeRepository, "get_many"): lambda w: w.hub.services.scopes.get_many(
+    (IReadScopeRepository, "get"): lambda w: w.hub.default_adapter(IReadScopeRepository).get(w.project_id, w.scope_a),
+    (IReadScopeRepository, "get_many"): lambda w: w.hub.default_adapter(IReadScopeRepository).get_many(
         w.project_id, [w.scope_a, w.scope_c, "runner-scope"]
     ),
     (IReadCadenceRepository, "get"): lambda w: w.hub.services.cadences.get(w.cadence_id),
@@ -3319,11 +3343,15 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         w.hub.services.cadences.list_all(w.project_id),
     ),
     (IReadScopeRepository, "list_all"): lambda w: (
-        w.hub.services.scopes.list_all(),
-        w.hub.services.scopes.list_all(w.project_id),
+        w.hub.default_adapter(IReadScopeRepository).list_all(),
+        w.hub.default_adapter(IReadScopeRepository).list_all(w.project_id),
     ),
-    (IReadScopeRepository, "is_retired"): lambda w: w.hub.services.scopes.is_retired(w.project_id, w.scope_c),
-    (IReadScopeRepository, "retired_slugs"): lambda w: w.hub.services.scopes.retired_slugs(w.project_id),
+    (IReadScopeRepository, "is_retired"): lambda w: w.hub.default_adapter(IReadScopeRepository).is_retired(
+        w.project_id, w.scope_c
+    ),
+    (IReadScopeRepository, "retired_slugs"): lambda w: w.hub.default_adapter(IReadScopeRepository).retired_slugs(
+        w.project_id
+    ),
     (IReadTranscriptSegments, "segments_for_chunk"): lambda w: w.hub.services.transcripts.segments_for_chunk(
         w.transcript_chunk
     ),

@@ -123,6 +123,12 @@ NO_HUB_SERVICES = {
     ("POST", "/api/fleet/host/runners/{runner_id}/retire"),
     ("POST", "/api/fleet/runners"),
     ("POST", "/api/hosts"),
+    ("POST", "/api/fleet/chunks/{chunk_id}/artifact-check"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/findings"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/findings/{finding_id}"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/garden/findings"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/garden/proposals/page"),
+    ("GET", "/api/fleet/scopes"),
 }
 DIRECT_DISPATCH: dict[tuple[str, str], dict[str, set[str]]] = {
     operation: {

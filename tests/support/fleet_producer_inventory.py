@@ -155,7 +155,7 @@ _MODELS = {
     ("POST", "/api/fleet/chunks/{chunk_id}/artifact-check"): {
         (
             "blizzard.hub.api.fleet.check_artifact",
-            "ArtifactCheckResponse(refusal=services.garden_stage_check.refusal(graph, body.name, body.content))",
+            "ArtifactCheckResponse(refusal=stage_check.refusal(graph, body.name, body.content))",
         )
     },
     ("GET", "/api/fleet/runners/{runner_id}/decisions"): {

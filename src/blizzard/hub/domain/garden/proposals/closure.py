@@ -281,6 +281,11 @@ def compose_minted_body(body: str, findings: Sequence[Finding]) -> str:
     )
 
 
+#: The key the closure takes its default graph under: ensures the tenant's default graph exists and returns it, supplied
+#: by the API edge's wiring, which holds the packaged graph this area cannot import.
+DefaultGraphEnsurer = Callable[[], Graph]
+
+
 class GardenProposalClosureService:
     """Close a garden proposal — pass or accept — over the closure write seam,
     :class:`~blizzard.hub.domain.work_items.editing.WorkItemEditService` (an accept's mint-with-link path),
@@ -293,7 +298,7 @@ class GardenProposalClosureService:
         *,
         closures: IWriteGardenProposalClosureRepository,
         items: WorkItemEditService,
-        default_graph: Callable[[], Graph],
+        default_graph: DefaultGraphEnsurer,
         clock: IClock,
         transactions: IHubTransactions,
     ) -> None:

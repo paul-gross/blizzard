@@ -24,9 +24,17 @@ from blizzard.hub.domain.cadence.model import AttentionFacts, Cadence, CadenceSh
 from blizzard.hub.domain.cadence.services import CadenceAttention
 from blizzard.hub.domain.chunk.model import Chunk, ErrandMark, WorkItemAuthor, WorkItemAuthorKind
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.garden.routines import Routine
+from blizzard.hub.domain.garden.routines import (
+    IReadRoutineRepository,
+    IReadRoutineScopeRepository,
+    Routine,
+    RoutineAuthoring,
+    RoutineLifecycle,
+    RoutineScopeMembership,
+)
+from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
 from blizzard.hub.domain.garden.runs.run import RoutineRetiredError
-from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.operations.delete import DeleteService
 from blizzard.hub.domain.operations.promote import PromoteService
 from blizzard.hub.domain.operations.queue import GroupService
@@ -50,12 +58,12 @@ def _routine(hub: HubHarness, slug: str, *linked: str) -> Routine:
         PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     project = project_record(hub, default_project(hub.engine))
-    routine = hub.services.routine_authoring.create(
+    routine = hub.default_adapter(RoutineAuthoring).create(
         project=project, ctx=_CTX, slug=slug, graph_name=graph.name, default_scope_slug=ScopeSlug.parse(slug)
     )
     for scope_slug in linked:
-        scope = hub.services.scope_registry.ensure(project, ScopeSlug.parse(scope_slug), _CTX)
-        routine = hub.services.routine_scope_membership.link(routine, scope, _CTX)
+        scope = hub.default_adapter(ScopeRegistry).ensure(project, ScopeSlug.parse(scope_slug), _CTX)
+        routine = hub.default_adapter(RoutineScopeMembership).link(routine, scope, _CTX)
     return routine
 
 
@@ -70,9 +78,9 @@ def _cadence(hub: HubHarness, *chores: ChoreShape) -> Cadence:
 
 def _facts(hub: HubHarness, cadence: Cadence) -> AttentionFacts:
     attention = CadenceAttention(
-        routines=hub.services.routines,
-        routine_scopes=hub.services.routine_scopes,
-        scopes=hub.services.scopes,
+        routines=hub.default_adapter(IReadRoutineRepository),
+        routine_scopes=hub.default_adapter(IReadRoutineScopeRepository),
+        scopes=hub.default_adapter(IReadScopeRepository),
         graphs=hub.services.graphs,
     )
     return attention.facts([cadence])[cadence.project_id]
@@ -121,7 +129,7 @@ def test_an_errand_never_run_has_no_last_run_and_others_runs_are_not_its(hub: Hu
     routine = _routine(hub, "sweep", "runner")
     cadence = _cadence(hub, ChoreShape("every", "sweep", scopes="all"), ChoreShape("one", "sweep", scopes=["runner"]))
     found = _errands(hub, cadence)
-    scope = hub.services.scopes.get(routine.project_id, "runner")
+    scope = hub.default_adapter(IReadScopeRepository).get(routine.project_id, "runner")
     assert scope is not None
     hub.services.routine_run.run(routine, scope=scope, mode=RunMode.FULL, note=None, author=WorkItemAuthor.user("u"))
     _mint(hub, cadence, found[("one", "runner")])
@@ -200,8 +208,8 @@ def test_an_all_chores_errand_joins_when_its_scope_was_linked(hub: HubHarness) -
     cadence = _cadence(hub, ChoreShape("every", "sweep", scopes="all"))
     hub.clock.advance(timedelta(days=1))
     project = project_record(hub, routine.project_id)
-    later = hub.services.scope_registry.ensure(project, ScopeSlug.parse("later"), _CTX)
-    hub.services.routine_scope_membership.link(routine, later, _CTX)
+    later = hub.default_adapter(ScopeRegistry).ensure(project, ScopeSlug.parse("later"), _CTX)
+    hub.default_adapter(RoutineScopeMembership).link(routine, later, _CTX)
 
     found = _errands(hub, cadence)
 
@@ -231,7 +239,7 @@ def test_a_mint_plans_as_a_hand_run_and_marks_its_run_promoted_or_held(hub: HubH
     assert _status(hub, promoted.chunk.chunk_id) is ChunkStatus.READY
     assert not held.promoted
     assert _status(hub, held.chunk.chunk_id) is ChunkStatus.NOT_READY
-    context = hub.services.run_context.for_chunk(_chunk(hub, held.chunk.chunk_id))
+    context = hub.default_adapter(IReadRunContextRepository).for_chunk(_chunk(hub, held.chunk.chunk_id))
     assert context is not None
     assert context.errand == ErrandMark(cadence_id=cadence.cadence_id, chore_id=cadence.chores[1].chore_id)
 
@@ -279,7 +287,7 @@ def test_one_errands_refusal_leaves_anothers_mint_untouched(hub: HubHarness) -> 
     _routine(hub, "kept")
     cadence = _cadence(hub, ChoreShape("a", "retiring"), ChoreShape("b", "kept"))
     found = _errands(hub, cadence)
-    hub.services.routine_lifecycle.retire(retiring, _CTX, by="operator")
+    hub.default_adapter(RoutineLifecycle).retire(retiring, _CTX, by="operator")
     before = _work_items(hub)
 
     with pytest.raises(RoutineRetiredError):
@@ -310,6 +318,6 @@ def test_a_promoting_mint_and_an_operator_promote_each_land_at_their_own_tail(hu
 
 
 def _scope(hub: HubHarness, slug: str) -> Scope:
-    scope = hub.services.scopes.get(default_project(hub.engine), slug)
+    scope = hub.default_adapter(IReadScopeRepository).get(default_project(hub.engine), slug)
     assert scope is not None
     return scope

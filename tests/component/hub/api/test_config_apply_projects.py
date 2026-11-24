@@ -10,6 +10,7 @@ import httpx2
 import pytest
 
 from blizzard.hub.domain.config.changes import ChangeContext, Door
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId, ProjectSlug
 from tests.support.scaffolding import HubHarness, build_hub, ensure_fixture_forge
@@ -141,13 +142,13 @@ def test_a_scope_may_name_a_project_the_document_declares_by_slug_or_one_stored_
         ("scope", "core", "create"),
         ("scope", "core", "create"),
     ]
-    homes = sorted(scope.project_id for scope in hub.services.scopes.list_all())
+    homes = sorted(scope.project_id for scope in hub.default_adapter(IReadScopeRepository).list_all())
     assert homes == sorted([default_id, _project_id(hub, "web")])
 
 
 def test_an_entry_naming_no_project_lands_in_the_only_one_and_is_refused_with_several(hub: HubHarness) -> None:
     assert _rows(_apply(hub, {"scopes": [{"slug": "core"}]})) == [("scope", "core", "create")]
-    (scope,) = hub.services.scopes.list_all()
+    (scope,) = hub.default_adapter(IReadScopeRepository).list_all()
     assert scope.project_id == _project_id(hub, "default")
 
     before = _changes(hub)

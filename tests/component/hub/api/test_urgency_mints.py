@@ -18,7 +18,8 @@ from blizzard.hub.domain.cadence.mint import MintedErrand
 from blizzard.hub.domain.cadence.model import CadenceShape, ChoreShape
 from blizzard.hub.domain.cadence.services import CadenceAttention
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.garden.scopes import ScopeSlug
+from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository, RoutineAuthoring
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
 from blizzard.hub.domain.urgency.model import UrgencyId
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
@@ -72,7 +73,7 @@ def _routine(hub: HubHarness, slug: str = "nightly", *, default_urgency: str | N
     graph = hub.services.default_graph.ensure_default(
         PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
-    routine = hub.services.routine_authoring.create(
+    routine = hub.default_adapter(RoutineAuthoring).create(
         project=project_record(hub, default_project(hub.engine)),
         ctx=_CTX,
         slug=slug,
@@ -109,9 +110,9 @@ def _cadence_mint(hub: HubHarness, *, chore_urgency: UrgencyId | None) -> Minted
         may_admit=True,
     )
     attention = CadenceAttention(
-        routines=hub.services.routines,
-        routine_scopes=hub.services.routine_scopes,
-        scopes=hub.services.scopes,
+        routines=hub.default_adapter(IReadRoutineRepository),
+        routine_scopes=hub.default_adapter(IReadRoutineScopeRepository),
+        scopes=hub.default_adapter(IReadScopeRepository),
         graphs=hub.services.graphs,
     )
     facts = attention.facts([cadence])[cadence.project_id]
@@ -169,9 +170,9 @@ def test_a_cadence_mint_writes_the_default(hub: HubHarness) -> None:
         may_admit=True,
     )
     attention = CadenceAttention(
-        routines=hub.services.routines,
-        routine_scopes=hub.services.routine_scopes,
-        scopes=hub.services.scopes,
+        routines=hub.default_adapter(IReadRoutineRepository),
+        routine_scopes=hub.default_adapter(IReadRoutineScopeRepository),
+        scopes=hub.default_adapter(IReadScopeRepository),
         graphs=hub.services.graphs,
     )
     facts = attention.facts([cadence])[cadence.project_id]

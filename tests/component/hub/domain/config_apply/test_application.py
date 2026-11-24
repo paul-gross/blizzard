@@ -15,6 +15,8 @@ from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryEdit
 from blizzard.hub.domain.config_apply.entries import DeclaredRepository, DocumentEntries
 from blizzard.hub.domain.config_apply.service import ConfigApplication
+from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 from blizzard.hub.domain.projects.declarations import ProjectDeclaration
 from blizzard.hub.domain.projects.model import ProjectEdit
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
@@ -65,9 +67,9 @@ def _application(hub: HubHarness, clock: FixedClock) -> ConfigApplication:
         projects=services.projects,
         links=services.project_links,
         positions=hub.default_adapter(ProjectPositionStore),
-        scopes=services.scopes,
-        routines=services.routines,
-        routine_scopes=services.routine_scopes,
+        scopes=hub.default_adapter(IReadScopeRepository),
+        routines=hub.default_adapter(IReadRoutineRepository),
+        routine_scopes=hub.default_adapter(IReadRoutineScopeRepository),
         cadences=services.cadences,
         graphs=services.graphs,
         secrets=services.secret_catalog,

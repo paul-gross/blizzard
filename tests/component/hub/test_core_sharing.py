@@ -15,6 +15,7 @@ from blizzard.hub.domain.execution.claim import ClaimService
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
+from blizzard.hub.domain.garden.proposals.closure import GardenProposalClosureService
 from blizzard.hub.domain.operations.delete import DeleteService
 from blizzard.hub.domain.urgency.ports import IReadUrgencyRepository, IWriteUrgencyRepository
 from blizzard.hub.domain.urgency.services import TenantDefault, UrgencyLifecycle, UrgencyReading
@@ -38,9 +39,7 @@ def test_services_share_the_cores_stores(tmp_path: Path) -> None:
 
     exits = hub.resolve(default_tenant(hub.engine), FindingExitService)
     assert services.findings is exits.repo
-    assert services.garden_proposals is services.garden_proposal_authoring.proposals
-    assert services.garden_proposal_closures is services.garden_proposal_authoring.closures
-    assert hub.default_adapter(DeleteService) is services.garden_proposal_closure.items.delete
+    assert hub.default_adapter(DeleteService) is hub.default_adapter(GardenProposalClosureService).items.delete
     assert services.registry is hub.default_adapter(ClaimService).registry
     assert services.registry is hub.default_adapter(FleetService).registry
 
@@ -52,7 +51,7 @@ def test_the_garden_proposal_closure_and_the_hub_source_share_one_edit_service(t
     assert hub_editor is not None
 
     assert isinstance(hub_editor, HubWorkSource)
-    assert hub_editor._edits is hub.services.garden_proposal_closure.items  # pyright: ignore[reportPrivateUsage]  # the shared instance is wiring, observable only on the private seam
+    assert hub_editor._edits is hub.default_adapter(GardenProposalClosureService).items  # pyright: ignore[reportPrivateUsage]  # the shared instance is wiring, observable only on the private seam
 
 
 def test_the_harness_serves_the_default_tenants_cached_services(tmp_path: Path) -> None:
