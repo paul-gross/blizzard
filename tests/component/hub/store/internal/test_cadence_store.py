@@ -27,6 +27,8 @@ from blizzard.hub.domain.cadence.model import (
     ScheduleShape,
     ScopeSelection,
 )
+from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
+from blizzard.hub.domain.cadence.services import CadenceAuthoring, CadenceLifecycle
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, RecordKind
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.store import schema as s
@@ -62,13 +64,13 @@ def hub(tmp_path: Path) -> HubHarness:
 
 
 def _create(hub: HubHarness, shape: CadenceShape = _SHAPE) -> Cadence:
-    return hub.services.cadence_authoring.create(
+    return hub.default_adapter(CadenceAuthoring).create(
         shape, project=project_record(hub, default_project(hub.engine)), ctx=_CTX, may_admit=True
     )
 
 
 def _edit(hub: HubHarness, cadence: Cadence, edit: CadenceEdit) -> Cadence:
-    return hub.services.cadence_authoring.edit(cadence, edit, _CTX, may_admit=True, if_match=cadence.revision)
+    return hub.default_adapter(CadenceAuthoring).edit(cadence, edit, _CTX, may_admit=True, if_match=cadence.revision)
 
 
 def _rows(hub: HubHarness, table: sa.Table) -> list[sa.Row[Any]]:
@@ -91,12 +93,12 @@ def test_a_cadence_reads_back_as_written_by_id_slug_and_list(hub: HubHarness) ->
     created = _create(hub)
     project = default_project(hub.engine)
 
-    by_id = hub.services.cadences.get(created.cadence_id)
+    by_id = hub.default_adapter(IReadCadenceRepository).get(created.cadence_id)
 
     assert by_id == created
-    assert hub.services.cadences.get_by_slug(project, "evening") == created
-    assert hub.services.cadences.list_all(project) == [created]
-    assert hub.services.cadences.list_all() == [created]
+    assert hub.default_adapter(IReadCadenceRepository).get_by_slug(project, "evening") == created
+    assert hub.default_adapter(IReadCadenceRepository).list_all(project) == [created]
+    assert hub.default_adapter(IReadCadenceRepository).list_all() == [created]
     assert by_id is not None
     assert created.cadence_id.startswith("cad_")
     assert (by_id.name, by_id.revision, by_id.retired) == ("Evening sweep", 1, False)
@@ -118,14 +120,14 @@ def test_a_cadence_reads_back_as_written_by_id_slug_and_list(hub: HubHarness) ->
 
 
 def test_an_unknown_cadence_reads_as_none(hub: HubHarness) -> None:
-    assert hub.services.cadences.get("cad_missing") is None
-    assert hub.services.cadences.get_by_slug(default_project(hub.engine), "missing") is None
-    assert hub.services.cadences.list_all() == []
+    assert hub.default_adapter(IReadCadenceRepository).get("cad_missing") is None
+    assert hub.default_adapter(IReadCadenceRepository).get_by_slug(default_project(hub.engine), "missing") is None
+    assert hub.default_adapter(IReadCadenceRepository).list_all() == []
 
 
 def test_a_slug_its_project_holds_refuses_a_create_retired_cadences_included(hub: HubHarness) -> None:
     held = _create(hub)
-    hub.services.cadence_lifecycle.retire(held, _CTX, by="operator")
+    hub.default_adapter(CadenceLifecycle).retire(held, _CTX, by="operator")
 
     with pytest.raises(CadenceSlugTakenError):
         _create(hub, replace(_SHAPE, name="another"))
@@ -156,7 +158,7 @@ def test_only_a_listed_chore_holds_scope_rows(hub: HubHarness) -> None:
         hub, created, CadenceEdit(chores=[ChoreShape("tests", "test-gaps", scopes="all"), ChoreShape("plain", "x")])
     )
     assert _rows(hub, s.cadence_chore_scopes) == []
-    assert hub.services.cadences.get(created.cadence_id) == edited
+    assert hub.default_adapter(IReadCadenceRepository).get(created.cadence_id) == edited
 
 
 def test_an_edit_moves_the_revision_and_commits_its_change_row(hub: HubHarness) -> None:
@@ -165,7 +167,7 @@ def test_an_edit_moves_the_revision_and_commits_its_change_row(hub: HubHarness) 
     edited = _edit(hub, created, CadenceEdit(name="Renamed", spacing=None, anchor=None))
 
     assert edited.revision == 2
-    assert hub.services.cadences.get(created.cadence_id) == edited
+    assert hub.default_adapter(IReadCadenceRepository).get(created.cadence_id) == edited
     assert edited.rhythm.spacing is None
     create, edit = _changes(hub)
     assert (create.op, create.revision, create.record_key, create.project_id) == (
@@ -188,7 +190,7 @@ def test_a_stale_revision_is_refused_and_writes_nothing(hub: HubHarness) -> None
     with pytest.raises(ConfigRevisionConflict):
         store.update(stale, from_revision=created.revision, change=change)
 
-    stored = hub.services.cadences.get(created.cadence_id)
+    stored = hub.default_adapter(IReadCadenceRepository).get(created.cadence_id)
     assert stored is not None
     assert (stored.name, stored.revision) == ("First", 2)
     assert len(_changes(hub)) == 2
@@ -198,18 +200,18 @@ def test_an_edit_naming_the_stored_revision_wrongly_is_refused_before_writing(hu
     created = _create(hub)
 
     with pytest.raises(ConfigRevisionConflict):
-        hub.services.cadence_authoring.edit(created, CadenceEdit(name="x"), _CTX, may_admit=True, if_match=7)
+        hub.default_adapter(CadenceAuthoring).edit(created, CadenceEdit(name="x"), _CTX, may_admit=True, if_match=7)
 
 
 def test_retirement_is_appended_facts_the_newest_deciding(hub: HubHarness) -> None:
     created = _create(hub)
 
-    retired = hub.services.cadence_lifecycle.retire(created, _CTX, by="operator")
-    again = hub.services.cadence_lifecycle.retire(retired, _CTX, by="operator")
-    enabled = hub.services.cadence_lifecycle.enable(again, _CTX, by="operator", may_admit=True)
+    retired = hub.default_adapter(CadenceLifecycle).retire(created, _CTX, by="operator")
+    again = hub.default_adapter(CadenceLifecycle).retire(retired, _CTX, by="operator")
+    enabled = hub.default_adapter(CadenceLifecycle).enable(again, _CTX, by="operator", may_admit=True)
 
     assert again is retired
-    stored = hub.services.cadences.get(created.cadence_id)
+    stored = hub.default_adapter(IReadCadenceRepository).get(created.cadence_id)
     assert stored is not None
     assert (stored.retired, stored.revision) == (False, 3) == (enabled.retired, enabled.revision)
     facts = _rows(hub, s.cadence_lifecycle_facts)
@@ -218,8 +220,8 @@ def test_retirement_is_appended_facts_the_newest_deciding(hub: HubHarness) -> No
         (False, "operator"),
     ]
     assert [row.op for row in _changes(hub)] == ["create", "retire", "enable"]
-    hub.services.cadence_lifecycle.retire(enabled, _CTX, by="operator")
-    stored = hub.services.cadences.get(created.cadence_id)
+    hub.default_adapter(CadenceLifecycle).retire(enabled, _CTX, by="operator")
+    stored = hub.default_adapter(IReadCadenceRepository).get(created.cadence_id)
     assert stored is not None
     assert stored.retired
 
@@ -253,6 +255,6 @@ def test_an_edit_keeping_a_chores_key_keeps_its_id_and_a_key_dropped_and_rewritt
     assert by_key["arch"] == ids["arch"]
     assert by_key["plain"] != ids["plain"]
     assert by_key["plain"].startswith("chr_")
-    assert hub.services.cadences.get(created.cadence_id) == rewritten
+    assert hub.default_adapter(IReadCadenceRepository).get(created.cadence_id) == rewritten
     diff_fields = [entry["field"] for entry in json.loads(_changes(hub)[1].diff)]
     assert diff_fields == ["chores.arch", "chores.tests", "chores.plain"]

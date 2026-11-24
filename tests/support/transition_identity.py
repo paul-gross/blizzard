@@ -21,7 +21,6 @@ from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_driver import StepWake
 from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.cadence.ports import IReadCadenceRepository, IReadErrandRunsRepository, IWriteCadenceRepository
-from blizzard.hub.domain.cadence.services import CadenceReading
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ingest import IWorkItemProjectRead
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
@@ -220,8 +219,6 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantServices.graphs", services.graphs, GraphStore),
         ("TenantServices.graph_bodies", services.graph_bodies, GraphStore),
         ("TenantServices.node_executors", services.node_executors, GraphStore),
-        ("TenantServices.cadences", services.cadences, CadenceStore),
-        ("TenantServices.cadence_reading", services.cadence_reading, CadenceReading),
         ("TenantServices.work_source_records", services.work_source_records, WorkSourceRecordStore),
         ("TenantServices.repository_records", services.repository_records, RepositoryRecordStore),
         ("TenantServices.forge_records", services.forge_records, ForgeRecordStore),

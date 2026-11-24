@@ -19,9 +19,9 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.cadence.errands import Errand, ErrandRun, RunOutcome, errands
-from blizzard.hub.domain.cadence.mint import MintedErrand
+from blizzard.hub.domain.cadence.mint import CadenceMint, ErrandPlanning, MintedErrand
 from blizzard.hub.domain.cadence.model import AttentionFacts, Cadence, CadenceShape, ChoreShape
-from blizzard.hub.domain.cadence.services import CadenceAttention
+from blizzard.hub.domain.cadence.services import CadenceAttention, CadenceAuthoring
 from blizzard.hub.domain.chunk.model import Chunk, ErrandMark, WorkItemAuthor, WorkItemAuthorKind
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import (
@@ -68,7 +68,7 @@ def _routine(hub: HubHarness, slug: str, *linked: str) -> Routine:
 
 
 def _cadence(hub: HubHarness, *chores: ChoreShape) -> Cadence:
-    return hub.services.cadence_authoring.create(
+    return hub.default_adapter(CadenceAuthoring).create(
         CadenceShape(slug="nightly", spacing="1h", chores=chores),
         project=project_record(hub, default_project(hub.engine)),
         ctx=_CTX,
@@ -97,8 +97,8 @@ def _mint(hub: HubHarness, cadence: Cadence, errand: Errand, *, judged: ErrandRu
 
 
 def _try_mint(hub: HubHarness, cadence: Cadence, errand: Errand, *, judged: ErrandRun | None) -> MintedErrand | None:
-    inputs = hub.services.errand_planning.inputs([(errand, _facts(hub, cadence))])
-    return hub.services.cadence_mint.mint(errand, judged=judged, inputs=inputs[errand.key])
+    inputs = hub.default_adapter(ErrandPlanning).inputs([(errand, _facts(hub, cadence))])
+    return hub.default_adapter(CadenceMint).mint(errand, judged=judged, inputs=inputs[errand.key])
 
 
 def _last(hub: HubHarness, errand: Errand) -> ErrandRun | None:
@@ -266,13 +266,13 @@ def test_two_passes_racing_one_errand_mint_it_once(hub: HubHarness) -> None:
     _routine(hub, "sweep")
     cadence = _cadence(hub, ChoreShape("plain", "sweep"))
     (errand,) = _errands(hub, cadence).values()
-    inputs = hub.services.errand_planning.inputs([(errand, _facts(hub, cadence))])[errand.key]
+    inputs = hub.default_adapter(ErrandPlanning).inputs([(errand, _facts(hub, cadence))])[errand.key]
     start = threading.Barrier(2)
     outcomes: list[MintedErrand | None] = []
 
     def race() -> None:
         start.wait()
-        outcomes.append(hub.services.cadence_mint.mint(errand, judged=None, inputs=inputs))
+        outcomes.append(hub.default_adapter(CadenceMint).mint(errand, judged=None, inputs=inputs))
 
     passes = [threading.Thread(target=race) for _ in range(2)]
     for each in passes:

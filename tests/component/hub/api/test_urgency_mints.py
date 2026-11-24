@@ -14,9 +14,9 @@ import sqlalchemy as sa
 
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.hub.domain.cadence.errands import errands
-from blizzard.hub.domain.cadence.mint import MintedErrand
+from blizzard.hub.domain.cadence.mint import CadenceMint, ErrandPlanning, MintedErrand
 from blizzard.hub.domain.cadence.model import CadenceShape, ChoreShape
-from blizzard.hub.domain.cadence.services import CadenceAttention
+from blizzard.hub.domain.cadence.services import CadenceAttention, CadenceAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository, RoutineAuthoring
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
@@ -101,7 +101,7 @@ def _proposal(hub: HubHarness) -> None:
 
 def _cadence_mint(hub: HubHarness, *, chore_urgency: UrgencyId | None) -> MintedErrand:
     project = project_record(hub, default_project(hub.engine))
-    cadence = hub.services.cadence_authoring.create(
+    cadence = hub.default_adapter(CadenceAuthoring).create(
         CadenceShape(
             slug="nightly", spacing="1h", chores=(ChoreShape("plain", "sweep", promote=True, urgency_id=chore_urgency),)
         ),
@@ -117,8 +117,8 @@ def _cadence_mint(hub: HubHarness, *, chore_urgency: UrgencyId | None) -> Minted
     )
     facts = attention.facts([cadence])[cadence.project_id]
     (errand,) = errands(cadence, facts)
-    inputs = hub.services.errand_planning.inputs([(errand, facts)])
-    minted = hub.services.cadence_mint.mint(errand, judged=None, inputs=inputs[errand.key])
+    inputs = hub.default_adapter(ErrandPlanning).inputs([(errand, facts)])
+    minted = hub.default_adapter(CadenceMint).mint(errand, judged=None, inputs=inputs[errand.key])
     assert minted is not None
     return minted
 
@@ -163,7 +163,7 @@ def test_a_routine_run_writes_the_default(hub: HubHarness) -> None:
 def test_a_cadence_mint_writes_the_default(hub: HubHarness) -> None:
     _routine(hub, "sweep")
     project = project_record(hub, default_project(hub.engine))
-    cadence = hub.services.cadence_authoring.create(
+    cadence = hub.default_adapter(CadenceAuthoring).create(
         CadenceShape(slug="nightly", spacing="1h", chores=(ChoreShape("plain", "sweep", promote=True),)),
         project=project,
         ctx=_CTX,
@@ -177,9 +177,9 @@ def test_a_cadence_mint_writes_the_default(hub: HubHarness) -> None:
     )
     facts = attention.facts([cadence])[cadence.project_id]
     (errand,) = errands(cadence, facts)
-    inputs = hub.services.errand_planning.inputs([(errand, facts)])
+    inputs = hub.default_adapter(ErrandPlanning).inputs([(errand, facts)])
 
-    minted = hub.services.cadence_mint.mint(errand, judged=None, inputs=inputs[errand.key])
+    minted = hub.default_adapter(CadenceMint).mint(errand, judged=None, inputs=inputs[errand.key])
 
     assert minted is not None and minted.promoted
     assert minted.chunk.urgency_id == default_urgency(hub.engine)

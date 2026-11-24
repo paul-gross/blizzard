@@ -10,6 +10,7 @@ import httpx2
 
 from blizzard.auth_core import Role
 from blizzard.hub.domain.cadence.model import CadenceShape, ChoreShape
+from blizzard.hub.domain.cadence.services import CadenceAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.delivery.flows import FlowResource
 from blizzard.hub.domain.projects.model import Project, ProjectId
@@ -186,7 +187,7 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     t.keep("routine_id", routine["routine_id"])
     t.keep("routine_name", f"{label}-routine")
     # Written through the tenant's own services, so its chore can name the routine created above.
-    cadence = harness.services.cadence_authoring.create(
+    cadence = hub.resolve(harness.tenant, CadenceAuthoring).create(
         CadenceShape(
             slug=f"{label}-cadence",
             spacing="1d",

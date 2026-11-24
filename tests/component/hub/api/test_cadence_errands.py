@@ -15,6 +15,8 @@ import pytest
 from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.cadence.errands import errands
+from blizzard.hub.domain.cadence.mint import CadenceMint, ErrandPlanning
+from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
 from blizzard.hub.domain.cadence.services import CadenceAttention
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
@@ -68,7 +70,7 @@ def _errands(hub: HubHarness, cadence_id: str) -> list[dict[str, Any]]:
 
 def _mint_all(hub: HubHarness, cadence_id: str) -> list[str]:
     """Mint every errand of the cadence as the sweep would, returning the minted chunk ids."""
-    cadence = hub.services.cadences.get(cadence_id)
+    cadence = hub.default_adapter(IReadCadenceRepository).get(cadence_id)
     assert cadence is not None
     attention = CadenceAttention(
         routines=hub.default_adapter(IReadRoutineRepository),
@@ -79,8 +81,8 @@ def _mint_all(hub: HubHarness, cadence_id: str) -> list[str]:
     facts = attention.facts([cadence])[cadence.project_id]
     minted: list[str] = []
     for errand in errands(cadence, facts):
-        inputs = hub.services.errand_planning.inputs([(errand, facts)])
-        result = hub.services.cadence_mint.mint(errand, judged=None, inputs=inputs[errand.key])
+        inputs = hub.default_adapter(ErrandPlanning).inputs([(errand, facts)])
+        result = hub.default_adapter(CadenceMint).mint(errand, judged=None, inputs=inputs[errand.key])
         assert result is not None
         minted.append(result.chunk.chunk_id)
     return minted

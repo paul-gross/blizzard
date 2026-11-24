@@ -18,8 +18,9 @@ from blizzard.foundation.flags import resolve_flags
 from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.cadence.errands import Errand, ErrandRun
-from blizzard.hub.domain.cadence.mint import ErrandInputs, MintedErrand
+from blizzard.hub.domain.cadence.mint import CadenceMint, ErrandInputs, MintedErrand
 from blizzard.hub.domain.cadence.model import CadenceShape, ChoreShape
+from blizzard.hub.domain.cadence.services import CadenceAuthoring
 from blizzard.hub.domain.cadence.sweep import CADENCE_PASS_LIMIT
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkItemAuthorKind, WorkRef
@@ -62,8 +63,8 @@ def _routine(
     return routine
 
 
-def _cadence(services: TenantServices, project: Project, *chores: ChoreShape) -> None:
-    services.cadence_authoring.create(
+def _cadence(hub: HubHarness, tenant: TenantId, project: Project, *chores: ChoreShape) -> None:
+    hub.resolve(tenant, CadenceAuthoring).create(
         CadenceShape(slug="nightly", spacing="1h", chores=chores), project=project, ctx=_CTX, may_admit=True
     )
 
@@ -93,7 +94,8 @@ def test_a_pass_mints_each_due_errand_promoted_or_held_and_then_waits_on_its_liv
     project = _project(hub, hub.services, default_tenant(hub.engine))
     _routine(hub, default_tenant(hub.engine), hub.services, project, "sweep", "runner")
     _cadence(
-        hub.services,
+        hub,
+        default_tenant(hub.engine),
         project,
         ChoreShape("every", "sweep", scopes="all"),
         ChoreShape("held", "sweep", scopes=["runner"], promote=False),
@@ -111,7 +113,7 @@ def test_a_pass_with_the_flag_off_mints_nothing(tmp_path: Path) -> None:
     hub = _hub(tmp_path, on=False)
     project = _project(hub, hub.services, default_tenant(hub.engine))
     _routine(hub, default_tenant(hub.engine), hub.services, project, "sweep")
-    _cadence(hub.services, project, ChoreShape("plain", "sweep"))
+    _cadence(hub, default_tenant(hub.engine), project, ChoreShape("plain", "sweep"))
 
     _sweep(hub)
     assert hub.hub_services.sweeps.pass_one_tenant("cadence", default_tenant(hub.engine)).error is None
@@ -126,7 +128,7 @@ def test_one_pass_mints_each_tenants_errands_in_that_tenant(tmp_path: Path) -> N
     for services, tenant, slug in ((hub.services, carried, "alpha"), (other.services, other.tenant, "beta")):
         project = _project(hub, services, tenant)
         _routine(hub, tenant, services, project, slug)
-        _cadence(services, project, ChoreShape("plain", slug))
+        _cadence(hub, tenant, project, ChoreShape("plain", slug))
 
     _sweep(hub)
 
@@ -140,7 +142,7 @@ def test_a_pass_mints_up_to_its_bound_and_the_next_pass_mints_the_rest(tmp_path:
     project = _project(hub, hub.services, tenant)
     linked = [f"scope-{n:02}" for n in range(CADENCE_PASS_LIMIT + 1)]
     _routine(hub, default_tenant(hub.engine), hub.services, project, "sweep", *linked)
-    _cadence(hub.services, project, ChoreShape("every", "sweep", scopes="all"))
+    _cadence(hub, default_tenant(hub.engine), project, ChoreShape("every", "sweep", scopes="all"))
 
     _sweep(hub)
     assert len(_runs(hub, tenant)) == CADENCE_PASS_LIMIT
@@ -159,7 +161,7 @@ def test_a_hand_started_run_neither_counts_as_the_errands_run_nor_holds_it(tmp_p
     hub.default_adapter(RunService).run(
         routine, scope=scope, mode=RunMode.FULL, note=None, author=WorkItemAuthor.user("operator")
     )
-    _cadence(hub.services, project, ChoreShape("plain", "sweep"))
+    _cadence(hub, default_tenant(hub.engine), project, ChoreShape("plain", "sweep"))
 
     _sweep(hub)
 
@@ -173,8 +175,8 @@ def test_a_refused_errand_counts_as_refused_and_the_pass_mints_the_others(
     tenant = default_tenant(hub.engine)
     project = _project(hub, hub.services, tenant)
     _routine(hub, default_tenant(hub.engine), hub.services, project, "sweep", "retired", "taken")
-    _cadence(hub.services, project, ChoreShape("every", "sweep", scopes="all"))
-    mint = hub.services.cadence_mint.mint
+    _cadence(hub, default_tenant(hub.engine), project, ChoreShape("every", "sweep", scopes="all"))
+    mint = hub.default_adapter(CadenceMint).mint
     refusals = {
         "retired": RoutineRetiredError("sweep"),
         "taken": IngestConflict(existing_chunk_id="chk_held", pointer=WorkRef(source="hub", ref="1")),
@@ -186,7 +188,7 @@ def test_a_refused_errand_counts_as_refused_and_the_pass_mints_the_others(
             raise refusal
         return mint(errand, judged=judged, inputs=inputs)
 
-    monkeypatch.setattr(hub.services.cadence_mint, "mint", refusing)
+    monkeypatch.setattr(hub.default_adapter(CadenceMint), "mint", refusing)
 
     with capture_logs() as logs:
         _sweep(hub)
@@ -203,7 +205,7 @@ def test_a_sweep_mint_publishes_its_minted_frame_and_the_queue_change_on_the_ten
     tenant = default_tenant(hub.engine)
     project = _project(hub, hub.services, tenant)
     _routine(hub, tenant, hub.services, project, "sweep", "runner")
-    _cadence(hub.services, project, ChoreShape("plain", "sweep"))
+    _cadence(hub, default_tenant(hub.engine), project, ChoreShape("plain", "sweep"))
     before = hub.services.events.latest_id()
 
     _sweep(hub)
@@ -221,7 +223,7 @@ def test_a_failed_announcement_is_logged_and_the_committed_mint_still_counts(
     tenant = default_tenant(hub.engine)
     project = _project(hub, hub.services, tenant)
     _routine(hub, default_tenant(hub.engine), hub.services, project, "sweep", "runner")
-    _cadence(hub.services, project, ChoreShape("every", "sweep", scopes="all"))
+    _cadence(hub, default_tenant(hub.engine), project, ChoreShape("every", "sweep", scopes="all"))
 
     def refuse() -> None:
         raise RuntimeError("broker down")

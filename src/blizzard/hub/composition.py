@@ -58,13 +58,6 @@ from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores, ITurnR
 from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.delivery.hub_node import HubNodeRouter
 from blizzard.hub.documents.codec import IConfigCodec
-from blizzard.hub.domain.cadence.mint import CadenceMint, ErrandPlanning
-from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
-from blizzard.hub.domain.cadence.services import (
-    CadenceAuthoring,
-    CadenceLifecycle,
-    CadenceReading,
-)
 from blizzard.hub.domain.cadence.sweep import CadenceSweep, TenantCadence
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import WorkRefLabel
@@ -296,21 +289,9 @@ class TenantServices:
     chunk_targets: ChunkTargets
     #: List and show urgencies in order, with the default marked and their open chunks counted.
     urgency_reading: UrgencyReading
-    #: The cadence read Protocol — the same store instance as ``cadence_authoring``'s writes.
-    cadences: IReadCadenceRepository
-    #: Create and edit a cadence, refusing an admission the writer may not make.
-    cadence_authoring: CadenceAuthoring
-    #: The cadence retire/enable brake.
-    cadence_lifecycle: CadenceLifecycle
-    #: List and show cadences with their attention, resolved in bulk.
-    cadence_reading: CadenceReading
     #: Each errand's last run, read in one snapshot or in a caller's unit.
     #: Every node step a routed chunk spent in a runner environment over a window.
     env_timeline: EnvTimelineReading
-    #: A due set's planning inputs, read in bulk.
-    errand_planning: ErrandPlanning
-    #: Mint one due errand's run in its own unit of work.
-    cadence_mint: CadenceMint
     #: The finding read Protocol.
     findings: IReadFindingRepository
     #: A run's finding bucket — what it is shown and may cite.
@@ -1046,15 +1027,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         project_links=stores.project_links,
         chunk_targets=chunk_targets,
         urgency_reading=tenant.get(UrgencyReading),
-        cadences=tenant.get(IReadCadenceRepository),
-        cadence_authoring=tenant.get(CadenceAuthoring),
-        cadence_lifecycle=tenant.get(CadenceLifecycle),
-        cadence_reading=tenant.get(CadenceReading),
         env_timeline=EnvTimelineReading(
             facts=tenant.get(EnvTimelineStore), graphs=graph_store, artifacts=chunk_artifacts, clock=clock
         ),
-        errand_planning=tenant.get(ErrandPlanning),
-        cadence_mint=tenant.get(CadenceMint),
         findings=finding_store,
         finding_bucket=finding_bucket,
     )

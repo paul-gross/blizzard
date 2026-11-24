@@ -93,5 +93,5 @@ def test_the_sweeps_tenant_half_is_the_tenant_containers_own_and_the_routes_hold
     scope = hub.hub_services.process.tenants.open(tenant).resolver
     assert swept is scope.get(TenantCadence)
     assert swept._attention is scope.get(CadenceReading)._attention
-    assert swept._planning is hub.services.errand_planning
-    assert swept._mint is hub.services.cadence_mint
+    assert swept._planning is hub.default_adapter(ErrandPlanning)
+    assert swept._mint is hub.default_adapter(CadenceMint)

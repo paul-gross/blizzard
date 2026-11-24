@@ -52,9 +52,10 @@ from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IReadSuperuserBootstrapRepository
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.domain.cadence.errands import ErrandKey, errands
+from blizzard.hub.domain.cadence.mint import CadenceMint, ErrandPlanning
 from blizzard.hub.domain.cadence.model import CadenceShape, ChoreShape
 from blizzard.hub.domain.cadence.ports import IReadCadenceCorpus, IReadCadenceRepository, IReadErrandRunsRepository
-from blizzard.hub.domain.cadence.services import CadenceAttention
+from blizzard.hub.domain.cadence.services import CadenceAttention, CadenceAuthoring, CadenceLifecycle
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     CloseEnqueueDecision,
@@ -1675,7 +1676,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     )
 
     # --- cadences: one keeping a listed chore and one over every scope, the second retired ----
-    cadence = hub.services.cadence_authoring.create(
+    cadence = hub.default_adapter(CadenceAuthoring).create(
         CadenceShape(
             slug="census-cadence",
             spacing="1d",
@@ -1688,13 +1689,13 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         ctx=operator,
         may_admit=True,
     )
-    retired_cadence = hub.services.cadence_authoring.create(
+    retired_cadence = hub.default_adapter(CadenceAuthoring).create(
         CadenceShape(slug="census-retired", spacing="7d", chores=(ChoreShape("plain", "gardening"),)),
         project=garden_project_record,
         ctx=operator,
         may_admit=True,
     )
-    hub.services.cadence_lifecycle.retire(retired_cadence, operator, by="operator")
+    hub.default_adapter(CadenceLifecycle).retire(retired_cadence, operator, by="operator")
 
     # --- routine runs: garden_run/run_context's own source ---------------------------------
     run_1 = hub.default_adapter(RunService).run(
@@ -2544,9 +2545,9 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         graphs=hub.services.graphs,
     ).facts([cadence])[cadence.project_id]
     census_errands = [e for e in errands(cadence, census_facts) if e.chore.spec.key == "every"]
-    census_inputs = hub.services.errand_planning.inputs([(e, census_facts) for e in census_errands])
+    census_inputs = hub.default_adapter(ErrandPlanning).inputs([(e, census_facts) for e in census_errands])
     for errand in census_errands:
-        hub.services.cadence_mint.mint(errand, judged=None, inputs=census_inputs[errand.key])
+        hub.default_adapter(CadenceMint).mint(errand, judged=None, inputs=census_inputs[errand.key])
 
     # --- urgencies: `census-urgent` first with an icon, carrying two ready chunks; `census-old` retired ---------
     urgency_store = UrgencyStore(store_connections)
@@ -3331,17 +3332,17 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadScopeRepository, "get_many"): lambda w: w.hub.default_adapter(IReadScopeRepository).get_many(
         w.project_id, [w.scope_a, w.scope_c, "runner-scope"]
     ),
-    (IReadCadenceRepository, "get"): lambda w: w.hub.services.cadences.get(w.cadence_id),
+    (IReadCadenceRepository, "get"): lambda w: w.hub.default_adapter(IReadCadenceRepository).get(w.cadence_id),
     (IReadErrandRunsRepository, "last_runs"): lambda w: w.hub.default_adapter(ErrandRunsStore).last_runs(w.errand_keys),
     (IReadCadenceCorpus, "tenants_with_live_cadences"): lambda w: (
         w.hub.hub_services.hub_scoped_reads.corpus.tenants_with_live_cadences()
     ),
-    (IReadCadenceRepository, "get_by_slug"): lambda w: w.hub.services.cadences.get_by_slug(
+    (IReadCadenceRepository, "get_by_slug"): lambda w: w.hub.default_adapter(IReadCadenceRepository).get_by_slug(
         w.project_id, "census-cadence"
     ),
     (IReadCadenceRepository, "list_all"): lambda w: (
-        w.hub.services.cadences.list_all(),
-        w.hub.services.cadences.list_all(w.project_id),
+        w.hub.default_adapter(IReadCadenceRepository).list_all(),
+        w.hub.default_adapter(IReadCadenceRepository).list_all(w.project_id),
     ),
     (IReadScopeRepository, "list_all"): lambda w: (
         w.hub.default_adapter(IReadScopeRepository).list_all(),
