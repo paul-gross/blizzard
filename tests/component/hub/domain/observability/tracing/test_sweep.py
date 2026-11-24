@@ -36,6 +36,7 @@ from tests.support.scaffolding import (
     count_rows_read,
     hub_scoped,
     ingest,
+    trace_sweep_of,
 )
 from tests.support.trace_export_world import closed_pair, trace_export_sweep
 from tests.support.trace_hub import claim, pass_build, trace_hub, trace_store
@@ -387,7 +388,7 @@ def test_a_gap_that_closed_nothing_jumps_without_an_event(tmp_path: Path) -> Non
 def test_a_hub_with_tracing_off_has_no_trace_sweep_and_writes_no_cursor(tmp_path: Path) -> None:
     hub, _graph = trace_hub(tmp_path)
     closed_pair(hub)
-    assert hub.hub_services.trace_export is None
+    assert trace_sweep_of(hub.hub_services) is None
     assert hub.app is not None
     hub.app.state.shutdown = None
 
@@ -431,7 +432,7 @@ def test_the_hosted_app_builds_no_exporter_without_an_endpoint(tmp_path: Path, m
 
     app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
 
-    assert app.state.services.trace_export is None
+    assert trace_sweep_of(app.state.services) is None
 
 
 def test_the_hosted_app_wires_the_sweep_when_an_endpoint_enables_tracing(
@@ -451,7 +452,7 @@ def test_the_hosted_app_wires_the_sweep_when_an_endpoint_enables_tracing(
     app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
 
     assert len(built) == 1
-    assert app.state.services.trace_export is not None
+    assert trace_sweep_of(app.state.services) is not None
 
 
 def _open_steps(hub: HubHarness, count: int, seqs: itertools.count[int]) -> None:

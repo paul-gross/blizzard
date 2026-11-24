@@ -15,6 +15,7 @@ from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chu
 from blizzard.foundation.trace_spans import FinishedSpan, SpanEvent, SpanLink, SpanStatus
 from blizzard.hub.domain.observability.tracing.attributes import INSTRUMENTATION_SCOPE, INSTRUMENTATION_SCOPE_VERSION
 from tests.support.otlp_sink import OtlpSink, otlp_sink
+from tests.support.scaffolding import trace_sweep_of
 from tests.support.trace_hub import trace_hub, transitioned_and_stopped
 
 _KEY = StepKey.attempt("ch_1", 2)
@@ -122,7 +123,7 @@ def test_the_sweep_tells_assembled_steps_to_the_sink(tmp_path: Path, sink: OtlpS
         resource=_RESOURCE, scope=INSTRUMENTATION_SCOPE, scope_version=INSTRUMENTATION_SCOPE_VERSION
     )
     hub, graph = trace_hub(tmp_path, trace_exporter=exporter, tracing=TracingConfig(settle_seconds=0))
-    sweep = hub.hub_services.trace_export
+    sweep = trace_sweep_of(hub.hub_services)
     assert sweep is not None
     sweep.sweep()
     moved, stopped = transitioned_and_stopped(hub, graph, 1)

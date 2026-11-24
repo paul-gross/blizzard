@@ -45,6 +45,7 @@ from tests.support.scaffolding import (
     InMemoryEgressWriter,
     SeedingTranscriptSegmentStore,
     default_project,
+    egress_sweep_of,
     hub_level_connections,
     hub_scoped,
     hub_store_connections,
@@ -200,7 +201,7 @@ class Events:
         self.chunk_id = closed_step(self.hub, self.graph, 1)
 
     def sweep(self) -> None:
-        sweep = self.hub.hub_services.egress_export
+        sweep = egress_sweep_of(self.hub.hub_services)
         assert sweep is not None
         self.hub.clock.advance(timedelta(seconds=1))
         sweep.sweep()
@@ -253,7 +254,7 @@ class Events:
 
     def reads_version(self, version: str, monkeypatch: pytest.MonkeyPatch) -> None:
         """Make the sweep read ``version`` as the hub's current extractor version, as an upgrade does."""
-        sweep = self.hub.hub_services.egress_export
+        sweep = egress_sweep_of(self.hub.hub_services)
         assert sweep is not None
         monkeypatch.setattr(sweep, "_extractor_version", version)
         monkeypatch.setattr(sweep_module, "EXTRACTOR_VERSION", version)

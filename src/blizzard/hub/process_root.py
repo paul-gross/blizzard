@@ -1,8 +1,9 @@
 """The hub process's composition root: it registers the hub graph, then opens the validated container over it.
 
 The store-free graph declares each store-backed registration absent, and a graph without settings the settings ports.
-The process scope borrows every value it opens with; the :class:`HubProcess` owns only the container, closing its tenant
-scopes and then the process scope."""
+Whether the trace and egress exports run is decided once, by the switches the root registers with, from the exporter
+and the egress boot outcome it supplies. The process scope borrows every value it opens with; the :class:`HubProcess`
+owns only the container, closing its tenant scopes and then the process scope."""
 
 from __future__ import annotations
 
@@ -20,6 +21,8 @@ from blizzard.foundation.registry.internal.translation import HUB_LIFETIMES, bui
 from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import OwnedChild, Resolver, ScopeValue, ScopeValues, supply
 from blizzard.foundation.roles import collaborator
+from blizzard.foundation.trace_export.exporter import ITraceExporter
+from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub.api import wiring as api
 from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.api.version_window import HubVersionWindow
@@ -40,11 +43,14 @@ from blizzard.hub.domain.garden import wiring as garden_area
 from blizzard.hub.domain.garden.findings import wiring as findings
 from blizzard.hub.domain.graph import wiring as graph_area
 from blizzard.hub.domain.observability import wiring as observability_area
+from blizzard.hub.domain.observability.egress.boot import EgressBoot
+from blizzard.hub.domain.observability.tracing.repository import StepHydration, StepHydrations
 from blizzard.hub.domain.operations import wiring as operations_area
 from blizzard.hub.domain.projects import wiring as projects
 from blizzard.hub.domain.runners import wiring as runners
 from blizzard.hub.domain.urgency import wiring as urgency_area
 from blizzard.hub.domain.work_items import wiring as work_items_area
+from blizzard.hub.egress import wiring as egress
 from blizzard.hub.events import wiring as events
 from blizzard.hub.forge import wiring as forge
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
@@ -62,7 +68,7 @@ from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
-from blizzard.hub.tenancy import TenantId, UnknownTenant
+from blizzard.hub.tenancy import StoreScope, TenantId, UnknownTenant
 from blizzard.hub.work_sources import wiring as work_sources
 
 #: The process scope's owner id.
@@ -96,12 +102,20 @@ class HubProcess:
 
 
 def register_hub(
-    registry: LegacyRegistry, *, store_backed: bool, settings: bool = False, versions: bool = False
+    registry: LegacyRegistry,
+    *,
+    store_backed: bool,
+    settings: bool = False,
+    versions: bool = False,
+    trace_export: bool = False,
+    egress_export: bool = False,
 ) -> None:
     """Declare the hub graph: the scope inputs, the legacy bridge's leaves, the store adapters and the adopted areas
     over them — or, store-free, each store-backed registration absent. The settings ports resolve from the borrowed
     settings graph when ``settings`` is set, and are absent otherwise, whether or not the graph is store-backed. The
-    version window is the supplied one when ``versions`` is set on a store-backed graph, and is absent otherwise."""
+    version window is the supplied one when ``versions`` is set on a store-backed graph, and is absent otherwise. The
+    trace export's sweep runs over the supplied exporter when ``trace_export`` is set, and the fact export's sweep
+    over its writers when ``egress_export`` is; each sweep is ``None`` otherwise."""
     scopes.register(registry)
     documents.register(registry)
     platform_tracing_wiring.register(registry)
@@ -131,6 +145,7 @@ def register_hub(
         forge.register_tenant(registry)
         work_sources.register(registry)
         _register_observability(registry, hub_events=hub_events)
+        _register_exports(registry, trace_export=trace_export, egress_export=egress_export)
     else:
         store.register_process_absent(registry)
         register_legacy_absent(registry)
@@ -168,6 +183,9 @@ def register_hub(
         work_sources.register_absent(registry)
         store.register_observability_absent(registry)
         observability_area.register_absent(registry)
+        store.register_exports_absent(registry)
+        egress.register_absent(registry)
+        observability_area.register_exports_absent(registry)
         api.register_absent(registry)
     if store_backed and settings:
         settings_wiring.register(registry)
@@ -197,6 +215,28 @@ def _register_observability(registry: LegacyRegistry, *, hub_events: Ref[HubEven
         annotations=refs.annotations,
         hub_events=hub_events,
         invariants=refs.invariants,
+    )
+
+
+def _register_exports(registry: LegacyRegistry, *, trace_export: bool, egress_export: bool) -> None:
+    """The trace and egress stores and the egress adapters, and the observability area's exports over them — each
+    export's sweep present only when its switch is set."""
+    refs = store.register_exports(registry)
+    free_space = egress.register_probe(registry)
+    writers: observability_area.EgressWriterRefs | None = None
+    if egress_export:
+        held = egress.register_writers(registry)
+        writers = (held.configured, held.backfill)
+    else:
+        egress.register_writers_absent(registry)
+    observability_area.register_exports(
+        registry,
+        trace=refs.trace,
+        egress=refs.egress,
+        project_labels=refs.project_labels,
+        free_space=free_space,
+        trace_export=trace_export,
+        egress_writers=writers,
     )
 
 
@@ -316,15 +356,22 @@ def store_backed_values(
     settings: HubSettingsGraph | None = None,
     versions: HubVersionWindow | None = None,
     oauth_http_client: httpx2.Client | None = None,
+    trace_exporter: ITraceExporter | None = None,
+    tracing: TracingSettings | None = None,
+    egress_boot: EgressBoot | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> ScopeValues:
     """The store-backed graph's scope values; ``settings`` is supplied only to a graph declaring the settings ports, and
     ``versions`` only to one declaring the version window. ``oauth_http_client`` is the OAuth client the caller lends,
-    left ``None`` for the hub to open its own."""
+    left ``None`` for the hub to open its own. ``trace_exporter`` is supplied only to a graph whose trace export runs;
+    without ``tracing`` or ``egress_boot``, tracing is disabled and the fact export off."""
     values: list[ScopeValue[Any]] = [
         supply(port(HubStoreConnections), connections),
         supply(port(BorrowedOAuthClient), BorrowedOAuthClient(oauth_http_client)),
+        supply(port(TracingSettings), tracing if tracing is not None else TracingSettings("disabled")),
+        supply(port(EgressBoot), egress_boot if egress_boot is not None else EgressBoot.off()),
+        supply(port(StepHydrations), StepHydrations()),
         *process_values(
             clock=clock,
             config=config,
@@ -339,6 +386,8 @@ def store_backed_values(
         values.append(supply(port(HubSettingsGraph), settings))
     if versions is not None:
         values.append(supply(port(HubVersionWindow), versions))
+    if trace_exporter is not None:
+        values.append(supply(port(ITraceExporter), trace_exporter))
     return _scoped(values)
 
 
@@ -354,6 +403,9 @@ def build_store_backed(
     settings: HubSettingsGraph | None = None,
     versions: HubVersionWindow | None = None,
     oauth_http_client: httpx2.Client | None = None,
+    trace_exporter: ITraceExporter | None = None,
+    tracing: TracingSettings | None = None,
+    egress_boot: EgressBoot | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> HubProcess:
@@ -368,6 +420,9 @@ def build_store_backed(
         settings=settings,
         versions=versions,
         oauth_http_client=oauth_http_client,
+        trace_exporter=trace_exporter,
+        tracing=tracing,
+        egress_boot=egress_boot,
         graphs=graphs,
         system_artifacts=system_artifacts,
     )
@@ -375,13 +430,18 @@ def build_store_backed(
 
 
 def store_backed_process(owner: OwnedChild) -> HubProcess:
-    """The store-backed :class:`HubProcess` over its opened container, which is closed if the tenant reads fail."""
+    """The store-backed :class:`HubProcess` over its opened container, which is closed if the tenant reads fail. Its
+    step hydration accessor is bound over its tenant scopes before it is handed out."""
     try:
         reads = owner.resolver.get(HubScopedReads)
+        hydrations = owner.resolver.get(StepHydrations)
     except BaseException:
         owner.close()
         raise
-    return _process(owner, confirm_open=reads.tenants.confirm_open, open_tenants=reads.tenants.open_tenants)
+    process = _process(owner, confirm_open=reads.tenants.confirm_open, open_tenants=reads.tenants.open_tenants)
+    tenants = process.tenants
+    hydrations.bind(lambda tenant: tenants.resolve(StoreScope(tenant), StepHydration))
+    return process
 
 
 def build_store_free(
@@ -420,13 +480,23 @@ def open_store_backed(
     settings: HubSettingsGraph | None = None,
     versions: HubVersionWindow | None = None,
     oauth_http_client: httpx2.Client | None = None,
+    trace_exporter: ITraceExporter | None = None,
+    tracing: TracingSettings | None = None,
+    egress_boot: EgressBoot | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> HubProcess:
     """The hub's store-backed process, registered and opened; the settings ports are present only with ``settings``,
-    and the version window only with ``versions``."""
+    and the version window only with ``versions``. The trace export runs only over a lent ``trace_exporter``, and the
+    fact export only when ``egress_boot`` booted it on; a root that lends neither serves both off."""
     return build_store_backed(
-        registered(store_backed=True, settings=settings is not None, versions=versions is not None),
+        registered(
+            store_backed=True,
+            settings=settings is not None,
+            versions=versions is not None,
+            trace_export=trace_exporter is not None,
+            egress_export=egress_boot is not None and egress_boot.on(),
+        ),
         connections,
         clock=clock,
         graphs=graphs,
@@ -438,6 +508,9 @@ def open_store_backed(
         settings=settings,
         versions=versions,
         oauth_http_client=oauth_http_client,
+        trace_exporter=trace_exporter,
+        tracing=tracing,
+        egress_boot=egress_boot,
     )
 
 
@@ -464,10 +537,24 @@ def open_store_free(
     )
 
 
-def registered(*, store_backed: bool, settings: bool = False, versions: bool = False) -> LegacyRegistry:
+def registered(
+    *,
+    store_backed: bool,
+    settings: bool = False,
+    versions: bool = False,
+    trace_export: bool = False,
+    egress_export: bool = False,
+) -> LegacyRegistry:
     """A fresh registry holding the hub graph :func:`register_hub` declares."""
     registry = LegacyRegistry()
-    register_hub(registry, store_backed=store_backed, settings=settings, versions=versions)
+    register_hub(
+        registry,
+        store_backed=store_backed,
+        settings=settings,
+        versions=versions,
+        trace_export=trace_export,
+        egress_export=egress_export,
+    )
     return registry
 
 

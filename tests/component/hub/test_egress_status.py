@@ -14,11 +14,10 @@ from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, UsagePosition
 from blizzard.hub.egress.factory import EgressUnavailable
-from blizzard.hub.egress.writer import EgressWriterSettings
 from blizzard.hub.store.internal.egress_store import EgressStore
 from tests.support.egress_world import closed_step, egress_hub
 from tests.support.hub_event_rows import hub_events_of
-from tests.support.scaffolding import HubHarness, hub_level_connections
+from tests.support.scaffolding import HubHarness, egress_sweep_of, hub_level_connections
 from tests.support.worker_http import bind_stubs
 
 
@@ -43,12 +42,10 @@ def test_a_hub_with_the_export_off_reports_it_off(tmp_path: Path) -> None:
 
 
 def test_a_rejected_export_names_the_setting_and_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    def without_pyarrow(
-        format: Literal["ndjson", "parquet"], directory: Path, settings: EgressWriterSettings, token: str
-    ) -> EgressUnavailable:
+    def without_pyarrow(format: Literal["ndjson", "parquet"]) -> EgressUnavailable:
         return EgressUnavailable("parquet needs pyarrow")
 
-    monkeypatch.setattr("blizzard.hub.composition.build_egress_writer", without_pyarrow)
+    monkeypatch.setattr("blizzard.hub.egress.factory.writer_unavailable", without_pyarrow)
     config = EgressConfig(directory=tmp_path / "out", format="parquet")
     hub, _ = egress_hub(tmp_path, config)
     body = _status(hub)
@@ -61,7 +58,7 @@ def test_a_rejected_export_names_the_setting_and_value(tmp_path: Path, monkeypat
 
 def test_the_cursors_their_lag_the_last_pass_the_last_file_and_the_free_space(tmp_path: Path) -> None:
     hub, graph = egress_hub(tmp_path, _on(tmp_path))
-    sweep = hub.hub_services.egress_export
+    sweep = egress_sweep_of(hub.hub_services)
     assert sweep is not None
     sweep.sweep()
     start = _status(hub)
@@ -128,7 +125,7 @@ def test_status_uses_append_order_for_position_and_recorded_time_for_pass_and_fi
 def test_the_last_error_is_ongoing_until_a_write_recovers(tmp_path: Path) -> None:
     config = EgressConfig(directory=tmp_path / "never-made", settle_seconds=0, min_free_bytes=0)
     hub, graph = egress_hub(tmp_path, config)
-    sweep = hub.hub_services.egress_export
+    sweep = egress_sweep_of(hub.hub_services)
     assert sweep is not None
     sweep.sweep()
     assert _status(hub)["last_error_at"] is None
@@ -149,7 +146,7 @@ def test_the_last_error_is_ongoing_until_a_write_recovers(tmp_path: Path) -> Non
 
 def test_the_cli_renders_the_status_and_its_json(tmp_path: Path) -> None:
     hub, _ = egress_hub(tmp_path, _on(tmp_path))
-    sweep = hub.hub_services.egress_export
+    sweep = egress_sweep_of(hub.hub_services)
     assert sweep is not None
     sweep.sweep()
 

@@ -32,7 +32,6 @@ from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import Resolver
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub.api.chunk_events import AnnouncedTurns
@@ -83,12 +82,7 @@ from blizzard.hub.domain.observability.analytics.derivation import (
     EventDerivationReconciler,
     TenantEventDerivation,
 )
-from blizzard.hub.domain.observability.egress.backfill import EgressBackfill
-from blizzard.hub.domain.observability.egress.config import EgressConfig
-from blizzard.hub.domain.observability.egress.event_rows import ExportPaths, export_paths
-from blizzard.hub.domain.observability.egress.ports import IEgressWriter
-from blizzard.hub.domain.observability.egress.reset import EgressReset
-from blizzard.hub.domain.observability.egress.status import EgressStatusReader
+from blizzard.hub.domain.observability.egress.boot import EgressPathKey
 from blizzard.hub.domain.observability.egress.sweep import EgressSweep
 from blizzard.hub.domain.observability.forge_status import (
     FULL_PASS_FLOOR_INTERVALS,
@@ -96,9 +90,6 @@ from blizzard.hub.domain.observability.forge_status import (
     TenantAnnotation,
 )
 from blizzard.hub.domain.observability.hub_events import HubEventLogService
-from blizzard.hub.domain.observability.tracing.replay import TraceReplay
-from blizzard.hub.domain.observability.tracing.repository import StepHydration
-from blizzard.hub.domain.observability.tracing.status import TraceStatusReader
 from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
 from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.projects.links import IReadProjectLinks
@@ -116,9 +107,7 @@ from blizzard.hub.domain.urgency.services import (
 )
 from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentDrainer
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
-from blizzard.hub.egress.factory import ConfiguredWriter, EgressUnavailable, build_egress_writer
-from blizzard.hub.egress.space import free_bytes
-from blizzard.hub.egress.writer import EgressWriterSettings, mint_process_token
+from blizzard.hub.egress.factory import egress_boot
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
@@ -140,13 +129,11 @@ from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
 from blizzard.hub.store.internal.credential_referrers import CredentialReferrersStore
-from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
-from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.store.internal.hub_settings_store import HubSettingsStore
 from blizzard.hub.store.internal.invitation_store import InvitationStore
@@ -158,7 +145,6 @@ from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
 from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
-from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
 from blizzard.hub.store.internal.urgency_store import UrgencyOrderStore, UrgencyStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
@@ -249,7 +235,7 @@ class TenantServices:
 
 @dataclass(frozen=True)
 class HubServices:
-    """The hub-level services — identity, sessions, signing, exports and sweeps — shared by every
+    """The hub-level services — identity, sessions, signing and sweeps — shared by every
     tenant and stashed on ``app.state.services``; a tenant's own services are opened through
     :attr:`tenants`."""
 
@@ -277,24 +263,6 @@ class HubServices:
     close_drain: CloseDrainSweep
     #: The cadence sweep — one pass per hub, judging and minting in each tenant holding a live cadence.
     cadence: CadenceSweep
-    #: The fleet-trace export sweep — ``None`` when no trace exporter is wired.
-    trace_export: TraceExportSweep | None
-    #: The operator's read of fleet tracing — always composed, so status answers with tracing off.
-    trace_status: TraceStatusReader
-    #: Tells a past window again — always composed; holds the sweep's own exporter, or ``None`` with tracing off.
-    trace_replay: TraceReplay
-    #: The fact-egress export sweep — ``None`` unless ``[egress] directory`` is set and its writer could be built.
-    egress_export: EgressSweep | None
-    #: Why the configured export could not start (Parquet without its extra); ``None`` when it could, or none is set.
-    egress_unavailable: EgressUnavailable | None
-    #: The unset ``path_key_env`` variable that dropped the ``events`` dataset from a running export; else ``None``.
-    egress_missing_path_key: str | None
-    #: The operator's read of the fact export — always composed, so status answers with the export off.
-    egress_status: EgressStatusReader
-    #: Moves a dataset's cursor — always composed; it refuses while the export is off.
-    egress_reset: EgressReset
-    #: Writes a past window — always composed; it refuses while the export is off.
-    egress_backfill: EgressBackfill
     #: The session read repository — reads only (``bzh:controller-read-only``).
     sessions: IReadSessionRepository
     #: The identity-link read repository — a plain read, no domain service.
@@ -690,13 +658,17 @@ def build_hub_core(
     settings: HubSettingsGraph | None = None,
     versions: HubVersionWindow | None = None,
     oauth_http_client: httpx2.Client | None = None,
+    trace_exporter: ITraceExporter | None = None,
+    tracing: TracingSettings | None = None,
+    egress_path_key: EgressPathKey | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> HubCore:
     """Build the :class:`HubCore` over the hub's process container, opened here over the borrowed inputs; the core's
     ``process`` closes it. A core built without the ``settings`` graph declares the settings ports absent, and one
     without the ``versions`` window, serving no runner, declares the window absent; a lent ``oauth_http_client`` is
-    borrowed, and the hub opens its own when none is lent."""
+    borrowed, and the hub opens its own when none is lent. The trace export runs only over a lent ``trace_exporter``,
+    and the fact export as the boot ``[egress]`` config and ``egress_path_key`` decide here."""
     from blizzard.hub.process_root import open_store_backed  # the root registers this module's leaves
 
     process = open_store_backed(
@@ -711,6 +683,9 @@ def build_hub_core(
         settings=settings,
         versions=versions,
         oauth_http_client=oauth_http_client,
+        trace_exporter=trace_exporter,
+        tracing=tracing,
+        egress_boot=egress_boot(config.egress, egress_path_key),
     )
     return hub_core_over(process, store_connections, clock=clock)
 
@@ -734,20 +709,6 @@ def hub_core_over(process: HubProcess, store_connections: HubStoreConnections, *
         clock=clock,
         process=process,
     )
-
-
-def _backfill_writers(config: EgressConfig, settings: EgressWriterSettings) -> Callable[[], IEgressWriter]:
-    """A fresh writer per backfill, each with a newly minted process token. The export's own writer was built from
-    these same settings, so a backfill's writer can fail to build only if that one did not."""
-    directory = config.directory
-    assert directory is not None  # composed only once the export itself is on
-
-    def writer() -> IEgressWriter:
-        built = build_egress_writer(config.format, directory, settings, mint_process_token())
-        assert not isinstance(built, EgressUnavailable)
-        return built
-
-    return writer
 
 
 @dataclass(frozen=True)
@@ -870,21 +831,17 @@ def build_services(
     core: HubCore,
     *,
     public_url: str | None = None,
-    trace_exporter: ITraceExporter | None = None,
-    tracing_settings: TracingSettings | None = None,
-    egress_path_key: bytes | None = None,
     cadences_on: Callable[[], bool],
 ) -> HubServices:
     """Construct the hub-level services over the shared :class:`HubCore`, its tenant cache serving each tenant's
     (:func:`build_tenant_services`). Each sweep or export is one pass per hub, acting on a row through its tenant's
-    services; live config is read through the container's :class:`HubConfigSource`. ``cadences_on`` answers
-    whether a cadence pass may mint."""
+    services; live config is read through the container's :class:`HubConfigSource`, and the trace and egress sweeps are
+    the container's, ``None`` while their export is off. ``cadences_on`` answers whether a cadence pass may mint."""
     clock = core.clock
     process = core.process.resolver
     config_source = process.get(HubConfigSource)
     action_loop = process.get(ActionLoop)
     step_wake = process.get(StepWake)
-    store_connections = core.store_connections
     color_pick = process.get(ColorPick)
 
     parts = TenantServiceParts(
@@ -893,7 +850,6 @@ def build_services(
         step_wake=step_wake,
     )
     core.tenants.serve(TenantServing(build=lambda stores, events: build_tenant_services(stores, parts, events=events)))
-    hub_events = core.process.resolver.get(HubEventLogStore)
     hub_event_log = core.process.resolver.get(HubEventLogService)
     open_tenants = core.process.resolver.get(OpenTenants)
 
@@ -904,128 +860,8 @@ def build_services(
     def sweeps_of(tenant: TenantId) -> TenantSweeps:
         return core.tenants.open_sweeps(scope_of(tenant))
 
-    def hydration_of(tenant: TenantId) -> StepHydration:
-        services = core.open_services(scope_of(tenant))
-        return StepHydration(
-            graphs=services.graphs,
-            names=services.registry,
-            projects=ProjectLabels(services.projects),
-            label=services.work_ref_label,
-            source_label=services.work_sources.source_label,
-        )
-
-    trace_store = TraceStore(
-        store_connections,
-        hub_events=hub_events,
-        corpus=core.hub_scoped_reads.corpus,
-        hydration=hydration_of,
-        tenant_name=open_tenants.name,
-    )
-
-    def trace_config_source() -> TracingConfig:
-        return config_source.current().tracing
-
-    trace_export = (
-        TraceExportSweep(
-            steps=trace_store,
-            exporter=trace_exporter,
-            events=hub_event_log,
-            clock=clock,
-            config=trace_config_source,
-        )
-        if trace_exporter is not None
-        else None
-    )
-    trace_replay = TraceReplay(steps=trace_store, exporter=trace_exporter, clock=clock, config=trace_config_source)
-    trace_status = TraceStatusReader(
-        settings=tracing_settings or TracingSettings("disabled"),
-        status=trace_store,
-        steps=trace_store,
-        clock=clock,
-        replay_max_window=lambda: config_source.current().tracing.replay_max_window,
-    )
-    exported = export_paths(config_source.boot.egress, egress_path_key)
-    egress_config, egress_paths, egress_missing_key = exported.config, exported.policy, exported.missing_key_env
-
-    def egress_exported_source() -> ExportPaths:
-        return export_paths(config_source.current().egress, egress_path_key)
-
-    def egress_source() -> EgressConfig:
-        return egress_exported_source().config
-
-    def writer_settings(config: EgressConfig) -> EgressWriterSettings:
-        return EgressWriterSettings(config.max_rows_per_file, config.min_free_bytes)
-
-    egress_writer_settings = writer_settings(egress_config)
-    egress_writer = (
-        build_egress_writer(
-            egress_config.format,
-            egress_config.directory,
-            egress_writer_settings,
-            mint_process_token(),
-        )
-        if egress_config.directory is not None
-        else None
-    )
-    egress_store = core.process.resolver.get(EgressStore)
-    egress_event_reads = core.hub_scoped_reads.corpus
-    egress_unavailable = egress_writer if isinstance(egress_writer, EgressUnavailable) else None
-    # The missing key matters only to an export that runs; with it off, nothing would have been written anyway.
-    egress_missing_path_key = egress_missing_key if egress_writer is not None and egress_unavailable is None else None
-    egress_status = EgressStatusReader(
-        config=egress_source,
-        rejected=egress_unavailable is not None,
-        missing_path_key=egress_missing_path_key,
-        exported_paths=egress_exported_source,
-        egress=egress_store,
-        event_reads=egress_event_reads,
-        steps=trace_store,
-        clock=clock,
-        free_space=lambda: free_bytes(egress_config.directory) if egress_config.directory is not None else None,
-    )
-    configured_writer = (
-        ConfiguredWriter(
-            egress_writer, egress_writer_settings, lambda settings: _backfill_writers(egress_config, settings)()
-        )
-        if egress_writer is not None and not isinstance(egress_writer, EgressUnavailable)
-        else None
-    )
-    egress_export = (
-        EgressSweep(
-            steps=trace_store,
-            egress=egress_store,
-            event_reads=egress_event_reads,
-            paths=egress_paths,
-            writer=egress_writer,
-            events=hub_event_log,
-            clock=clock,
-            config=egress_source,
-            writer_for=configured_writer.for_config if configured_writer is not None else None,
-        )
-        if egress_writer is not None and not isinstance(egress_writer, EgressUnavailable)
-        else None
-    )
-    egress_reset = EgressReset(
-        egress=egress_store,
-        events=hub_event_log,
-        clock=clock,
-        config=egress_source,
-        active=egress_export is not None,
-        missing_path_key=egress_missing_path_key,
-        exported_paths=egress_exported_source,
-    )
-    egress_backfill = EgressBackfill(
-        steps=trace_store,
-        egress=egress_store,
-        event_reads=egress_event_reads,
-        paths=egress_paths,
-        clock=clock,
-        config=egress_source,
-        writers=None,
-        writer_for=(lambda cfg: _backfill_writers(cfg, writer_settings(cfg))()) if egress_export is not None else None,
-        missing_path_key=egress_missing_path_key,
-        exported_paths=egress_exported_source,
-    )
+    trace_sweep: TraceExportSweep | None = process.get(TraceExportSweep | None)
+    egress_sweep: EgressSweep | None = process.get(EgressSweep | None)
     # The identity area's services, each the process scope's one instance.
     user_store = process.get(UserRepository)
     identity_store = process.get(IdentityRepository)
@@ -1109,15 +945,6 @@ def build_services(
         clock=clock,
         close_drain=close_drain,
         cadence=cadence,
-        trace_export=trace_export,
-        trace_status=trace_status,
-        trace_replay=trace_replay,
-        egress_export=egress_export,
-        egress_unavailable=egress_unavailable,
-        egress_missing_path_key=egress_missing_path_key,
-        egress_status=egress_status,
-        egress_reset=egress_reset,
-        egress_backfill=egress_backfill,
         sessions=session_store,
         identities=identity_store,
         users=user_store,
@@ -1133,8 +960,8 @@ def build_services(
                 SweepName.EVENT_DERIVATION: event_derivation,
                 SweepName.CLOSE_DRAIN: close_drain,
                 SweepName.TENANT_TEARDOWN: tenant_teardown_sweep,
-                **({SweepName.TRACE_EXPORT: trace_export} if trace_export is not None else {}),
-                **({SweepName.EGRESS: egress_export} if egress_export is not None else {}),
+                **({SweepName.TRACE_EXPORT: trace_sweep} if trace_sweep is not None else {}),
+                **({SweepName.EGRESS: egress_sweep} if egress_sweep is not None else {}),
                 SweepName.CADENCE: cadence,
             },
             one_tenant={

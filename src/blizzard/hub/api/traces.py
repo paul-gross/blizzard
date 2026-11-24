@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from functools import partial
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends
 
 from blizzard.auth_core import Permission
@@ -13,9 +14,9 @@ from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import problems, problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
-from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
-from blizzard.hub.domain.observability.tracing.replay import ReplayUnavailable, ReplayWindowRefused
+from blizzard.hub.domain.observability.tracing.replay import ReplayUnavailable, ReplayWindowRefused, TraceReplay
+from blizzard.hub.domain.observability.tracing.status import TraceStatusReader
 from blizzard.wire.traces import (
     TraceReplayRequest,
     TraceReplayResponse,
@@ -26,9 +27,10 @@ router = APIRouter(prefix="/api/traces", tags=["traces"], dependencies=[Depends(
 
 
 @router.get("/status", response_model=TraceStatusResponse, dependencies=[Depends(require_hub(Permission.EXPORT_ADMIN))])
-def trace_status(services: Hub) -> TraceStatusResponse:
+@inject_sync
+def trace_status(status: FromDishka[TraceStatusReader]) -> TraceStatusResponse:
     """Tracing on or off, the redacted endpoint, the cursor and its lag, the last export and the last error."""
-    read = services.trace_status.read()
+    read = status.read()
     return TraceStatusResponse(
         state=read.state,
         endpoint=read.endpoint,
@@ -50,12 +52,13 @@ def trace_status(services: Hub) -> TraceStatusResponse:
     response_model=TraceReplayResponse,
     dependencies=[Depends(require_hub(Permission.EXPORT_ADMIN))],
 )
-def trace_replay(request: TraceReplayRequest, services: Hub) -> TraceReplayResponse:
+@inject_sync
+def trace_replay(request: TraceReplayRequest, replay: FromDishka[TraceReplay]) -> TraceReplayResponse:
     """Tell every step closed and chunk finished in ``[since, until)`` again, without moving the live cursor.
     A bad window — inverted, too wide, or reaching past now — is 422, a replay that must export while tracing
     is off is 409, and an exporter that refuses is 502 with the counts it accepted before."""
     try:
-        result = services.trace_replay.replay(as_utc(request.since), as_utc(request.until), dry_run=request.dry_run)
+        result = replay.replay(as_utc(request.since), as_utc(request.until), dry_run=request.dry_run)
     except ReplayWindowRefused as exc:
         raise ProblemHTTPException(partial(problems_runners.trace_replay_window_refused_problem, exc)) from exc
     except ReplayUnavailable as exc:

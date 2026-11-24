@@ -96,6 +96,9 @@ NARROWED_MODULES: tuple[Path, ...] = tuple(
         "admin_invariants.py",
         "chunk_statuses.py",
         "chunk_events.py",
+        "traces.py",
+        "egress.py",
+        "trace_continuation.py",
     )
 )
 #: The legacy bags a narrowed module may not name.

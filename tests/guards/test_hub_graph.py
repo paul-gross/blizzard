@@ -4,6 +4,7 @@ Each gate runs over the real hub registration and over that registration with a 
 
 from __future__ import annotations
 
+import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -22,6 +23,8 @@ from blizzard.foundation.registry.internal.translation import HUB_LIFETIMES, bui
 from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import OwnedChild, ScopeValues, supply
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.trace_export.exporter import ITraceExporter
+from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub.api.auth_session import tenant_bound
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.version_window import HubVersionWindow
@@ -56,9 +59,17 @@ from blizzard.hub.domain.graph.authoring import DefaultGraphService
 from blizzard.hub.domain.observability.analytics.derivation import EventDerivationService
 from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
 from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
+from blizzard.hub.domain.observability.egress.backfill import EgressBackfill
+from blizzard.hub.domain.observability.egress.boot import EgressBoot, EgressPathKey
+from blizzard.hub.domain.observability.egress.config import EgressConfig
+from blizzard.hub.domain.observability.egress.reset import EgressReset
+from blizzard.hub.domain.observability.egress.status import EgressStatusReader
 from blizzard.hub.domain.observability.env_timeline import EnvTimelineReading
 from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
 from blizzard.hub.domain.observability.invariants import HubInvariantCheck
+from blizzard.hub.domain.observability.tracing.replay import TraceReplay
+from blizzard.hub.domain.observability.tracing.repository import StepHydrations
+from blizzard.hub.domain.observability.tracing.status import TraceStatusReader
 from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments, TranscriptIngestService
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import IReadProjectRepository
@@ -93,11 +104,26 @@ from tests.support.container_guards import (
 )
 from tests.support.legacy_inventory import LEGACY_INVENTORY, inventory_violations
 from tests.support.route_resolution import RouteDependency, route_dependencies, unresolved_route_dependencies
+from tests.support.scaffolding import InMemoryTraceExporter, hub_migration_prototype
 
 
-def _hub(*, store_backed: bool, settings: bool = False, versions: bool = False) -> LegacyRegistry:
+def _hub(
+    *,
+    store_backed: bool,
+    settings: bool = False,
+    versions: bool = False,
+    trace_export: bool = False,
+    egress_export: bool = False,
+) -> LegacyRegistry:
     registry = LegacyRegistry()
-    register_hub(registry, store_backed=store_backed, settings=settings, versions=versions)
+    register_hub(
+        registry,
+        store_backed=store_backed,
+        settings=settings,
+        versions=versions,
+        trace_export=trace_export,
+        egress_export=egress_export,
+    )
     return registry
 
 
@@ -125,14 +151,28 @@ def _second_memberships(connections: HubStoreConnections) -> MembershipRepositor
 
 
 @pytest.mark.parametrize(
-    ("store_backed", "settings", "versions"),
-    [(True, True, True), (True, False, True), (True, True, False), (False, False, False)],
-    ids=["store-backed", "store-backed-settings-less", "store-backed-windowless", "store-free"],
+    ("store_backed", "settings", "versions", "exports"),
+    [
+        (True, True, True, False),
+        (True, True, True, True),
+        (True, False, True, False),
+        (True, True, False, False),
+        (False, False, False, False),
+    ],
+    ids=[
+        "store-backed",
+        "store-backed-exporting",
+        "store-backed-settings-less",
+        "store-backed-windowless",
+        "store-free",
+    ],
 )
 def test_the_hub_graph_builds_and_keeps_every_registration_rule(
-    store_backed: bool, settings: bool, versions: bool
+    store_backed: bool, settings: bool, versions: bool, exports: bool
 ) -> None:
-    registry = _hub(store_backed=store_backed, settings=settings, versions=versions)
+    registry = _hub(
+        store_backed=store_backed, settings=settings, versions=versions, trace_export=exports, egress_export=exports
+    )
     assert graph_builds(registry, HUB_LIFETIMES, ScopeValues()) == []
     assert duplicate_owners(registry) == []
     assert lifetime_violations(registry, HUB_LIFETIMES) == []
@@ -176,14 +216,19 @@ def _hub_routes() -> list[RouteDependency]:
     return route_dependencies(create_app_for_export(packaged_flag_registry()))
 
 
-@pytest.fixture
-def _process() -> Iterator[OwnedChild]:
-    engine = create_engine_from_url("sqlite://")
+@pytest.fixture(params=[False, True], ids=["exports-off", "exports-on"])
+def _process(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[OwnedChild]:
+    # The egress backfill reads the live config as it is built, so the settings graph reads a migrated store.
+    shutil.copyfile(hub_migration_prototype(), tmp_path / "hub.db")
+    engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
     connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("test")))
     clock = SystemClock()
     footing = HubSettingsFooting(Path(), None, None, False, FlagRegistry(), False, HUB_REGISTRY, {})
+    exports: bool = request.param
+    exporting = (supply(port(ITraceExporter), InMemoryTraceExporter()),) if exports else ()
+    boot = EgressBoot(EgressConfig(directory=tmp_path), EgressPathKey()) if exports else EgressBoot.off()
     owner = build_container(
-        _hub(store_backed=True, settings=True, versions=True),
+        _hub(store_backed=True, settings=True, versions=True, trace_export=exports, egress_export=exports),
         HUB_LIFETIMES,
         owner="guard",
         values=ScopeValues(
@@ -199,6 +244,10 @@ def _process() -> Iterator[OwnedChild]:
                 supply(port(PackagedGraphs), GRAPHS_PACKAGED),
                 supply(port(PackagedSystemArtifacts), SYSTEM_ARTIFACTS_PACKAGED),
                 supply(port(HubVersionWindow), HubVersionWindow(__version__, VERSION_WINDOW)),
+                supply(port(TracingSettings), TracingSettings("disabled")),
+                supply(port(EgressBoot), boot),
+                supply(port(StepHydrations), StepHydrations()),
+                *exporting,
             )
         ),
     )
@@ -280,12 +329,19 @@ def test_every_routes_container_dependencies_resolve_at_the_lifetime_it_runs_in(
         ("GET /api/analytics/spend/chunks/ndjson", IReadOperationalAnalytics),
         ("GET /api/admin/events", IReadHubEventLog),
         ("GET /api/admin/invariants", HubInvariantCheck),
+        ("GET /api/traces/status", TraceStatusReader),
+        ("POST /api/traces/replay", TraceReplay),
+        ("GET /api/egress/status", EgressStatusReader),
+        ("POST /api/egress/reset", EgressReset),
+        ("POST /api/egress/backfill", EgressBackfill),
         ("GET /api/fleet/chunk-statuses", IReadChunkRouteRepository),
         ("POST /api/fleet/transcripts", TranscriptIngestService),
         ("GET /api/fleet/chunks/{chunk_id}/analytics/counts/files", IReadAnalyticsEventQueries),
         ("GET /api/fleet/chunks/{chunk_id}/analytics/spend/nodes", IReadOperationalAnalytics),
     }
     assert [each.route for each in _hub_routes if each.route.split(" ")[1] == "/api/admin/events" and each.tenant] == []
+    exports = ("/api/traces", "/api/egress")
+    assert [each.route for each in _hub_routes if each.route.split(" ")[1].startswith(exports) and each.tenant] == []
     assert unresolved_route_dependencies(_hub_routes, _process) == []
 
 

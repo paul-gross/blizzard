@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from functools import partial
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends
 
 from blizzard.auth_core import Permission
@@ -12,10 +13,10 @@ from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import problems, problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
-from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
-from blizzard.hub.domain.observability.egress.backfill import BackfillUnavailable, BackfillWindowRefused
-from blizzard.hub.domain.observability.egress.reset import ResetRefused, ResetUnavailable
+from blizzard.hub.domain.observability.egress.backfill import BackfillUnavailable, BackfillWindowRefused, EgressBackfill
+from blizzard.hub.domain.observability.egress.reset import EgressReset, ResetRefused, ResetUnavailable
+from blizzard.hub.domain.observability.egress.status import EgressStatusReader
 from blizzard.wire.egress import (
     EgressBackfillCount,
     EgressBackfillRequest,
@@ -32,10 +33,11 @@ router = APIRouter(prefix="/api/egress", tags=["egress"], dependencies=[Depends(
 @router.get(
     "/status", response_model=EgressStatusResponse, dependencies=[Depends(require_hub(Permission.EXPORT_ADMIN))]
 )
-def egress_status(services: Hub) -> EgressStatusResponse:
+@inject_sync
+def egress_status(status: FromDishka[EgressStatusReader]) -> EgressStatusResponse:
     """Export on, off or rejected, each dataset's cursor and lag, the last pass and file, the last error and the
     free space."""
-    read = services.egress_status.read()
+    read = status.read()
     return EgressStatusResponse(
         state=read.state,
         rejected_setting=read.rejected_setting,
@@ -62,11 +64,12 @@ def egress_status(services: Hub) -> EgressStatusResponse:
 
 
 @router.post("/reset", response_model=EgressResetResponse, dependencies=[Depends(require_hub(Permission.EXPORT_ADMIN))])
-def egress_reset(request: EgressResetRequest, services: Hub) -> EgressResetResponse:
+@inject_sync
+def egress_reset(request: EgressResetRequest, reset: FromDishka[EgressReset]) -> EgressResetResponse:
     """Move one dataset's cursor to an instant and record the moved window. An unconfigured dataset or a future
     instant is 422, and a reset while the export is off or rejected is 409."""
     try:
-        result = services.egress_reset.reset(request.dataset, as_utc(request.to))
+        result = reset.reset(request.dataset, as_utc(request.to))
     except ResetRefused as exc:
         raise ProblemHTTPException(partial(problems_runners.egress_reset_refused_problem, exc)) from exc
     except ResetUnavailable as exc:
@@ -84,13 +87,14 @@ def egress_reset(request: EgressResetRequest, services: Hub) -> EgressResetRespo
     response_model=EgressBackfillResponse,
     dependencies=[Depends(require_hub(Permission.EXPORT_ADMIN))],
 )
-def egress_backfill(request: EgressBackfillRequest, services: Hub) -> EgressBackfillResponse:
+@inject_sync
+def egress_backfill(request: EgressBackfillRequest, backfill: FromDishka[EgressBackfill]) -> EgressBackfillResponse:
     """Write the rows of ``[since, until)`` again as the live export would, without moving a cursor. A bad window
     — inverted, too wide, or reaching past now — or dataset is 422, a wet backfill while the export is off or
     rejected is 409 (a dry run only counts, so it runs), and a writer that refuses is 502 with the counts
     committed before."""
     try:
-        result = services.egress_backfill.backfill(
+        result = backfill.backfill(
             as_utc(request.since), as_utc(request.until), dataset=request.dataset, dry_run=request.dry_run
         )
     except BackfillWindowRefused as exc:

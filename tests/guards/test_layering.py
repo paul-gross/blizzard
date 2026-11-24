@@ -4578,9 +4578,11 @@ def test_the_egress_sweep_imports_no_store_filesystem_or_format_library() -> Non
 
 def test_only_the_composition_root_builds_an_egress_writer() -> None:
     """Nothing in the fleet's path constructs or calls the writer: the factory and the file bindings are
-    named by the composition root alone, and the sweep sees only the ``IEgressWriter`` seam."""
+    named by the composition roots and the egress package's own wiring alone, and the sweep sees only the
+    ``IEgressWriter`` seam."""
     homes = (
         str((_HUB_DIR / "composition.py").relative_to(_REPO_ROOT)),
+        str((_HUB_DIR / "process_root.py").relative_to(_REPO_ROOT)),
         str((_HUB_DIR / "egress").relative_to(_REPO_ROOT)),
     )
     violations = [
