@@ -24,7 +24,7 @@ from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkItemAuthorKind, WorkRef
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine, RoutineAuthoring, RoutineScopeMembership
-from blizzard.hub.domain.garden.runs.run import RoutineRetiredError
+from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, RunService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
@@ -155,7 +155,7 @@ def test_a_hand_started_run_neither_counts_as_the_errands_run_nor_holds_it(tmp_p
     routine = _routine(hub, default_tenant(hub.engine), hub.services, project, "sweep")
     scope = hub.default_adapter(IReadScopeRepository).get(project.project_id, "sweep")
     assert scope is not None
-    hub.services.routine_run.run(
+    hub.default_adapter(RunService).run(
         routine, scope=scope, mode=RunMode.FULL, note=None, author=WorkItemAuthor.user("operator")
     )
     _cadence(hub.services, project, ChoreShape("plain", "sweep"))

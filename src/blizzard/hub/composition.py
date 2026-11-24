@@ -89,16 +89,11 @@ from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import (
     IReadFindingRepository,
 )
-from blizzard.hub.domain.garden.findings.trend import GardenTrendService
-from blizzard.hub.domain.garden.formats import IGardenFormats
 from blizzard.hub.domain.garden.review.service import ReviewFindingsRecorder
 from blizzard.hub.domain.garden.routines import (
     IReadRoutineRepository,
     IReadRoutineScopeRepository,
 )
-from blizzard.hub.domain.garden.runs.history import GardenRunService
-from blizzard.hub.domain.garden.runs.run import RunService
-from blizzard.hub.domain.garden.runs.sweeps import GardenSweepsService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
 from blizzard.hub.domain.graph.authoring import DefaultGraphService, GraphMintService
@@ -191,9 +186,6 @@ from blizzard.hub.store.internal.flow_store import FlowStore, tenant_flows
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
-from blizzard.hub.store.internal.garden_run_store import GardenRunStore
-from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
-from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
 from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
@@ -204,11 +196,8 @@ from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
-from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
-from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
@@ -332,18 +321,10 @@ class TenantServices:
     errand_planning: ErrandPlanning
     #: Mint one due errand's run in its own unit of work.
     cadence_mint: CadenceMint
-    #: Mint and ingest a hub work item from a routine, in one act.
-    routine_run: RunService
     #: The finding read Protocol.
     findings: IReadFindingRepository
     #: A run's finding bucket — what it is shown and may cite.
     finding_bucket: FindingBucketReader
-    #: A routine's finding inflow-against-outflow over a window.
-    garden_trend: GardenTrendService
-    #: A routine's per-scope last-swept table and windowed measurement series.
-    garden_sweeps: GardenSweepsService
-    #: A routine's runs are readable — the run list and one run's own delta.
-    garden_run: GardenRunService
 
 
 @dataclass(frozen=True)
@@ -969,20 +950,13 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     retired = tenant.get(RetiredRunnerGuard)
     graph_mint = tenant.get(GraphMintService)
     default_graph = tenant.get(DefaultGraphService)
-    scope_store = tenant.get(ScopeStore)
-    routine_store = tenant.get(RoutineStore)
-    routine_scope_store = tenant.get(RoutineScopeStore)
     cadence_store = tenant.get(CadenceStore)
     urgency_references = tenant.get(UrgencyReferences)
     errand_runs_store = tenant.get(ErrandRunsStore)
     config_authoring = tenant.get(ConfigAuthoring)
     finding_set_store = tenant.get(FindingSetStore)
     run_context_store = tenant.get(RunContextStore)
-    garden_trend_store = tenant.get(GardenTrendStore)
-    garden_sweeps_store = tenant.get(GardenSweepsStore)
-    garden_run_store = tenant.get(GardenRunStore)
     finding_bucket = tenant.get(FindingBucketReader)
-    garden_formats = tenant.get(IGardenFormats)
     commit_links = tenant.get(LandedCommitLinks)
     chunk_targets = tenant.get(ChunkTargets)
     chunk_target_capture = tenant.get(ChunkTargetCapture)
@@ -1139,34 +1113,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             clock=clock,
             default=tenant_default,
         ),
-        routine_run=RunService(
-            routines=routine_store,
-            scopes=scope_store,
-            routine_scopes=routine_scope_store,
-            graphs=graph_store,
-            finding_sets=finding_set_store,
-            items=work_item_store,
-            chunks=chunk_record,
-            run_contexts=run_context_store,
-            work_refs=chunk_work_refs,
-            clock=clock,
-            default=tenant_default,
-            transactions=stores.transactions,
-        ),
         findings=finding_store,
         finding_bucket=finding_bucket,
-        garden_trend=GardenTrendService(repo=garden_trend_store),
-        garden_sweeps=GardenSweepsService(
-            repo=garden_sweeps_store, scopes=scope_store, routine_scopes=routine_scope_store
-        ),
-        garden_run=GardenRunService(
-            repo=garden_run_store,
-            chunk_records=chunk_record,
-            chunk_facts=chunk_facts,
-            findings=finding_store,
-            formats=garden_formats,
-            clock=clock,
-        ),
     )
     sweeps = TenantSweeps(
         close_drain=CloseIntentDrainer(

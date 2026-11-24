@@ -84,9 +84,6 @@ _TENANT_SERVICES: tuple[type[Any], ...] = (
     AnalyticsEventQueryStore,
     AnalyticsOperationalStore,
     ErrandRunsStore,
-    GardenTrendStore,
-    GardenSweepsStore,
-    GardenRunStore,
     EnvTimelineStore,
     ForgeAnnotationStore,
 )
@@ -124,6 +121,12 @@ _GARDEN_AUTHORING_SERVICES: tuple[type[Any], ...] = (
 
 #: The garden materialization adapters, whose ``Ref`` the garden area aliases its delivery ports onto.
 _GARDEN_MATERIALIZATION_SERVICES: tuple[type[Any], ...] = (GardenDeliveryStore, ReviewFindingsStore)
+#: The garden run-read adapters, whose ``Ref`` the garden area aliases its ports onto.
+_GARDEN_RUNS_SERVICES: tuple[type[Any], ...] = (
+    GardenTrendStore,
+    GardenSweepsStore,
+    GardenRunStore,
+)
 
 #: The configured-record adapters, whose ``Ref`` the config area aliases its ports onto.
 _CONFIG_SERVICES: tuple[type[Any], ...] = (
@@ -250,6 +253,31 @@ def register_garden_materialization(registry: Registry) -> GardenMaterialization
 def register_garden_materialization_absent(registry: Registry) -> None:
     """Declare the tenant's garden delivery adapters absent, for the store-free graph."""
     for missing in _GARDEN_MATERIALIZATION_SERVICES:
+        registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
+
+
+@adapter_model
+@dataclass(frozen=True)
+class GardenRunsRefs:
+    """The ``Ref`` of each garden run-read adapter, named for the garden area's port family it fills."""
+
+    trends: Ref[GardenTrendStore]
+    sweeps: Ref[GardenSweepsStore]
+    runs: Ref[GardenRunStore]
+
+
+def register_garden_runs(registry: Registry) -> GardenRunsRefs:
+    """Declare the tenant's garden run-read adapters, handing back the ``Ref`` of each, which the garden area's ports
+    alias."""
+    refs = StoreRefs({each: registry.service(each, lifetime=Lifetime.TENANT) for each in _GARDEN_RUNS_SERVICES})
+    return GardenRunsRefs(
+        trends=refs.of(GardenTrendStore), sweeps=refs.of(GardenSweepsStore), runs=refs.of(GardenRunStore)
+    )
+
+
+def register_garden_runs_absent(registry: Registry) -> None:
+    """Declare the tenant's garden run-read adapters absent, for the store-free graph."""
+    for missing in _GARDEN_RUNS_SERVICES:
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
 
 

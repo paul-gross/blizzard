@@ -25,6 +25,7 @@ from blizzard.hub.domain.garden.routines import (
     RoutineAuthoring,
     RoutineScopeMembership,
 )
+from blizzard.hub.domain.garden.runs.run import RunService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeRegistry, ScopeSlug
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
@@ -205,9 +206,11 @@ def test_a_minted_run_names_its_cadence_and_chore_and_a_hand_run_names_none(hub:
     [minted] = _mint_all(hub, cadence["cadence_id"])
     scope = hub.default_adapter(IReadScopeRepository).get(routine.project_id, "sweep")
     assert scope is not None
-    hand = hub.services.routine_run.run(
-        routine, scope=scope, mode=RunMode.FULL, note=None, author=WorkItemAuthor.user("u")
-    ).chunk_id
+    hand = (
+        hub.default_adapter(RunService)
+        .run(routine, scope=scope, mode=RunMode.FULL, note=None, author=WorkItemAuthor.user("u"))
+        .chunk_id
+    )
     chore_id = cadence["chores"][0]["chore_id"]
 
     expected = {

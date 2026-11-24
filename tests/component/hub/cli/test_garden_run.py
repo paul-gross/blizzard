@@ -13,6 +13,7 @@ from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine, RoutineAuthoring
+from blizzard.hub.domain.garden.runs.run import RunService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
@@ -57,7 +58,7 @@ def test_run_list_and_show_work_end_to_end_against_a_real_app(tmp_path: Path) ->
     routine = _routine(hub)
     scope = hub.default_adapter(IReadScopeRepository).get(routine.project_id, routine.default_scope_slug)
     assert scope is not None
-    result = hub.services.routine_run.run(
+    result = hub.default_adapter(RunService).run(
         routine,
         scope=scope,
         mode=RunMode.FULL,

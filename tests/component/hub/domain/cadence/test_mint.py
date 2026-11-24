@@ -33,7 +33,7 @@ from blizzard.hub.domain.garden.routines import (
     RoutineScopeMembership,
 )
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
-from blizzard.hub.domain.garden.runs.run import RoutineRetiredError
+from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, RunService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.operations.delete import DeleteService
 from blizzard.hub.domain.operations.promote import PromoteService
@@ -131,7 +131,9 @@ def test_an_errand_never_run_has_no_last_run_and_others_runs_are_not_its(hub: Hu
     found = _errands(hub, cadence)
     scope = hub.default_adapter(IReadScopeRepository).get(routine.project_id, "runner")
     assert scope is not None
-    hub.services.routine_run.run(routine, scope=scope, mode=RunMode.FULL, note=None, author=WorkItemAuthor.user("u"))
+    hub.default_adapter(RunService).run(
+        routine, scope=scope, mode=RunMode.FULL, note=None, author=WorkItemAuthor.user("u")
+    )
     _mint(hub, cadence, found[("one", "runner")])
 
     assert _last(hub, found[("every", "runner")]) is None
@@ -302,7 +304,7 @@ def test_a_promoting_mint_and_an_operator_promote_each_land_at_their_own_tail(hu
     _routine(hub, "sweep", "runner")
     cadence = _cadence(hub, ChoreShape("every", "sweep", scopes="all"))
     found = _errands(hub, cadence)
-    hand = hub.services.routine_run.run(
+    hand = hub.default_adapter(RunService).run(
         _routine(hub, "other"),
         scope=_scope(hub, "other"),
         mode=RunMode.FULL,
