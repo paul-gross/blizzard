@@ -166,14 +166,14 @@ def _require_editable(chunk_id: str, facts: ChunkFacts, field_name: str) -> None
 
 
 def require_valid_migration_target(
-    chunk: Chunk, intended: IntendedMigration, target_graph: Graph, *, retired: bool
+    pin: str, intended: IntendedMigration, target_graph: Graph, *, retired: bool
 ) -> None:
     """The refusals for a non-``None`` intended migration: a retired target, a target that is
-    already the chunk's own pin, and — for ``forced`` — a named node absent from the target.
+    already the pin the edit leaves (``pin``), and — for ``forced`` — a named node absent from the target.
     Field-shape mismatches (``node_name`` with ``auto`` / missing with ``forced``) are the
     wire's concern."""
     GraphStanding(target_graph, retired=retired).require_targetable()
-    if target_graph.graph_id == chunk.graph_id:
+    if target_graph.graph_id == pin:
         raise MigrationTargetIsCurrentPin(target_graph.graph_id)
     if intended.mode is MigrationMode.FORCED and target_graph.node_by_name(intended.node_name or "") is None:
         raise ForcedNodeUnknown(intended.node_name, target_graph.graph_id)
@@ -196,6 +196,7 @@ def plan_edit(
     A graph pin edit names its loaded target graph, refused once retired; an urgency edit names ``urgency`` as read
     under its lock, likewise."""
     graph_id: str | None = None
+    effective_pin = chunk.graph_id if edit.graph_id is UNSET else edit.graph_id
     if edit.graph_id is not UNSET:
         if graph_target is None or graph_target.graph_id != edit.graph_id:
             raise ValueError("a graph pin edit requires its loaded target graph")
@@ -218,8 +219,14 @@ def plan_edit(
         if edit.intended_migration is not None:
             assert migration_target is not None, "an intended-migration edit requires its resolved target graph"
             require_valid_migration_target(
-                chunk, edit.intended_migration, migration_target, retired=migration_target_retired
+                effective_pin, edit.intended_migration, migration_target, retired=migration_target_retired
             )
+    elif (
+        edit.graph_id is not UNSET
+        and chunk.intended_migration is not None
+        and chunk.intended_migration.graph_id == effective_pin
+    ):
+        raise MigrationTargetIsCurrentPin(effective_pin)
     urgency_id: UrgencyId | None = None
     if edit.urgency is not UNSET:
         _require_editable(chunk.chunk_id, facts, "urgency")

@@ -476,6 +476,34 @@ def test_a_pin_edit_refuses_a_moved_chunk_and_a_retired_target() -> None:
         )
 
 
+def test_a_body_pinning_a_graph_and_intending_a_move_to_it_is_refused() -> None:
+    with pytest.raises(MigrationTargetIsCurrentPin):
+        plan_edit(
+            _CHUNK,
+            _AT[ChunkStatus.READY],
+            ChunkEdit(graph_id="gr_2", intended_migration=IntendedMigration.toward("gr_2", None)),
+            graph_target=_OTHER,
+            migration_target=_OTHER,
+        )
+
+
+def test_a_pin_edit_onto_the_graph_a_standing_intent_names_is_refused() -> None:
+    standing = replace(_CHUNK, intended_migration=IntendedMigration.toward("gr_2", None))
+    with pytest.raises(MigrationTargetIsCurrentPin):
+        plan_edit(standing, _AT[ChunkStatus.READY], ChunkEdit(graph_id="gr_2"), graph_target=_OTHER)
+
+
+def test_a_pin_edit_clearing_the_intent_beside_it_is_admitted() -> None:
+    standing = replace(_CHUNK, intended_migration=IntendedMigration.toward("gr_2", None))
+    plan = plan_edit(
+        standing,
+        _AT[ChunkStatus.READY],
+        ChunkEdit(graph_id="gr_2", intended_migration=None),
+        graph_target=_OTHER,
+    )
+    assert plan.graph_id == "gr_2" and plan.intended_migration is None
+
+
 def test_edit_refuses_a_field_outside_its_own_window_naming_the_field() -> None:
     with pytest.raises(ChunkNotEditable) as excinfo:
         plan_edit(_CHUNK, _AT[ChunkStatus.RUNNING], ChunkEdit(default_effort="high"))

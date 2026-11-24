@@ -267,7 +267,13 @@ class ApplyService:
 
         edge = graph.edge_for_choice(from_node.node_id, submission.choice)
         re_escalating = re_escalates(
-            facts, edge, targets, epoch=submission.epoch, taken=EscalateChoice.of(from_node, submission.choice)
+            facts,
+            edge,
+            targets,
+            epoch=submission.epoch,
+            taken=EscalateChoice.of(from_node, submission.choice),
+            node=from_node,
+            choice=submission.choice,
         )
         try:
             refuse_hub_executed(from_node)
@@ -460,7 +466,7 @@ class ApplyService:
             submission,
             edge,
             targets,
-            UnresolvableTarget.of(edge),
+            UnresolvableTarget.of(from_node, submission.choice, edge),
             answer=ApplyResult.unresolved_target(edge.target_graph),
         )
 
@@ -520,6 +526,8 @@ class ApplyService:
                     targets,
                     epoch=submission.epoch,
                     taken=draft if isinstance(draft, EscalateChoice) else None,
+                    node=from_node,
+                    choice=submission.choice,
                 )
                 refused = self._refuse_under_lock(
                     chunk, graph, from_node, submission, facts, transaction=locked, re_escalating=re_escalating

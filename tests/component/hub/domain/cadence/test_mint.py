@@ -53,13 +53,27 @@ def hub(tmp_path: Path) -> HubHarness:
     return build_hub(tmp_path)
 
 
-def _routine(hub: HubHarness, slug: str, *linked: str) -> Routine:
+def _routine(
+    hub: HubHarness,
+    slug: str,
+    *linked: str,
+    model: list[str] | None = None,
+    effort: str | None = None,
+    harnesses: list[str] | None = None,
+) -> Routine:
     graph = hub.services.default_graph.ensure_default(
         PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     project = project_record(hub, default_project(hub.engine))
     routine = hub.default_adapter(RoutineAuthoring).create(
-        project=project, ctx=_CTX, slug=slug, graph_name=graph.name, default_scope_slug=ScopeSlug.parse(slug)
+        project=project,
+        ctx=_CTX,
+        slug=slug,
+        graph_name=graph.name,
+        default_scope_slug=ScopeSlug.parse(slug),
+        default_model=model,
+        default_effort=effort,
+        default_harnesses=harnesses,
     )
     for scope_slug in linked:
         scope = hub.default_adapter(ScopeRegistry).ensure(project, ScopeSlug.parse(scope_slug), _CTX)
@@ -244,6 +258,18 @@ def test_a_mint_plans_as_a_hand_run_and_marks_its_run_promoted_or_held(hub: HubH
     context = hub.default_adapter(IReadRunContextRepository).for_chunk(_chunk(hub, held.chunk.chunk_id))
     assert context is not None
     assert context.errand == ErrandMark(cadence_id=cadence.cadence_id, chore_id=cadence.chores[1].chore_id)
+
+
+def test_a_minted_chunk_inherits_the_routines_model_effort_and_harness_defaults(hub: HubHarness) -> None:
+    _routine(hub, "sweep", model=["opus"], effort="high", harnesses=["claude_code", "codex"])
+    cadence = _cadence(hub, ChoreShape("every", "sweep"))
+    errand = next(iter(_errands(hub, cadence).values()))
+
+    chunk = _chunk(hub, _mint(hub, cadence, errand).chunk.chunk_id)
+
+    assert chunk.default_model == ["opus"]
+    assert chunk.default_effort == "high"
+    assert chunk.default_harnesses == ["claude_code", "codex"]
 
 
 def test_a_mint_whose_errand_moved_since_it_was_judged_writes_nothing(hub: HubHarness) -> None:

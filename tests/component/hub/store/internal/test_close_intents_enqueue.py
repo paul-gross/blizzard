@@ -14,6 +14,7 @@ import pytest
 from sqlalchemy import select
 
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkItemCloseOutcome, WorkRef
+from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.chunk.ports.artifacts import HubArtifactWrite, IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -132,6 +133,34 @@ def test_a_replayed_landing_marker_enqueues_nothing_new(tmp_path: Path) -> None:
         ).all()
     assert replayed == HubArtifactWrite(wrote=False)
     assert len(rows) == 1
+
+
+def test_a_no_code_marker_closes_no_refs(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    name, data = no_code_marker(
+        {"repo": "widget", "record": "rec", "base_branch": "master", "branch": "feat", "commit": "abc"}
+    )
+
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+        written = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
+            chunk_id,
+            node_id="nd_deliver",
+            node_name="deliver",
+            epoch=1,
+            name=name,
+            content=data,
+            at=hub.clock.now(),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset()),
+            transaction=unit,
+        )
+
+    assert written == HubArtifactWrite(wrote=True)
+    assert _pending_intents(hub) == set()
+    with hub.engine.connect() as conn:
+        assert conn.execute(hub_scoped(select(s.work_item_closures))).all() == []
 
 
 def test_a_stop_with_no_landing_enqueues_nothing(tmp_path: Path) -> None:
