@@ -441,6 +441,8 @@ class RunnerStepper:
         self.settings_failure: tuple[int, str, str] | None = None
         self._logged_failure: int | None = None
         self._trace_interval = config.tracing.sweep_seconds
+        self._trace_config = config.tracing
+        self._logged_trace_failure: int | None = None
         self._next_recovery_retry = 0.0
 
     @property
@@ -540,11 +542,27 @@ class RunnerStepper:
         tick(self._context())
 
     def _sweep_traces(self) -> None:
-        if self._graph.trace_sweep is not None:
-            reader = self._graph.settings_reader
-            config = reader.snapshot()[1] if reader is not None else self._graph.config
-            self._trace_interval = config.tracing.sweep_seconds
-            self._graph.trace_sweep.sweep(config.tracing)
+        sweep = self._graph.trace_sweep
+        if sweep is None:
+            return
+        reader = self._graph.settings_reader
+        config = self._trace_config
+        if reader is None:
+            config = self._graph.config.tracing
+        else:
+            revision = None
+            try:
+                pair = reader.pair_record()
+                revision = pair.runner.revision
+                config = reader.resolve_pair(pair).tracing
+                self._trace_config = config
+                self._logged_trace_failure = None
+            except Exception as exc:
+                if self._logged_trace_failure != revision:
+                    _log.error("trace sweep settings did not resolve", revision=revision, detail=str(exc))
+                    self._logged_trace_failure = revision
+        self._trace_interval = config.sweep_seconds
+        sweep.sweep(config)
 
     def trace_interval(self) -> float:
         return self._trace_interval

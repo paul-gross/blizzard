@@ -122,6 +122,30 @@ def test_a_tracing_write_reaches_the_next_sweep_and_not_the_running_one(
         host.close()
 
 
+def test_a_trace_sweep_keeps_its_last_good_tracing_when_a_revision_does_not_resolve(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    host = _host(tmp_path, monkeypatch, "[tracing]\nbatch_limit = 10")
+    runner = host.runners[0]
+    spy = _SweepSpy([])
+    stepper = RunnerStepper(runner.config, process_graph=replace(runner, trace_sweep=spy))
+    reader = runner.settings_reader
+    assert reader is not None
+    try:
+        stepper.timed_trace_sweep()
+
+        def unresolvable(*_args: object, **_kwargs: object) -> object:
+            raise ValueError("revision does not resolve")
+
+        monkeypatch.setattr(reader, "resolve_pair", unresolvable)
+        stepper.timed_trace_sweep()
+        stepper.timed_trace_sweep()
+        assert [config.batch_limit for config in spy.seen] == [10, 10, 10]
+    finally:
+        stepper.close()
+        host.close()
+
+
 def test_a_tracing_write_reaches_the_next_replay(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     host = _host(tmp_path, monkeypatch)
     runner = host.runners[0]
