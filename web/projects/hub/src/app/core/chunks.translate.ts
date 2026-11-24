@@ -1,5 +1,20 @@
 import type { hubApi } from 'fleet';
-import type { BoardPageMetadata, GraphProgressNode, GraphProgressState } from './chunks.domain';
+import { laneStatus } from 'fleet/shell';
+import type { BoardPageMetadata, GraphProgressNode, GraphProgressState, RunnerClaimChunk } from './chunks.domain';
+
+export function fromRunnerClaimChunk(chunk: hubApi.ChunkSummary): RunnerClaimChunk {
+  return {
+    chunk_id: chunk.chunk_id,
+    runner_id: chunk.runner_id,
+    current_node_id: chunk.current_node_id,
+    current_node_name: chunk.current_node_name,
+    laneStatus: laneStatus(chunk.status),
+    environment_count: chunk.environment_count,
+    workspace_id: chunk.workspace_id,
+    project_id: chunk.project_id,
+    project_slug: chunk.project_slug,
+  };
+}
 
 /** Read the open graph-progress vocabulary without losing an unrecognized value. */
 export function fromGraphProgressState(state: hubApi.GraphProgressState): GraphProgressState {

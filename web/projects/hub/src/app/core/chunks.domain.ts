@@ -1,3 +1,5 @@
+import type { LaneStatus } from 'fleet';
+
 /** A node's latest visit in a chunk's graph. Unknown states retain the server's value. */
 export type GraphProgressState =
   | { readonly kind: 'current' | 'passed' | 'failed' | 'unvisited' }
@@ -19,4 +21,16 @@ export interface BoardDoneWindow {
 export interface BoardPageMetadata {
   readonly next_cursor: string | null;
   readonly board_done_policy: BoardDoneWindow | null | undefined;
+}
+/** Chunk facts used to render runner claims and workspace occupancy. */
+export interface RunnerClaimChunk {
+  readonly chunk_id: string;
+  readonly runner_id: string | null;
+  readonly current_node_id: string | null;
+  readonly current_node_name: string | null;
+  readonly laneStatus: LaneStatus;
+  readonly environment_count: number;
+  readonly workspace_id: string | null;
+  readonly project_id: string | null;
+  readonly project_slug: string | null;
 }

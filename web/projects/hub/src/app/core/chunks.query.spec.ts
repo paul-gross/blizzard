@@ -17,7 +17,7 @@ import {
   stubError,
   stubHubClient,
 } from 'fleet/testing';
-import { boardChunksQueryOptions, injectHubBoardChunksQuery } from './chunks.query';
+import { boardChunksQueryOptions, injectHubBoardChunksQuery, runnerChunksQueryOptions } from './chunks.query';
 import type { BoardChunksRead } from './chunks.model';
 
 @Component({
@@ -101,6 +101,25 @@ describe('injectHubBoardChunksQuery', () => {
     const cached = TestBed.inject(QueryClient).getQueryData<BoardChunksRead>(boardChunksQueryOptions(null).queryKey);
     expect(cached?.chunks[0]).toEqual(future);
     expect(cached?.pages[0].chunks[0]).toEqual(future);
+  });
+
+  it('projects runner claims from the same tenant-wide raw cache', async () => {
+    const held = { ...chunk('ch_held'), runner_id: 'rn_1', workspace_id: 'ws_1', environment_count: 2 };
+    stub = stubHubClient({
+      'GET /api/chunks': () => ({ chunks: [held], next_cursor: null, board_done_policy: null }),
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const runner = runnerChunksQueryOptions();
+    const board = boardChunksQueryOptions(null);
+    const raw = await client.fetchQuery(board);
+    expect(runner.queryKey).toEqual(board.queryKey);
+    expect(runner.select(raw).chunks[0]).toEqual({
+      chunk_id: 'ch_held', runner_id: 'rn_1', workspace_id: 'ws_1', environment_count: 2,
+      current_node_id: null, current_node_name: null, project_id: null, project_slug: null,
+      laneStatus: { kind: 'ready' },
+    });
+    expect(client.getQueryData(board.queryKey)).toEqual(raw);
+    expect(stub.forRoute('/api/chunks', 'GET')).toHaveLength(1);
   });
 
   it('drains every page of a multi-page response and concatenates them in order', async () => {
