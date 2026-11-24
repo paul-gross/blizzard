@@ -352,7 +352,7 @@ class HubNodeRouter:
         if edge is not None and edge.target_graph is not None:
             target = self._graphs.get_enabled_by_name(edge.target_graph)
             if target is None:
-                unresolvable = UnresolvableTarget.of(edge)
+                unresolvable = UnresolvableTarget.of(node, choice, edge)
                 return _Escalate(ActionEscalation(unresolvable.cause, unresolvable.detail))
             return _Migrate(Landing.authored(edge, target, node))
         to_node_id = _target(graph, edge.to_node_name) if edge is not None else None

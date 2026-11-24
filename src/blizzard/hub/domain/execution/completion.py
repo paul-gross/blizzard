@@ -160,11 +160,14 @@ def re_escalates(
     *,
     epoch: int,
     taken: EscalateChoice | None = None,
+    node: Node | None = None,
+    choice: str = "",
 ) -> bool:
     """Whether taking ``edge`` at ``epoch`` would only re-escalate — answered ``escalated`` with
     nothing written: it crosses graphs to the very target that still names no enabled graph the
     attempt at ``epoch`` already escalated over, or it is the very ``escalate`` choice (``taken``)
-    the attempt at ``epoch`` already escalated by."""
+    the attempt at ``epoch`` already escalated by. An unresolvable target is the same only when ``node``
+    and ``choice`` match too: a different choice to the same graph is a different report."""
     if edge is None:
         return False
     if edge.escalates:
@@ -179,9 +182,10 @@ def re_escalates(
         return False
     escalation = facts.open_escalation_at(epoch)
     return (
-        escalation is not None
+        node is not None
+        and escalation is not None
         and escalation.cause == EscalationCause.MIGRATION_TARGET_UNRESOLVABLE
-        and escalation.detail == UnresolvableTarget.of(edge).detail
+        and escalation.detail == UnresolvableTarget.of(node, choice, edge).detail
     )
 
 
@@ -341,13 +345,16 @@ class UnresolvableTarget:
     cause: EscalationCause = EscalationCause.MIGRATION_TARGET_UNRESOLVABLE
 
     @classmethod
-    def of(cls, edge: Edge) -> UnresolvableTarget:
+    def of(cls, node: Node, choice: str, edge: Edge) -> UnresolvableTarget:
         return cls(
             takeover_command=(
                 f"cross-graph target `{edge.target_graph}` names no enabled graph — mint a graph "
                 f"named `{edge.target_graph}` (or edit the choice), then requeue this chunk"
             ),
-            detail=f"cross-graph target graph `{edge.target_graph}` names no enabled graph",
+            detail=(
+                f"node `{node.name}` took choice `{choice}`, whose cross-graph target graph "
+                f"`{edge.target_graph}` names no enabled graph"
+            ),
         )
 
 

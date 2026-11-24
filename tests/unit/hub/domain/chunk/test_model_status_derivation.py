@@ -16,6 +16,7 @@ from blizzard.hub.domain.chunk.model import (
     ChunkFacts,
     DecisionFact,
     EscalationFact,
+    HubNodePollFact,
     LeaseFact,
     MigrationFact,
     PauseFact,
@@ -225,6 +226,24 @@ def test_newest_transition_into_hub_node_is_delivering() -> None:
         transitions=[
             TransitionFact(to_node_id="nd_deliver", to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(5)),
         ],
+    )
+    assert facts.status() is ChunkStatus.DELIVERING
+
+
+def test_an_awaiting_merge_park_at_a_hub_node_is_delivering_while_no_ask_or_decision_is_open() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id="nd_deliver", to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(5)),
+        ],
+        hub_node_polls=[
+            HubNodePollFact(
+                node_id="nd_deliver", epoch=1, polled_at=_at(6), next_poll_at=_at(66), kind="awaiting-merge"
+            )
+        ],
+        questions=[QuestionFact(question_id="qn_1", asked_at=_at(2), answered=True)],
+        decisions=[DecisionFact(decision_id="dec_1", submitted_at=_at(3), resolved=True)],
     )
     assert facts.status() is ChunkStatus.DELIVERING
 

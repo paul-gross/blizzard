@@ -165,6 +165,23 @@ def test_a_retire_leaves_a_routines_default_and_a_chores_override_reading_none(h
     assert cadence_change["diff"][0]["new"]["urgency_id"] is None
 
 
+def test_enabling_a_retired_urgency_restores_neither_a_routines_default_nor_a_chores_override(
+    hub: HubHarness,
+) -> None:
+    _urgency(hub, "urgent")
+    routine = _routine(hub, default_urgency="urgent").json()
+    cadence = _cadence(hub, {"key": "nightly", "routine": "sweep", "urgency": "urgent"}).json()
+    _retire(hub, "urgent")
+
+    enabled = hub.client.post("/api/urgencies/urgent/enable", json={})
+
+    assert enabled.status_code == 200, enabled.text
+    after = hub.client.get(f"/api/routines/{routine['routine_id']}").json()
+    assert (after["default_urgency"], after["revision"]) == (None, 2)
+    kept = hub.client.get(f"/api/cadences/{cadence['cadence_id']}").json()
+    assert ([c["urgency"] for c in kept["chores"]], kept["revision"]) == ([None], 2)
+
+
 def test_one_document_declares_an_urgency_and_the_routine_and_chore_naming_it(hub: HubHarness) -> None:
     applied = _apply(
         hub,

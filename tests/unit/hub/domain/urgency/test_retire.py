@@ -13,7 +13,12 @@ from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.kernel.locks import HubLock, LockKey
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.urgency.model import MoveTo, Urgency, UrgencyId
-from blizzard.hub.domain.urgency.ports import IReadTenantSettings, IWriteUrgencyChunks, IWriteUrgencyRepository
+from blizzard.hub.domain.urgency.ports import (
+    IReadTenantSettings,
+    IWriteUrgencyChunks,
+    IWriteUrgencyRepository,
+    urgency_lock,
+)
 from blizzard.hub.domain.urgency.services import UrgencyLifecycle
 from blizzard.hub.domain.urgency.settings import TenantSettings
 from tests.support.urgency import urgency
@@ -29,6 +34,7 @@ _TARGET = urgency("routine")
 @dataclass
 class _Transactions:
     chunk_sets: list[list[str]] = field(default_factory=list[list[str]])
+    key_sets: list[list[LockKey]] = field(default_factory=list[list[LockKey]])
 
     @contextmanager
     def begin(self) -> Generator[Transaction]:
@@ -38,6 +44,7 @@ class _Transactions:
         self, *, chunks: Sequence[str] = (), keys: Sequence[LockKey] = (), hub: Sequence[HubLock] = ()
     ) -> Transaction:
         self.chunk_sets.append(list(chunks))
+        self.key_sets.append(list(keys))
         return cast(Transaction, self)
 
 
@@ -130,3 +137,28 @@ def test_re_retiring_a_retired_urgency_with_open_chunks_and_a_move_writes_nothin
 
     assert (chunks.moves, urgencies.recorded, retired.moved) == ([], [], ())
     assert retired.urgency.retired
+
+
+def test_a_retire_locks_both_the_retiring_urgency_and_its_destination() -> None:
+    transactions = _Transactions()
+    lifecycle = UrgencyLifecycle(
+        urgencies=cast(IWriteUrgencyRepository, _Urgencies()),
+        settings=cast(IReadTenantSettings, _Settings()),
+        chunks=cast(IWriteUrgencyChunks, _Chunks(ahead=["chk_a"], late=[])),
+        transactions=cast(IHubTransactions, transactions),
+        clock=FixedClock(_AT),
+        references=(),
+    )
+
+    lifecycle.retire(
+        _RETIRING,
+        ChangeContext(actor="usr_op", door=Door.CLI),
+        move_to=MoveTo(key=_TARGET.slug, urgency=_TARGET),
+        may_control=True,
+        if_match=None,
+    )
+
+    assert transactions.key_sets
+    for keys in transactions.key_sets:
+        assert urgency_lock(_RETIRING.urgency_id) in keys
+        assert urgency_lock(_TARGET.urgency_id) in keys

@@ -52,6 +52,9 @@ nodes:
         phantom:
           description: Hand off to another graph never minted.
           to: graph:phantom
+        haunt:
+          description: Hand off to the same never-minted graph by another choice.
+          to: graph:ghost
 """
 
 _ESCALATED = "escalated — requeue the chunk"
@@ -224,6 +227,16 @@ def test_a_different_unresolvable_cross_graph_choice_after_one_that_escalated_is
     assert chunk.complete("ghost")["outcome"] == _PARKED
 
     refused = chunk.complete("phantom")
+
+    assert refused["outcome"] == "failure" and _ESCALATED in refused["detail"]
+    assert chunk.rows(s.escalations) == 1 and chunk.rows(s.transitions) == 0
+
+
+def test_a_different_choice_to_the_same_unresolvable_graph_is_refused(tmp_path: Path) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+    assert chunk.complete("ghost")["outcome"] == _PARKED
+
+    refused = chunk.complete("haunt")
 
     assert refused["outcome"] == "failure" and _ESCALATED in refused["detail"]
     assert chunk.rows(s.escalations) == 1 and chunk.rows(s.transitions) == 0
