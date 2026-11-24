@@ -12,7 +12,7 @@ import { fromArtifactView } from '../chunk-detail/artifact.translate';
 import { fromWorkItemsView } from './work-items.translate';
 import { toAwaitingHuman } from '../awaiting-human/awaiting-human.translate';
 import type { ChunkDetail } from './chunk-detail.model';
-import { fromChunkDeleteRefusal, fromChunkWaitKind, fromMigrationMode, fromMigrationSource, fromUsageKind, fromFlowState, fromFlowFactKind, fromFlowVerdict } from './chunk-wait.translate';
+import { fromChunkDeleteRefusal, fromChunkWaitKind, fromMigrationMode, fromMigrationSource, fromUsageKind, fromBounceView, fromChunkFlowPlaceView, fromFlowFactView } from './chunk-wait.translate';
 
 /** Each plane's live-covered backstop — the interval its own live-update registry
  * leaves as insurance against a dropped frame. */
@@ -32,7 +32,7 @@ export function projectChunkDetail(detail: WireChunkDetail): ChunkDetail {
     artifacts: detail.artifacts.map(fromArtifactView),
     awaiting_external_merge: detail.awaiting_external_merge,
     blocked: detail.blocked && { prerequisite_chunk_id: detail.blocked.prerequisite_chunk_id, unmet_count: detail.blocked.unmet_count },
-    bounces: detail.bounces.map((b) => ({ cause: b.cause, envelope: b.envelope, recorded_at: b.recorded_at, rework: b.rework, withdrawn: b.withdrawn })),
+    bounces: detail.bounces.map(fromBounceView),
     chunk_id: detail.chunk_id,
     closed_prs: detail.closed_prs.map((p) => ({ number: p.number, repo: p.repo, url: p.url })),
     completable: detail.completable,
@@ -54,10 +54,8 @@ export function projectChunkDetail(detail: WireChunkDetail): ChunkDetail {
       takeover_command: detail.escalation.takeover_command,
       wrapped_takeover_command: detail.escalation.wrapped_takeover_command,
     },
-    flow_places: detail.flow_places.map((f) => ({ branch: f.branch, flow_id: f.flow_id, in_line: f.in_line, next_poll_at: f.next_poll_at,
-      position: f.position, repository_name: f.repository_name, repository_slug: f.repository_slug, resource: f.resource, state: fromFlowState(f.state) })),
-    flow_record: detail.flow_record.map((f) => ({ at: f.at, chunk_id: f.chunk_id, flow_id: f.flow_id, id: f.id, kind: fromFlowFactKind(f.kind),
-      outcome: f.outcome, revision: f.revision, rework: f.rework, submission_id: f.submission_id, verdict: f.verdict === null ? null : fromFlowVerdict(f.verdict), wait: f.wait })),
+    flow_places: detail.flow_places.map(fromChunkFlowPlaceView),
+    flow_record: detail.flow_record.map(fromFlowFactView),
     graph_created_at: detail.graph_created_at,
     graph_editable: detail.graph_editable,
     graph_id: detail.graph_id,

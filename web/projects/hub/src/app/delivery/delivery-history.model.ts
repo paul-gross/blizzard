@@ -2,24 +2,24 @@ import {
   bounceReason,
   compactBounce,
   type ChunkDetailAggregate,
-  type FlowView,
   formatAbsolute,
   formatSeenTag,
   formatWhen,
   formatWhenParts,
-  type hubApi,
   parseBounceEnvelope,
-  type RepositorySummary,
+  type ParsedBounceEnvelope,
   shortCommitHash,
   type Tone,
 } from 'fleet';
 
 import { ordinal, placeInLine, placeStateLabel, placeStateTone } from '../core/flow-place.model';
+import type { DeliveryFlow, DeliveryFlowFact, DeliveryRepository, DeliveryTransition } from './delivery.domain';
 import { deliveryDiagnostic, deliveryFailureLabel } from './delivery-failure-label.model';
 
 type ChunkDetail = Pick<ChunkDetailAggregate,
   'artifacts' | 'awaiting_external_merge' | 'bounces' | 'closed_prs' | 'flow_places' | 'flow_record' | 'history' | 'landed_repos' | 'open_prs'>;
-type FlowFactView = ChunkDetailAggregate['flow_record'][number];
+type FlowFactView = DeliveryFlowFact;
+type BounceUnlandedRepo = ParsedBounceEnvelope['unlanded'][number];
 
 /** A link the drawer draws. */
 export interface DrawerLink {
@@ -92,7 +92,7 @@ export function withdrawnAfter(facts: readonly FlowFactView[], turn: FlowFactVie
 }
 
 /** The repositories a bounce left unlanded, by forge-side `owner/repo` — none for an envelope that does not parse. */
-function unlandedOf(envelope: Pick<hubApi.BounceEnvelope, 'unlanded'> | null): readonly hubApi.BounceUnlandedRepo[] {
+function unlandedOf(envelope: Pick<ParsedBounceEnvelope, 'unlanded'> | null): readonly BounceUnlandedRepo[] {
   return envelope?.unlanded ?? [];
 }
 
@@ -101,7 +101,7 @@ function shortName(forge: string): string {
 }
 
 /** Each flow's forge-side `owner/repo`, by flow id. */
-function flowForges(flows: readonly FlowView[], repositories: readonly RepositorySummary[]): ReadonlyMap<string, string> {
+function flowForges(flows: readonly DeliveryFlow[], repositories: readonly DeliveryRepository[]): ReadonlyMap<string, string> {
   return new Map(
     flows.flatMap((flow) => {
       const repository = repositories.find((each) => each.repository_id === flow.repository_id);
@@ -122,7 +122,7 @@ export type HistoryTone = 'done' | 'waiting' | 'needs' | 'idle' | null;
  * that takes it up; any other turn that settled without landing — sent back, or ended judging nothing — any other
  * bounce, and a withdrawal are problems; a run of waits and a transition are context; anything else is neutral
  * progress. */
-function historyTone(kind: hubApi.FlowFactKind | 'bounced' | 'polls' | 'transition', rework = false): HistoryTone {
+function historyTone(kind: DeliveryFlowFact['kind']['kind'] | 'bounced' | 'polls' | 'transition', rework = false): HistoryTone {
   switch (kind) {
     case 'landed':
       return 'done';
@@ -249,7 +249,7 @@ function bounceEntry(detail: ChunkDetail, bounce: ChunkDetail['bounces'][number]
   };
 }
 
-function transitionText(transition: hubApi.TransitionView): string {
+function transitionText(transition: DeliveryTransition): string {
   const choice = transition.choice_name ? ` · ${transition.choice_name}` : '';
   return `${transition.from_node_name ?? 'start'}${choice} → ${transition.to_node_name ?? 'end'}`;
 }
@@ -259,7 +259,7 @@ function transitionText(transition: hubApi.TransitionView): string {
  * and the earliest after it, each once — the chunk's route into and out of every delivery event, whatever its graph
  * names its nodes. `transitions` must be sorted by `recorded_at`.
  */
-function framingTransitions(transitions: readonly hubApi.TransitionView[], anchors: readonly string[]): readonly hubApi.TransitionView[] {
+function framingTransitions(transitions: readonly DeliveryTransition[], anchors: readonly string[]): readonly DeliveryTransition[] {
   const picked = new Set<number>();
   for (const at of anchors) {
     const after = transitions.findIndex((transition) => transition.recorded_at > at);
@@ -363,8 +363,8 @@ function summary(detail: ChunkDetail, repos: readonly DrawerRepo[], now: number)
 /** The drawer's whole view of one chunk — `null` while its detail is unread: a block per repository, the delivery history, and a summary. */
 export function deliveryDrawerView(
   detail: ChunkDetail | undefined,
-  flows: readonly FlowView[],
-  repositories: readonly RepositorySummary[],
+  flows: readonly DeliveryFlow[],
+  repositories: readonly DeliveryRepository[],
   now: number,
 ): DeliveryDrawerView | null {
   if (detail === undefined) return null;

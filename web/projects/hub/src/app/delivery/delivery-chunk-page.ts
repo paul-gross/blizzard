@@ -5,9 +5,8 @@ import { map } from 'rxjs';
 
 import { KitBackBar } from 'fleet';
 import { AppLink } from 'fleet/shell';
-import { injectActiveFlowsQuery } from '../core/flows.query';
-import { injectLaneRepositoriesQuery } from '../core/repositories.query';
 import { DeliveryDrawer } from './delivery-drawer';
+import { injectDeliveryFlowsQuery, injectDeliveryRepositoriesQuery } from './delivery.query';
 
 /**
  * `/delivery/chunk/:chunkId` — the phone's screen for one chunk's delivery, opened from a Delivery card: a back row to
@@ -22,8 +21,8 @@ import { DeliveryDrawer } from './delivery-drawer';
 })
 export class DeliveryChunkPage {
   private readonly route = inject(ActivatedRoute);
-  private readonly flowsQuery = injectActiveFlowsQuery();
-  private readonly repositoriesQuery = injectLaneRepositoriesQuery();
+  private readonly flowsQuery = injectDeliveryFlowsQuery();
+  private readonly repositoriesQuery = injectDeliveryRepositoriesQuery();
 
   protected readonly chunkId = toSignal(this.route.paramMap.pipe(map((params) => params.get('chunkId') ?? '')), { initialValue: '' });
   protected readonly flows = computed(() => this.flowsQuery.data() ?? []);

@@ -10,7 +10,7 @@ import {
   provideTanStackQuery,
 } from '@tanstack/angular-query-experimental';
 
-import { FLEET_CLOCK, type ChunkWorkItemsView, type WorkItemsView } from 'fleet';
+import { FLEET_CLOCK, fromWorkItemsView, type ChunkWorkItemsView, type WorkItemsView } from 'fleet';
 import {
   type RequestClientStub,
   settle,
@@ -19,7 +19,7 @@ import {
   workItemEntry,
 } from 'fleet/testing';
 import { WORK_ITEMS_BATCH_SIZE } from './board-work-items.model';
-import { injectBoardWorkItemsQuery } from './board-work-items.query';
+import { injectBoardWorkItemDomainsQuery, injectBoardWorkItemsQuery } from './board-work-items.query';
 import { hubBoardChunkWorkItemsKey, hubChunkWorkItemsKey } from '../query-keys';
 
 @Component({
@@ -30,6 +30,7 @@ import { hubBoardChunkWorkItemsKey, hubChunkWorkItemsKey } from '../query-keys';
 class TestHost {
   readonly chunkIds = signal<readonly string[]>([]);
   readonly workItems = injectBoardWorkItemsQuery(() => this.chunkIds());
+  readonly workItemDomains = injectBoardWorkItemDomainsQuery(() => this.chunkIds());
 }
 
 const NOW = 10_000_000;
@@ -112,6 +113,24 @@ describe('injectBoardWorkItemsQuery', () => {
     expect(stub.requests).toHaveLength(1);
     expect(stub.requests[0].path).toBe('/api/work-items');
     expect(idsOf(stub.requests[0].search)).toEqual(all);
+  });
+
+  it('projects the same batches as translated domain items', async () => {
+    stub = stubHubClient({
+      'GET /api/work-items': ({ search }) => bulkAnswer(search),
+    });
+    const fixture = mount();
+    fixture.componentInstance.chunkIds.set(['ch_a', 'ch_b']);
+    await vi.waitFor(async () => {
+      await settle(fixture, 1);
+      expect(queryClient.isFetching()).toBe(0);
+    });
+    const domains = fixture.componentInstance.workItemDomains();
+
+    expect(domains.size).toBe(2);
+    expect(domains.get('ch_b')?.items[0].title).toBe('ch_b');
+    expect(domains.get('ch_b')).toEqual(fromWorkItemsView(titled('ch_b')));
+    expect(stub.requests).toHaveLength(1);
   });
 
   it('answers every chunk past one batch with one request per batch', async () => {

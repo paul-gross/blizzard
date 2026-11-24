@@ -1,9 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { asyncState, type FlowView, injectHubChunkDetailQuery, injectNowSignal, injectRunnerHostNames, type RepositorySummary } from 'fleet';
-import { injectProjectsQuery } from '../core/projects.query';
+import { asyncState, injectHubChunkDetailQuery, injectNowSignal, injectRunnerHostNames } from 'fleet';
+import { injectProjectDomainsQuery } from '../core/projects.query';
 import { injectShowProjectColors, openProjectColor } from '../core/project-lens-colors';
 import { deliveryDrawerView } from './delivery-history.model';
+import type { DeliveryFlow, DeliveryRepository } from './delivery.domain';
 import { DeliveryDrawerView } from './delivery-drawer-view';
 
 /**
@@ -20,8 +21,8 @@ import { DeliveryDrawerView } from './delivery-drawer-view';
 })
 export class DeliveryDrawer {
   readonly chunkId = input.required<string>();
-  readonly flows = input.required<readonly FlowView[]>();
-  readonly repositories = input.required<readonly RepositorySummary[]>();
+  readonly flows = input.required<readonly DeliveryFlow[]>();
+  readonly repositories = input.required<readonly DeliveryRepository[]>();
   /** Whether the drawer draws its close button — off on the phone's screen, whose back row returns to the list. */
   readonly closable = input(true);
   /** Emitted when the operator closes the drawer. */
@@ -29,7 +30,7 @@ export class DeliveryDrawer {
 
   private readonly detailQuery = injectHubChunkDetailQuery(() => this.chunkId());
   private readonly now = injectNowSignal();
-  private readonly projectsQuery = injectProjectsQuery();
+  private readonly projectsQuery = injectProjectDomainsQuery();
   private readonly showProjectColors = injectShowProjectColors();
 
   protected readonly runnerHosts = injectRunnerHostNames();

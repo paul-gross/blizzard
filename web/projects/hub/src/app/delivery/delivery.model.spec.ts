@@ -1,8 +1,9 @@
-import { type ChunkFlowPlaceView, type ChunkSummary, type FlowFactView, type FlowView, type hubApi, type RepositorySummary, domainStatusTone, toneColor, type WorkItemsView } from 'fleet';
-import { laneStatus } from 'fleet/shell';
-import { bounceView, chunkSummary, FIXTURE_NOW, fixtureInstant, landedRepoView, prView } from 'fleet/testing';
+import { domainStatusTone, type LaneStatus, toneColor } from 'fleet';
+import { domainBounce, domainLandedRepo, domainPr, FIXTURE_NOW, fixtureInstant } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
+import { deliveryChunk, deliveryFlow, deliveryFlowFact, deliveryRepository, deliveryWorkItems } from './delivery.builders';
+import type { DeliveryBounceRecord, DeliveryChunk, DeliveryFlowFact, DeliveryFlowPlace } from './delivery.domain';
 import {
   cardStageColor,
   stageTone,
@@ -11,7 +12,6 @@ import {
   deliveredRecently,
   deliveryChunkIds,
   type DeliveryInputs,
-  type DeliveryChunk,
   deliveryList,
   deliveryState,
   deliveryWhen,
@@ -19,34 +19,37 @@ import {
   toggledSelection,
 } from './delivery.model';
 
+type KnownLaneStatus = Exclude<LaneStatus['kind'], 'unknown'>;
+
 const MIN = 60;
 const HOUR = 60 * MIN;
 
-const chunk = (id: string, fields: Partial<ChunkSummary> = {}): DeliveryChunk => {
-  const summary = chunkSummary({ chunk_id: id, graph_id: 'gr_1', status: 'running', ...fields });
-  return { ...summary, laneStatus: laneStatus(summary.status) };
+/** A chunk with the hub's status named as the lane's known word. */
+const chunk = (id: string, fields: Partial<DeliveryChunk> & { status?: KnownLaneStatus } = {}): DeliveryChunk => {
+  const { status = 'running', ...rest } = fields;
+  return deliveryChunk({ chunk_id: id, laneStatus: { kind: status }, ...rest });
 };
 
-const flow = (id: string, repositoryId: string): FlowView =>
-  ({ flow_id: id, repository_id: repositoryId, branch: 'master', resource: `res-${id}`, line: [], last_landing: null, last_verdict: null, repository_name: null, repository_slug: null, turn: null }) as FlowView;
+const flow = (id: string, repositoryId: string) => deliveryFlow({ flow_id: id, repository_id: repositoryId });
 
-const repository = (id: string, name: string): RepositorySummary => ({ repository_id: id, name, owner: 'paul-gross', repo: name }) as RepositorySummary;
+const repository = (id: string, name: string) => deliveryRepository({ repository_id: id, name, repo: name });
 
 /** What the hub sends a `turn-ended` fact for each outcome these fixtures use, as its `NOT_VERDICTS` and reserved waits
  * judge it: `landed` lands, the reserved waits wait, an interruption, a cut-off, an escalation, or a supersession
  * judges nothing, any other answer bounces, and a conflict bounces as rework. */
-const JUDGED: Readonly<Record<string, Pick<FlowFactView, 'verdict' | 'wait' | 'rework'>>> = {
-  landed: { verdict: 'landed', wait: false, rework: false },
+const JUDGED: Readonly<Record<string, Pick<DeliveryFlowFact, 'verdict' | 'wait' | 'rework'>>> = {
+  landed: { verdict: { kind: 'landed' }, wait: false, rework: false },
   pending: { verdict: null, wait: true, rework: false },
   'awaiting-merge': { verdict: null, wait: true, rework: false },
   interrupted: { verdict: null, wait: false, rework: false },
   'cut-off': { verdict: null, wait: false, rework: false },
   escalated: { verdict: null, wait: false, rework: false },
   superseded: { verdict: null, wait: false, rework: false },
-  failure: { verdict: 'bounced', wait: false, rework: false },
-  conflict: { verdict: 'bounced', wait: false, rework: true },
+  failure: { verdict: { kind: 'bounced' }, wait: false, rework: false },
+  conflict: { verdict: { kind: 'bounced' }, wait: false, rework: true },
 };
-const judged = (kind: FlowFactView['kind'], outcome: string | null | undefined): Pick<FlowFactView, 'verdict' | 'wait' | 'rework'> => {
+type KnownFactKind = Exclude<DeliveryFlowFact['kind']['kind'], 'unknown'>;
+const judged = (kind: KnownFactKind, outcome: string | null | undefined): Pick<DeliveryFlowFact, 'verdict' | 'wait' | 'rework'> => {
   if (kind !== 'turn-ended') return { verdict: null, wait: false, rework: false };
   const judgement = outcome ? JUDGED[outcome] : undefined;
   if (judgement === undefined) throw new Error(`no hub judgement for the turn outcome ${String(outcome)}`);
@@ -55,37 +58,41 @@ const judged = (kind: FlowFactView['kind'], outcome: string | null | undefined):
 
 let factId = 0;
 /** A flow fact `secondsAgo` before the fixture's now. */
-const fact = (flowId: string, chunkId: string, kind: FlowFactView['kind'], secondsAgo: number, outcome: string | null = null): FlowFactView => ({
-  id: ++factId,
-  flow_id: flowId,
-  chunk_id: chunkId,
-  kind,
-  at: fixtureInstant(-secondsAgo),
-  outcome,
-  revision: null,
-  submission_id: `sub-${chunkId}`,
-  ...judged(kind, outcome),
-});
+const fact = (flowId: string, chunkId: string, kind: KnownFactKind, secondsAgo: number, outcome: string | null = null): DeliveryFlowFact =>
+  deliveryFlowFact({
+    id: ++factId,
+    flow_id: flowId,
+    chunk_id: chunkId,
+    kind: { kind },
+    at: fixtureInstant(-secondsAgo),
+    outcome,
+    revision: null,
+    submission_id: `sub-${chunkId}`,
+    ...judged(kind, outcome),
+  });
 
-const place = (flowId: string, position: number, state: ChunkFlowPlaceView['state'] = 'waiting', fields: Partial<ChunkFlowPlaceView> = {}): ChunkFlowPlaceView => ({
-  flow_id: flowId,
-  position,
-  state,
-  in_line: ['next', 'waiting', 'polling'].includes(state),
-  branch: 'master',
-  next_poll_at: null,
-  repository_name: null,
-  repository_slug: null,
-  resource: `res-${flowId}`,
-  ...fields,
-});
+const place = (flowId: string, position: number, state = 'waiting', fields: Partial<DeliveryFlowPlace> = {}): DeliveryFlowPlace => {
+  const known = ['landing', 'next', 'waiting', 'polling', 'awaiting-merge', 'passed-over'].includes(state);
+  return {
+    flow_id: flowId,
+    position,
+    state: (known ? { kind: state } : { kind: 'unknown', raw: state }) as DeliveryFlowPlace['state'],
+    in_line: ['next', 'waiting', 'polling'].includes(state),
+    branch: 'master',
+    next_poll_at: null,
+    repository_name: null,
+    repository_slug: null,
+    resource: `res-${flowId}`,
+    ...fields,
+  };
+};
 
 const FLOWS = [flow('fl_a', 'rp_a'), flow('fl_b', 'rp_b')];
 const REPOSITORIES = [repository('rp_a', 'blizzard'), repository('rp_b', 'blizzard-context')];
 
 /** The page's reads over `chunks`, every flow's facts newest first. */
-function inputs(chunks: readonly DeliveryChunk[], fields: Partial<Omit<DeliveryInputs, 'facts'>> & { facts?: readonly FlowFactView[] } = {}): DeliveryInputs {
-  const facts = new Map<string, FlowFactView[]>();
+function inputs(chunks: readonly DeliveryChunk[], fields: Partial<Omit<DeliveryInputs, 'facts'>> & { facts?: readonly DeliveryFlowFact[] } = {}): DeliveryInputs {
+  const facts = new Map<string, DeliveryFlowFact[]>();
   for (const each of [...(fields.facts ?? [])].sort((a, b) => b.at.localeCompare(a.at))) facts.set(each.flow_id, [...(facts.get(each.flow_id) ?? []), each]);
   return {
     flows: FLOWS,
@@ -109,21 +116,21 @@ const only = (i: DeliveryInputs) => {
 
 describe('the chunks the page reads', () => {
   const CHUNKS = [
-    chunk('ch_pr', { open_prs: [prView()] }),
+    chunk('ch_pr', { open_prs: [domainPr()] }),
     chunk('ch_place', { flow_places: [place('fl_a', 1)] }),
-    chunk('ch_merge', { status: 'waiting_on_human', awaiting_external_merge: true, graph_id: 'gr_2' }),
+    chunk('ch_merge', { status: 'waiting_on_human', awaiting_external_merge: true }),
     chunk('ch_landed', { landed: true, status: 'done' }),
     chunk('ch_idle', { status: 'ready' }),
   ];
 
   it('reads titles for every chunk that can hold a row, and every running chunk', () => {
     const facts = new Map([['fl_a', [fact('fl_a', 'ch_onflow', 'turn-ended', MIN, 'failure')]]]);
-    const chunks = [...CHUNKS, chunk('ch_run'), chunk('ch_onflow', { status: 'needs_human' }), chunk('ch_bounced', { status: 'needs_human', latest_bounce: bounceView() })];
+    const chunks = [...CHUNKS, chunk('ch_run'), chunk('ch_onflow', { status: 'needs_human' }), chunk('ch_bounced', { status: 'needs_human', latest_bounce: domainBounce() })];
     expect(deliveryChunkIds(chunks, facts)).toEqual(['ch_pr', 'ch_place', 'ch_merge', 'ch_landed', 'ch_run', 'ch_onflow', 'ch_bounced']);
   });
 
   it('reads the titles of every chunk the list draws a row for', () => {
-    const chunks = [...CHUNKS, chunk('ch_bounced', { status: 'needs_human', latest_bounce: bounceView({ recorded_at: fixtureInstant(-MIN) }), bounce_count: 1 })];
+    const chunks = [...CHUNKS, chunk('ch_bounced', { status: 'needs_human', latest_bounce: domainBounce({ recorded_at: fixtureInstant(-MIN) }), bounce_count: 1 })];
     const read = inputs(chunks);
     const rows = [...deliveryList(read).delivering, ...deliveryList(read).delivered].map((row) => row.chunk.chunkId);
     expect(rows).toContain('ch_bounced');
@@ -133,7 +140,7 @@ describe('the chunks the page reads', () => {
 
 describe('a row\'s stage', () => {
   it('reads an open PR, or an awaited merge, as PR open', () => {
-    expect(only(inputs([chunk('ch_1', { open_prs: [prView()] })])).stage).toBe(0);
+    expect(only(inputs([chunk('ch_1', { open_prs: [domainPr()] })])).stage).toBe(0);
     expect(only(inputs([chunk('ch_1', { awaiting_external_merge: true })])).stage).toBe(0);
   });
 
@@ -143,13 +150,13 @@ describe('a row\'s stage', () => {
   });
 
   it('reads a chunk landed on any repository as landed, still delivering while unlanded overall', () => {
-    const partial = only(inputs([chunk('ch_1', { landed_repos: [landedRepoView()], flow_places: [place('fl_b', 1)] })]));
+    const partial = only(inputs([chunk('ch_1', { landed_repos: [domainLandedRepo()], flow_places: [place('fl_b', 1)] })]));
     expect(partial.stage).toBe(3);
-    expect(deliveryList(inputs([chunk('ch_1', { landed_repos: [landedRepoView()] })])).delivering).toHaveLength(1);
+    expect(deliveryList(inputs([chunk('ch_1', { landed_repos: [domainLandedRepo()] })])).delivering).toHaveLength(1);
   });
 
   it('reads a turn the hub judged landed as landed, though it left no landed repository', () => {
-    const row = only(inputs([chunk('ch_1', { open_prs: [prView()] })], { facts: [fact('fl_a', 'ch_1', 'turn-ended', MIN, 'landed')] }));
+    const row = only(inputs([chunk('ch_1', { open_prs: [domainPr()] })], { facts: [fact('fl_a', 'ch_1', 'turn-ended', MIN, 'landed')] }));
     expect(row.stage).toBe(3);
   });
 
@@ -160,11 +167,11 @@ describe('a row\'s stage', () => {
 
 describe('a row\'s bounce', () => {
   const ENVELOPE = JSON.stringify({ cause: 'failure', detail: 'pre-push checks failed in `lint`', unlanded: [] });
-  const bounced = (minutesAgo: number, fields: Partial<ChunkSummary> = {}) =>
-    chunk('ch_1', { latest_bounce: bounceView({ cause: 'failure', envelope: ENVELOPE, recorded_at: fixtureInstant(-minutesAgo * MIN) }), bounce_count: 2, ...fields });
+  const bounced = (minutesAgo: number, fields: Partial<DeliveryChunk> & { status?: KnownLaneStatus } = {}) =>
+    chunk('ch_1', { latest_bounce: domainBounce({ cause: 'failure', envelope: ENVELOPE, recorded_at: fixtureInstant(-minutesAgo * MIN) }), bounce_count: 2, ...fields });
 
   it('reads the hub\'s latest bounce, its reason without code ticks, and the chunk\'s bounce count', () => {
-    const row = only(inputs([bounced(50, { open_prs: [prView()] })]));
+    const row = only(inputs([bounced(50, { open_prs: [domainPr()] })]));
     expect(row.bounce).toMatchObject({ cause: 'failure', reason: 'pre-push checks failed in lint', count: 2, at: fixtureInstant(-50 * MIN) });
     expect(row.bounce?.title).toContain('failure\npre-push checks failed in lint');
     expect(row.statusColor).toBe(toneColor('stale'));
@@ -172,7 +179,7 @@ describe('a row\'s bounce', () => {
 
   it('reads the bounce, not the turn that wrote it a moment later, as the row\'s one bounce', () => {
     const turnEnd = { ...fact('fl_a', 'ch_1', 'turn-ended', 0, 'failure'), at: new Date(Date.parse(fixtureInstant(-50 * MIN)) + 3).toISOString() };
-    const row = only(inputs([bounced(50, { bounce_count: 1, open_prs: [prView()] })], { facts: [turnEnd] }));
+    const row = only(inputs([bounced(50, { bounce_count: 1, open_prs: [domainPr()] })], { facts: [turnEnd] }));
     expect(row.bounce).toMatchObject({ cause: 'failure', reason: 'pre-push checks failed in lint', count: 1 });
     expect(row.bounce?.title).not.toContain('No bounce recorded');
   });
@@ -187,12 +194,12 @@ describe('a row\'s bounce', () => {
   it('keeps a footprintless chunk\'s bounce for a day, and one with an open change however old', () => {
     expect(only(inputs([bounced(23 * 60)])).stage).toBe(-1);
     expect(delivering(inputs([bounced(25 * 60)]))).toEqual([]);
-    expect(only(inputs([bounced(25 * 60, { open_prs: [prView()] })])).bounce?.cause).toBe('failure');
+    expect(only(inputs([bounced(25 * 60, { open_prs: [domainPr()] })])).bounce?.cause).toBe('failure');
   });
 
   it('names the bounce withdrawn as the hub records it, whatever the flow record holds', () => {
-    const withdrawn = (bounce: Partial<hubApi.BounceView>, facts: readonly FlowFactView[] = []) =>
-      only(inputs([chunk('ch_1', { open_prs: [prView()], latest_bounce: bounceView({ cause: 'failure', envelope: ENVELOPE, recorded_at: fixtureInstant(-50 * MIN), ...bounce }), bounce_count: 1 })], { facts }));
+    const withdrawn = (bounce: Partial<DeliveryBounceRecord>, facts: readonly DeliveryFlowFact[] = []) =>
+      only(inputs([chunk('ch_1', { open_prs: [domainPr()], latest_bounce: domainBounce({ cause: 'failure', envelope: ENVELOPE, recorded_at: fixtureInstant(-50 * MIN), ...bounce }), bounce_count: 1 })], { facts }));
     const row = withdrawn({ withdrawn: true });
     expect(row.bounce?.withdrawn).toBe(true);
     expect(cardStageLabel(row)).toBe('delivery failed · withdrawn');
@@ -203,7 +210,7 @@ describe('a row\'s bounce', () => {
   });
 
   it('falls back to the recorded cause when an envelope has no detail', () => {
-    const row = only(inputs([bounced(5, { open_prs: [prView()], latest_bounce: bounceView({ cause: 'failure', envelope: JSON.stringify({ cause: 'failure' }), recorded_at: fixtureInstant(-5 * MIN) }) })]));
+    const row = only(inputs([bounced(5, { open_prs: [domainPr()], latest_bounce: domainBounce({ cause: 'failure', envelope: JSON.stringify({ cause: 'failure' }), recorded_at: fixtureInstant(-5 * MIN) }) })]));
     expect(row.bounce?.reason).toBe('failure');
     expect(row.bounce?.compact).toEqual({ identity: null, reason: 'failure', full: 'failure' });
     expect(row.bounce?.title.split('\n')).toHaveLength(2);
@@ -214,9 +221,28 @@ describe('a row\'s bounce', () => {
   });
 });
 
+describe('a vocabulary value this build does not list', () => {
+  const unknownFact = (verdict: DeliveryFlowFact['verdict'], kind: DeliveryFlowFact['kind']): DeliveryFlowFact =>
+    deliveryFlowFact({ id: ++factId, chunk_id: 'ch_1', flow_id: 'fl_a', at: fixtureInstant(-MIN), kind, verdict, submission_id: 'sub-ch_1' });
+
+  it('counts an unknown place state as in line when the hub says so, not as landing', () => {
+    const row = only(inputs([chunk('ch_1', { flow_places: [place('fl_a', 1, 'mystery', { in_line: true })] })]));
+    expect(row.stage).toBe(1);
+    expect(row.line?.best).toBe('#1');
+  });
+
+  it('lands no row, and moves no stage, for an unknown fact kind or verdict', () => {
+    const odd = unknownFact({ kind: 'unknown', raw: 'maybe' }, { kind: 'unknown', raw: 'rewound' });
+    const row = only(inputs([chunk('ch_1', { open_prs: [domainPr()] })], { facts: [odd] }));
+    expect(row.stage).toBe(0);
+    const landedChunk = only(inputs([chunk('ch_1', { landed: true, status: 'done' })], { facts: [odd] }));
+    expect(landedChunk.at).toBe(null);
+  });
+});
+
 describe('the list\'s read state', () => {
   const settled = { isPending: () => false, isError: () => false };
-  const list = deliveryList(inputs([chunk('ch_1', { open_prs: [prView()] })]));
+  const list = deliveryList(inputs([chunk('ch_1', { open_prs: [domainPr()] })]));
   const read = (size: number, pending: boolean) => ({ facts: new Map(Array.from({ length: size }, (_, i) => [`fl_${i}`, []])), pending });
 
   it('loads until the first of the flows\' records is read, and not again when another flow\'s record is', () => {
@@ -243,7 +269,7 @@ describe('the phone\'s cards', () => {
   });
 
   it('names a bounce, a place in line, or the furthest stage, and colours it', () => {
-    const bounce = only(inputs([chunk('ch_1', { open_prs: [prView()], latest_bounce: bounceView({ cause: 'conflict', recorded_at: fixtureInstant(-MIN) }), bounce_count: 1 })]));
+    const bounce = only(inputs([chunk('ch_1', { open_prs: [domainPr()], latest_bounce: domainBounce({ cause: 'conflict', recorded_at: fixtureInstant(-MIN) }), bounce_count: 1 })]));
     const inLine = only(inputs([chunk('ch_1', { flow_places: [place('fl_a', 2)] })]));
     const landed = only(inputs([chunk('ch_1', { landed: true, status: 'done' })]));
     expect([bounce, inLine, landed].map(cardStageLabel)).toEqual(['merge conflict', 'in line #2', 'landed']);
@@ -259,8 +285,8 @@ describe('the phone\'s cards', () => {
 describe('the list\'s order', () => {
   it('splits the delivering from the delivered, each newest first, an undated row last', () => {
     const chunks = [
-      chunk('ch_old', { open_prs: [prView()] }),
-      chunk('ch_undated', { open_prs: [prView()] }),
+      chunk('ch_old', { open_prs: [domainPr()] }),
+      chunk('ch_undated', { open_prs: [domainPr()] }),
       chunk('ch_new', { flow_places: [place('fl_a', 1)] }),
       chunk('ch_land_old', { landed: true, status: 'done', completed_at: fixtureInstant(-5 * HOUR) }),
       chunk('ch_land_new', { landed: true, status: 'done', completed_at: fixtureInstant(-9 * HOUR) }),
@@ -277,7 +303,7 @@ describe('the list\'s order', () => {
   });
 
   it('finds a listed row by chunk id across both runs, and nothing for none', () => {
-    const list = deliveryList(inputs([chunk('ch_pr', { open_prs: [prView()] }), chunk('ch_done', { landed: true, status: 'done' })]));
+    const list = deliveryList(inputs([chunk('ch_pr', { open_prs: [domainPr()] }), chunk('ch_done', { landed: true, status: 'done' })]));
     expect(findRow(list, 'ch_done')?.chunk.chunkId).toBe('ch_done');
     expect(findRow(list, 'ch_missing')).toBeNull();
     expect(findRow(list, null)).toBeNull();
@@ -309,27 +335,27 @@ describe('a row\'s line, links, step and icon', () => {
   });
 
   it('links an in-flight row\'s open PRs, and a landed row\'s commits then its merged PRs', () => {
-    const open = only(inputs([chunk('ch_1', { open_prs: [prView({ number: 7 })] })]));
-    expect(open.links).toEqual([{ repo: 'blizzard', text: '#7', url: prView().url, title: 'paul-gross/blizzard#7' }]);
-    const landed = only(inputs([chunk('ch_1', { landed: true, status: 'done', landed_repos: [landedRepoView()], closed_prs: [prView({ number: 8 })] })]));
+    const open = only(inputs([chunk('ch_1', { open_prs: [domainPr({ number: 7 })] })]));
+    expect(open.links).toEqual([{ repo: 'blizzard', text: '#7', url: domainPr().url, title: 'paul-gross/blizzard#7' }]);
+    const landed = only(inputs([chunk('ch_1', { landed: true, status: 'done', landed_repos: [domainLandedRepo()], closed_prs: [domainPr({ number: 8 })] })]));
     expect(landed.links.map((link) => link.text)).toEqual(['9f2c4e1', '#8']);
   });
 
   it('writes the step as graph/node · host/runner, the runner only while one holds it', () => {
-    const held = chunk('ch_1', { open_prs: [prView()], current_node_name: 'deliver', graph_name: 'adv-dwf', runner_id: 'rn_1', runner_name: 'r-claude' });
+    const held = chunk('ch_1', { open_prs: [domainPr()], current_node_name: 'deliver', graph_name: 'adv-dwf', runner_id: 'rn_1', runner_name: 'r-claude' });
     expect(only(inputs([held], { runnerHosts: new Map([['rn_1', 'xps']]) })).step).toBe('adv-dwf/deliver · xps/r-claude');
-    expect(only(inputs([chunk('ch_1', { open_prs: [prView()], current_node_name: 'deliver' })])).step).toBe('deliver');
-    expect(only(inputs([chunk('ch_1', { open_prs: [prView()] })])).step).toBeNull();
+    expect(only(inputs([chunk('ch_1', { open_prs: [domainPr()], current_node_name: 'deliver' })])).step).toBe('deliver');
+    expect(only(inputs([chunk('ch_1', { open_prs: [domainPr()] })])).step).toBeNull();
   });
 
   it('keeps a human-waiting chunk\'s own icon, draws any other in flight as running, and a landed one as done', () => {
-    expect(only(inputs([chunk('ch_1', { status: 'needs_human', open_prs: [prView()] })])).icon).toEqual({ lane: 'needs', status: { kind: 'needs_human' } });
-    expect(only(inputs([chunk('ch_1', { status: 'delivering', open_prs: [prView()] })])).icon).toEqual({ lane: 'running', status: { kind: 'running' } });
+    expect(only(inputs([chunk('ch_1', { status: 'needs_human', open_prs: [domainPr()] })])).icon).toEqual({ lane: 'needs', status: { kind: 'needs_human' } });
+    expect(only(inputs([chunk('ch_1', { status: 'delivering', open_prs: [domainPr()] })])).icon).toEqual({ lane: 'running', status: { kind: 'running' } });
     expect(only(inputs([chunk('ch_1', { landed: true, status: 'done' })])).icon).toEqual({ lane: 'done', status: { kind: 'done' } });
   });
 
   it('uses the projected status for title reads, lane and tone, including unknown statuses', () => {
-    const projected = { ...chunk('ch_1', { status: 'ready', open_prs: [prView()] }), laneStatus: { kind: 'needs_human' } as const };
+    const projected = chunk('ch_1', { status: 'needs_human', open_prs: [domainPr()] });
     const row = only(inputs([projected]));
     expect(row.icon).toEqual({ lane: 'needs', status: { kind: 'needs_human' } });
     expect(row.statusColor).toBe(toneColor('needs'));
@@ -340,16 +366,16 @@ describe('a row\'s line, links, step and icon', () => {
   });
 
   it('holds a title skeleton until the chunk\'s work items are read', () => {
-    const pr = chunk('ch_1', { open_prs: [prView()] });
+    const pr = chunk('ch_1', { open_prs: [domainPr()] });
     expect(only(inputs([pr])).chunk.titlesPending).toBe(true);
-    expect(only(inputs([pr], { workItems: new Map([['ch_1', { items: [] } as unknown as WorkItemsView]]) })).chunk.titlesPending).toBe(false);
+    expect(only(inputs([pr], { workItems: new Map([['ch_1', deliveryWorkItems({ items: [] })]]) })).chunk.titlesPending).toBe(false);
   });
 });
 
 describe('chunkLine on the hub\'s classification', () => {
   it('lists only the places the hub affirms are in line, an unknown state included', () => {
-    const unknown = place('fl_a', 2, 'mystery' as ChunkFlowPlaceView['state'], { in_line: false });
-    const affirmed = place('fl_b', 4, 'mystery' as ChunkFlowPlaceView['state'], { in_line: true });
+    const unknown = place('fl_a', 2, 'mystery', { in_line: false });
+    const affirmed = place('fl_b', 4, 'mystery', { in_line: true });
     const chunkA = chunk('ch_1', { flow_places: [unknown] });
     const chunkB = chunk('ch_2', { flow_places: [unknown, affirmed] });
     expect(chunkLine(chunkA, inputs([chunkA]))).toBeNull();
@@ -357,7 +383,7 @@ describe('chunkLine on the hub\'s classification', () => {
   });
 
   it('lists no place lacking in_line', () => {
-    const bare = { ...place('fl_a', 2, 'waiting'), in_line: undefined } as unknown as ChunkFlowPlaceView;
+    const bare = { ...place('fl_a', 2, 'waiting'), in_line: undefined } as unknown as DeliveryFlowPlace;
     const c = chunk('ch_1', { flow_places: [bare] });
     expect(chunkLine(c, inputs([c]))).toBeNull();
   });

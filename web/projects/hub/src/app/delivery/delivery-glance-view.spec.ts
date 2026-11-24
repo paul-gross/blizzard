@@ -3,7 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import { formatAbsolute, type KitAsyncStateValue } from 'fleet';
-import { bounceView, chunkSummary, FIXTURE_NOW, fixtureInstant, settle } from 'fleet/testing';
+import { domainBounce, FIXTURE_NOW, fixtureInstant, settle } from 'fleet/testing';
+import { deliveryChunk } from './delivery.builders';
 import { DeliveryGlanceView } from './delivery-glance-view';
 import type { DeliveryList, DeliveryRow } from './delivery.model';
 import { deliveryList } from './delivery.model';
@@ -42,10 +43,10 @@ describe('DeliveryGlanceView', () => {
 
   it.each(['{}', ''])('keeps the recorded cause and full dated hover through the real list model without an envelope account: %s', async (envelope) => {
     const list = deliveryList({
-      chunks: [{ ...chunkSummary({
-        chunk_id: 'ch_timeout', graph_id: 'gr_build', status: 'needs_human', bounce_count: 1,
-        latest_bounce: bounceView({ cause: 'poll-timeout', envelope, recorded_at: fixtureInstant(-60) }),
-      }), laneStatus: { kind: 'needs_human' } }],
+      chunks: [deliveryChunk({
+        chunk_id: 'ch_timeout', laneStatus: { kind: 'needs_human' }, bounce_count: 1,
+        latest_bounce: domainBounce({ cause: 'poll-timeout', envelope, recorded_at: fixtureInstant(-60) }),
+      })],
       flows: [], repositories: [], facts: new Map(), workItems: new Map(), projectColors: null, runnerHosts: new Map(), now: FIXTURE_NOW,
     });
     const { el } = await render('ready', list);

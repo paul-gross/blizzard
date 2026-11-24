@@ -8,3 +8,5 @@ export {
   injectHubChunkDetailQuery,
   injectHubChunkWorkItemsQuery,
 } from './chunk-detail.query';
+export { fromWorkItemsView } from './work-items.translate';
+export { fromBounceView, fromChunkFlowPlaceView, fromFlowFactView } from './chunk-wait.translate';

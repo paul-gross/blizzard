@@ -5,7 +5,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { FLEET_CLOCK, type FlowFactView, formatAbsolute } from 'fleet';
+import { FLEET_CLOCK, formatAbsolute } from 'fleet';
 import {
   bounceView,
   FIXTURE_NOW,
@@ -44,7 +44,7 @@ const CHUNKS = [
   chunkSummary({ chunk_id: IDLE, graph_id: 'gr_1', status: 'ready' }),
 ];
 
-const fact = (id: number, chunkId: string, kind: FlowFactView['kind'], secondsAgo: number, outcome: string | null = null) =>
+const fact = (id: number, chunkId: string, kind: NonNullable<Parameters<typeof flowFactView>[0]>['kind'], secondsAgo: number, outcome: string | null = null) =>
   flowFactView({
     id,
     flow_id: 'fl_a',
