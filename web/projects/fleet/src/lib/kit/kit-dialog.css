@@ -58,6 +58,17 @@
   border-bottom: 1px solid var(--line);
 }
 
+/* The title block every dialog header shares. The header is projected content, so
+   emulated encapsulation cannot reach it from a plain rule: `::ng-deep` under `:host`
+   is what lets this one rule style the consumer's `<h2 fleetKitDialogHeader>` (or an
+   `<h2>` inside a header wrapper) without each dialog re-typing it. */
+:host ::ng-deep [fleetKitDialogHeader] :is(h2, h3),
+:host ::ng-deep :is(h2, h3)[fleetKitDialogHeader] {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--text);
+}
+
 .p-hdr:empty {
   display: none;
 }

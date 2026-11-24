@@ -6,12 +6,6 @@
   --kit-dialog-width: 700px;
 }
 
-h2 {
-  margin: 0;
-  font-size: var(--fs-md);
-  color: var(--text);
-}
-
 .mode-field,
 .urgency-field,
 .note-field {
