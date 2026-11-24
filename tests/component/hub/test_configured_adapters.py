@@ -39,7 +39,6 @@ from blizzard.hub.domain.config.forges import (
 )
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryId
 from blizzard.hub.domain.config_apply.service import ConfigApplication
-from blizzard.hub.domain.observability.analytics.extraction import shipped_extractors
 from blizzard.hub.forge.auth import IForgeAuthorizations
 from blizzard.hub.forge.budget import ForgeBudgetLow, ForgeBudgets, ForgePriority
 from blizzard.hub.forge.commit_links import LandedCommitLinks
@@ -263,7 +262,6 @@ def _hosted(
     )
     services = build_services(
         core,
-        extractors=shipped_extractors(),
         cadences_on=lambda: False,
     )
     return core, services, StoreScope(default_tenant(engine))

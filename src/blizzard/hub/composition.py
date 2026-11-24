@@ -10,7 +10,7 @@ from __future__ import annotations
 # The tenant cache's lock guards this process's memory, not a store decision.
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Protocol
@@ -84,7 +84,6 @@ from blizzard.hub.domain.observability.analytics.derivation import (
     EventDerivationService,
     TenantEventDerivation,
 )
-from blizzard.hub.domain.observability.analytics.extraction import ITurnEventExtractor
 from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
 from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
 from blizzard.hub.domain.observability.egress.backfill import EgressBackfill
@@ -108,7 +107,6 @@ from blizzard.hub.domain.observability.tracing.status import TraceStatusReader
 from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
 from blizzard.hub.domain.observability.transcripts import (
     IReadTranscriptSegments,
-    TranscriptCaps,
     TranscriptIngestService,
 )
 from blizzard.hub.domain.projects.color import ColorPick
@@ -116,7 +114,7 @@ from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.domain.projects.targets import ChunkTargets
 from blizzard.hub.domain.runners.host import IReadHostRegistry
-from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.sweeps.locks import SweepLocks
 from blizzard.hub.domain.sweeps.names import SweepName
 from blizzard.hub.domain.sweeps.roster import SweepRoster
@@ -147,19 +145,13 @@ from blizzard.hub.settings.service import HubSettingsAuthoring
 from blizzard.hub.settings.source import HubConfigSource
 from blizzard.hub.store import wiring as store_wiring
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
-from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
-from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
-from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
 from blizzard.hub.store.internal.credential_referrers import CredentialReferrersStore
 from blizzard.hub.store.internal.egress_store import EgressStore
-from blizzard.hub.store.internal.env_timeline_store import EnvTimelineStore
 from blizzard.hub.store.internal.finding_store import FindingStore
-from blizzard.hub.store.internal.flow_store import tenant_flows
-from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
 from blizzard.hub.store.internal.graph_store import GraphStore
@@ -167,7 +159,7 @@ from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
 from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.store.internal.hub_settings_store import HubSettingsStore
-from blizzard.hub.store.internal.invariants import HubInvariants, TenantReads
+from blizzard.hub.store.internal.invariants import HubInvariants
 from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_store import ProjectStore
@@ -178,8 +170,6 @@ from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
 from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
 from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
-from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
-from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.urgency_store import UrgencyOrderStore, UrgencyStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
@@ -521,8 +511,6 @@ class TenantSweeps:
     rows of that tenant."""
 
     close_drain: CloseIntentDrainer
-    event_derivation: TenantEventDerivation
-    annotation: TenantAnnotation
 
 
 @dataclass(frozen=True)
@@ -687,17 +675,16 @@ def action_pass_driver_leaf(loop: ActionLoop, config: HubConfigSource) -> Action
 
 
 def register_legacy(registry: LegacyRegistry) -> None:
-    """Declare the store's adapters and the legacy bridge's leaves, each built as the legacy builder built it: the
-    process services a request's admission reads before its tenant is known, and the transitional ports and leaves of
-    the areas not yet adopted — invitation writes and the action pass driver."""
+    """Declare the store's tenant adapters and the legacy bridge's leaves, each built as the legacy builder built it:
+    the process services a request's admission reads before its tenant is known, and the transitional ports and leaves
+    of the areas not yet adopted — cadence reads and writes and its attention and reading leaves, invitation writes, and
+    the action pass driver."""
     registry.leaf(open_tenants_leaf, lifetime=Lifetime.PROCESS)
     registry.leaf(action_loop_leaf, lifetime=Lifetime.PROCESS)
     registry.leaf(action_pass_driver_leaf, lifetime=Lifetime.PROCESS)
     step_wake = registry.leaf(step_wake_leaf, lifetime=Lifetime.PROCESS)
     # The wake a completion's apply names by the domain's own Protocol.
     registry.alias(port(IHubStepWake), step_wake)
-    hub_events = store_wiring.register_process(registry)
-    registry.alias(port(IReadHubEventLog), hub_events)
     tenant = store_wiring.register_tenant(registry)
     registry.alias(port(IHubTransactions), tenant.of(HubTransactions))
     # The reads a chunk-changed frame is enriched from.
@@ -719,10 +706,8 @@ def register_legacy_absent(registry: LegacyRegistry) -> None:
         ActionPassDriver,
         StepWake,
         IHubStepWake,
-        IReadHubEventLog,
     ):
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
-    store_wiring.register_process_absent(registry)
     store_wiring.register_tenant_absent(registry)
     for missing in _LEGACY_TENANT_KEYS:
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
@@ -781,7 +766,7 @@ def hub_core_over(process: HubProcess, store_connections: HubStoreConnections, *
         store_errors=store_errors,
         hub_scoped_reads=hub_scoped_reads,
         hub_events=hub_events,
-        hub_event_log=HubEventLogService(events=hub_events),
+        hub_event_log=resolver.get(HubEventLogService),
         tenants=TenantCache(build=build, confirm_open=hub_scoped_reads.tenants.confirm_open),
         clock=clock,
         process=process,
@@ -809,8 +794,6 @@ class TenantServiceParts:
 
     clock: IClock
     public_url: str | None
-    transcript_caps: TranscriptCaps | None
-    extractors: Sequence[ITurnEventExtractor]
     step_wake: StepWake
 
 
@@ -843,18 +826,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     forge_budgets = tenant.get(ForgeBudgets)
     work_sources = tenant.get(IWorkSourceRegistry)
     forges = tenant.get(ForgeRegistry)
-    transcript_caps = parts.transcript_caps
     graph_store = tenant.get(GraphStore)
-    transcript_store = tenant.get(TranscriptSegmentStore)
-    event_store = tenant.get(TranscriptEventStore)
-    event_derivation_service = EventDerivationService(
-        events=event_store, facts=chunk_facts, record=chunk_record, clock=clock, extractors=parts.extractors
-    )
-    analytics_event_queries = tenant.get(AnalyticsEventQueryStore)
-    operational_analytics = tenant.get(AnalyticsOperationalStore)
     event_log = tenant.get(EventLogService)
-    # One id-keyed retired-runner refusal, shared by every runner-contact operation.
-    retired = tenant.get(RetiredRunnerGuard)
     graph_mint = tenant.get(GraphMintService)
     default_graph = tenant.get(DefaultGraphService)
     config_authoring = tenant.get(ConfigAuthoring)
@@ -887,13 +860,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         graphs=graph_store,
         graph_bodies=graph_store,
         node_executors=graph_store,
-        transcript_ingest=TranscriptIngestService(
-            store=transcript_store,
-            transactions=stores.transactions,
-            retired=retired,
-            clock=clock,
-            caps=transcript_caps,
-        ),
+        transcript_ingest=tenant.get(TranscriptIngestService),
         graph_mint=graph_mint,
         default_graph=default_graph,
         graph_yaml=graph_yaml,
@@ -906,10 +873,10 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         clock=clock,
         work_sources=work_sources,
         users=tenant.get(IReadUserRepository),
-        transcripts=transcript_store,
-        event_derivation_service=event_derivation_service,
-        analytics_events=analytics_event_queries,
-        operational_analytics=operational_analytics,
+        transcripts=tenant.get(IReadTranscriptSegments),
+        event_derivation_service=tenant.get(EventDerivationService),
+        analytics_events=tenant.get(IReadAnalyticsEventQueries),
+        operational_analytics=tenant.get(IReadOperationalAnalytics),
         secret_catalog=stores.secrets,
         config_authoring=config_authoring,
         work_source_records=stores.work_source_records,
@@ -923,9 +890,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         project_links=stores.project_links,
         chunk_targets=chunk_targets,
         urgency_reading=tenant.get(UrgencyReading),
-        env_timeline=EnvTimelineReading(
-            facts=tenant.get(EnvTimelineStore), graphs=graph_store, artifacts=chunk_artifacts, clock=clock
-        ),
+        env_timeline=tenant.get(EnvTimelineReading),
         findings=finding_store,
         finding_bucket=finding_bucket,
     )
@@ -940,14 +905,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             commit_links=commit_links,
             public_url=parts.public_url,
         ),
-        event_derivation=TenantEventDerivation(service=event_derivation_service, events=event_store, clock=clock),
-        annotation=TenantAnnotation(
-            facts=chunk_facts,
-            work_sources=work_sources,
-            memory=tenant.get(ForgeAnnotationStore),
-            events=event_log,
-            clock=clock,
-        ),
     )
     return ServedTenant(services=services, sweeps=sweeps)
 
@@ -956,11 +913,9 @@ def build_services(
     core: HubCore,
     *,
     public_url: str | None = None,
-    transcript_caps: TranscriptCaps | None = None,
     trace_exporter: ITraceExporter | None = None,
     tracing_settings: TracingSettings | None = None,
     egress_path_key: bytes | None = None,
-    extractors: Sequence[ITurnEventExtractor],
     cadences_on: Callable[[], bool],
 ) -> HubServices:
     """Construct the hub-level services over the shared :class:`HubCore`, its tenant cache serving each tenant's
@@ -979,8 +934,6 @@ def build_services(
     parts = TenantServiceParts(
         clock=clock,
         public_url=public_url,
-        transcript_caps=transcript_caps,
-        extractors=extractors,
         step_wake=step_wake,
     )
     core.tenants.serve(TenantServing(build=lambda stores, events: build_tenant_services(stores, parts, events=events)))
@@ -1163,15 +1116,22 @@ def build_services(
         tenant=lambda tenant: core.process.tenants.resolve(scope_of(tenant), TenantCadence),
         minting=cadences_on,
     )
+
+    def derivation_of(tenant: TenantId) -> TenantEventDerivation:
+        return core.process.tenants.resolve(scope_of(tenant), TenantEventDerivation)
+
+    def annotation_of(tenant: TenantId) -> TenantAnnotation:
+        return core.process.tenants.resolve(scope_of(tenant), TenantAnnotation)
+
     event_derivation = EventDerivationReconciler(
         corpus=core.hub_scoped_reads.corpus,
-        tenant=lambda tenant: sweeps_of(tenant).event_derivation,
+        tenant=derivation_of,
         clock=clock,
     )
     annotation = AnnotationReconciler(
         corpus=core.hub_scoped_reads.corpus,
         tenants=lambda: open_tenants.every().keys(),
-        tenant=lambda tenant: sweeps_of(tenant).annotation,
+        tenant=annotation_of,
         clock=clock,
         full_pass_floor=lambda: timedelta(
             seconds=FULL_PASS_FLOOR_INTERVALS * config_source.current().annotation_interval_seconds
@@ -1192,7 +1152,7 @@ def build_services(
         tenant_admin=tenant_admin,
         tenant_teardown=tenant_teardown,
         tenant_teardown_sweep=tenant_teardown_sweep,
-        invariants=HubInvariantCheck(build_hub_invariants(store_connections, clock)),
+        invariants=process.get(HubInvariantCheck),
         clock=clock,
         close_drain=close_drain,
         cadence=cadence,
@@ -1237,14 +1197,8 @@ def build_services(
 
 
 def build_hub_invariants(connections: HubStoreConnections, clock: IClock) -> HubInvariants:
-    """The hub half of the invariant checker over ``connections``; each tenant's reads are built over the scoped
-    connections the half hands them, which share its one read transaction."""
-
-    def tenant_reads(scoped: ScopedConnections) -> TenantReads:
-        chunk_stores = build_chunk_stores(scoped, clock)
-        return TenantReads(chunk_stores.facts, chunk_stores.record, tenant_flows(scoped, clock))
-
-    return HubInvariants(connections, tenant_reads, clock)
+    """The hub half of the invariant checker over ``connections``, built by the store wiring's registered factory."""
+    return store_wiring.hub_invariant_checker(connections, clock)
 
 
 def build_flow_driver(process: HubProcess) -> FlowDriver:

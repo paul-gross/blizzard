@@ -1,12 +1,14 @@
 """The hub settings' registrations: the admin-settings ports, each a member of the borrowed settings graph.
 
-A graph without settings declares each port absent. Every graph holds the borrowed boot ``HubConfig`` and one
-:class:`HubConfigSource` over it, reading the settings graph's resolution when one is borrowed."""
+A graph without settings declares each port absent. Every graph holds the borrowed boot ``HubConfig``, the transcript
+caps it resolves, and one :class:`HubConfigSource` over it, reading the settings graph's resolution when one is
+borrowed."""
 
 from __future__ import annotations
 
 from blizzard.foundation.registry.interface import Lifetime, Registry, port
 from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from blizzard.hub.settings.footing import HubSettingsFooting
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.settings.model import IReadHubSettingsAdmin
@@ -46,9 +48,15 @@ def boot_config_source(boot: HubConfig) -> HubConfigSource:
     return HubConfigSource(boot, None)
 
 
+def boot_transcript_caps(boot: HubConfig) -> TranscriptCaps:
+    """The ceilings the boot config resolves for the transcript ingest lane."""
+    return boot.transcripts.transcript_caps()
+
+
 def register_boot(registry: Registry) -> None:
-    """Declare the borrowed boot config."""
+    """Declare the borrowed boot config and the transcript caps it resolves."""
     registry.context(port(HubConfig), lifetime=Lifetime.PROCESS)
+    registry.factory(boot_transcript_caps, lifetime=Lifetime.PROCESS)
 
 
 def register(registry: Registry) -> None:

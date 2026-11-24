@@ -34,7 +34,6 @@ from blizzard.hub.composition import (
     connections_for_engine,
 )
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.observability.analytics.extraction import shipped_extractors
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantClosed, TenantId, UnknownTenant
 from tests.support.config_inputs import VERSION_WINDOW
@@ -237,7 +236,6 @@ def test_hub_scoped_reads_mark_every_statement_they_issue(tmp_path: Path) -> Non
 def _served(core: HubCore) -> HubServices:
     return build_services(
         core,
-        extractors=shipped_extractors(),
         cadences_on=lambda: False,
     )
 

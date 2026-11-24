@@ -156,7 +156,6 @@ from blizzard.hub.domain.config.oauth_providers import ProvidersOrphaned, requir
 from blizzard.hub.domain.config.secrets import KeysUncovered, require_keys_covered
 from blizzard.hub.domain.config.work_sources import BuiltInWorkSource
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
-from blizzard.hub.domain.observability.analytics.extraction import shipped_extractors
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
 from blizzard.hub.domain.observability.tracing.attributes import (
@@ -829,7 +828,6 @@ def build_hosted_app(
         services = build_services(
             core,
             public_url=config.public_url,
-            transcript_caps=config.transcripts.transcript_caps(),
             # No exporter is built unless OpenTelemetry's own variables enable tracing.
             trace_exporter=(
                 OtlpTraceExporter(
@@ -841,7 +839,6 @@ def build_hosted_app(
                 else None
             ),
             tracing_settings=tracing,
-            extractors=shipped_extractors(),
             egress_path_key=_egress_path_key(config.egress),
             cadences_on=lambda: flags.on("cadences"),
         )
