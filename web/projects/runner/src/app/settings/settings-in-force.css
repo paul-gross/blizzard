@@ -1,0 +1,15 @@
+:host {
+  display: block;
+}
+.in-force,
+.failed {
+  margin: 0;
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.failed {
+  margin-top: 4px;
+}
+.err {
+  color: var(--red);
+}

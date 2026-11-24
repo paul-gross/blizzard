@@ -966,7 +966,8 @@ const RUNNER_LAYERS = {
   host: ['runners'],
   runners: [],
   board: ['asks', 'runners'],
-  shell: ['board', 'events', 'host', 'runners'],
+  settings: [],
+  shell: ['board', 'events', 'host', 'runners', 'settings'],
 };
 
 /**

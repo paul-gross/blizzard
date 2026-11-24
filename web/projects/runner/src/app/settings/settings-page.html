@@ -1,0 +1,9 @@
+<div class="page" data-testid="settings-page">
+  @for (ref of records(); track ref.id) {
+    <app-settings-record [ref]="ref" [superuser]="superuser()" />
+  }
+  <fleet-kit-section-head label="History" />
+  @for (ref of records(); track ref.id) {
+    <app-settings-history [ref]="ref" />
+  }
+</div>

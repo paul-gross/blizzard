@@ -1,0 +1,24 @@
+<app-settings-record-view
+  [title]="ref().title"
+  [recordId]="ref().id"
+  [state]="state()"
+  [line]="line()"
+  [groups]="groups()"
+  [settingsError]="record()?.settingsError ?? null"
+  [editDisabled]="pending()"
+  (edit)="onEdit($event)"
+/>
+@if (editForm(); as f) {
+  @if (editing(); as e) {
+    <app-setting-edit-dialog
+      [form]="f"
+      [recordTitle]="ref().title"
+      [settingKey]="e.key"
+      [lifetime]="e.lifetime"
+      [canReset]="e.canReset"
+      (save)="onSave()"
+      (resetToDefault)="onReset()"
+      (closed)="onClose()"
+    />
+  }
+}

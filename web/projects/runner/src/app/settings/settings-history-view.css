@@ -1,0 +1,39 @@
+:host {
+  display: block;
+}
+.changes {
+  list-style: none;
+  margin: 0;
+  padding: 0 10px;
+}
+.change {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.rev,
+.new {
+  color: var(--snow);
+}
+.rec,
+.by {
+  color: var(--label);
+  font-size: var(--fs-sm);
+}
+.diff {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0 0 0 12px;
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.k {
+  color: var(--label);
+}
+.more {
+  padding: 8px 10px;
+}

@@ -1,0 +1,18 @@
+@let f = form();
+<fleet-kit-dialog [open]="true" [ariaLabel]="'Edit ' + settingKey()" testid="setting-edit" (closed)="onClosed()">
+  <h2 fleetKitDialogHeader class="hd" data-testid="setting-edit-title">
+    {{ recordTitle() }} · {{ settingKey() }}
+    <fleet-kit-badge [tone]="lifetime().tone" variant="soft">{{ lifetime().label }}</fleet-kit-badge>
+  </h2>
+  <fleet-kit-field label="Value" [field]="f.value">
+    <fleet-kit-text-input [formField]="f.value" ariaLabel="Value" testid="setting-edit-value" />
+  </fleet-kit-field>
+  <div fleetKitDialogFooter class="ft">
+    @for (message of messages(); track $index) {
+      <fleet-kit-error-line class="line" [message]="message" testid="setting-edit-line" />
+    }
+    <fleet-kit-button [disabled]="submitting() || !canReset()" testid="setting-edit-reset" (click)="resetToDefault.emit()">Reset to default</fleet-kit-button>
+    <fleet-kit-button [disabled]="submitting()" testid="setting-edit-cancel" (click)="onClosed()">Cancel</fleet-kit-button>
+    <fleet-kit-button variant="primary" [disabled]="submitting()" testid="setting-edit-save" (click)="onSave()">Save</fleet-kit-button>
+  </div>
+</fleet-kit-dialog>

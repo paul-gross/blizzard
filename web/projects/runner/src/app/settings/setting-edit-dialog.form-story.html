@@ -1,0 +1,10 @@
+<app-setting-edit-dialog
+  [form]="f"
+  [recordTitle]="recordTitle()"
+  [settingKey]="settingKey()"
+  [lifetime]="lifetime()"
+  [canReset]="canReset()"
+  (save)="save.emit()"
+  (resetToDefault)="resetToDefault.emit()"
+  (closed)="closed.emit()"
+/>

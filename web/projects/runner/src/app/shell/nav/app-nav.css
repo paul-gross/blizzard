@@ -2,3 +2,11 @@
   display: block;
   flex: none;
 }
+/* Four tabs and the filters share the strip; at the narrowest phones the
+   kit tab's phone gutter still pushes the fourth past the viewport, so the
+   gutters give a little more here. */
+@media (max-width: 360px) {
+  a[fleetKitTab] {
+    padding: 0 7px;
+  }
+}

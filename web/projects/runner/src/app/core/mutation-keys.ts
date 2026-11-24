@@ -27,3 +27,11 @@ export function chunkRequeueMutationKey(runnerId: string | null): readonly unkno
 export function selftestStartMutationKey(runnerId: string | null): readonly unknown[] {
   return [runnerId, 'mutation', 'selftest-start'];
 }
+
+/** A write to the host's own settings record — `PATCH /api/host/settings`. */
+export const hostSettingsWriteMutationKey = ['host', 'mutation', 'settings-write'] as const;
+
+/** A write to one runner's settings record — `PATCH /runners/{runner_id}/api/settings`. */
+export function runnerSettingsWriteMutationKey(runnerId: string): readonly unknown[] {
+  return [runnerId, 'mutation', 'settings-write'];
+}

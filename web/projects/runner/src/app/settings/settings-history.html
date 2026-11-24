@@ -1,0 +1,9 @@
+<app-settings-history-view
+  [title]="ref().title"
+  [recordId]="ref().id"
+  [state]="state()"
+  [changes]="changes()"
+  [hasNext]="query.hasNextPage()"
+  [loadingNext]="query.isFetchingNextPage()"
+  (loadMore)="query.fetchNextPage()"
+/>
