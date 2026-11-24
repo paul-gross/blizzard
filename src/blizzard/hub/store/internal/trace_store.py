@@ -85,32 +85,22 @@ class TraceStore:
         reference read through that tenant's reads, and the tenant's current name beside them. A chunk of a tenant
         closed since the corpus read is left out: a window or page holding it exports none of its rows, and the cursor
         still passes its closing facts."""
-        opened = _Opened(self._hydration)
-        corpus = self._corpus.step_facts_for(chunk_ids, opened.label)
-        by_tenant: dict[TenantId, dict[str, StepFacts]] = {}
-        for chunk_id, facts in corpus.items():
-            if facts.tenant is not None:
-                by_tenant.setdefault(facts.tenant, {})[chunk_id] = facts
-        built: dict[str, StepFacts] = {}
-        for tenant, tenant_facts in by_tenant.items():
-            reads = opened.reads(tenant)
-            if reads is None:
-                continue
-            graphs = reads.graphs.get_many(sorted({g for facts in tenant_facts.values() for g in _graph_ids(facts)}))
-            names = reads.names.names_for(sorted({r for facts in tenant_facts.values() for r in _runner_ids(facts)}))
-            projects = reads.projects.labels_for(sorted({f.project for f in tenant_facts.values() if f.project}))
-            name = self._tenant_name(tenant)
-            built.update(
-                (chunk_id, _with_reads(facts, graphs, names, projects, name, reads.source_label))
-                for chunk_id, facts in tenant_facts.items()
-            )
-        return {chunk_id: built[chunk_id] for chunk_id in corpus if chunk_id in built}
+        return self._completed(chunk_ids, self._complete_whole)
 
     def closing_step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
         """The corpus's step facts completed only as far as a step's close and a chunk's finish are told: the graphs
         that name each node, and nothing else — no runner names, project, tenant name or work-source labels. The same
-        chunks are left out as :meth:`step_facts_for` leaves out — those of a tenant closed since the corpus read — so
-        a lag scan and a window agree on which closing facts close something."""
+        chunks are left out as :meth:`step_facts_for` leaves out, so a lag scan and a window agree on which closing
+        facts close something."""
+        return self._completed(chunk_ids, self._complete_graphs)
+
+    def _completed(
+        self,
+        chunk_ids: Sequence[str],
+        complete: Callable[[TenantId, StepHydration, dict[str, StepFacts]], dict[str, StepFacts]],
+    ) -> dict[str, StepFacts]:
+        """The corpus's facts grouped by tenant and completed per open tenant by ``complete``, in the corpus's order;
+        a tenant closed since the corpus read contributes nothing."""
         opened = _Opened(self._hydration)
         corpus = self._corpus.step_facts_for(chunk_ids, opened.label)
         by_tenant: dict[TenantId, dict[str, StepFacts]] = {}
@@ -120,14 +110,30 @@ class TraceStore:
         built: dict[str, StepFacts] = {}
         for tenant, tenant_facts in by_tenant.items():
             reads = opened.reads(tenant)
-            if reads is None:
-                continue
-            graphs = reads.graphs.get_many(sorted({g for facts in tenant_facts.values() for g in _graph_ids(facts)}))
-            built.update(
-                (chunk_id, replace(facts, graphs={g: graphs[g] for g in _graph_ids(facts) if g in graphs}))
-                for chunk_id, facts in tenant_facts.items()
-            )
+            if reads is not None:
+                built.update(complete(tenant, reads, tenant_facts))
         return {chunk_id: built[chunk_id] for chunk_id in corpus if chunk_id in built}
+
+    def _complete_graphs(
+        self, tenant: TenantId, reads: StepHydration, tenant_facts: dict[str, StepFacts]
+    ) -> dict[str, StepFacts]:
+        graphs = reads.graphs.get_many(sorted({g for facts in tenant_facts.values() for g in _graph_ids(facts)}))
+        return {
+            chunk_id: replace(facts, graphs={g: graphs[g] for g in _graph_ids(facts) if g in graphs})
+            for chunk_id, facts in tenant_facts.items()
+        }
+
+    def _complete_whole(
+        self, tenant: TenantId, reads: StepHydration, tenant_facts: dict[str, StepFacts]
+    ) -> dict[str, StepFacts]:
+        graphs = reads.graphs.get_many(sorted({g for facts in tenant_facts.values() for g in _graph_ids(facts)}))
+        names = reads.names.names_for(sorted({r for facts in tenant_facts.values() for r in _runner_ids(facts)}))
+        projects = reads.projects.labels_for(sorted({f.project for f in tenant_facts.values() if f.project}))
+        name = self._tenant_name(tenant)
+        return {
+            chunk_id: _with_reads(facts, graphs, names, projects, name, reads.source_label)
+            for chunk_id, facts in tenant_facts.items()
+        }
 
     # --- cursor and latch -----------------------------------------------------------
 
