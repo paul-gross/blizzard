@@ -37,10 +37,11 @@
           </p>
         }
         @if (delta.escalation; as escalation) {
-          <p class="rd-escalation" data-testid="gardening-run-delta-escalation">
-            Escalated at {{ escalation.nodeName ?? 'unknown node' }} — takeover:
-            <code>{{ escalation.takeoverCommand }}</code>
-          </p>
+          <div class="rd-escalation" data-testid="gardening-run-delta-escalation">
+            <fleet-chunk-detail-escalation-takeover [wrapped]="escalation.wrappedTakeoverCommand" [raw]="escalation.takeoverCommand">
+              Escalated at {{ escalation.nodeName ?? 'unknown node' }}.
+            </fleet-chunk-detail-escalation-takeover>
+          </div>
         }
       </header>
 
