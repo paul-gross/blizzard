@@ -87,8 +87,12 @@ from blizzard.hub.domain.execution.envelope import Envelope, NoCurrentNode
 from blizzard.hub.domain.execution.facts import FactIngestService
 from blizzard.hub.domain.execution.release import ReleaseRefused, ReleaseService
 from blizzard.hub.domain.execution.submissions import Completion
-from blizzard.hub.domain.garden.proposals.model import RoutineProposalState
-from blizzard.hub.domain.garden.run_context import RunContext
+from blizzard.hub.domain.garden.delivery.stage_check import GardenStageCheck
+from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
+from blizzard.hub.domain.garden.proposals.model import RoutineGardenProposalReader, RoutineProposalState
+from blizzard.hub.domain.garden.proposals.resolution import AnsweredFindingsReader
+from blizzard.hub.domain.garden.run_context import IReadRunContextRepository, RunContext
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 from blizzard.hub.domain.graph.model import FollowLatest, Graph, IReadGraphRepository
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.observability.transcripts import (
@@ -96,7 +100,7 @@ from blizzard.hub.domain.observability.transcripts import (
     refuse_foreign_lease_read,
 )
 from blizzard.hub.domain.operations.pause import PauseService
-from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
 from blizzard.hub.domain.runners.bindings import flag_bindings, offered_projects
 from blizzard.hub.domain.runners.host import IReadHostRegistry
 from blizzard.hub.domain.runners.registration import (
@@ -237,6 +241,13 @@ class FleetRequest:
 
 
 Records = FromDishka[IReadChunkRecordRepository]
+RunContexts = FromDishka[IReadRunContextRepository]
+StageCheck = FromDishka[GardenStageCheck]
+Buckets = FromDishka[FindingBucketReader]
+RoutineProposals = FromDishka[RoutineGardenProposalReader]
+Scopes = FromDishka[IReadScopeRepository]
+Answered = FromDishka[AnsweredFindingsReader]
+ProjectReads = FromDishka[IReadProjectRepository]
 Graphs = FromDishka[IReadGraphRepository]
 Frames = FromDishka[ChunkFrameLoader]
 DecisionReads = FromDishka[IReadChunkDecisionsRepository]
@@ -470,47 +481,59 @@ def get_envelope(chunk_id: str, services: Services) -> NodeEnvelope:
 
 
 @router.post("/chunks/{chunk_id}/artifact-check", response_model=ArtifactCheckResponse)
-def check_artifact(chunk_id: str, body: ArtifactCheckRequest, services: Services) -> ArtifactCheckResponse:
+@inject_sync
+def check_artifact(
+    chunk_id: str, body: ArtifactCheckRequest, records: Records, graphs: Graphs, stage_check: StageCheck
+) -> ArtifactCheckResponse:
     """The verdict on content a worker is about to stage under ``body.name``: the delivery-time refusal when
     the chunk's graph owes the name a format the content fails. The verdict rides a ``200`` body — a
     ``4xx`` here is a failed request, never a refusal. 404 for an unknown chunk."""
-    chunk = services.chunks.record.get(chunk_id)
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    graph = services.graphs.get(chunk.graph_id)
+    graph = graphs.get(chunk.graph_id)
     if graph is None:
         raise ProblemHTTPException(problems.pinned_graph_missing_problem)
-    return ArtifactCheckResponse(refusal=services.garden_stage_check.refusal(graph, body.name, body.content))
+    return ArtifactCheckResponse(refusal=stage_check.refusal(graph, body.name, body.content))
 
 
-def _routine_run_or_404(chunk_id: str, services: TenantServices) -> RunContext:
+def _routine_run_or_404(
+    chunk_id: str, records: IReadChunkRecordRepository, run_contexts: IReadRunContextRepository
+) -> RunContext:
     """The run context that gates a worker's fleet-scoped read — 404 both for an
     unknown chunk and for one carrying no run context (not a routine run), returning the
     chunk's :class:`RunContext`."""
-    chunk = services.chunks.record.get(chunk_id)
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    run = services.run_context.for_chunk(chunk)
+    run = run_contexts.for_chunk(chunk)
     if run is None:
         raise ProblemHTTPException(partial(problems.no_run_context_problem, chunk_id))
     return run
 
 
 @router.get("/chunks/{chunk_id}/garden/findings", response_model=list[FindingView])
-def get_garden_findings(chunk_id: str, services: Services) -> list[FindingView]:
+@inject_sync
+def get_garden_findings(
+    chunk_id: str, records: Records, run_contexts: RunContexts, buckets: Buckets, projects: ProjectReads
+) -> list[FindingView]:
     """A worker's finding bucket — exactly the findings its delivery may cite; the
     chunk's own run context derives the routine and scope, no caller flag can name another.
     404 for an unknown chunk or one with no run context (not a routine run)."""
-    run = _routine_run_or_404(chunk_id, services)
-    citable = services.finding_bucket.for_run(run).citable
-    labels = ProjectLabels.read(services.projects, (f.project_id for f in citable))
+    run = _routine_run_or_404(chunk_id, records, run_contexts)
+    citable = buckets.for_run(run).citable
+    labels = ProjectLabels.read(projects, (f.project_id for f in citable))
     return [finding_view(f, labels.fields(f.project_id)) for f in citable]
 
 
 @router.get("/chunks/{chunk_id}/garden/proposals", response_model=list[GardenProposalView])
+@inject_sync
 def get_garden_proposals(
     chunk_id: str,
-    services: Services,
+    records: Records,
+    run_contexts: RunContexts,
+    routine_proposals: RoutineProposals,
+    projects: ProjectReads,
     state: Annotated[RoutineProposalState, Query()] = RoutineProposalState.OPEN,
 ) -> list[GardenProposalView]:
     """A worker's own routine's garden proposals, filtered by `state` (`open` by
@@ -522,18 +545,22 @@ def get_garden_proposals(
 
     Unpaged, kept for a previous-minor runner that reads the whole docket in one request;
     `/garden/proposals/page` is the bounded form current runners follow."""
-    run = _routine_run_or_404(chunk_id, services)
-    labels = ProjectLabels.read(services.projects, [run.project_id]).fields(run.project_id)
+    run = _routine_run_or_404(chunk_id, records, run_contexts)
+    labels = ProjectLabels.read(projects, [run.project_id]).fields(run.project_id)
     return [
         garden_proposal_view(p, closure, labels)
-        for p, closure in services.routine_garden_proposals.list_for_routine(run.project_id, run.routine_name, state)
+        for p, closure in routine_proposals.list_for_routine(run.project_id, run.routine_name, state)
     ]
 
 
 @router.get("/chunks/{chunk_id}/garden/proposals/page", response_model=GardenProposalsPageView)
+@inject_sync
 def get_garden_proposals_page(
     chunk_id: str,
-    services: Services,
+    records: Records,
+    run_contexts: RunContexts,
+    routine_proposals: RoutineProposals,
+    projects: ProjectReads,
     state: Annotated[RoutineProposalState, Query()] = RoutineProposalState.OPEN,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
@@ -541,10 +568,10 @@ def get_garden_proposals_page(
     """One keyset page of `get_garden_proposals`'s docket, newest first — the same filters and
     404s, `limit` bounding what the request reads however long the routine's history; follow
     `next_cursor` until it is `None` for the whole docket. 422 on a cursor this route did not issue."""
-    run = _routine_run_or_404(chunk_id, services)
-    labels = ProjectLabels.read(services.projects, [run.project_id]).fields(run.project_id)
+    run = _routine_run_or_404(chunk_id, records, run_contexts)
+    labels = ProjectLabels.read(projects, [run.project_id]).fields(run.project_id)
     try:
-        pairs, next_cursor = services.routine_garden_proposals.list_page_for_routine(
+        pairs, next_cursor = routine_proposals.list_page_for_routine(
             run.project_id, run.routine_name, state=state, cursor=cursor, limit=limit
         )
     except MalformedCursor as exc:
@@ -587,122 +614,156 @@ class AnalyticsWindow:
 
 
 @router.get("/chunks/{chunk_id}/analytics/counts/files", response_model=AnalyticsCountsResponse)
+@inject_sync
 def get_chunk_analytics_counts_files(
     chunk_id: str,
     services: Services,
+    records: Records,
+    run_contexts: RunContexts,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/files`` — the same
     rows, over the window it names, gated on the chunk carrying a run context rather than
     on operator credentials."""
-    _routine_run_or_404(chunk_id, services)
+    _routine_run_or_404(chunk_id, records, run_contexts)
     return counts_response(services.analytics_events.counts_by_file(window.event_scope.criteria))
 
 
 @router.get("/chunks/{chunk_id}/analytics/counts/skills", response_model=AnalyticsCountsResponse)
+@inject_sync
 def get_chunk_analytics_counts_skills(
     chunk_id: str,
     services: Services,
+    records: Records,
+    run_contexts: RunContexts,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/skills``."""
-    _routine_run_or_404(chunk_id, services)
+    _routine_run_or_404(chunk_id, records, run_contexts)
     return counts_response(services.analytics_events.counts_by_skill(window.event_scope.criteria))
 
 
 @router.get("/chunks/{chunk_id}/analytics/counts/agent-types", response_model=AnalyticsCountsResponse)
+@inject_sync
 def get_chunk_analytics_counts_agent_types(
     chunk_id: str,
     services: Services,
+    records: Records,
+    run_contexts: RunContexts,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/agent-types``."""
-    _routine_run_or_404(chunk_id, services)
+    _routine_run_or_404(chunk_id, records, run_contexts)
     return counts_response(services.analytics_events.counts_by_agent_type(window.event_scope.criteria))
 
 
 @router.get("/chunks/{chunk_id}/analytics/counts/nodes", response_model=AnalyticsCountsResponse)
+@inject_sync
 def get_chunk_analytics_counts_nodes(
     chunk_id: str,
     services: Services,
+    records: Records,
+    run_contexts: RunContexts,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
     by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/nodes``."""
-    _routine_run_or_404(chunk_id, services)
+    _routine_run_or_404(chunk_id, records, run_contexts)
     return counts_response(named_counts(services.analytics_events.counts_by_node(window.event_scope.criteria), by_name))
 
 
 @router.get("/chunks/{chunk_id}/analytics/spend/nodes", response_model=AnalyticsSpendResponse)
+@inject_sync
 def get_chunk_analytics_spend_nodes(
     chunk_id: str,
     services: Services,
+    records: Records,
+    run_contexts: RunContexts,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
     by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsSpendResponse:
     """A worker's own routine-run read of ``GET /api/analytics/spend/nodes``."""
-    _routine_run_or_404(chunk_id, services)
+    _routine_run_or_404(chunk_id, records, run_contexts)
     stats = services.operational_analytics.spend_by_node(operational_criteria(window.scope))
     return spend_response(named_spend(stats, by_name))
 
 
 @router.get("/chunks/{chunk_id}/analytics/spend/graphs", response_model=AnalyticsSpendResponse)
+@inject_sync
 def get_chunk_analytics_spend_graphs(
     chunk_id: str,
     services: Services,
+    records: Records,
+    run_contexts: RunContexts,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
     by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsSpendResponse:
     """A worker's own routine-run read of ``GET /api/analytics/spend/graphs``."""
-    _routine_run_or_404(chunk_id, services)
+    _routine_run_or_404(chunk_id, records, run_contexts)
     stats = services.operational_analytics.spend_by_graph(operational_criteria(window.scope))
     return spend_response(named_spend(stats, by_name))
 
 
 @router.get("/scopes", response_model=list[ScopeView])
+@inject_sync
 def get_scopes(
-    services: Services, http_request: Request, chunk_id: Annotated[str | None, Query()] = None
+    records: Records,
+    scopes: Scopes,
+    projects: ProjectReads,
+    http_request: Request,
+    chunk_id: Annotated[str | None, Query()] = None,
 ) -> list[ScopeView] | JSONResponse:
     """Every scope, newest first, each marked retired or not — the
     deployment's scope vocabulary; with `chunk_id`, only the scopes of that chunk's project, the vocabulary a
     worker on that chunk may name. 404 on an unknown chunk."""
     project_id = None
     if chunk_id is not None:
-        chunk = services.chunks.record.get(chunk_id)
+        chunk = records.get(chunk_id)
         if chunk is None:
             return problem_response(problems.chunk_not_found_problem(chunk_id, instance=http_request.url.path))
         project_id = chunk.require_project()
-    scopes = services.scopes.list_all(project_id)
-    labels = ProjectLabels.read(services.projects, (s.project_id for s in scopes))
-    return [scope_view(s, labels.fields(s.project_id)) for s in scopes]
+    listed = scopes.list_all(project_id)
+    labels = ProjectLabels.read(projects, (s.project_id for s in listed))
+    return [scope_view(s, labels.fields(s.project_id)) for s in listed]
 
 
-def _answered_findings_or_404(chunk_id: str, services: TenantServices) -> list[FindingView]:
-    chunk = services.chunks.record.get(chunk_id)
+def _answered_findings_or_404(
+    chunk_id: str,
+    records: IReadChunkRecordRepository,
+    answered: AnsweredFindingsReader,
+    projects: IReadProjectRepository,
+) -> list[FindingView]:
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    findings = services.answered_findings.resolve_for_chunk(chunk)
+    findings = answered.resolve_for_chunk(chunk)
     if findings is None:
         raise ProblemHTTPException(partial(problems.no_answered_proposal_problem, chunk_id))
-    labels = ProjectLabels.read(services.projects, (f.project_id for f in findings))
+    labels = ProjectLabels.read(projects, (f.project_id for f in findings))
     return [finding_view(f, labels.fields(f.project_id)) for f in findings]
 
 
 @router.get("/chunks/{chunk_id}/findings", response_model=list[FindingView])
-def get_chunk_findings(chunk_id: str, services: Services) -> list[FindingView]:
+@inject_sync
+def get_chunk_findings(
+    chunk_id: str, records: Records, answered: Answered, projects: ProjectReads
+) -> list[FindingView]:
     """The findings the accepted, minted garden proposals behind the chunk's work items answer — a worker's
     per-chunk read, distinct from ``get_garden_findings``'s routine-run bucket. 404 both
     for an unknown chunk and for one answering no such proposal."""
-    return _answered_findings_or_404(chunk_id, services)
+    return _answered_findings_or_404(chunk_id, records, answered, projects)
 
 
 @router.get("/chunks/{chunk_id}/findings/{finding_id}", response_model=FindingView)
-def get_chunk_finding(chunk_id: str, finding_id: str, services: Services) -> FindingView:
+@inject_sync
+def get_chunk_finding(
+    chunk_id: str, finding_id: str, records: Records, answered: Answered, projects: ProjectReads
+) -> FindingView:
     """One finding within the set the chunk's work items answer — ``get_chunk_findings`` narrowed
     to a single id. An id outside that set is structurally unreachable rather than
     filtered after the fact, so it 404s the same as an id belonging to no proposal at
     all."""
-    for finding in _answered_findings_or_404(chunk_id, services):
+    for finding in _answered_findings_or_404(chunk_id, records, answered, projects):
         if finding.finding_id == finding_id:
             return finding
     raise ProblemHTTPException(partial(problems.finding_not_in_chunk_problem, chunk_id, finding_id))
