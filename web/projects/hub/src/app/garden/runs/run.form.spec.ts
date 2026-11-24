@@ -22,6 +22,13 @@ describe('the run rules', () => {
     expect(kinds({}).valid).toBe(true);
   });
 
+  it('names a selected scope that is no longer offered', () => {
+    const f = form(signal<RunDraft>({ ...EMPTY_RUN_DRAFT, scope: 'gone' }), runRules(() => new Set(['web']), () => new Set()), {
+      injector: TestBed.inject(Injector),
+    });
+    expect(f.scope().errors()[0].message).toContain('no longer available');
+  });
+
   it('block delta only for a scope without a baseline', () => {
     expect(kinds({ mode: 'delta', scope: 'web' }).valid).toBe(true);
     expect(kinds({ mode: 'delta', scope: 'hub' }).mode).toEqual(['mode']);

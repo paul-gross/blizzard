@@ -11,7 +11,7 @@ export function runRules(offered: () => ReadonlySet<string>, swept: () => Readon
   return schema<RunDraft>((p) => {
     required(p.scope);
     validate(p.scope, ({ value }) =>
-      value() === '' || offered().has(value()) ? null : { kind: 'scope', message: 'Choose one of the offered scopes' },
+      value() === '' || offered().has(value()) ? null : { kind: 'scope', message: 'This scope is no longer available — pick again' },
     );
     validate(p.mode, ({ value, valueOf }) =>
       value() !== 'delta' || swept().has(valueOf(p.scope))

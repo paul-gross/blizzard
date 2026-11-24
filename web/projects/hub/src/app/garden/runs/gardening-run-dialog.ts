@@ -97,19 +97,13 @@ export class GardeningRunDialog {
   );
 
   constructor() {
-    // Defaults the choice to the first (previously-swept-first-ordered) scope the instant the read resolves — a bare
-    // empty choice otherwise leaves nothing checked until the operator acts.
+    // Defaults the scope to the first (previously-swept-first-ordered) scope while no choice has been made — the instant
+    // the options first arrive. Once chosen, the selection is never re-addressed: a refresh that drops it leaves it in
+    // place for the offered-scope rule to refuse, so a run never goes to a scope the operator did not pick.
     effect(() => {
-      if (this.state() !== 'ready') return;
+      if (this.state() !== 'ready' || this.draft().scope !== '') return;
       const scopes = this.orderedScopes();
-      if (scopes.length > 0 && !scopes.some((scope) => scope.slug === this.draft().scope)) {
-        this.draft.update((d) => ({ ...d, scope: scopes[0].slug }));
-      }
-    });
-    // The delta-steering rule: a scope that carries no baseline — the operator switched to a never-swept one — steers
-    // back to full rather than leaving delta chosen with nothing to run it against.
-    effect(() => {
-      if (this.baseline() === undefined && this.draft().mode === 'delta') this.draft.update((d) => ({ ...d, mode: 'full' }));
+      if (scopes.length > 0) this.draft.update((d) => ({ ...d, scope: scopes[0].slug }));
     });
   }
 
