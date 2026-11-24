@@ -87,6 +87,32 @@ def test_a_body_without_mint_on_a_closed_proposal_is_409(tmp_path: Path) -> None
     assert resp.status_code == 409, resp.text
 
 
+@pytest.mark.parametrize("mint", [True, False])
+@pytest.mark.parametrize("urgency", ["unknown", "retired"])
+def test_an_accept_stating_a_bad_urgency_on_a_closed_proposal_is_409(tmp_path: Path, mint: bool, urgency: str) -> None:
+    hub = build_hub(tmp_path)
+    _seed(hub)
+    if urgency == "retired":
+        assert hub.client.post("/api/urgencies", json={"slug": "retired"}).status_code == 201
+        assert hub.client.post("/api/urgencies/retired/retire", json={}).status_code == 200
+    hub.client.post("/api/garden-proposals/gprop_1/pass", json={"reason": "not worth it"})
+
+    resp = hub.client.post("/api/garden-proposals/gprop_1/accept", json={"mint_work_item": mint, "urgency": urgency})
+
+    assert resp.status_code == 409, resp.text
+
+
+def test_an_open_minting_accept_stating_an_unknown_urgency_is_422_and_closes_nothing(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed(hub)
+
+    resp = hub.client.post("/api/garden-proposals/gprop_1/accept", json={"mint_work_item": True, "urgency": "nope"})
+
+    assert resp.status_code == 422, resp.text
+    assert "urgency_unknown" in resp.text
+    assert hub.client.get("/api/garden-proposals/gprop_1").json()["closure"] is None
+
+
 @pytest.mark.parametrize("mint", [False, True])
 def test_an_accepts_blank_reason_is_stored_as_none(tmp_path: Path, mint: bool) -> None:
     hub = build_hub(tmp_path)

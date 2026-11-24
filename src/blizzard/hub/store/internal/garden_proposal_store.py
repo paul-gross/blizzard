@@ -34,7 +34,7 @@ from blizzard.hub.domain.garden.proposals.model import (
     garden_proposal_state,
 )
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
-from blizzard.hub.domain.kernel.transactions import LockedTransaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.kernel.unset import UnsetType
 
 # Reads the finding adapter's project-scope query in the caller's unit.
@@ -42,7 +42,7 @@ from blizzard.hub.domain.kernel.unset import UnsetType
 from blizzard.hub.store.internal.finding_store import findings_outside_project
 from blizzard.hub.store.schema import garden_proposal_closures, garden_proposal_findings, garden_proposals
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
-from blizzard.hub.store.transactions import connection_for
+from blizzard.hub.store.transactions import connection_for, connection_in
 
 #: `list_page`'s cursor, already total: `(created_at, proposal_id)`.
 _CURSOR_ARITY = 2
@@ -236,8 +236,8 @@ class GardenProposalStore:
         ).one()
         return self._of(row, self._findings(conn, proposal_id))
 
-    def get(self, proposal_id: str) -> GardenProposal | None:
-        with self._store.read("get") as conn:
+    def get(self, proposal_id: str, *, transaction: Transaction | None = None) -> GardenProposal | None:
+        with connection_in(self._store, transaction, "get") as conn:
             row = conn.execute(
                 self._store.select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)
             ).one_or_none()

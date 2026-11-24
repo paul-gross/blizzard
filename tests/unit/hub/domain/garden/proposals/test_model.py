@@ -76,6 +76,14 @@ class _FakeGardenProposalRepo:
     detached: list[tuple[str, list[str]]] = field(default_factory=list[tuple[str, list[str]]])
     #: The token each write was handed, so a test can check it is the unit's locked one.
     tokens: list[object] = field(default_factory=list[object])
+    #: The stored copy `get` reads back; a proposal absent here reads as :func:`_proposal`'s.
+    stored: dict[str, GardenProposal] = field(default_factory=dict[str, GardenProposal])
+    #: The transaction each `get` joined, so a test can check the unit re-reads the proposal.
+    read_in: list[Transaction | None] = field(default_factory=list[Transaction | None])
+
+    def get(self, proposal_id: str, *, transaction: Transaction | None = None) -> GardenProposal | None:
+        self.read_in.append(transaction)
+        return self.stored.get(proposal_id) or _proposal(proposal_id)
 
     def create(
         self,
@@ -542,6 +550,41 @@ def test_detach_rejects_a_finding_not_linked_to_this_proposal() -> None:
     assert repo.detached == []
 
 
+def _linking(findings: list[str]) -> GardenProposal:
+    return replace(_proposal("gprop_1"), findings=findings)
+
+
+def test_detach_judges_the_links_read_under_its_lock_not_the_copy_handed_in() -> None:
+    repo = _FakeGardenProposalRepo(stored={"gprop_1": _linking([])})  # fin_1 detached since the copy was read
+    authoring = GardenProposalAuthoring(
+        proposals=_as_write_repo(repo),
+        closures=cast(Any, _FakeGardenProposalClosureRepo()),
+        clock=FixedClock(instant=_T0),
+        transactions=FakeTransactions(),
+    )
+
+    with pytest.raises(GardenProposalFindingNotLinkedError):
+        authoring.detach(_linking(["fin_1"]), [_finding("fin_1")])
+
+    assert repo.detached == []
+    assert repo.read_in != [None]
+
+
+def test_attach_judges_the_links_read_under_its_lock_not_the_copy_handed_in() -> None:
+    repo = _FakeGardenProposalRepo(stored={"gprop_1": _linking([])})  # fin_1 detached since the copy was read
+    authoring = GardenProposalAuthoring(
+        proposals=_as_write_repo(repo),
+        closures=cast(Any, _FakeGardenProposalClosureRepo()),
+        clock=FixedClock(instant=_T0),
+        transactions=FakeTransactions(),
+    )
+
+    authoring.attach(_linking(["fin_1"]), [_finding("fin_1")])
+
+    assert repo.attached == [("gprop_1", ["fin_1"])]
+    assert repo.read_in != [None]
+
+
 def test_detach_rejects_the_same_finding_named_twice() -> None:
     repo = _FakeGardenProposalRepo()
     authoring = GardenProposalAuthoring(
@@ -763,6 +806,7 @@ def test_each_change_declares_the_proposal_key_and_decides_on_the_closure_read_i
         transactions=transactions,
     )
     proposal = replace(_proposal("gprop_1"), findings=["fin_1"] if verb == "detach" else [])
+    repo.stored["gprop_1"] = proposal
 
     if verb == "edit":
         authoring.edit(proposal, GardenProposalEdit(title="new"))

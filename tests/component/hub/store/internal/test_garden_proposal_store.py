@@ -10,6 +10,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy import Engine
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.garden_proposals import (
     GardenProposalClosureKind,
     GardenProposalItemOutcome,
@@ -18,15 +19,22 @@ from blizzard.foundation.garden_proposals import (
 from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.garden.findings.model import Finding
 from blizzard.hub.domain.garden.proposals.model import (
     GardenProposal,
+    GardenProposalAuthoring,
     GardenProposalCounts,
     GardenProposalEdit,
+    GardenProposalFindingNotLinkedError,
     RoutineProposalState,
 )
 from blizzard.hub.store.internal.finding_store import FindingStore
-from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
+from blizzard.hub.store.internal.garden_proposal_closure_store import (
+    GardenProposalClosureStore,
+    insert_garden_proposal_closure_row,
+)
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
+from blizzard.hub.store.transactions import HubTransactions
 from tests.support.garden_proposal_units import proposal_unit
 from tests.support.scaffolding import (
     count_queries,
@@ -692,6 +700,78 @@ def test_two_edits_from_the_same_stale_view_each_keep_the_field_they_did_not_nam
     after = store.get("gprop_1")
     assert after is not None
     assert (after.title, after.class_, after.body) == ("new title", "c", "new body")
+
+
+def test_get_in_a_unit_reads_that_units_own_uncommitted_write(tmp_path: Path) -> None:
+    store, engine = _store_and_engine(tmp_path)
+    store.create(
+        "gprop_1",
+        project_id=default_project(engine),
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="t",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
+    )
+
+    with proposal_unit(hub_store_connections(engine), "gprop_1") as transaction:
+        store.detach("gprop_1", ["fin_1"], transaction=transaction)
+        inside = store.get("gprop_1", transaction=transaction)
+
+    assert inside is not None
+    assert inside.findings == []
+
+
+def _authoring_and_stale_copy(
+    tmp_path: Path,
+) -> tuple[GardenProposalAuthoring, GardenProposalStore, GardenProposal, Finding]:
+    """An authoring service over the real stores, a copy of ``gprop_1`` read while it still linked ``fin_1`` — which a
+    detach has since unlinked — and ``fin_1``."""
+    store, engine = _store_and_engine(tmp_path)
+    store.create(
+        "gprop_1",
+        project_id=default_project(engine),
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="t",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
+    )
+    stale = store.get("gprop_1")
+    assert stale is not None
+    connections = hub_store_connections(engine)
+    with proposal_unit(connections, "gprop_1") as transaction:
+        store.detach("gprop_1", ["fin_1"], transaction=transaction)
+    authoring = GardenProposalAuthoring(
+        proposals=store,
+        closures=GardenProposalClosureStore(connections),
+        clock=FixedClock(_NOW),
+        transactions=HubTransactions(connections),
+    )
+    fin_1 = FindingStore(connections).get("fin_1")
+    assert fin_1 is not None
+    return authoring, store, stale, fin_1
+
+
+def test_detach_from_a_stale_copy_refuses_a_finding_no_longer_linked(tmp_path: Path) -> None:
+    authoring, _, stale, fin_1 = _authoring_and_stale_copy(tmp_path)
+
+    with pytest.raises(GardenProposalFindingNotLinkedError):
+        authoring.detach(stale, [fin_1])
+
+
+def test_attach_from_a_stale_copy_links_a_finding_no_longer_linked(tmp_path: Path) -> None:
+    authoring, store, stale, fin_1 = _authoring_and_stale_copy(tmp_path)
+
+    authoring.attach(stale, [fin_1])
+
+    after = store.get("gprop_1")
+    assert after is not None
+    assert after.findings == ["fin_1"]
 
 
 def _seed_routine_docket(store: GardenProposalStore, engine: Engine, *, open_count: int, closed_count: int) -> None:

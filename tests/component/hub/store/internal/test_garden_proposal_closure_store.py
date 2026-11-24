@@ -30,6 +30,7 @@ from blizzard.hub.domain.garden.proposals.closure import (
 )
 from blizzard.hub.domain.garden.proposals.model import GardenProposalAlreadyClosed
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
+from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
@@ -389,6 +390,7 @@ def _closure_service(hub: HubHarness, closures: IWriteGardenProposalClosureRepos
         default_graph=lambda: graph,
         clock=FixedClock(_NOW),
         transactions=HubTransactions(store),
+        urgencies=hub.default_adapter(UrgencyReading),
     )
 
 

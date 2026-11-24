@@ -22,7 +22,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.garden.findings.model import Finding
 from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
-from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
 if TYPE_CHECKING:
@@ -384,7 +384,10 @@ class GardenProposalPage:
 class IReadGardenProposalRepository(Protocol):
     """Read-only garden-proposal access."""
 
-    def get(self, proposal_id: str) -> GardenProposal | None: ...
+    def get(self, proposal_id: str, *, transaction: Transaction | None = None) -> GardenProposal | None:
+        """`proposal_id`'s proposal, findings included, or `None` when none — read in `transaction` when one is
+        given (``bzh:transaction-participation``)."""
+        ...
 
     def get_many(self, proposal_ids: Sequence[str]) -> dict[str, GardenProposal]:
         """`get`'s batched sibling (`bzh:bulk-reconstitution`) — every proposal among
@@ -608,19 +611,25 @@ class GardenProposalAuthoring:
             return self._proposals.edit(proposal.proposal_id, fields, transaction=locked)
 
     def attach(self, proposal: GardenProposal, findings: Sequence[Finding]) -> GardenProposal:
-        """Link `findings` to `proposal` (:meth:`GardenProposal.attachable`)."""
+        """Link `findings` to `proposal` (:meth:`GardenProposal.attachable`), judged against its links re-read
+        under its lock, not the copy handed in."""
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(keys=[garden_proposal_lock(proposal.proposal_id)])
+            current = self._proposals.get(proposal.proposal_id, transaction=locked)
+            assert current is not None
             closure = self._closures.get(proposal.proposal_id, transaction=locked)
-            finding_ids = proposal.attachable(findings, closure=closure)
+            finding_ids = current.attachable(findings, closure=closure)
             return self._proposals.attach(proposal.proposal_id, finding_ids, transaction=locked)
 
     def detach(self, proposal: GardenProposal, findings: Sequence[Finding]) -> GardenProposal:
-        """Unlink `findings` from `proposal` (:meth:`GardenProposal.detachable`)."""
+        """Unlink `findings` from `proposal` (:meth:`GardenProposal.detachable`), judged against its links re-read
+        under its lock, not the copy handed in."""
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(keys=[garden_proposal_lock(proposal.proposal_id)])
+            current = self._proposals.get(proposal.proposal_id, transaction=locked)
+            assert current is not None
             closure = self._closures.get(proposal.proposal_id, transaction=locked)
-            finding_ids = proposal.detachable(findings, closure=closure)
+            finding_ids = current.detachable(findings, closure=closure)
             return self._proposals.detach(proposal.proposal_id, finding_ids, transaction=locked)
 
 

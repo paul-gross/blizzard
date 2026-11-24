@@ -129,7 +129,7 @@ class _FakeClosures:
 class _FakeProposals:
     by_id: dict[str, GardenProposal] = field(default_factory=dict[str, GardenProposal])
 
-    def get(self, proposal_id: str) -> GardenProposal | None:
+    def get(self, proposal_id: str, *, transaction: Transaction | None = None) -> GardenProposal | None:
         return self.by_id.get(proposal_id)
 
     def get_many(self, proposal_ids: Sequence[str]) -> dict[str, GardenProposal]:
