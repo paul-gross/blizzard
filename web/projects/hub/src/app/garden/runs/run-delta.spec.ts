@@ -210,18 +210,42 @@ describe('FleetRunDelta', () => {
     expect(revisions?.textContent).toContain('396d00708fb7092463f38a0dcbc035e7a9e39e4c');
   });
 
-  it('renders the open escalation when the run needs a human', async () => {
-    const fixture = await mount({
-      vm: {
-        ...VM,
-        escalation: { nodeName: 'survey', takeoverCommand: 'blizzard hub chunk takeover ch_1', wrappedTakeoverCommand: '' },
-      },
-    });
-    const el = fixture.nativeElement as HTMLElement;
+  describe('escalation takeover', () => {
+    const escalationOf = async (takeoverCommand: string, wrappedTakeoverCommand: string): Promise<HTMLElement> => {
+      const fixture = await mount({
+        vm: { ...VM, escalation: { nodeName: 'survey', takeoverCommand, wrappedTakeoverCommand } },
+      });
+      return (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(
+        '[data-testid="gardening-run-delta-escalation"]',
+      ) as HTMLElement;
+    };
 
-    expect(el.querySelector('[data-testid="gardening-run-delta-escalation"]')?.textContent).toContain(
-      'blizzard hub chunk takeover ch_1',
-    );
+    it('shows the wrapped command as primary with a copy control and the raw one as fallback', async () => {
+      const esc = await escalationOf('cd /w && claude', 'blizzard runner takeover ch_1');
+
+      expect(esc.querySelector('[data-testid="takeover-command"]')?.textContent).toContain('blizzard runner takeover ch_1');
+      expect(esc.querySelector('[data-testid="copy-takeover"]')).not.toBeNull();
+      expect(esc.querySelector('[data-testid="takeover-command-raw-fallback"]')?.textContent).toContain('cd /w && claude');
+      expect(esc.textContent).toContain('Escalated at survey');
+    });
+
+    it('shows the raw field with a copy control and the may-be-guidance hint when nothing is wrapped', async () => {
+      const esc = await escalationOf('blizzard hub chunk takeover ch_1', '');
+
+      expect(esc.querySelector('[data-testid="takeover-command"]')?.textContent).toContain('blizzard hub chunk takeover ch_1');
+      expect(esc.querySelector('[data-testid="copy-takeover"]')).not.toBeNull();
+      expect(esc.querySelector('[data-testid="unwrapped-hint"]')).not.toBeNull();
+      expect(esc.querySelector('[data-testid="takeover-command-raw-fallback"]')).toBeNull();
+    });
+
+    it('shows the no-command hint, with no empty command line or copy control, when neither exists', async () => {
+      const esc = await escalationOf('', '');
+
+      expect(esc.querySelector('[data-testid="no-command-hint"]')).not.toBeNull();
+      expect(esc.querySelector('[data-testid="takeover-command"]')).toBeNull();
+      expect(esc.querySelector('[data-testid="copy-takeover"]')).toBeNull();
+      expect(esc.textContent).not.toContain('takeover:');
+    });
   });
 
   it('names the cadence that minted the run, linked to its detail, and the chore', async () => {

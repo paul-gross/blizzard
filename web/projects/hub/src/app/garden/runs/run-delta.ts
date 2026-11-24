@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { compactRef, KitAsyncState, type KitAsyncStateValue, KitProseBlock, FleetWhen } from 'fleet';
+import { compactRef, KitAsyncState, type KitAsyncStateValue, KitProseBlock, KitTakeover, FleetWhen } from 'fleet';
 import { AppLink } from 'fleet/shell';
 
 /** One `add` op a delivered set's artifact published — `findingClass` rather than
@@ -97,7 +97,7 @@ function findingRoute(findingId: string): readonly string[] {
 @Component({
   selector: 'app-run-delta',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitProseBlock, RouterLink, FleetWhen, AppLink],
+  imports: [KitAsyncState, KitProseBlock, KitTakeover, RouterLink, FleetWhen, AppLink],
   templateUrl: './run-delta.html',
   styleUrl: './run-delta.css',
 })
