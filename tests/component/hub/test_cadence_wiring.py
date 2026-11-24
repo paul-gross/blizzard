@@ -67,9 +67,13 @@ def _hub_with_two_tenants(tmp_path: Path) -> tuple[HubHarness, StoreScope, Store
 def test_each_cadence_key_is_one_instance_within_a_tenant(tmp_path: Path) -> None:
     hub, first, second = _hub_with_two_tenants(tmp_path)
 
-    for tenant in (first, second):
-        for name, held in _shared(hub, tenant).items():
-            assert all(each is held[0] for each in held), name
+    split = {
+        (tenant, name): [each for each in held if each is not held[0]]
+        for tenant in (first, second)
+        for name, held in _shared(hub, tenant).items()
+    }
+
+    assert {key: others for key, others in split.items() if others} == {}
 
 
 def test_the_cadence_instances_differ_across_tenants(tmp_path: Path) -> None:
