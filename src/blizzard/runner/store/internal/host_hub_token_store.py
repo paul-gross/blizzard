@@ -18,10 +18,14 @@ from blizzard.foundation.secrets.sealing import SealedValue
 from blizzard.runner.hosting.ports import IAdmissionHandle, IWriteAdmittedHubToken
 from blizzard.runner.hub.sealed_tokens import FIRST_REVISION, IWriteHubTokenRepository, SealedHubToken
 from blizzard.runner.store.internal.admission_handle import admission_of
-from blizzard.runner.store.internal.row_transfer import handle_of
+from blizzard.runner.store.internal.row_transfer import handle_of, removal_of
 from blizzard.runner.store.schema import runner_hub_tokens
 from blizzard.runner.store.scoped import RunnerStoreConnections
-from blizzard.runner.transfer.rows import IRunnerTransferHandle, IWriteCarriedHubTokenRepository
+from blizzard.runner.transfer.rows import (
+    IRunnerRemovalHandle,
+    IRunnerTransferHandle,
+    IWriteCarriedHubTokenRepository,
+)
 
 _log = get_logger("blizzard.runner.store")
 
@@ -115,14 +119,24 @@ class HostHubTokenStore:
 
     def drop(self, runner_id: str) -> bool:
         with self._store.begin() as conn:
-            if runner_hub_tokens.name not in inspect(conn).get_table_names():
-                return False
-            dropped = bool(
-                conn.execute(runner_hub_tokens.delete().where(runner_hub_tokens.c.runner_id == runner_id)).rowcount
-            )
+            dropped = _drop_locked(conn, runner_id)
         if dropped:
             _log.info("runner hub token dropped", runner_id=runner_id)
         return dropped
+
+    def drop_removed_locked(self, handle: IRunnerRemovalHandle) -> bool:
+        removal = removal_of(handle)
+        dropped = _drop_locked(removal.conn, removal.runner_id)
+        _log.info("removed runner hub token dropped", runner_id=removal.runner_id, dropped=dropped)
+        return dropped
+
+
+def _drop_locked(conn: Connection, runner_id: str) -> bool:
+    """Delete the runner's row on ``conn``'s open transaction, unless the store is behind head and lacks the table;
+    whether a row was deleted."""
+    if runner_hub_tokens.name not in inspect(conn).get_table_names():
+        return False
+    return bool(conn.execute(runner_hub_tokens.delete().where(runner_hub_tokens.c.runner_id == runner_id)).rowcount)
 
 
 def seal_if_absent_locked(conn: Connection, runner_id: str, sealed: SealedValue, *, at: datetime) -> bool:

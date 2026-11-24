@@ -13,9 +13,13 @@ from sqlalchemy import Row
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.asks import IWriteAskRepository, OpenAsk, QuestionPark, newest_unforwarded, open_asks_of
-from blizzard.runner.store.internal.base import pause_parked_lease_ids
+from blizzard.runner.store.internal.base import Unclosed, pause_parked_lease_ids
 from blizzard.runner.store.schema import asks, lease_closures, park_facts, park_resumes
 from blizzard.runner.store.scoped import RunnerStoreConnections
+
+# `bzh:open-facts-declare-closure`: a hub-terminal chunk retires its lease (`lease_closures`) without a resume,
+# so a park on a closed lease stands no longer.
+_ASK_PARK_LEASE_UNCLOSED = Unclosed(park_facts.c.lease_id, lease_closures.c.lease_id)
 
 _log = get_logger("blizzard.runner.store")
 
@@ -43,8 +47,10 @@ class AskStore:
 
     def ask_parked_lease_ids(self) -> set[str]:
         st = self._store
-        stmt = st.select(park_facts, park_facts.c.lease_id).where(
-            park_facts.c.question_id.not_in(st.select(park_resumes, park_resumes.c.question_id))
+        stmt = (
+            st.select(park_facts, park_facts.c.lease_id)
+            .where(park_facts.c.question_id.not_in(st.select(park_resumes, park_resumes.c.question_id)))
+            .where(_ASK_PARK_LEASE_UNCLOSED.clause(st))
         )
         return {str(r.lease_id) for r in self._store.all(stmt)}
 
@@ -54,6 +60,7 @@ class AskStore:
             st.select(park_facts)
             .where(park_facts.c.lease_id == lease_id)
             .where(park_facts.c.question_id.not_in(st.select(park_resumes, park_resumes.c.question_id)))
+            .where(_ASK_PARK_LEASE_UNCLOSED.clause(st))
             .order_by(park_facts.c.id.desc())
             .limit(1)
         )

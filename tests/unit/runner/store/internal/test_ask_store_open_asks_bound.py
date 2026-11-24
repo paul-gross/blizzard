@@ -67,3 +67,29 @@ def test_open_asks_does_not_read_the_park_rows_of_closed_leases(tmp_path: Path) 
     assert [a.question_id for a in open_asks] == ["q_live"]
     # one live ask + its one park fact; the closed history contributes nothing
     assert counting.rows_read == 2
+
+
+def test_ask_parked_lease_ids_does_not_read_the_never_resumed_parks_of_closed_leases(tmp_path: Path) -> None:
+    engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
+    create_all(runner_metadata, engine)
+    counting = _RowCountingConnections(engine, runner_store_errors(), FIXTURE_RUNNER_ID)
+    asks = AskStore(counting)
+    for i in range(_HISTORY):
+        lease, question = f"lease_old_{i}", f"q_old_{i}"
+        asks.record_park(lease_id=lease, chunk_id="ch_old", question_id=question, parked_at=_NOW)
+        with counting.begin() as conn:
+            conn.execute(
+                lease_closures.insert().values(
+                    runner_id=FIXTURE_RUNNER_ID,
+                    lease_id=lease,
+                    chunk_id="ch_old",
+                    node_id="nd",
+                    reason="terminal",
+                    closed_at=_NOW,
+                )
+            )
+    asks.record_park(lease_id="lease_live", chunk_id="ch_live", question_id="q_live", parked_at=_NOW)
+    counting.rows_read = 0
+
+    assert asks.ask_parked_lease_ids() == {"lease_live"}
+    assert counting.rows_read == 1

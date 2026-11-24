@@ -92,6 +92,8 @@ from blizzard.runner.transfer.rows import (
     IWriteCarriedHosting,
     IWriteCarriedHubTokenRepository,
     IWriteHostIngestRepository,
+    IWriteRemovedHostingRepository,
+    IWriteRemovedHubTokenRepository,
 )
 from blizzard.runner.usage.repository import (
     IWriteCredentialRenewalRepository,
@@ -649,12 +651,13 @@ WRITE_EXEMPTIONS: dict[tuple[type, str], str] = {
     (IWriteCarriedHubTokenRepository, "seal_carried_locked"): _HOST_ONLY + " (runner_hub_tokens)",
     (IWriteHostedRunnerRepository, "host"): _HOST_ONLY + " (hosted_runners, hosted_runner_facts)",
     (IWriteHostedRunnerRepository, "append_fact"): _HOST_ONLY + " (hosted_runner_facts)",
-    (IWriteHostedRunnerRepository, "drop"): _HOST_ONLY + " (hosted_runners, hosted_runner_facts)",
     (IWriteAdmittedHosting, "host_admitted_locked"): _HOST_ONLY + " (hosted_runners, hosted_runner_facts)",
     (IWriteAdmittedHubToken, "seal_admitted_locked"): _HOST_ONLY + " (runner_hub_tokens)",
     (IWriteAdmittedIdentity, "record_admitted_locked"): _ADMITTED + " (runner_identity)",
     (IWriteAdmittedSettings, "create_admitted_locked"): _ADMITTED
     + " (runner_settings, runner_setting_entries, runner_setting_changes)",
+    (IWriteRemovedHubTokenRepository, "drop_removed_locked"): _HOST_ONLY + " (runner_hub_tokens)",
+    (IWriteRemovedHostingRepository, "drop_removed_locked"): _HOST_ONLY + " (hosted_runners, hosted_runner_facts)",
     (IWriteCarriedHosting, "host_carried_locked"): _HOST_ONLY + " (hosted_runners, hosted_runner_facts)",
     (IWriteHostedRunnerRepository, "record_retired"): _HOST_ONLY + " (hosted_runners, hosted_runner_facts)",
     (IWriteHostLaneMarkRepository, "record_host_high_water"): _HOST_ONLY

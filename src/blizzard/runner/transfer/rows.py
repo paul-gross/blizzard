@@ -19,12 +19,15 @@ __all__ = [
     "DanglingReference",
     "HostIngest",
     "IReadHostIngestRepository",
+    "IRunnerRemovalHandle",
     "IRunnerRowRemoval",
     "IRunnerTransfer",
     "IRunnerTransferHandle",
     "IWriteCarriedHosting",
     "IWriteCarriedHubTokenRepository",
     "IWriteHostIngestRepository",
+    "IWriteRemovedHostingRepository",
+    "IWriteRemovedHubTokenRepository",
     "WorkspacePromptConflict",
 ]
 
@@ -73,6 +76,15 @@ class IRunnerTransferHandle(Protocol):
         ...
 
 
+class IRunnerRemovalHandle(Protocol):
+    """One open removal — the source's write transaction. Like the copy's handle it declares no connection access."""
+
+    @property
+    def runner_id(self) -> str:
+        """The runner the removal deletes."""
+        ...
+
+
 class IReadHostIngestRepository(Protocol):
     """Read the ingests this host has recorded."""
 
@@ -115,6 +127,24 @@ class IWriteCarriedHubTokenRepository(Protocol):
         ...
 
 
+class IWriteRemovedHubTokenRepository(Protocol):
+    """The source's sealed hub token of the leaving runner, deleted on the removal's own transaction."""
+
+    def drop_removed_locked(self, handle: IRunnerRemovalHandle) -> bool:
+        """Delete the leaving runner's hub token row on ``handle``'s transaction; whether one was deleted. A store
+        without the table has none."""
+        ...
+
+
+class IWriteRemovedHostingRepository(Protocol):
+    """The source's hosting of the leaving runner, deleted on the removal's own transaction."""
+
+    def drop_removed_locked(self, handle: IRunnerRemovalHandle) -> bool:
+        """Delete the leaving runner's hosted facts and hosted row on ``handle``'s transaction; whether a hosted row
+        was deleted. A store without the table hosts none."""
+        ...
+
+
 class IRunnerTransfer(Protocol):
     """Copy one runner from a source store into a destination store."""
 
@@ -139,8 +169,9 @@ class IRunnerTransfer(Protocol):
 class IRunnerRowRemoval(Protocol):
     """Delete one runner's rows from one store."""
 
-    def remove_runner_rows(self, *, keep_counters: bool) -> None:
-        """Delete every runner-scoped row of the runner, its identity included, in one transaction; host rows stay.
-        ``keep_counters`` leaves its outbox counters, so a runner that runs here again never issues a ``seq`` at or
-        below one its hub already holds."""
+    def remove_runner_rows(self, *, keep_counters: bool, drop_host: bool = False) -> None:
+        """Delete every runner-scoped row of the runner, its identity included, in one transaction; other host rows
+        stay. ``keep_counters`` leaves its outbox counters, so a runner that runs here again never issues a ``seq`` at
+        or below one its hub already holds. ``drop_host`` deletes, in that same transaction, the runner's sealed hub
+        token and its hosting, since it has left the host."""
         ...
