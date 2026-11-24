@@ -1,6 +1,11 @@
 """The delivery area's registrations: the catalogue of the hub's actions, which the entrypoint borrows, and each
 tenant's flow executor — the hub-node router, the turn runner, and the publishers a turn announces through.
 
+The process holds the one action loop every tenant's passes run on, as a resource whose finalizer stops it, the action
+pass driver over it, and the flow driver's step wake, which the domain names as ``IHubStepWake``. The loop is started
+by the hosted app's lifespan; the process scope's close stops it after the tenant scopes, so a tenant's configured
+clients close on the loop they run on.
+
 The entrypoint resolves the actions from its environ and supplies them when the process scope opens, so no provider
 reads the environment. The catalogue is a projection of that one value, keyed by the domain type, so a domain consumer
 takes it without importing this package. The router answers the domain's chunk-write refusals, which the domain
@@ -10,14 +15,17 @@ protocol, so a tenant's turns and its announced turns are two registrations. The
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
 from blizzard.foundation.registry.interface import Lifetime, Registry, port
 from blizzard.hub.config import HubConfig
-from blizzard.hub.delivery.action_pass import ActionPassDriver
+from blizzard.hub.delivery.action_loop import ActionLoop
+from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE, ActionPassDriver, PassBound
 from blizzard.hub.delivery.action_registry import HubActions
+from blizzard.hub.delivery.flow_driver import StepWake
 from blizzard.hub.delivery.flow_turn import ITurnPublisher, TurnRunner
 from blizzard.hub.delivery.hub_node import HubNodeRouter
 from blizzard.hub.domain.chunk.event_log import EventLogService
@@ -31,6 +39,7 @@ from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.delivery.ports.flows import IFlowChangePublisher, IHubStepRefusals, IWriteFlows
+from blizzard.hub.domain.execution.apply import IHubStepWake
 from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
 from blizzard.hub.domain.garden.review.service import ReviewFindingsRecorder
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
@@ -56,9 +65,29 @@ _TENANT_KEYS: tuple[type[Any], ...] = (
 )
 
 
+#: The process keys :func:`register` declares beyond the catalogue, for the store-free graph to declare absent.
+_PROCESS_KEYS: tuple[type[Any], ...] = (
+    ActionLoop,
+    ActionPassDriver,
+    StepWake,
+    IHubStepWake,
+)
+
+
 def register(registry: Registry) -> None:
-    """Declare the catalogue that resolves to the borrowed actions' own."""
+    """Declare the catalogue that resolves to the borrowed actions' own, the action loop and the pass driver over it,
+    and the step wake under its own type and the domain's."""
     registry.factory(action_catalogue, lifetime=Lifetime.PROCESS)
+    registry.resource(action_loop, lifetime=Lifetime.PROCESS)
+    registry.factory(action_pass_driver, lifetime=Lifetime.PROCESS)
+    step_wake = registry.service(StepWake, lifetime=Lifetime.PROCESS)
+    registry.alias(port(IHubStepWake), step_wake)
+
+
+def register_absent(registry: Registry) -> None:
+    """Declare the action loop, the pass driver and the step wake absent, for the store-free graph."""
+    for missing in _PROCESS_KEYS:
+        registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
 
 
 def register_tenant(registry: Registry) -> None:
@@ -75,6 +104,21 @@ def register_tenant_absent(registry: Registry) -> None:
     """Declare the tenant's flow executor absent, for the store-free graph."""
     for missing in _TENANT_KEYS:
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
+
+
+def action_loop() -> Iterator[ActionLoop]:
+    """The one action loop every tenant's passes share, stopped when the process scope closes."""
+    loop = ActionLoop()
+    try:
+        yield loop
+    finally:
+        loop.stop()
+
+
+def action_pass_driver(loop: ActionLoop, config: HubConfigSource) -> ActionPassDriver:
+    """Takes every tenant's action passes on the one loop, each bound by the live config's pass seconds past the
+    default grace."""
+    return ActionPassDriver(loop, lambda: PassBound(config.current().action_pass_seconds, ACTION_PASS_GRACE))
 
 
 def action_catalogue(actions: HubActions) -> HubActionCatalogue:

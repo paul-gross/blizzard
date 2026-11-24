@@ -14,11 +14,11 @@ import structlog
 from blizzard.foundation.config_keys import ConfigKey, ConfigRegistry, Lifetime
 from blizzard.foundation.flags import FlagRegistry
 from blizzard.foundation.flags.keys import held_keys
-from blizzard.hub.composition import build_hub_flags
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.config_defaults import DEFAULT_ANNOTATION_INTERVAL_SECONDS
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.layout import CONFIG_FILENAME
+from blizzard.hub.settings.wiring import build_hub_flags
 from blizzard.runner.composition import build_host_process
 from blizzard.runner.config import DEFAULT_HUB_URL
 from blizzard.runner.config_keys import HOST_REGISTRY

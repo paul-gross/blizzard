@@ -41,7 +41,6 @@ from blizzard.foundation.roles import collaborator
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.rotation import RotationResult
 from blizzard.foundation.secrets.sealing import IRotatableKeyProvider
-from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.trace_attributes import CHUNK_ID
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
@@ -135,7 +134,6 @@ from blizzard.hub.composition import (
     HubSettingsGraph,
     build_flow_driver,
     build_hub_core,
-    build_hub_flags,
     build_services,
     build_system_clock,
     open_hub_store,
@@ -147,6 +145,7 @@ from blizzard.hub.config import (
     legacy_keys_from_document,
     read_legacy_keys,
 )
+from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_registry import build_hub_actions
 from blizzard.hub.delivery.flow_driver import FlowDriver
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
@@ -174,7 +173,6 @@ from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
 from blizzard.hub.layout import remove_retired_workdirs
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.process_root import HubProcess, open_store_backed, open_store_free
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.settings.pass_config import bind_pass_config
@@ -583,19 +581,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     and drive the sweeps across the app's lifetime (pinned:
     ``tests/unit/hub/test_annotation_loop.py::test_lifespan_starts_the_event_derivation_loop_unconditionally``)."""
     services: HubServices | None = app.state.services
+    process: HubProcess = app.state.hub_process
+    # The store-free graph declares no action loop: nothing it serves takes a pass.
+    action_loop = process.resolver.get(ActionLoop) if services is not None else None
     async with contextlib.AsyncExitStack() as cleanup:
         hosted_cleanup: contextlib.ExitStack | None = getattr(app.state, "hosted_cleanup", None)
         if hosted_cleanup is not None:
+            # The process close stops the action loop after the tenant scopes close their configured clients on it.
             cleanup.callback(hosted_cleanup.close)
+        elif action_loop is not None:
+            # A process lent to the app stays open; only its tenant scopes, and then the loop, are closed.
+            cleanup.callback(action_loop.stop)
+            cleanup.callback(process.tenants.close)
         else:
-            if services is not None:
-                cleanup.callback(services.action_loop.stop)
-                cleanup.callback(services.process.tenants.close)
-            else:
-                cleanup.callback(app.state.hub_process.close)
+            cleanup.callback(process.close)
         try:
-            if services is not None:
-                services.action_loop.start()
+            if action_loop is not None:
+                action_loop.start()
             for sweep in Sweep.all(app):
                 task = asyncio.create_task(sweep.run())
                 cleanup.push_async_callback(_wait_for_task, task)
@@ -797,9 +799,6 @@ def build_hosted_app(
     resolved_clock = clock if clock is not None else resolve_clock(os.environ)
     controlled = isinstance(resolved_clock, ControlledClock)
     with contextlib.ExitStack() as cleanup:
-        reader = SqlAlchemyStoreStatusReader(engine)
-        expected = migration_runner(config).script_head()
-        readiness = ReadinessService(reader=reader, expected_revision=expected)
         tracing = TracingSettings.of(os.environ)
 
         core = build_hub_core(
@@ -825,9 +824,15 @@ def build_hosted_app(
             tracing=tracing,
             egress_path_key=_egress_path_key(config.egress),
         )
-        # Closed after everything registered below: the tenant scopes, then the process scope; the engine, tracing
-        # and settings stay borrowed from `hub host`.
+        # The hosted resources' one cleanup: the tenant scopes close their configured clients on the running action
+        # loop, then the process scope stops the loop; the engine, tracing and settings stay borrowed from `hub host`.
         cleanup.callback(core.process.close)
+        resolver = core.process.resolver
+        # Resolved now: the container builds lazily, and only a resolved resource is finalized on close.
+        resolver.get(ActionLoop)
+        readiness = resolver.get(ReadinessService)
+        expected = readiness.expected_revision
+        flags = resolver.get(Flags)
         # Minted here on first start when no key source exists yet.
         secret_keys = core.process.resolver.get(IRotatableKeyProvider)
         remove_retired_workdirs(config.data_dir)
@@ -837,16 +842,11 @@ def build_hosted_app(
         core.process.resolver.get(IOAuthProviderRegistry)
         core.process.resolver.get(SigningKeyService | None)
 
-        flags = build_hub_flags(config)
         services = build_services(
             core,
             public_url=config.public_url,
             cadences_on=lambda: flags.on("cadences"),
         )
-        # Closed before the action loop stops: each tenant scope's finalizer closes the configured clients its
-        # records built on the loop they run on.
-        cleanup.callback(services.action_loop.stop)
-        cleanup.callback(core.process.tenants.close)
         # Only once the store is at the expected schema head: a store mid-migration must
         # fail *readiness*, not *boot* (pinned:
         # `tests/component/test_readiness.py::test_ready_probe_false_on_unmigrated_store`).

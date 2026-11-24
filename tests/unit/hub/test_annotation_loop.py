@@ -311,8 +311,8 @@ class _FakeWorkSources:
 class _FakeServices:
     """A minimal stand-in for ``HubServices`` — only the attributes ``lifespan``
     reads: ``sweeps`` (the roster over ``annotation``, when given, ``close_drain``, ``event_derivation`` and
-    ``tenant_teardown_sweep``, with no trace or egress export), ``action_loop`` (started and stopped around the
-    sweeps), and ``process.tenants`` (closed before the loop stops)."""
+    ``tenant_teardown_sweep``, with no trace or egress export), ``action_loop`` (resolved through ``process.resolver``,
+    started and stopped around the sweeps), and ``process.tenants`` (closed before the loop stops)."""
 
     def __init__(
         self,
@@ -328,7 +328,13 @@ class _FakeServices:
         self.tenant_teardown_sweep = _CountingReconciler()
         self.annotation = annotation
         self.action_loop = ActionLoop()
-        self.process = SimpleNamespace(tenants=SimpleNamespace(close=lambda: None))
+        # The process ``lifespan`` resolves the action loop from and closes the tenant scopes of.
+        self.process = SimpleNamespace(
+            tenants=SimpleNamespace(close=lambda: None), resolver=SimpleNamespace(get=self._resolve)
+        )
+
+    def _resolve(self, key: object) -> ActionLoop:
+        return self.action_loop
 
     @property
     def sweeps(self) -> SweepRoster:
@@ -343,12 +349,14 @@ class _FakeServices:
 
 
 class _FakeApp(FastAPI):
-    """A real ``FastAPI`` carrying only the ``app.state.{services,config,shutdown,platform_tracing,flow_driver}``
-    ``lifespan`` reads, with fake services."""
+    """A real ``FastAPI`` carrying only the
+    ``app.state.{services,hub_process,config,shutdown,platform_tracing,flow_driver}`` ``lifespan`` reads, with fake
+    services."""
 
     def __init__(self, services: _FakeServices, config: HubConfig) -> None:
         super().__init__()
         self.state.services = services
+        self.state.hub_process = services.process
         self.state.config = config
         self.state.shutdown = asyncio.Event()
         self.state.platform_tracing = DisabledPlatformTracing()

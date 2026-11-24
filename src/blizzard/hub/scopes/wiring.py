@@ -14,11 +14,12 @@ from blizzard.foundation.clock import IClock, IMonotonicClock, SystemMonotonicCl
 from blizzard.foundation.registry.interface import Lifetime, Registry, port
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.graphs import PackagedGraphs
+from blizzard.hub.open_tenants import IReadOpenTenants, OpenTenants
 from blizzard.hub.scopes.environ import HubEnviron
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
-from blizzard.hub.tenancy import StoreScope
+from blizzard.hub.tenancy import STORE_UNAVAILABLE, StoreScope
 
 
 def register(registry: Registry) -> None:
@@ -35,3 +36,19 @@ def register(registry: Registry) -> None:
     monotonic = registry.service(SystemMonotonicClock, lifetime=Lifetime.PROCESS)
     registry.alias(port(IMonotonicClock), monotonic)
     registry.context(port(StoreScope), lifetime=Lifetime.TENANT)
+
+
+def register_tenants(registry: Registry) -> None:
+    """Declare the open tenants held in memory over the store's open-tenant read — what a request's tenant is resolved
+    against."""
+    registry.factory(open_tenants, lifetime=Lifetime.PROCESS)
+
+
+def register_tenants_absent(registry: Registry) -> None:
+    """Declare the open tenants absent, for the store-free graph."""
+    registry.absent(port(OpenTenants), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+
+
+def open_tenants(reads: IReadOpenTenants) -> OpenTenants:
+    """The open tenants, loaded through ``reads`` on first use and on each refresh."""
+    return OpenTenants(reads.open_tenants)

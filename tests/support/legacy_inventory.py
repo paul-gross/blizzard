@@ -8,18 +8,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from blizzard.foundation.registry.internal.recording import Kind, RecordingRegistry
-from blizzard.hub.delivery.action_loop import ActionLoop
-from blizzard.hub.delivery.action_pass import ActionPassDriver
-from blizzard.hub.delivery.flow_driver import StepWake
-from blizzard.hub.open_tenants import OpenTenants
 
 #: Each legacy key the hub registry declares (a class or a callable alias), and the area that owns it until adopted.
-LEGACY_INVENTORY: Mapping[object, str] = {
-    OpenTenants: "hub lifecycle",
-    ActionLoop: "hub lifecycle",
-    StepWake: "hub lifecycle",
-    ActionPassDriver: "hub lifecycle",
-}
+LEGACY_INVENTORY: Mapping[object, str] = {}
 
 
 def inventory_violations(registry: RecordingRegistry, allowed: Mapping[object, str] = LEGACY_INVENTORY) -> list[str]:

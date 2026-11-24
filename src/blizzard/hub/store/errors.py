@@ -71,6 +71,11 @@ class HubStoreConnections:
         self._errors = errors
 
     @property
+    def engine(self) -> Engine:
+        """The borrowed engine these connections acquire from — never disposed here."""
+        return self._engine
+
+    @property
     def errors(self) -> HubStoreErrorFactory:
         return self._errors
 

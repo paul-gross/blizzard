@@ -19,12 +19,6 @@ import httpx2
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import IClock, SystemClock
-from blizzard.foundation.flags import (
-    Flags,
-    resolve_flags,
-    warn_held_keys,
-    warn_ignored_flags,
-)
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
 from blizzard.foundation.registry.interface import Lifetime, port
@@ -51,7 +45,6 @@ from blizzard.hub.auth.throttle import LiveIpThrottle
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.action_loop import ActionLoop
-from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE, ActionPassDriver, PassBound
 from blizzard.hub.delivery.action_registry import HubActions, build_hub_actions
 from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores, ITurnRunner, StepWake
 from blizzard.hub.documents.codec import IConfigCodec
@@ -69,7 +62,6 @@ from blizzard.hub.domain.config.secrets import ISecretCatalog
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.delivery.ports.flows import IFlowChangePublisher, IReadFlowLinesCorpus, IReadFlows
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
-from blizzard.hub.domain.execution.apply import IHubStepWake
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import (
     IReadFindingRepository,
@@ -535,17 +527,6 @@ def build_hub_settings(
     return HubSettingsGraph(store, reader, HubSettingsAuthoring(reader, store, footing.validate), footing)
 
 
-def build_hub_flags(config: HubConfig) -> Flags:
-    """The hub's resolved flags: the resolution ``config``'s load made, or — for a config built in code — every ``hub``
-    and ``fleet`` flag of the registry it carries at its default, then its ``[flags]`` overrides. Each override the hub
-    ignores, and each guarded key read as absent, is warned of here, once per process."""
-    resolution = config.flag_resolution or resolve_flags(config.flag_registry, "hub", config.flags)
-    log = get_logger("blizzard.hub")
-    warn_ignored_flags(log, resolution)
-    warn_held_keys(log, config.held_keys)
-    return resolution.flags
-
-
 def connections_for_engine(engine: Engine, platform_tracing: IPlatformTracing | None = None) -> HubStoreConnections:
     """Build the hub store graph over a borrowed engine."""
     if platform_tracing is not None:
@@ -586,46 +567,16 @@ def build_system_clock() -> IClock:
     return SystemClock()
 
 
-def open_tenants_leaf(reads: HubScopedReads) -> OpenTenants:
-    """The open tenants held in memory, a legacy leaf the hub identity area owns until it adopts them."""
-    return OpenTenants(reads.tenants.open_tenants)
-
-
-def action_loop_leaf() -> ActionLoop:
-    """The one action loop every tenant's turns share, a legacy leaf the hub lifecycle owns until it adopts it."""
-    return ActionLoop()
-
-
-def step_wake_leaf() -> StepWake:
-    """The flow driver's wake, bound by `build_flow_driver` — a build with no driver wakes nothing. A legacy leaf the
-    hub lifecycle owns until it adopts it."""
-    return StepWake()
-
-
-def action_pass_driver_leaf(loop: ActionLoop, config: HubConfigSource) -> ActionPassDriver:
-    """Takes every tenant's action passes on the one loop, each bound by the live config's pass seconds past the
-    default grace — a legacy leaf the hub lifecycle owns until it adopts it."""
-    return ActionPassDriver(loop, lambda: PassBound(config.current().action_pass_seconds, ACTION_PASS_GRACE))
-
-
 def register_legacy(registry: LegacyRegistry) -> None:
-    """Declare the store's tenant adapters and the legacy bridge's leaves, each built as the legacy builder built it:
-    the process services a request's admission reads before its tenant is known, and the transitional ports and leaves
-    of the areas not yet adopted — cadence reads and writes and its attention and reading leaves, invitation writes, and
-    the action pass driver."""
-    registry.leaf(open_tenants_leaf, lifetime=Lifetime.PROCESS)
-    registry.leaf(action_loop_leaf, lifetime=Lifetime.PROCESS)
-    registry.leaf(action_pass_driver_leaf, lifetime=Lifetime.PROCESS)
-    step_wake = registry.leaf(step_wake_leaf, lifetime=Lifetime.PROCESS)
-    # The wake a completion's apply names by the domain's own Protocol.
-    registry.alias(port(IHubStepWake), step_wake)
+    """Declare the store's tenant adapters and the legacy bridge's transitional ports over them: the tenant's
+    transactions and its invitation writes."""
     tenant = store_wiring.register_tenant(registry)
     registry.alias(port(IHubTransactions), tenant.of(HubTransactions))
     # The reads a chunk-changed frame is enriched from.
     registry.alias(port(IWriteInvitationRepository), tenant.of(InvitationStore))
 
 
-#: The transitional tenant ports and leaves :func:`register_legacy` declares, for the store-free graph.
+#: The transitional tenant ports :func:`register_legacy` declares, for the store-free graph.
 _LEGACY_TENANT_KEYS: tuple[type[Any], ...] = (
     IHubTransactions,
     IWriteInvitationRepository,
@@ -633,15 +584,7 @@ _LEGACY_TENANT_KEYS: tuple[type[Any], ...] = (
 
 
 def register_legacy_absent(registry: LegacyRegistry) -> None:
-    """Declare each of the legacy bridge's leaves and transitional ports absent, for the store-free graph."""
-    for missing in (
-        OpenTenants,
-        ActionLoop,
-        ActionPassDriver,
-        StepWake,
-        IHubStepWake,
-    ):
-        registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+    """Declare each of the legacy bridge's transitional ports absent, for the store-free graph."""
     store_wiring.register_tenant_absent(registry)
     for missing in _LEGACY_TENANT_KEYS:
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)

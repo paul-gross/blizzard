@@ -2,10 +2,12 @@
 
 A graph without settings declares each port absent. Every graph holds the borrowed boot ``HubConfig``, the transcript
 caps it resolves, and one :class:`HubConfigSource` over it, reading the settings graph's resolution when one is
-borrowed, and the live ``[tracing]`` and ``[egress]`` configs read through that source."""
+borrowed, the live ``[tracing]`` and ``[egress]`` configs read through that source, and the hub's resolved flags."""
 
 from __future__ import annotations
 
+from blizzard.foundation.flags import Flags, resolve_flags, warn_held_keys, warn_ignored_flags
+from blizzard.foundation.logging import get_logger
 from blizzard.foundation.registry.interface import Lifetime, Registry, port
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.egress.boot import LiveEgressConfig
@@ -65,9 +67,22 @@ def live_egress(source: HubConfigSource) -> LiveEgressConfig:
     return LiveEgressConfig(lambda: source.current().egress)
 
 
+def build_hub_flags(config: HubConfig) -> Flags:
+    """The hub's resolved flags: the resolution ``config``'s load made, or — for a config built in code — every ``hub``
+    and ``fleet`` flag of the registry it carries at its default, then its ``[flags]`` overrides. Each override the hub
+    ignores, and each guarded key read as absent, is warned of here, once per process."""
+    resolution = config.flag_resolution or resolve_flags(config.flag_registry, "hub", config.flags)
+    log = get_logger("blizzard.hub")
+    warn_ignored_flags(log, resolution)
+    warn_held_keys(log, config.held_keys)
+    return resolution.flags
+
+
 def register_boot(registry: Registry) -> None:
-    """Declare the borrowed boot config, the transcript caps it resolves, and the live tracing and egress configs."""
+    """Declare the borrowed boot config, the transcript caps and the flags it resolves, and the live tracing and egress
+    configs."""
     registry.context(port(HubConfig), lifetime=Lifetime.PROCESS)
+    registry.factory(build_hub_flags, lifetime=Lifetime.PROCESS)
     registry.factory(boot_transcript_caps, lifetime=Lifetime.PROCESS)
     registry.factory(live_tracing, lifetime=Lifetime.PROCESS)
     registry.factory(live_egress, lifetime=Lifetime.PROCESS)

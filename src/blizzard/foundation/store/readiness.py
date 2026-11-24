@@ -7,7 +7,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlalchemy import Engine
+
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.status import IStoreStatusReader, StoreStatus
 
 
@@ -52,3 +55,8 @@ class ReadinessService:
 
     def evaluate(self) -> Readiness:
         return Readiness.of(self.reader.read_status(), expected_revision=self.expected_revision)
+
+
+def store_status_reader(engine: Engine) -> IStoreStatusReader:
+    """Reads ``engine``'s reachability and applied revision."""
+    return SqlAlchemyStoreStatusReader(engine)

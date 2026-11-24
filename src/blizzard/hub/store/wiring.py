@@ -15,16 +15,24 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
+from sqlalchemy import Engine
+
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
 from blizzard.foundation.roles import adapter_model
+from blizzard.foundation.store import readiness
+from blizzard.foundation.store.migrations import MigrationRunner
+from blizzard.foundation.store.readiness import ReadinessService
+from blizzard.foundation.store.status import IStoreStatusReader
 from blizzard.hub.auth.invitations import IInvitationTokenReads
 from blizzard.hub.auth.service import InvitationWriters
+from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus
 from blizzard.hub.domain.observability.egress.repository import IReadEgressEvents, IReadUsageCorpus
 from blizzard.hub.domain.observability.tracing.repository import StepHydrations
-from blizzard.hub.open_tenants import OpenTenants
+from blizzard.hub.open_tenants import IReadOpenTenants, OpenTenants
+from blizzard.hub.store import MIGRATIONS_DIR
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
@@ -376,6 +384,9 @@ _PROCESS_KEYS: tuple[type[Any], ...] = (
     IReadFlowLinesCorpus,
     IInvitationTokenReads,
     HubEventLogStore,
+    IReadOpenTenants,
+    IStoreStatusReader,
+    ReadinessService,
     *_PROCESS_SERVICES,
 )
 
@@ -395,19 +406,39 @@ def invitation_token_reads(reads: HubScopedReads) -> IInvitationTokenReads:
     return reads.invitations
 
 
+def open_tenant_reads(reads: HubScopedReads) -> IReadOpenTenants:
+    """The hub-scoped reads' open-tenant read, as its port."""
+    return reads.tenants
+
+
+def store_status_reader(engine: Engine) -> IStoreStatusReader:
+    """Reads the borrowed engine's reachability and applied revision."""
+    return readiness.store_status_reader(engine)
+
+
+def readiness_service(reader: IStoreStatusReader, config: HubConfig) -> ReadinessService:
+    """The hub's readiness: the store's status against the head revision this build's migration tree carries."""
+    head = MigrationRunner(script_location=MIGRATIONS_DIR, url=config.db_url).script_head()
+    return ReadinessService(reader=reader, expected_revision=head)
+
+
 def invitation_writers() -> InvitationWriters:
     """Opens a tenant's invitation writer: the invitation store, over the tenant's connections."""
     return InvitationStore
 
 
 def register_process(registry: Registry) -> Ref[HubEventLogStore]:
-    """Declare every hub-level adapter once per process, handing back the hub event log's ``Ref``, which the
-    observability area's hub event log ports alias."""
+    """Declare every hub-level adapter once per process — the open-tenant read, and the store status reader and the
+    readiness over it among them — handing back the hub event log's ``Ref``, which the observability area's hub event
+    log ports alias."""
     registry.factory(build_hub_scoped_reads, lifetime=Lifetime.PROCESS)
     registry.factory(usage_corpus, lifetime=Lifetime.PROCESS)
     registry.factory(flow_lines_corpus, lifetime=Lifetime.PROCESS)
     registry.factory(invitation_token_reads, lifetime=Lifetime.PROCESS)
     registry.factory(invitation_writers, lifetime=Lifetime.PROCESS)
+    registry.factory(open_tenant_reads, lifetime=Lifetime.PROCESS)
+    registry.factory(store_status_reader, lifetime=Lifetime.PROCESS)
+    registry.factory(readiness_service, lifetime=Lifetime.PROCESS)
     hub_events = registry.service(HubEventLogStore, lifetime=Lifetime.PROCESS)
     for each in _PROCESS_SERVICES:
         registry.service(each, lifetime=Lifetime.PROCESS)

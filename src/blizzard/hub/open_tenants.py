@@ -6,8 +6,15 @@ from __future__ import annotations
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from collections.abc import Callable, Mapping
+from typing import Protocol
 
 from blizzard.hub.tenancy import TenantId
+
+
+class IReadOpenTenants(Protocol):
+    """Reads every open tenant's name by id from the store."""
+
+    def open_tenants(self) -> Mapping[TenantId, str]: ...
 
 
 class OpenTenants:

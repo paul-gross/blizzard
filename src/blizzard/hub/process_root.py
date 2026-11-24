@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx2
+from sqlalchemy import Engine
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.platform_tracing import wiring as platform_tracing_wiring
@@ -110,12 +111,13 @@ def register_hub(
     trace_export: bool = False,
     egress_export: bool = False,
 ) -> None:
-    """Declare the hub graph: the scope inputs, the legacy bridge's leaves, the store adapters and the adopted areas
-    over them — or, store-free, each store-backed registration absent. The settings ports resolve from the borrowed
-    settings graph when ``settings`` is set, and are absent otherwise, whether or not the graph is store-backed. The
-    version window is the supplied one when ``versions`` is set on a store-backed graph, and is absent otherwise. The
-    trace export's sweep runs over the supplied exporter when ``trace_export`` is set, and the fact export's sweep
-    over its writers when ``egress_export`` is; each sweep is ``None`` otherwise."""
+    """Declare the hub graph: the scope inputs, the legacy bridge's transitional ports, the store adapters, the
+    process lifecycle owners and the adopted areas over them — or, store-free, each store-backed registration absent.
+    The settings ports resolve from the borrowed settings graph when ``settings`` is set, and are absent otherwise,
+    whether or not the graph is store-backed. The version window is the supplied one when ``versions`` is set on a
+    store-backed graph, and is absent otherwise. The trace export's sweep runs over the supplied exporter when
+    ``trace_export`` is set, and the fact export's sweep over its writers when ``egress_export`` is; each sweep is
+    ``None`` otherwise."""
     scopes.register(registry)
     documents.register(registry)
     platform_tracing_wiring.register(registry)
@@ -124,6 +126,7 @@ def register_hub(
     forge.register_process(registry)
     if store_backed:
         delivery.register(registry)
+        scopes.register_tenants(registry)
         chunk_operations = store.register_chunk_operations(registry)
         hub_events = store.register_process(registry)
         register_legacy(registry)
@@ -148,6 +151,8 @@ def register_hub(
         _register_exports(registry, trace_export=trace_export, egress_export=egress_export)
     else:
         store.register_process_absent(registry)
+        delivery.register_absent(registry)
+        scopes.register_tenants_absent(registry)
         register_legacy_absent(registry)
         delivery.register_tenant_absent(registry)
         delivery_area.register_absent(registry)
@@ -368,6 +373,7 @@ def store_backed_values(
     without ``tracing`` or ``egress_boot``, tracing is disabled and the fact export off."""
     values: list[ScopeValue[Any]] = [
         supply(port(HubStoreConnections), connections),
+        supply(port(Engine), connections.engine),
         supply(port(BorrowedOAuthClient), BorrowedOAuthClient(oauth_http_client)),
         supply(port(TracingSettings), tracing if tracing is not None else TracingSettings("disabled")),
         supply(port(EgressBoot), egress_boot if egress_boot is not None else EgressBoot.off()),

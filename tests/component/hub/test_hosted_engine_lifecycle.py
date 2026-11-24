@@ -321,7 +321,7 @@ def test_owned_oauth_client_closes(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(hub_app.httpx2, "Client", client)
     if fail_construction:
-        monkeypatch.setattr(hub_app, "build_hub_flags", fail)
+        monkeypatch.setattr(hub_app, "build_flow_driver", fail)
         with pytest.raises(RuntimeError, match="instrumentation failed"):
             build_hosted_hub_app(config)
     else:
