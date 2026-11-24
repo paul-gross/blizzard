@@ -1,5 +1,6 @@
 """The garden area's registrations: scope and routine authoring, baselines, proposals and their closure and delivery
-resolution, the run context and the stage check, over the adapters it is handed.
+resolution, the run context, the stage check and the delivery and review-findings materialization, over the adapters
+it is handed.
 
 The read and write ports of each adapter alias that adapter's one instance, so a reader and a writer in one tenant
 share it; the area names no adapter. The artifact formats are handed in as the API edge's instance, and the default
@@ -12,6 +13,12 @@ from typing import Any, cast
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
+from blizzard.hub.domain.garden.delivery.materialize import (
+    GardenDelivery,
+    IReadGardenDeliveryRepository,
+    IWriteGardenDeliveryRepository,
+)
+from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
 from blizzard.hub.domain.garden.delivery.stage_check import GardenStageCheck
 from blizzard.hub.domain.garden.findings.model import IReadFindingSetRepository, IWriteFindingSetRepository
 from blizzard.hub.domain.garden.formats import IGardenFormats
@@ -28,6 +35,12 @@ from blizzard.hub.domain.garden.proposals.model import (
     RoutineGardenProposalReader,
 )
 from blizzard.hub.domain.garden.proposals.resolution import AnsweredFindingsReader, GardenProposalDeliveryResolution
+from blizzard.hub.domain.garden.review.materialize import (
+    IReadReviewFindingsRepository,
+    IWriteReviewFindingsRepository,
+    ReviewFindingsMaterialize,
+)
+from blizzard.hub.domain.garden.review.service import ReviewFindingsRecorder
 from blizzard.hub.domain.garden.routines import (
     IReadRoutineRepository,
     IReadRoutineScopeRepository,
@@ -75,6 +88,10 @@ _SERVICES: tuple[type[Any], ...] = (
     GardenProposalDeliveryResolution,
     GardenProposalClosureService,
     GardenStageCheck,
+    GardenDelivery,
+    GardenDeliveryRecorder,
+    ReviewFindingsMaterialize,
+    ReviewFindingsRecorder,
 )
 
 #: The ports the area aliases onto the adapters it is handed, each family's read half then its write half.
@@ -92,6 +109,10 @@ _PORTS: tuple[type[Any], ...] = (
     IWriteGardenProposalClosureRepository,
     IReadFindingSetRepository,
     IWriteFindingSetRepository,
+    IReadGardenDeliveryRepository,
+    IWriteGardenDeliveryRepository,
+    IReadReviewFindingsRepository,
+    IWriteReviewFindingsRepository,
     IGardenFormats,
 )
 
@@ -106,6 +127,8 @@ def register(
     proposals: Ref[IWriteGardenProposalRepository],
     closures: Ref[IWriteGardenProposalClosureRepository],
     finding_sets: Ref[IWriteFindingSetRepository],
+    deliveries: Ref[IWriteGardenDeliveryRepository],
+    review_findings: Ref[IWriteReviewFindingsRepository],
     formats: Ref[IGardenFormats],
 ) -> None:
     """Declare the area's ports over the adapters handed in, and its services, each once per tenant."""
@@ -122,6 +145,10 @@ def register(
     registry.alias(port(IWriteGardenProposalClosureRepository), closures)
     registry.alias(port(IReadFindingSetRepository), finding_sets)
     registry.alias(port(IWriteFindingSetRepository), finding_sets)
+    registry.alias(port(IReadGardenDeliveryRepository), deliveries)
+    registry.alias(port(IWriteGardenDeliveryRepository), deliveries)
+    registry.alias(port(IReadReviewFindingsRepository), review_findings)
+    registry.alias(port(IWriteReviewFindingsRepository), review_findings)
     registry.alias(port(IGardenFormats), formats)
     for service in _SERVICES:
         registry.service(service, lifetime=Lifetime.TENANT)

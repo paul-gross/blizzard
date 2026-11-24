@@ -84,16 +84,13 @@ from blizzard.hub.domain.delivery.lines import FlowLineFactory
 from blizzard.hub.domain.delivery.ports.flows import IReadFlows, IReadFlowViews
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.execution.apply import IHubStepWake
-from blizzard.hub.domain.garden.delivery.materialize import GardenDelivery
 from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
-from blizzard.hub.domain.garden.delivery.validation import ICommitResolver
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import (
     IReadFindingRepository,
 )
 from blizzard.hub.domain.garden.findings.trend import GardenTrendService
 from blizzard.hub.domain.garden.formats import IGardenFormats
-from blizzard.hub.domain.garden.review.materialize import ReviewFindingsMaterialize
 from blizzard.hub.domain.garden.review.service import ReviewFindingsRecorder
 from blizzard.hub.domain.garden.routines import (
     IReadRoutineRepository,
@@ -141,7 +138,7 @@ from blizzard.hub.domain.observability.transcripts import (
 )
 from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.projects.links import IReadProjectLinks
-from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
+from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.domain.projects.targets import ChunkTargetCapture, ChunkTargets
 from blizzard.hub.domain.runners.host import IReadHostRegistry
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
@@ -164,7 +161,6 @@ from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
-from blizzard.hub.forge.commit_check import SeamCommitResolver
 from blizzard.hub.forge.commit_links import LandedCommitLinks
 from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.graph_sync import packaged_minter
@@ -195,8 +191,6 @@ from blizzard.hub.store.internal.flow_store import FlowStore, tenant_flows
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
-from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
-from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
@@ -210,7 +204,6 @@ from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
-from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
@@ -345,8 +338,6 @@ class TenantServices:
     findings: IReadFindingRepository
     #: A run's finding bucket — what it is shown and may cite.
     finding_bucket: FindingBucketReader
-    #: A project's resolver of a cited commit, against the forge of a repository the project links.
-    commit_resolver_for: Callable[[ProjectId], ICommitResolver]
     #: A routine's finding inflow-against-outflow over a window.
     garden_trend: GardenTrendService
     #: A routine's per-scope last-swept table and windowed measurement series.
@@ -986,46 +977,13 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     errand_runs_store = tenant.get(ErrandRunsStore)
     config_authoring = tenant.get(ConfigAuthoring)
     finding_set_store = tenant.get(FindingSetStore)
-    garden_proposal_store = tenant.get(GardenProposalStore)
     run_context_store = tenant.get(RunContextStore)
-    garden_delivery_store = tenant.get(GardenDeliveryStore)
-    review_findings_store = tenant.get(ReviewFindingsStore)
     garden_trend_store = tenant.get(GardenTrendStore)
     garden_sweeps_store = tenant.get(GardenSweepsStore)
     garden_run_store = tenant.get(GardenRunStore)
     finding_bucket = tenant.get(FindingBucketReader)
     garden_formats = tenant.get(IGardenFormats)
     commit_links = tenant.get(LandedCommitLinks)
-    # A project to a plain `delivery.validation.ICommitResolver` callable.
-    commit_resolver_for = tenant.get(SeamCommitResolver).for_project
-    # Built before the executor, which writes a delivering action's record through them.
-    garden_delivery = GardenDeliveryRecorder(
-        artifacts=chunk_artifacts,
-        buckets=finding_bucket,
-        materialize=GardenDelivery(
-            delivery=garden_delivery_store,
-            findings=finding_store,
-            finding_sets=finding_set_store,
-            proposals=garden_proposal_store,
-            facts=chunk_facts,
-            transactions=stores.transactions,
-            clock=clock,
-        ),
-        formats=garden_formats,
-        resolve_commit_for=commit_resolver_for,
-    )
-    review_findings = ReviewFindingsRecorder(
-        artifacts=chunk_artifacts,
-        materialize=ReviewFindingsMaterialize(
-            delivery=review_findings_store,
-            findings=finding_store,
-            scopes=scope_store,
-            facts=chunk_facts,
-            transactions=stores.transactions,
-            clock=clock,
-        ),
-        formats=garden_formats,
-    )
     chunk_targets = tenant.get(ChunkTargets)
     chunk_target_capture = tenant.get(ChunkTargetCapture)
     hub_router = HubNodeRouter(
@@ -1067,8 +1025,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         actions=actions,
         passes=parts.action_passes,
         forges=forges,
-        review_findings=review_findings,
-        garden_delivery=garden_delivery,
+        review_findings=tenant.get(ReviewFindingsRecorder),
+        garden_delivery=tenant.get(GardenDeliveryRecorder),
         run_context=run_context_store,
         tracer=parts.platform_tracer,
         public_url=parts.public_url,
@@ -1197,7 +1155,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         ),
         findings=finding_store,
         finding_bucket=finding_bucket,
-        commit_resolver_for=commit_resolver_for,
         garden_trend=GardenTrendService(repo=garden_trend_store),
         garden_sweeps=GardenSweepsService(
             repo=garden_sweeps_store, scopes=scope_store, routine_scopes=routine_scope_store

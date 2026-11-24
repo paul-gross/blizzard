@@ -84,8 +84,6 @@ _TENANT_SERVICES: tuple[type[Any], ...] = (
     AnalyticsEventQueryStore,
     AnalyticsOperationalStore,
     ErrandRunsStore,
-    GardenDeliveryStore,
-    ReviewFindingsStore,
     GardenTrendStore,
     GardenSweepsStore,
     GardenRunStore,
@@ -123,6 +121,9 @@ _GARDEN_AUTHORING_SERVICES: tuple[type[Any], ...] = (
     FindingSetStore,
     RunContextStore,
 )
+
+#: The garden materialization adapters, whose ``Ref`` the garden area aliases its delivery ports onto.
+_GARDEN_MATERIALIZATION_SERVICES: tuple[type[Any], ...] = (GardenDeliveryStore, ReviewFindingsStore)
 
 #: The configured-record adapters, whose ``Ref`` the config area aliases its ports onto.
 _CONFIG_SERVICES: tuple[type[Any], ...] = (
@@ -223,6 +224,32 @@ def register_garden_authoring(registry: Registry) -> GardenAuthoringRefs:
 def register_garden_authoring_absent(registry: Registry) -> None:
     """Declare the tenant's garden authoring adapters absent, for the store-free graph."""
     for missing in _GARDEN_AUTHORING_SERVICES:
+        registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
+
+
+@adapter_model
+@dataclass(frozen=True)
+class GardenMaterializationRefs:
+    """The ``Ref`` of each garden delivery adapter, named for the garden area's port family it fills."""
+
+    delivery: Ref[GardenDeliveryStore]
+    review_findings: Ref[ReviewFindingsStore]
+
+
+def register_garden_materialization(registry: Registry) -> GardenMaterializationRefs:
+    """Declare the tenant's garden delivery adapters, handing back the ``Ref`` of each, which the garden area's
+    delivery ports alias."""
+    refs = StoreRefs(
+        {each: registry.service(each, lifetime=Lifetime.TENANT) for each in _GARDEN_MATERIALIZATION_SERVICES}
+    )
+    return GardenMaterializationRefs(
+        delivery=refs.of(GardenDeliveryStore), review_findings=refs.of(ReviewFindingsStore)
+    )
+
+
+def register_garden_materialization_absent(registry: Registry) -> None:
+    """Declare the tenant's garden delivery adapters absent, for the store-free graph."""
+    for missing in _GARDEN_MATERIALIZATION_SERVICES:
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
 
 
