@@ -79,3 +79,137 @@ def test_deletion_and_gitlink_require_exact_entries() -> None:
     good = commit("r", "base", TreeEntry("link", "160000", "other", None), entry("extra", b"upstream"))
     assert proves(plan, (good,))
     assert not proves(plan, (replace(good, tree=(TreeEntry("link", "160000", "wrong", None), good.tree[1])),))
+
+
+def test_unhydrated_identity_does_not_mask_modes_or_foreign_trees() -> None:
+    old = TreeEntry("a", "100644", "old", None)
+    new = TreeEntry("a", "100644", "new", None)
+    root = commit("root", "older", old)
+    source = commit("source", "root", new)
+    plan = prepare(root, (source,), root)
+    assert plan is not None
+    assert proves(plan, (commit("r", "root", new),))
+    assert not proves(plan, (commit("r", "root", replace(new, mode="100755")),))
+    assert not proves(plan, (commit("r", "root", old),))
+    assert not proves(plan, (commit("r", "root", new, TreeEntry("evil", "100644", "x", None)),))
+    assert prepare(root, (commit("source", "root", old),), root) is None
+
+
+def test_multicommit_text_replay_proves_each_intermediate_tree() -> None:
+    root = commit("root", "older", entry("a", b"one\ntwo\nthree\nfour\nfive\n"))
+    first = commit("first", "root", entry("a", b"ONE\ntwo\nthree\nfour\nfive\n"))
+    second = commit("second", "first", entry("a", b"ONE\nTWO\nthree\nfour\nfive\n"))
+    base = commit("base", "root", entry("a", b"one\ntwo\nthree\nfour\nFIVE\n"))
+    plan = prepare(root, (first, second), base)
+    assert plan is not None
+    r1 = commit("r1", "base", entry("a", b"ONE\ntwo\nthree\nfour\nFIVE\n"))
+    r2 = commit("r2", "r1", entry("a", b"ONE\nTWO\nthree\nfour\nFIVE\n"))
+    assert proves(plan, (r1, r2))
+    assert not proves(plan, (replace(r1, tree=(entry("a", b"foreign"),)), r2))
+    assert not proves(plan, (replace(r1, parents=("other-base",)), r2))
+
+
+def test_concurrent_mode_or_gitlink_change_is_not_text_replayed() -> None:
+    root = commit("root", "older", TreeEntry("a", "100644", "old", None))
+    source = commit("source", "root", TreeEntry("a", "100755", "old", None))
+    base = commit("base", "root", TreeEntry("a", "100644", "other", None))
+    assert prepare(root, (source,), base) is None
+    root = commit("root", "older", TreeEntry("a", "160000", "old", None))
+    source = commit("source", "root", TreeEntry("a", "160000", "new", None))
+    base = commit("base", "root", TreeEntry("a", "160000", "other", None))
+    assert prepare(root, (source,), base) is None
+
+
+async def test_large_unchanged_tree_loads_only_changed_blobs_and_proves_replay() -> None:
+    from collections.abc import Awaitable
+    from types import SimpleNamespace
+    from typing import TypeVar, cast
+    from unittest.mock import AsyncMock
+
+    from blizzard.hub.delivery.actions.landing.repo import RepoLanding
+    from blizzard.hub.delivery.actions.landing.rewrite_admission import (
+        _commit,  # pyright: ignore[reportPrivateUsage]  # Exercise evidence loading.
+        _hydrate,  # pyright: ignore[reportPrivateUsage]  # Exercise evidence loading.
+        _prepare,  # pyright: ignore[reportPrivateUsage]  # Exercise evidence loading.
+    )
+
+    unchanged = [SimpleNamespace(path=f"file-{i}", mode="100644", revision=f"same-{i}") for i in range(2000)]
+    contents = {
+        "old": b"one\ntwo\nthree\nfour\nfive\n",
+        "work": b"ONE\ntwo\nthree\nfour\nfive\n",
+        "base": b"one\ntwo\nthree\nfour\nFIVE\n",
+        "replay": b"ONE\ntwo\nthree\nfour\nFIVE\n",
+    }
+    trees = {
+        name: (*unchanged, SimpleNamespace(path="changed", mode="100644", revision=blob))
+        for name, blob in (("root", "old"), ("source", "work"), ("base", "base"), ("rewritten", "replay"))
+    }
+    parents = {"root": ("older",), "source": ("root",), "base": ("root",), "rewritten": ("base",)}
+
+    async def commit_evidence(oid: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            revision=oid,
+            tree=oid,
+            parents=parents[oid],
+            author_name="a",
+            author_email="e",
+            author_date="d",
+            message="m",
+        )
+
+    async def tree_evidence(oid: str) -> tuple[SimpleNamespace, ...]:
+        return trees[oid]
+
+    async def blob_evidence(oid: str) -> bytes:
+        return contents[oid]
+
+    T = TypeVar("T")
+
+    async def ask(value: Awaitable[T]) -> T:
+        return await value
+
+    blobs = AsyncMock(side_effect=blob_evidence)
+    refs = SimpleNamespace(commit_evidence=commit_evidence, tree_evidence=tree_evidence, blob_evidence=blobs)
+    repo = cast(RepoLanding, SimpleNamespace(forge=SimpleNamespace(refs=refs), ask=ask))
+    plan = await _prepare(repo, "root", ("source",), "base")
+    assert plan is not None
+    assert {call.args[0] for call in blobs.call_args_list} == {"old", "work", "base"}
+    rewritten = await _commit(repo, "rewritten")
+    hydrated = await _hydrate(repo, (rewritten,), {"changed"})
+    assert proves(plan, hydrated)
+    assert not proves(plan, (rewritten,))
+    assert blobs.await_count == 4
+    foreign = replace(hydrated[0], tree=(*hydrated[0].tree, TreeEntry("foreign", "100644", "bad", None)))
+    assert not proves(plan, (foreign,))
+
+
+async def test_conflicting_mode_changes_do_not_fetch_blobs() -> None:
+    from collections.abc import Awaitable
+    from types import SimpleNamespace
+    from typing import TypeVar, cast
+    from unittest.mock import AsyncMock
+
+    from blizzard.hub.delivery.actions.landing.repo import RepoLanding
+    from blizzard.hub.delivery.actions.landing.rewrite_admission import (
+        _prepare,  # pyright: ignore[reportPrivateUsage]  # Exercise evidence loading.
+    )
+
+    async def commit_evidence(oid: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            revision=oid, tree=oid, parents=("root",), author_name="a", author_email="e", author_date="d", message="m"
+        )
+
+    async def tree_evidence(oid: str) -> tuple[SimpleNamespace, ...]:
+        mode, blob = {"root": ("100644", "old"), "source": ("100755", "old"), "base": ("100644", "other")}[oid]
+        return (SimpleNamespace(path="a", mode=mode, revision=blob),)
+
+    T = TypeVar("T")
+
+    async def ask(value: Awaitable[T]) -> T:
+        return await value
+
+    blobs = AsyncMock()
+    refs = SimpleNamespace(commit_evidence=commit_evidence, tree_evidence=tree_evidence, blob_evidence=blobs)
+    repo = cast(RepoLanding, SimpleNamespace(forge=SimpleNamespace(refs=refs), ask=ask))
+    assert await _prepare(repo, "root", ("source",), "base") is None
+    blobs.assert_not_awaited()

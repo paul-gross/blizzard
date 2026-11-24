@@ -1860,7 +1860,7 @@ def test_rebase_intent_survives_response_loss_and_checks_the_rewritten_head() ->
             "blob_evidence": [blob_evidence],
         }
     )
-    for call in ("commit_evidence", "tree_evidence", "blob_evidence"):
+    for call in ("commit_evidence", "tree_evidence"):
         original = state.replies[call]
         for refusal in (ForgeRejected("protected"), ForgeNotFound(ForgeObject.REVISION), ForgeUnavailable("offline")):
             state.replies[call] = [refusal]
@@ -1881,7 +1881,7 @@ def test_rebase_intent_survives_response_loss_and_checks_the_rewritten_head() ->
     marker = _row(ArtifactKind.ASSET, *intent)
     visit = replace(_visit(), markers=(marker,))
 
-    for call in ("commit_evidence", "tree_evidence", "blob_evidence"):
+    for call in ("commit_evidence", "tree_evidence"):
         original = state.replies[call]
         for refusal in (ForgeRejected("protected"), ForgeNotFound(ForgeObject.REVISION), ForgeUnavailable("offline")):
             state.replies[call] = [refusal]

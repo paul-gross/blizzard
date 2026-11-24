@@ -11,7 +11,7 @@ from blizzard.foundation.roles import domain_model
 @domain_model
 @dataclass(frozen=True)
 class TreeEntry:
-    """A complete leaf entry; content is absent only for a gitlink."""
+    """A complete leaf identity, with content loaded only when replay needs it."""
 
     path: str
     mode: str
@@ -62,7 +62,7 @@ def _tree(entries: tuple[TreeEntry, ...]) -> dict[str, ExpectedEntry] | None:
             or entry.path in result
             or not entry.oid
             or entry.mode not in {"100644", "100755", "120000", "160000"}
-            or (entry.content is None) != (entry.mode == "160000")
+            or (entry.mode == "160000" and entry.content is not None)
         ):
             return None
         result[entry.path] = ExpectedEntry(entry.mode, entry.oid, entry.content)
@@ -70,6 +70,16 @@ def _tree(entries: tuple[TreeEntry, ...]) -> dict[str, ExpectedEntry] | None:
     if any("/".join(path.split("/")[:i]) in result for path in result for i in range(1, len(path.split("/")))):
         return None
     return result
+
+
+def _same(left: ExpectedEntry | None, right: ExpectedEntry | None) -> bool:
+    if left is None or right is None:
+        return left is right
+    if left.mode != right.mode:
+        return False
+    if left.oid is not None and right.oid is not None:
+        return left.oid == right.oid
+    return left.content is not None and left.content == right.content
 
 
 def _edits(old: list[bytes], new: list[bytes]) -> list[tuple[int, int, list[bytes]]]:
@@ -120,13 +130,15 @@ def prepare(source_base: Commit, source_commits: tuple[Commit, ...], base: Commi
         current = _tree(commit.tree)
         if current is None or not commit.oid or commit.oid in seen or commit.parents != (parent,):
             return None
-        changes = {path for path in previous.keys() | current.keys() if previous.get(path) != current.get(path)}
+        changes = {
+            path for path in previous.keys() | current.keys() if not _same(previous.get(path), current.get(path))
+        }
         if not changes:
             return None
         result = target.copy()
         for path in changes:
             before, after, onto = previous.get(path), current.get(path), target.get(path)
-            if onto == before:
+            if _same(onto, before):
                 if after is None:
                     result.pop(path, None)
                 else:
@@ -147,7 +159,7 @@ def prepare(source_base: Commit, source_commits: tuple[Commit, ...], base: Commi
                 result[path] = ExpectedEntry(after.mode, None, content)
             else:
                 return None
-        if result == target:
+        if all(_same(result.get(path), target.get(path)) for path in result.keys() | target.keys()):
             return None
         # Reject file/directory collisions introduced by replay.
         if any("/".join(path.split("/")[:i]) in result for path in result for i in range(1, len(path.split("/")))):
@@ -181,8 +193,8 @@ def proves(plan: RewritePlan, rewritten: tuple[Commit, ...]) -> bool:
             expectation = wanted[path]
             if (
                 entry.mode != expectation.mode
-                or entry.content != expectation.content
                 or (expectation.oid is not None and entry.oid != expectation.oid)
+                or (expectation.oid is None and (entry.content is None or entry.content != expectation.content))
             ):
                 return False
         parent = commit.oid
