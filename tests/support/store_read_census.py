@@ -149,6 +149,7 @@ from blizzard.hub.domain.garden.routines import (
 )
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository, RunContext
 from blizzard.hub.domain.garden.runs.history import IReadGardenRunRepository
+from blizzard.hub.domain.garden.runs.run import RunService
 from blizzard.hub.domain.garden.runs.sweeps import IReadGardenSweepsRepository
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
@@ -1696,7 +1697,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     hub.services.cadence_lifecycle.retire(retired_cadence, operator, by="operator")
 
     # --- routine runs: garden_run/run_context's own source ---------------------------------
-    run_1 = hub.services.routine_run.run(
+    run_1 = hub.default_adapter(RunService).run(
         routine,
         scope=scope_a,
         mode=RunMode.FULL,
@@ -1705,7 +1706,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     )
     # A second run is all `runs_in_window`/`list_all` need (>=2 rows) — its own chunk is
     # never referenced by any recipe, so its return value is deliberately discarded.
-    hub.services.routine_run.run(
+    hub.default_adapter(RunService).run(
         routine_2,
         scope=scope_b,
         mode=RunMode.FULL,

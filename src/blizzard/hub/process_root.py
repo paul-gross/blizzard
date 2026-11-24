@@ -140,6 +140,7 @@ def register_hub(
         urgency_area.register_absent(registry)
         store.register_garden_authoring_absent(registry)
         store.register_garden_materialization_absent(registry)
+        store.register_garden_runs_absent(registry)
         garden_area.register_absent(registry)
         cadence_area.register_absent(registry)
         store.register_config_absent(registry)
@@ -199,6 +200,7 @@ def _register_garden(registry: LegacyRegistry, *, formats: Ref[GardenFormats]) -
     formats."""
     refs = store.register_garden_authoring(registry)
     materialization = store.register_garden_materialization(registry)
+    runs = store.register_garden_runs(registry)
     garden_area.register(
         registry,
         scopes=refs.scopes,
@@ -211,6 +213,9 @@ def _register_garden(registry: LegacyRegistry, *, formats: Ref[GardenFormats]) -
         deliveries=materialization.delivery,
         review_findings=materialization.review_findings,
         formats=formats,
+        trends=runs.trends,
+        sweeps=runs.sweeps,
+        runs=runs.runs,
     )
 
 

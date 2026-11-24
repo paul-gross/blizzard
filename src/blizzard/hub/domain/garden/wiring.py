@@ -21,6 +21,7 @@ from blizzard.hub.domain.garden.delivery.materialize import (
 from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
 from blizzard.hub.domain.garden.delivery.stage_check import GardenStageCheck
 from blizzard.hub.domain.garden.findings.model import IReadFindingSetRepository, IWriteFindingSetRepository
+from blizzard.hub.domain.garden.findings.trend import GardenTrendService, IReadGardenTrendRepository
 from blizzard.hub.domain.garden.formats import IGardenFormats
 from blizzard.hub.domain.garden.proposals.closure import (
     DefaultGraphEnsurer,
@@ -52,6 +53,9 @@ from blizzard.hub.domain.garden.routines import (
 )
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository, IWriteRunContextRepository
 from blizzard.hub.domain.garden.runs.baselines import RoutineBaselineService
+from blizzard.hub.domain.garden.runs.history import GardenRunService, IReadGardenRunRepository
+from blizzard.hub.domain.garden.runs.run import RunService
+from blizzard.hub.domain.garden.runs.sweeps import GardenSweepsService, IReadGardenSweepsRepository
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, IWriteScopeRepository, ScopeLifecycle, ScopeRegistry
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.tenancy import STORE_UNAVAILABLE
@@ -92,6 +96,10 @@ _SERVICES: tuple[type[Any], ...] = (
     GardenDeliveryRecorder,
     ReviewFindingsMaterialize,
     ReviewFindingsRecorder,
+    RunService,
+    GardenTrendService,
+    GardenSweepsService,
+    GardenRunService,
 )
 
 #: The ports the area aliases onto the adapters it is handed, each family's read half then its write half.
@@ -114,6 +122,9 @@ _PORTS: tuple[type[Any], ...] = (
     IReadReviewFindingsRepository,
     IWriteReviewFindingsRepository,
     IGardenFormats,
+    IReadGardenTrendRepository,
+    IReadGardenSweepsRepository,
+    IReadGardenRunRepository,
 )
 
 
@@ -130,6 +141,9 @@ def register(
     deliveries: Ref[IWriteGardenDeliveryRepository],
     review_findings: Ref[IWriteReviewFindingsRepository],
     formats: Ref[IGardenFormats],
+    trends: Ref[IReadGardenTrendRepository],
+    sweeps: Ref[IReadGardenSweepsRepository],
+    runs: Ref[IReadGardenRunRepository],
 ) -> None:
     """Declare the area's ports over the adapters handed in, and its services, each once per tenant."""
     registry.alias(port(IReadScopeRepository), scopes)
@@ -150,6 +164,9 @@ def register(
     registry.alias(port(IReadReviewFindingsRepository), review_findings)
     registry.alias(port(IWriteReviewFindingsRepository), review_findings)
     registry.alias(port(IGardenFormats), formats)
+    registry.alias(port(IReadGardenTrendRepository), trends)
+    registry.alias(port(IReadGardenSweepsRepository), sweeps)
+    registry.alias(port(IReadGardenRunRepository), runs)
     for service in _SERVICES:
         registry.service(service, lifetime=Lifetime.TENANT)
     registry.factory(garden_proposal_authoring, lifetime=Lifetime.TENANT)

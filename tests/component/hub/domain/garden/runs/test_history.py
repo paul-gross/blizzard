@@ -23,6 +23,8 @@ from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine, RoutineAuthoring
+from blizzard.hub.domain.garden.runs.history import GardenRunService
+from blizzard.hub.domain.garden.runs.run import RunService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.operations.queue import GroupService
@@ -71,7 +73,7 @@ def _run(hub: HubHarness, routine: Routine) -> str:
     joined through a genuine `chunk_work_refs`/`work_items` pointer, not hand-rolled."""
     scope = hub.default_adapter(IReadScopeRepository).get(routine.project_id, routine.default_scope_slug)
     assert scope is not None
-    result = hub.services.routine_run.run(
+    result = hub.default_adapter(RunService).run(
         routine,
         scope=scope,
         mode=RunMode.FULL,
@@ -211,7 +213,7 @@ def test_a_delivered_run_appears_with_its_finding_set(tmp_path: Path) -> None:
     chunk_id = _run(hub, routine)
     _seed_delivery(hub, chunk_id, "fins_1", artifact_id="art_1", findings=[], revisions={"blizzard": "aaa"})
 
-    (row,) = hub.services.garden_run.list_runs(since=_SINCE, until=_UNTIL)
+    (row,) = hub.default_adapter(GardenRunService).list_runs(since=_SINCE, until=_UNTIL)
 
     assert row.chunk_id == chunk_id
     assert row.routine_name == "gardening"
@@ -233,7 +235,7 @@ def test_a_run_that_delivered_an_empty_list_still_appears_with_its_set(tmp_path:
     chunk_id = _run(hub, routine)
     _seed_delivery(hub, chunk_id, "fins_empty", artifact_id="art_1", findings=[])
 
-    (row,) = hub.services.garden_run.list_runs(since=_SINCE, until=_UNTIL)
+    (row,) = hub.default_adapter(GardenRunService).list_runs(since=_SINCE, until=_UNTIL)
 
     (delivered,) = row.delivered
     assert delivered.finding_set_id == "fins_empty"
@@ -245,7 +247,7 @@ def test_an_escalated_run_with_no_delivery_still_appears(tmp_path: Path) -> None
     chunk_id = _run(hub, routine)
     _seed_escalation(hub, chunk_id, takeover="cd /ws && mock-claude-code --resume s1")
 
-    (row,) = hub.services.garden_run.list_runs(since=_SINCE, until=_UNTIL)
+    (row,) = hub.default_adapter(GardenRunService).list_runs(since=_SINCE, until=_UNTIL)
 
     assert row.chunk_id == chunk_id
     assert row.outcome == ChunkStatus.NEEDS_HUMAN
@@ -267,7 +269,7 @@ def test_every_run_kind_appears_together_in_one_window(tmp_path: Path) -> None:
     escalated_chunk = _run(hub, routine)
     _seed_escalation(hub, escalated_chunk)
 
-    rows = hub.services.garden_run.list_runs(since=_SINCE, until=_UNTIL)
+    rows = hub.default_adapter(GardenRunService).list_runs(since=_SINCE, until=_UNTIL)
 
     assert {r.chunk_id for r in rows} == {delivered_chunk, empty_chunk, escalated_chunk}
     by_chunk = {r.chunk_id: r for r in rows}
@@ -280,7 +282,7 @@ def test_a_run_outside_the_window_is_excluded(tmp_path: Path) -> None:
     routine = _routine(hub)
     _run(hub, routine)
 
-    rows = hub.services.garden_run.list_runs(
+    rows = hub.default_adapter(GardenRunService).list_runs(
         since=datetime(2020, 1, 1, tzinfo=UTC), until=datetime(2020, 2, 1, tzinfo=UTC)
     )
 
@@ -294,7 +296,7 @@ def test_several_finding_sets_from_one_run_stay_separately_grouped_in_the_list(t
     _seed_delivery(hub, chunk_id, "fins_1", artifact_id="art_1", findings=[], revisions={"a": "1"})
     _seed_delivery(hub, chunk_id, "fins_2", artifact_id="art_2", findings=[], revisions={"b": "2"})
 
-    (row,) = hub.services.garden_run.list_runs(since=_SINCE, until=_UNTIL)
+    (row,) = hub.default_adapter(GardenRunService).list_runs(since=_SINCE, until=_UNTIL)
 
     assert {d.finding_set_id for d in row.delivered} == {"fins_1", "fins_2"}
 
@@ -316,7 +318,7 @@ def test_delivered_set_counts_reflect_only_this_deliverys_add_observed_and_gone_
     _seed_finding_fact(hub, "fin_1", kind="gone", finding_set_id="fins_1", note="not found this pass")
     _seed_finding_fact(hub, "fin_2", kind="resolved", finding_set_id="fins_1", note="landed")
 
-    (row,) = hub.services.garden_run.list_runs(since=_SINCE, until=_UNTIL)
+    (row,) = hub.default_adapter(GardenRunService).list_runs(since=_SINCE, until=_UNTIL)
 
     (delivered,) = row.delivered
     assert delivered.added_count == 4
@@ -331,7 +333,7 @@ def test_delivered_set_counts_are_zero_not_null_for_an_absent_kind(tmp_path: Pat
     _seed_delivery(hub, chunk_id, "fins_1", artifact_id="art_1", findings=[])
     _seed_finding_fact(hub, "fin_1", kind="add", finding_set_id="fins_1")
 
-    (row,) = hub.services.garden_run.list_runs(since=_SINCE, until=_UNTIL)
+    (row,) = hub.default_adapter(GardenRunService).list_runs(since=_SINCE, until=_UNTIL)
 
     (delivered,) = row.delivered
     assert delivered.added_count == 1
@@ -350,7 +352,7 @@ def test_delivered_set_counts_stay_per_set_never_merged_across_sets_in_one_run(t
     _seed_finding_fact(hub, "fin_3", kind="add", finding_set_id="fins_2")
     _seed_finding_fact(hub, "fin_4", kind="observed", finding_set_id="fins_2")
 
-    (row,) = hub.services.garden_run.list_runs(since=_SINCE, until=_UNTIL)
+    (row,) = hub.default_adapter(GardenRunService).list_runs(since=_SINCE, until=_UNTIL)
 
     by_set = {d.finding_set_id: d for d in row.delivered}
     assert by_set["fins_1"].added_count == 1
@@ -378,7 +380,7 @@ def test_run_delta_reads_back_added_observed_and_gone(tmp_path: Path) -> None:
 
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
-    delta = hub.services.garden_run.run_delta(chunk)
+    delta = hub.default_adapter(GardenRunService).run_delta(chunk)
 
     assert delta is not None
     assert delta.routine_name == "gardening"
@@ -410,7 +412,7 @@ def test_an_observed_op_naming_no_finding_row_still_renders_by_id(tmp_path: Path
 
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
-    delta = hub.services.garden_run.run_delta(chunk)
+    delta = hub.default_adapter(GardenRunService).run_delta(chunk)
 
     assert delta is not None
     (set_delta,) = delta.sets
@@ -434,7 +436,7 @@ def test_an_add_predating_the_finding_set_link_renders_with_no_matched_id(tmp_pa
 
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
-    delta = hub.services.garden_run.run_delta(chunk)
+    delta = hub.default_adapter(GardenRunService).run_delta(chunk)
 
     assert delta is not None
     (set_delta,) = delta.sets
@@ -459,7 +461,7 @@ def test_run_delta_keeps_several_delivered_sets_separately_grouped(tmp_path: Pat
 
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
-    delta = hub.services.garden_run.run_delta(chunk)
+    delta = hub.default_adapter(GardenRunService).run_delta(chunk)
 
     assert delta is not None
     assert [s.finding_set_id for s in delta.sets] == ["fins_1", "fins_2"]
@@ -492,12 +494,12 @@ def test_run_delta_query_count_does_not_grow_with_delivered_set_count(tmp_path: 
     many_chunk = hub.services.chunks.record.get(many_chunk_id)
     assert few_chunk is not None and many_chunk is not None
 
-    few_count = count_queries(hub.engine, lambda: hub.services.garden_run.run_delta(few_chunk))
-    many_count = count_queries(hub.engine, lambda: hub.services.garden_run.run_delta(many_chunk))
+    few_count = count_queries(hub.engine, lambda: hub.default_adapter(GardenRunService).run_delta(few_chunk))
+    many_count = count_queries(hub.engine, lambda: hub.default_adapter(GardenRunService).run_delta(many_chunk))
     assert few_count == many_count
 
-    few_delta = hub.services.garden_run.run_delta(few_chunk)
-    many_delta = hub.services.garden_run.run_delta(many_chunk)
+    few_delta = hub.default_adapter(GardenRunService).run_delta(few_chunk)
+    many_delta = hub.default_adapter(GardenRunService).run_delta(many_chunk)
     assert few_delta is not None and len(few_delta.sets) == 2
     assert many_delta is not None and len(many_delta.sets) == 8
 
@@ -506,7 +508,7 @@ def test_run_delta_is_none_for_a_chunk_with_no_run_identity(tmp_path: Path) -> N
     hub = build_hub(tmp_path)
 
     ghost = Chunk(chunk_id="ch_ghost", graph_id="gr_1", work_refs=[], minted_at=datetime(2026, 1, 1, tzinfo=UTC))
-    assert hub.services.garden_run.run_delta(ghost) is None
+    assert hub.default_adapter(GardenRunService).run_delta(ghost) is None
 
 
 def test_a_chunk_that_absorbed_another_runs_work_ref_still_reads_its_own_identity(tmp_path: Path) -> None:
@@ -523,11 +525,11 @@ def test_a_chunk_that_absorbed_another_runs_work_ref_still_reads_its_own_identit
 
     survivor_chunk = hub.services.chunks.record.get(survivor_id)
     assert survivor_chunk is not None
-    delta = hub.services.garden_run.run_delta(survivor_chunk)
+    delta = hub.default_adapter(GardenRunService).run_delta(survivor_chunk)
     assert delta is not None
     assert delta.routine_name == "survivor-routine"
 
-    rows = hub.services.garden_run.list_runs(since=_SINCE, until=_UNTIL)
+    rows = hub.default_adapter(GardenRunService).list_runs(since=_SINCE, until=_UNTIL)
     by_chunk = {r.chunk_id: r for r in rows}
     assert by_chunk[survivor_id].routine_name == "survivor-routine"
 
@@ -547,7 +549,7 @@ def test_run_delta_answers_every_sets_finding_ids_across_a_batch_boundary(
 
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
-    delta = hub.services.garden_run.run_delta(chunk)
+    delta = hub.default_adapter(GardenRunService).run_delta(chunk)
 
     assert delta is not None
     assert [(s.finding_set_id, s.added[0].finding_id) for s in delta.sets] == [

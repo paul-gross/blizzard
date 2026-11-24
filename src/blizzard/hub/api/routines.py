@@ -26,8 +26,8 @@ from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import chunk_events, problems, problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.chunk_views import ingest_conflict_refusal
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
@@ -41,7 +41,7 @@ from blizzard.hub.domain.cadence.services import CadenceReading
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
-from blizzard.hub.domain.garden.findings.trend import Trend, TrendWindow
+from blizzard.hub.domain.garden.findings.trend import GardenTrendService, Trend, TrendWindow
 from blizzard.hub.domain.garden.proposals.model import GardenProposalCounts, IReadGardenProposalRepository
 from blizzard.hub.domain.garden.routines import (
     DEFAULT_URGENCY_FIELD,
@@ -60,8 +60,14 @@ from blizzard.hub.domain.garden.routines import (
     RoutineSlugTakenError,
 )
 from blizzard.hub.domain.garden.runs.baselines import RoutineBaseline, RoutineBaselineService
-from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, RunResult, ScopeNotRelatedError, ScopeRetiredError
-from blizzard.hub.domain.garden.runs.sweeps import GardenSweeps, SweepWindow
+from blizzard.hub.domain.garden.runs.run import (
+    RoutineRetiredError,
+    RunResult,
+    RunService,
+    ScopeNotRelatedError,
+    ScopeRetiredError,
+)
+from blizzard.hub.domain.garden.runs.sweeps import GardenSweeps, GardenSweepsService, SweepWindow
 from blizzard.hub.domain.garden.runs.window import InvalidWindowError, require_until_after_since
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
@@ -69,6 +75,8 @@ from blizzard.hub.domain.projects.model import IReadProjectRepository, Project
 from blizzard.hub.domain.urgency.chain import ChainLinks, resolve_chain
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, UrgencyRetired, UrgencyUnknown
 from blizzard.hub.domain.urgency.services import UrgencyReading
+from blizzard.hub.events.broker import EventBroker
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from blizzard.wire.garden_proposal_counts import GardenProposalCountsRowView, GardenProposalCountsView
 from blizzard.wire.garden_sweeps import GardenSweepsView, MeasurementReadingView, ScopeSweepView
 from blizzard.wire.garden_trend import TrendAgeView, TrendPeriodView, TrendView
@@ -357,7 +365,7 @@ def _trend_view(trend: Trend) -> TrendView:
 @router.get("/routines/trend", response_model=TrendView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 @inject_sync
 def routine_trend(
-    services: Services,
+    trends: FromDishka[GardenTrendService],
     routines: Routines,
     projects: ProjectReads,
     project: QueryProject,
@@ -388,7 +396,7 @@ def routine_trend(
         )
     except InvalidWindowError as exc:
         raise ProblemHTTPException(partial(problems_garden.garden_window_invalid_problem, str(exc))) from exc
-    return _trend_view(services.garden_trend.trend(found, window))
+    return _trend_view(trends.trend(found, window))
 
 
 def _proposal_counts_row_view(counts: GardenProposalCounts, labels: ProjectLabelFields) -> GardenProposalCountsRowView:
@@ -715,7 +723,7 @@ def _sweeps_view(sweeps: GardenSweeps) -> GardenSweepsView:
 @inject_sync
 def routine_sweeps(
     routine_id: str,
-    services: Services,
+    sweeps_service: FromDishka[GardenSweepsService],
     routines: Routines,
     since: Annotated[str, Query()],
     until: Annotated[str, Query()],
@@ -735,7 +743,7 @@ def routine_sweeps(
         window = SweepWindow.of(parsed_since, parsed_until)
     except InvalidWindowError as exc:
         raise ProblemHTTPException(partial(problems_garden.garden_window_invalid_problem, str(exc))) from exc
-    sweeps = services.garden_sweeps.sweeps(routine, since=window.since, until=window.until)
+    sweeps = sweeps_service.sweeps(routine, since=window.since, until=window.until)
     return _sweeps_view(sweeps)
 
 
@@ -766,7 +774,11 @@ def _run_response(result: RunResult) -> RoutineRunResponse:
 def run_routine(
     routine_id: str,
     request: RoutineRunRequest,
-    services: Services,
+    runs: FromDishka[RunService],
+    urgencies: Urgencies,
+    work_sources: FromDishka[IWorkSourceRegistry],
+    frames: FromDishka[ChunkFrameLoader],
+    events: FromDishka[EventBroker],
     routines: Routines,
     scopes: Scopes,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
@@ -782,10 +794,10 @@ def run_routine(
             partial(problems_garden.routine_not_found_problem, f"unknown routine {routine_id}", 404)
         )
     try:
-        services.routine_run.refuse_if_retired(routine)
+        runs.refuse_if_retired(routine)
     except RoutineRetiredError as exc:
         raise ProblemHTTPException(partial(problems_garden.routine_not_runnable_problem, str(exc))) from exc
-    urgency = stated_urgency(request.urgency, services.urgency_reading)
+    urgency = stated_urgency(request.urgency, urgencies)
     try:
         slug = routine.effective_scope_slug(
             ScopeSlug.parse(request.scope_slug) if request.scope_slug is not None else None
@@ -798,7 +810,7 @@ def run_routine(
             partial(problems_garden.scope_not_found_problem, f"unknown scope {slug.value!r}", 422)
         )
     try:
-        result = services.routine_run.run(
+        result = runs.run(
             routine,
             scope=scope,
             mode=request.mode,
@@ -819,10 +831,10 @@ def run_routine(
     except (RoutineGraphUnresolvedError, ScopeRetiredError, RoutineRetiredError) as exc:
         raise ProblemHTTPException(partial(problems_garden.routine_not_runnable_problem, str(exc))) from exc
     except IngestConflict as exc:
-        raise ingest_conflict_refusal(services.work_sources, exc) from exc
+        raise ingest_conflict_refusal(work_sources, exc) from exc
     # The chunk is minted `not_ready`, so its post-write status reads `not_ready`.
-    chunk_events.ChunkChanged.of(services.chunk_frames, result.chunk_id, prev_status=None).publish(
+    chunk_events.ChunkChanged.of(frames, result.chunk_id, prev_status=None).publish(
         cause="minted", key=f"chunks:{result.chunk_id}"
     )
-    services.events.publish_queue_changed()  # the mint adds the chunk to the backlog list
+    events.publish_queue_changed()  # the mint adds the chunk to the backlog list
     return _run_response(result)

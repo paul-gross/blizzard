@@ -15,6 +15,7 @@ from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import RoutineAuthoring
+from blizzard.hub.domain.garden.runs.run import RunService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
@@ -63,7 +64,7 @@ def _run(hub: HubHarness, project: str) -> str:
     )
     scope = hub.default_adapter(IReadScopeRepository).get(routine.project_id, routine.default_scope_slug)
     assert scope is not None
-    result = hub.services.routine_run.run(
+    result = hub.default_adapter(RunService).run(
         routine, scope=scope, mode=RunMode.FULL, note=None, author=WorkItemAuthor.user("usr_1")
     )
     hub.promote(result.chunk_id)

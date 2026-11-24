@@ -8,6 +8,7 @@ from datetime import datetime
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Query
 
 from blizzard.auth_core import Permission
@@ -15,22 +16,24 @@ from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import PathProject, QueryProject
-from blizzard.hub.composition import TenantServices
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.garden.runs.history import (
     DeliveredSet,
     DeliveredSetDelta,
+    GardenRunService,
     RunCadence,
     RunDelta,
     RunEscalation,
     RunSummary,
 )
 from blizzard.hub.domain.garden.runs.window import InvalidWindowError
+from blizzard.hub.domain.graph.model import IReadGraphRepository
+from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.wire.garden_run import (
     AddedFindingView,
     DeliveredSetDeltaView,
@@ -146,35 +149,52 @@ def _run_delta_view(delta: RunDelta, names: GraphNames, labels: ProjectLabelFiel
     )
 
 
-def _runs(services: TenantServices, project_id: str | None, since: str | None, until: str | None) -> list[RunRowView]:
+def _runs(
+    runs: GardenRunService,
+    graphs: IReadGraphRepository,
+    projects: IReadProjectRepository,
+    project_id: str | None,
+    since: str | None,
+    until: str | None,
+) -> list[RunRowView]:
     parsed_until = _parse_instant(until, field="until") if until is not None else None
     parsed_since = _parse_instant(since, field="since") if since is not None else None
     try:
-        rows = services.garden_run.list_runs(since=parsed_since, until=parsed_until, project_id=project_id)
+        rows = runs.list_runs(since=parsed_since, until=parsed_until, project_id=project_id)
     except InvalidWindowError as exc:
         raise ProblemHTTPException(partial(problems_garden.garden_window_invalid_problem, str(exc))) from exc
-    names = GraphNames(services.graphs)
+    names = GraphNames(graphs)
     names.prime(row.escalation.graph_id for row in rows if row.escalation is not None)
-    labels = ProjectLabels.read(services.projects, (row.project_id for row in rows))
+    labels = ProjectLabels.read(projects, (row.project_id for row in rows))
     return [_run_row_view(row, names, labels.fields(row.project_id)) for row in rows]
 
 
-def _delta(services: TenantServices, chunk_id: str, project_id: str | None) -> RunDeltaView:
-    chunk = services.chunks.record.get(chunk_id)
+def _delta(
+    runs: GardenRunService,
+    records: IReadChunkRecordRepository,
+    graphs: IReadGraphRepository,
+    projects: IReadProjectRepository,
+    chunk_id: str,
+    project_id: str | None,
+) -> RunDeltaView:
+    chunk = records.get(chunk_id)
     in_project = chunk is not None and (project_id is None or chunk.project_id == project_id)
-    delta = services.garden_run.run_delta(chunk) if chunk is not None and in_project else None
+    delta = runs.run_delta(chunk) if chunk is not None and in_project else None
     if delta is None:
         raise ProblemHTTPException(partial(problems_garden.run_not_found_problem, f"unknown run {chunk_id}"))
-    names = GraphNames(services.graphs)
+    names = GraphNames(graphs)
     if delta.escalation is not None:
         names.prime([delta.escalation.graph_id])
-    labels = ProjectLabels.read(services.projects, [delta.project_id]).fields(delta.project_id)
+    labels = ProjectLabels.read(projects, [delta.project_id]).fields(delta.project_id)
     return _run_delta_view(delta, names, labels)
 
 
 @router.get("/runs", response_model=list[RunRowView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
+@inject_sync
 def list_runs(
-    services: Services,
+    runs: FromDishka[GardenRunService],
+    graphs: FromDishka[IReadGraphRepository],
+    projects: FromDishka[IReadProjectRepository],
     project: QueryProject,
     since: Annotated[str | None, Query()] = None,
     until: Annotated[str | None, Query()] = None,
@@ -183,33 +203,51 @@ def list_runs(
     every project; `since`/`until` default to the last 24 hours ending now. Each row carries its routine, scope,
     mode, its derived outcome, and, where it delivered, every finding-set row it published.
     422 on a malformed instant or an inverted span."""
-    return _runs(services, project, since, until)
+    return _runs(runs, graphs, projects, project, since, until)
 
 
 @project_router.get("/runs", response_model=list[RunRowView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
+@inject_sync
 def list_project_runs(
-    services: Services,
+    runs: FromDishka[GardenRunService],
+    graphs: FromDishka[IReadGraphRepository],
+    projects: FromDishka[IReadProjectRepository],
     project: PathProject,
     since: Annotated[str | None, Query()] = None,
     until: Annotated[str | None, Query()] = None,
 ) -> list[RunRowView]:
     """The project's routine runs minted in `[since, until)`, newest first, as `GET /api/runs` reads them; 404 on
     an unknown project, 422 on a malformed instant or an inverted span."""
-    return _runs(services, project.project_id, since, until)
+    return _runs(runs, graphs, projects, project.project_id, since, until)
 
 
 @router.get("/runs/{chunk_id}", response_model=RunDeltaView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def run_delta(chunk_id: str, services: Services) -> RunDeltaView:
+@inject_sync
+def run_delta(
+    chunk_id: str,
+    runs: FromDishka[GardenRunService],
+    records: FromDishka[IReadChunkRecordRepository],
+    graphs: FromDishka[IReadGraphRepository],
+    projects: FromDishka[IReadProjectRepository],
+) -> RunDeltaView:
     """One run's full detail: its routine, scope, mode, derived outcome, and, per
     finding-set it delivered, the added/observed/gone entries its own artifact
     published. 404 when `chunk_id` names no routine run."""
-    return _delta(services, chunk_id, None)
+    return _delta(runs, records, graphs, projects, chunk_id, None)
 
 
 @project_router.get(
     "/runs/{chunk_id}", response_model=RunDeltaView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
-def project_run_delta(chunk_id: str, services: Services, project: PathProject) -> RunDeltaView:
+@inject_sync
+def project_run_delta(
+    chunk_id: str,
+    runs: FromDishka[GardenRunService],
+    records: FromDishka[IReadChunkRecordRepository],
+    graphs: FromDishka[IReadGraphRepository],
+    projects: FromDishka[IReadProjectRepository],
+    project: PathProject,
+) -> RunDeltaView:
     """One of the project's runs in full detail, as `GET /api/runs/{chunk_id}` reads it; 404 on an unknown project
     and when `chunk_id` names no routine run of the project."""
-    return _delta(services, chunk_id, project.project_id)
+    return _delta(runs, records, graphs, projects, chunk_id, project.project_id)

@@ -26,7 +26,7 @@ from blizzard.hub.domain.garden.routines import (
     RoutineScopeMembership,
 )
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
-from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, ScopeNotRelatedError, ScopeRetiredError
+from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, RunService, ScopeNotRelatedError, ScopeRetiredError
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope, ScopeLifecycle, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.domain.graph.model import Graph
@@ -96,7 +96,7 @@ def test_full_mode_mints_and_ingests_leaving_the_chunk_not_ready(tmp_path: Path)
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
 
-    result = hub.services.routine_run.run(
+    result = hub.default_adapter(RunService).run(
         routine,
         scope=_default_scope(hub, routine),
         mode=RunMode.FULL,
@@ -122,7 +122,7 @@ def test_the_minted_chunk_carries_a_resolvable_run_context(tmp_path: Path) -> No
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
 
-    result = hub.services.routine_run.run(
+    result = hub.default_adapter(RunService).run(
         routine,
         scope=_default_scope(hub, routine),
         mode=RunMode.FULL,
@@ -143,7 +143,7 @@ def test_chunk_is_pinned_to_the_routines_graph(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, graph = _routine(hub)
 
-    result = hub.services.routine_run.run(
+    result = hub.default_adapter(RunService).run(
         routine,
         scope=_default_scope(hub, routine),
         mode=RunMode.FULL,
@@ -160,7 +160,7 @@ def test_the_routines_model_and_effort_defaults_reach_the_minted_chunk(tmp_path:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub, model=["opus"], effort="high")
 
-    result = hub.services.routine_run.run(
+    result = hub.default_adapter(RunService).run(
         routine,
         scope=_default_scope(hub, routine),
         mode=RunMode.FULL,
@@ -178,7 +178,7 @@ def test_the_routines_harnesses_default_reaches_the_minted_chunk(tmp_path: Path)
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub, harnesses=["claude_code", "codex"])
 
-    result = hub.services.routine_run.run(
+    result = hub.default_adapter(RunService).run(
         routine,
         scope=_default_scope(hub, routine),
         mode=RunMode.FULL,
@@ -199,7 +199,7 @@ def test_a_scope_override_outside_the_routines_related_set_is_refused_never_mint
     )
 
     with pytest.raises(ScopeNotRelatedError):
-        hub.services.routine_run.run(
+        hub.default_adapter(RunService).run(
             routine,
             scope=unrelated,
             mode=RunMode.FULL,
@@ -216,7 +216,7 @@ def test_a_scope_override_naming_a_related_scope_runs_against_it(tmp_path: Path)
     )
     hub.default_adapter(RoutineScopeMembership).link(routine, related, _CTX)
 
-    result = hub.services.routine_run.run(
+    result = hub.default_adapter(RunService).run(
         routine,
         scope=related,
         mode=RunMode.FULL,
@@ -231,7 +231,7 @@ def test_delta_against_a_never_swept_pair_downgrades_to_full(tmp_path: Path) -> 
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
 
-    result = hub.services.routine_run.run(
+    result = hub.default_adapter(RunService).run(
         routine,
         scope=_default_scope(hub, routine),
         mode=RunMode.DELTA,
@@ -250,7 +250,7 @@ def test_delta_with_a_recorded_baseline_stays_delta_and_names_its_revisions(tmp_
     routine, graph = _routine(hub)
     _seed_baseline(hub, graph_id=graph.graph_id, routine_name=routine.name, scope_slug="blizzard")
 
-    result = hub.services.routine_run.run(
+    result = hub.default_adapter(RunService).run(
         routine,
         scope=_default_scope(hub, routine),
         mode=RunMode.DELTA,
@@ -269,7 +269,7 @@ def test_a_note_lands_in_the_charge_as_a_this_run_section(tmp_path: Path) -> Non
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
 
-    result = hub.services.routine_run.run(
+    result = hub.default_adapter(RunService).run(
         routine,
         scope=_default_scope(hub, routine),
         mode=RunMode.FULL,
@@ -289,7 +289,7 @@ def test_a_retired_scope_is_refused_rather_than_defaulted(tmp_path: Path) -> Non
     hub.default_adapter(ScopeLifecycle).retire(scope, _CTX, by="operator")
 
     with pytest.raises(ScopeRetiredError):
-        hub.services.routine_run.run(
+        hub.default_adapter(RunService).run(
             routine,
             scope=_default_scope(hub, routine),
             mode=RunMode.FULL,
@@ -304,7 +304,7 @@ def test_a_retired_routine_is_refused_and_enabling_it_lets_the_run_succeed(tmp_p
     retired = hub.default_adapter(RoutineLifecycle).retire(routine, _CTX, by="operator")
 
     with pytest.raises(RoutineRetiredError):
-        hub.services.routine_run.run(
+        hub.default_adapter(RunService).run(
             routine,
             scope=_default_scope(hub, routine),
             mode=RunMode.FULL,
@@ -314,7 +314,7 @@ def test_a_retired_routine_is_refused_and_enabling_it_lets_the_run_succeed(tmp_p
     assert _work_item_count(hub) == 0
 
     hub.default_adapter(RoutineLifecycle).enable(retired, _CTX, by="operator")
-    result = hub.services.routine_run.run(
+    result = hub.default_adapter(RunService).run(
         routine,
         scope=_default_scope(hub, routine),
         mode=RunMode.FULL,
@@ -331,7 +331,7 @@ def test_a_routine_whose_graph_has_no_enabled_mint_is_refused(tmp_path: Path) ->
     hub.resolve(default_tenant(hub.engine), GraphLifecycleService).retire(graph, by="operator")
 
     with pytest.raises(RoutineGraphUnresolvedError):
-        hub.services.routine_run.run(
+        hub.default_adapter(RunService).run(
             routine,
             scope=_default_scope(hub, routine),
             mode=RunMode.FULL,
@@ -395,7 +395,7 @@ def test_a_routine_whose_name_differs_from_its_slug_records_the_slug_as_lineage(
         project=project_record(hub, default_project(hub.engine)),
     )
 
-    result = hub.services.routine_run.run(
+    result = hub.default_adapter(RunService).run(
         routine, scope=_default_scope(hub, routine), mode=RunMode.FULL, note=None, author=_AUTHOR
     )
 
