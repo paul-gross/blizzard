@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 from tests.support.repo_files import repo_root
 
@@ -129,3 +130,12 @@ def test_a_context_matching_no_row_fails_rather_than_defaulting_to_master(
     assert result.returncode != 0
     assert "::error::" in result.stderr
     assert result.stdout == ""
+
+
+def test_the_action_resolves_and_checks_out_the_one_repository_its_input_names() -> None:
+    action = yaml.safe_load(_SCRIPT.with_name("action.yml").read_text())
+    assert action["inputs"]["repository"]["default"] == "paul-gross/blizzard-mock"
+    resolve, checkout = action["runs"]["steps"]
+    assert resolve["env"]["MOCK_URL"] == "https://github.com/${{ inputs.repository }}"
+    assert checkout["with"]["repository"] == "${{ inputs.repository }}"
+    assert checkout["with"]["persist-credentials"] is False

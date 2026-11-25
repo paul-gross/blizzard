@@ -27,9 +27,17 @@ runs `tests/component/test_route_clause_rule.py`, which holds `RouteClause` to `
 `src/blizzard/{wire,foundation,auth_core}`; both fail, rather than skips, when Vale is absent; generated API clients are
 excluded and `.html` templates are outside Vale's configured extensions. The change-history rule flags the
 change-history phrases its own token list names, which is the one statement of what it catches. Every gate check is
-seams-mocked and token-free, needing no real forge, no tokens, and no network beyond package installs.
-`gate / playwright static` is a required check of its own; an operator adds it to branch protection once the job exists
-on `master`.
+seams-mocked and token-free, needing no real forge, no tokens, and no network beyond package installs and the sibling
+checkouts the restatement sweep reads. `gate / playwright static` is a required check of its own; an operator adds it to
+branch protection once the job exists on `master`.
+
+`gate / restatement sweep (blizzard:restatement-sweep)` runs `mise run restatement-check`, the one-home census, over
+`blizzard`, `blizzard-mock` and `blizzard-context` checked out side by side. Both siblings resolve through
+[`resolve-mock-ref`](../.github/actions/resolve-mock-ref/action.yml): the pull request's same-named branch if the
+sibling has one, else `master`. blizzard-context's own gate runs the same sweep. The job runs on the hotfix lane and is
+skipped on a tag and on a pull request into `release/*`, since blizzard-context has no release lines or tags. It is a
+required check in both repositories; an operator adds it to each one's branch protection once the job exists on that
+`master`.
 
 The pytest tier runs as six parallel shard jobs. The service tier below runs three Python shards and six Playwright
 shards. `BLIZZARD_TEST_SHARD=<index>/<count>` (`tests/support/suite_plugin.py`) keeps one disjoint slice of the suite,
@@ -53,7 +61,8 @@ whole suite runs, and a `BLIZZARD_TEST_SHARD_BY` other than `test` or `file` is 
 run unsharded.
 
 `mise run gate` ([`scripts/ci-gate.sh`](../scripts/ci-gate.sh)) reproduces the whole merge gate in one command before
-pushing. The gate's exact individual commands:
+pushing. Its restatement sweep reads the sibling `../blizzard-context` and `../blizzard-mock` checkouts, so both must be
+present, as a feature env supplies them. The gate's exact individual commands:
 
 Pyright checks repository-owned Python in strict mode, including root scripts and colocated migration tests; dependency,
 cache, dot-directory and generated build output are excluded. The structural gate applies the suppression rule across
@@ -67,6 +76,7 @@ uv run ruff check .
 uv run pyright
 mise run process-ref-lint
 mise run structural-gate
+mise run restatement-check
 uv run pytest -n auto
 uv run blizzard-export-openapi --out-dir openapi && git diff --exit-code -- openapi/
 uv run blizzard-export-contracts --out-dir contracts && git diff --exit-code -- contracts/ && test -z "$(git ls-files --others --exclude-standard -- contracts/)"
@@ -395,12 +405,12 @@ a `master` push: `isolation-cross-check` weekly, and `postgres-uow-concurrency` 
 
 A pull request into `master` from a `hotfix/` branch of this repository — never a fork — is the operator's fast lane.
 `pr.yml` sets `gate.yml` and `upper-tiers.yml`'s `lint_only` input, so of their jobs only
-`gate / ruff + pyright + structural gate`, `gate / spec drift + change notes + flag lifecycle + dprint` and
-`gate / process-reference and change-history lint` run. Every other gate and upper-tier job is skipped by condition and
-still reports its check name, which passes its required check, so one required set on `master` merges both lanes. The
-`pr.yml` jobs outside those workflows keep their own conditions: a hotfix that changes a store revision still runs the
-store baseline, and one that cuts a release still runs the rehearsal. `push.yml` runs its gate and tiers on the landed
-commit either way.
+`gate / ruff + pyright + structural gate`, `gate / spec drift + change notes + flag lifecycle + dprint`,
+`gate / process-reference and change-history lint` and `gate / restatement sweep (blizzard:restatement-sweep)` run.
+Every other gate and upper-tier job is skipped by condition and still reports its check name, which passes its required
+check, so one required set on `master` merges both lanes. The `pr.yml` jobs outside those workflows keep their own
+conditions: a hotfix that changes a store revision still runs the store baseline, and one that cuts a release still runs
+the rehearsal. `push.yml` runs its gate and tiers on the landed commit either way.
 
 [`.github/workflows/push.yml`](../.github/workflows/push.yml) (push to `master`) runs the gate, the service tier and the
 bounded crash sweep, and alongside them uploads a dev-build wheel versioned `X.(Y+1).0.dev<run>+<9-char-sha>` from the

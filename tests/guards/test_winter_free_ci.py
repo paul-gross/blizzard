@@ -1,7 +1,7 @@
 """The platform tiers and the CI workflows stay winter-free.
 
 The service and crash tiers run their runners on the built-in ``basic`` provider over a fixture minted without a
-winter source, and the workflows check out only ``blizzard`` and ``blizzard-mock``. The winter binding's own tests are
+winter source, and the workflows check out only ``blizzard`` and its public siblings, never the winter workspace. The winter binding's own tests are
 the local-only ``winter_binding`` tier (``tests/winter/``). A static scan keeps either from drifting back, and pins that
 every checkout in a job that runs tests leaves no credentials behind.
 """
@@ -52,7 +52,7 @@ def test_a_workflow_names_no_winter_source(workflow: Path) -> None:
     text = workflow.read_text()
     for forbidden in ("blizzard-workspace", "BLIZZARD_MOCK_WINTER_SOURCE"):
         assert forbidden not in text, (
-            f"{workflow.name} names {forbidden!r}; CI checks out only blizzard and blizzard-mock"
+            f"{workflow.name} names {forbidden!r}; CI checks out only blizzard and its public siblings"
         )
 
 
@@ -62,7 +62,17 @@ def _local_action_steps(step: dict[str, Any]) -> list[dict[str, Any]]:
         return []
     relative = uses.removeprefix("./").removeprefix("blizzard/")
     action = yaml.safe_load((_ROOT / relative / "action.yml").read_text())
-    return action.get("runs", {}).get("steps") or []
+    declared: dict[str, dict[str, Any]] = action.get("inputs") or {}
+    inputs = {name: spec.get("default") for name, spec in declared.items()} | _with(step)
+    inner_steps: list[dict[str, Any]] = action.get("runs", {}).get("steps") or []
+    return [_bind_repository(inner, inputs) for inner in inner_steps]
+
+
+def _bind_repository(step: dict[str, Any], inputs: dict[str, Any]) -> dict[str, Any]:
+    """The step with a ``repository`` taken from an input resolved to what this caller passes."""
+    if _with(step).get("repository") != "${{ inputs.repository }}":
+        return step
+    return {**step, "with": {**_with(step), "repository": inputs["repository"]}}
 
 
 def _with(step: dict[str, Any]) -> dict[str, Any]:
