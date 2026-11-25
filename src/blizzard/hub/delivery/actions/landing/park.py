@@ -24,6 +24,8 @@ from blizzard.hub.delivery.actions.landing.repo import (
 from blizzard.hub.domain.actions.effects import ActionEscalation
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.pr_markers import (
+    AWAITING_MARKER,
+    awaiting_marker_name,
     latest_pr_marker,
     pr_marker_content,
     pr_marker_name,
@@ -66,7 +68,7 @@ class Park:
         marker, change, outcome = await self._assess(repo)
         if outcome is not None:
             if isinstance(outcome, AwaitingMerge):
-                await self._awaiting_marker(repo)
+                await self._awaiting_marker(repo, outcome.change)
             return outcome
         assert change is not None
         if change.state is ChangeState.MERGED:
@@ -168,14 +170,15 @@ class Park:
                 pr_marker_name(repo.repo, change.number),
                 pr_marker_content(repo.repo, change.number, change.web_url),
             )
-        await self._awaiting_marker(repo)
+        await self._awaiting_marker(repo, change.number)
         return self._waiting(repo, change.number, marker)
 
     @staticmethod
-    async def _awaiting_marker(repo: RepoLanding) -> None:
+    async def _awaiting_marker(repo: RepoLanding, number: int) -> None:
         visit = repo.run.visit
-        if not any(row.name == "awaiting-external-merge" and row.epoch == visit.epoch for row in visit.markers):
-            await repo.run.post("awaiting-external-merge", "")
+        for name in (awaiting_marker_name(repo.repo, number), AWAITING_MARKER):
+            if not any(row.name == name and row.epoch == visit.epoch for row in visit.markers):
+                await repo.run.post(name, "")
 
     @staticmethod
     def _proof_offered(repo: RepoLanding) -> bool:
@@ -192,8 +195,9 @@ class Park:
                     pr_marker_content(repo.repo, change.number, change.web_url),
                 )
             )
-        if not any(row.name == "awaiting-external-merge" and row.epoch == visit.epoch for row in visit.markers):
-            steps.append(("awaiting-external-merge", ""))
+        for name in (awaiting_marker_name(repo.repo, change.number), AWAITING_MARKER):
+            if not any(row.name == name and row.epoch == visit.epoch for row in visit.markers):
+                steps.append((name, ""))
         if change.head_revision != repo.commit:
             evidence: dict[str, object] = {
                 "repo": repo.repo,

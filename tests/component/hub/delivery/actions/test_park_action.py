@@ -165,6 +165,16 @@ def test_timeout_and_new_epoch_adoption():
     assert "awaiting-external-merge" in sink.markers()
 
 
+def test_refused_watch_of_earlier_epoch_records_the_specific_wait_without_reposting_pr():
+    visit = parked_visit()
+    visit = replace(visit, epoch=2, markers=(marker(visit, age=168),))
+    forge = _forge(replies={"recently_closed": [ForgeRejected("cannot read")]})
+    answer, sink = _land(forge, visit)
+    assert answer.choice == "awaiting-merge"
+    assert f"awaiting-external-merge/{_WIDGET}/1" in sink.markers()
+    assert f"delivery-pr/{_WIDGET}/1" not in sink.markers()
+
+
 def test_each_parked_repository_uses_its_own_timeout_and_marker_clock():
     visit = parked_visit((_WIDGET, _GADGET))
     targets = (

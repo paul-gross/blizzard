@@ -116,12 +116,41 @@ def test_external_wait_matches_open_pr_from_earlier_epoch() -> None:
     sources = delivery_sources(
         markers=[
             pr("delivery-pr/acme/one/3", '{"repo":"acme/one","number":3,"url":"http://forge/acme/one/pull/3"}'),
-            marker("awaiting-external-merge", "human review", epoch=2),
+            marker("awaiting-external-merge/acme/one/3", "", epoch=2),
         ]
     )
     view = DeliveryRead.of(ChunkFacts(minted=True), sources)
     assert [p.number for p in view.open_prs] == [3]
     assert view.awaiting_external_merge
+
+
+def test_landed_park_does_not_label_earlier_automatic_pr_as_a_human_wait() -> None:
+    sources = delivery_sources(
+        markers=[
+            pr("delivery-pr/acme/auto/1", '{"repo":"acme/auto","number":1,"url":"http://forge/acme/auto/pull/1"}'),
+            pr(
+                "delivery-pr/acme/park/2",
+                '{"repo":"acme/park","number":2,"url":"http://forge/acme/park/pull/2"}',
+                epoch=2,
+            ),
+            marker("awaiting-external-merge", "", epoch=2),
+            marker("awaiting-external-merge/acme/park/2", "", epoch=2),
+            marker("merged/acme/park", "sha", epoch=2),
+        ]
+    )
+    view = DeliveryRead.of(ChunkFacts(minted=True), sources)
+    assert [p.repo for p in view.open_prs] == ["acme/auto"]
+    assert not view.awaiting_external_merge
+
+
+def test_legacy_wait_does_not_infer_an_earlier_epoch_pr() -> None:
+    sources = delivery_sources(
+        markers=[
+            pr("delivery-pr/acme/one/3", '{"repo":"acme/one","number":3,"url":"http://forge/acme/one/pull/3"}'),
+            marker("awaiting-external-merge", "", epoch=2),
+        ]
+    )
+    assert not DeliveryRead.of(ChunkFacts(minted=True), sources).awaiting_external_merge
 
 
 def test_replacement_pr_in_same_epoch_closes_first_reference_without_a_closure_fact() -> None:

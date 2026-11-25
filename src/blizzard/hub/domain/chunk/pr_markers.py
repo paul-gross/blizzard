@@ -17,6 +17,7 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 
 #: The family prefix every ``delivery-pr/`` marker name starts with.
 PR_MARKER_PREFIX = "delivery-pr/"
+AWAITING_MARKER = "awaiting-external-merge"
 
 
 @domain_model
@@ -39,6 +40,10 @@ def pr_marker_bare_name(repo: str) -> str:
 
 def pr_marker_name(repo: str, number: int) -> str:
     return f"{PR_MARKER_PREFIX}{repo}/{number}"
+
+
+def awaiting_marker_name(repo: str, number: int) -> str:
+    return f"{AWAITING_MARKER}/{repo}/{number}"
 
 
 def is_pr_marker_name(marker: PrMarker) -> bool:
