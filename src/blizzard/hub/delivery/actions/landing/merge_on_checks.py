@@ -141,7 +141,8 @@ class PullRequest:
                 )
             except (ForgeRejected, ForgeNotFound) as exc:
                 existing = await cls._after_refused_open(target, exc)
-        return await cls._record(await cls(target, existing).reread())
+        pull = await cls._record(cls(target, existing))
+        return await pull.reread()
 
     @classmethod
     async def _after_refused_open(cls, target: RepoLanding, refusal: Exception) -> Change:

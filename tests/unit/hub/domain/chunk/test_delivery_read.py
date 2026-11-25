@@ -112,6 +112,18 @@ def test_authored_external_merge_marker_requires_a_still_open_pr() -> None:
     assert not DeliveryRead.of(ChunkFacts(minted=True), landed).awaiting_external_merge
 
 
+def test_external_wait_matches_open_pr_from_earlier_epoch() -> None:
+    sources = delivery_sources(
+        markers=[
+            pr("delivery-pr/acme/one/3", '{"repo":"acme/one","number":3,"url":"http://forge/acme/one/pull/3"}'),
+            marker("awaiting-external-merge", "human review", epoch=2),
+        ]
+    )
+    view = DeliveryRead.of(ChunkFacts(minted=True), sources)
+    assert [p.number for p in view.open_prs] == [3]
+    assert view.awaiting_external_merge
+
+
 def test_replacement_pr_in_same_epoch_closes_first_reference_without_a_closure_fact() -> None:
     sources = delivery_sources(
         markers=[

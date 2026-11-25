@@ -124,7 +124,7 @@ class DeliveryRead:
         ]
         # A script-created PR is reviewable, not an external merge wait. Only the
         # explicitly authored marker signals that wait.
-        external = any(script_epochs.get((p.repo, p.number)) in external_epochs for p in open_prs)
+        external = any(epoch >= script_epochs[(p.repo, p.number)] for p in open_prs for epoch in external_epochs)
         closed_prs = [p for p in prs.values() if p not in open_prs]
         rows = [
             LandedRepo(
