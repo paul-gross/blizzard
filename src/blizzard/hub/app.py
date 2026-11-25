@@ -661,6 +661,8 @@ def create_app(
     request bridge's tenant opener, is wired only beside the store-backed ``process`` it was built over.
     ``platform_tracing`` is off unless the composition root passes one.
     """
+    if services is not None and process is None:
+        raise ValueError("create_app takes services only beside the process they were built over")
     log = get_logger("blizzard.hub")
 
     platform_tracing = platform_tracing or DisabledPlatformTracing()

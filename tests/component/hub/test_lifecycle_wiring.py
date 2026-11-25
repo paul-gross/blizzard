@@ -8,6 +8,7 @@ tenant fails alone in a hub-wide pass (component tier)."""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -93,21 +94,30 @@ def test_the_hosted_cleanup_closes_the_tenant_scopes_before_the_loop_and_leaves_
 
 
 def test_a_failed_boot_still_stops_the_loop_it_resolved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    stopped: list[bool] = []
+    built: list[ActionLoop] = []
+    stopped: list[ActionLoop] = []
+    original_init = ActionLoop.__init__
     original_stop = ActionLoop.stop
 
+    def init(loop: ActionLoop, *args: Any, **kwargs: Any) -> None:
+        original_init(loop, *args, **kwargs)
+        built.append(loop)
+
     def stop(loop: ActionLoop) -> None:
-        stopped.append(True)
+        stopped.append(loop)
         original_stop(loop)
 
     def fail(*args: object, **kwargs: object) -> None:
         raise RuntimeError("boot failed")
 
+    monkeypatch.setattr(ActionLoop, "__init__", init)
     monkeypatch.setattr(ActionLoop, "stop", stop)
     monkeypatch.setattr(hub_app, "build_flow_driver", fail)
     with pytest.raises(RuntimeError, match="boot failed"):
         build_hosted_hub_app(init_hub(tmp_path / "hub"))
-    assert stopped == [True]
+    # Counted per loop: another test's process may stop its own loop while this one runs.
+    assert len(built) == 1
+    assert stopped.count(built[0]) == 1
 
 
 def test_the_store_free_app_declares_every_lifecycle_owner_absent(tmp_path: Path) -> None:
