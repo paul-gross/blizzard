@@ -600,8 +600,8 @@ def test_poll_timeout_routes_the_failure_edge_via_the_kickback_path(tmp_path: Pa
     # poll_timeout: 90, measured from the FIRST poll (t0) — elapsed is now 62 + 31 = 93 >= 90.
     hub.clock.advance(timedelta(seconds=31))
     assert hub.turn_outcome(chunk_id) == "failure"
-    # No 4th pass is taken — the timeout check pre-empts it.
-    assert _passes(hub, chunk_id) == 3
+    # The deadline's pass is taken once more; still `pending`, it is the kick-back.
+    assert _passes(hub, chunk_id) == 4
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "running"

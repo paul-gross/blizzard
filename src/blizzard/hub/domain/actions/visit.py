@@ -152,7 +152,8 @@ class Visit:
     """Everything a pass reads, fixed as the visit starts. ``markers`` are the artifacts recorded at this
     node across every epoch, so a re-visit sees what earlier visits wrote; ``work_items`` are one
     ``{label, reference}`` mapping per work ref. ``first_turn_at`` is when the visit's first turn started, across
-    every generation of its submissions; ``now`` is the driver's clock as it built the visit."""
+    every generation of its submissions; ``now`` is the driver's clock as it built the visit. ``final_pass`` marks
+    the pass taken past the node's poll deadline, whose ``pending`` answer ends the visit."""
 
     chunk: VisitChunk
     node: VisitNode
@@ -167,6 +168,7 @@ class Visit:
     project: LandingProject
     first_turn_at: datetime
     now: datetime
+    final_pass: bool = False
 
     def marker_names(self) -> frozenset[str]:
         """The names of the markers recorded at this node, in any epoch."""

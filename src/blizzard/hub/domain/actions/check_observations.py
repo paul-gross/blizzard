@@ -80,7 +80,7 @@ def observation(markers: tuple[StoredArtifact, ...], epoch: int, repository: str
 
 def missing_checks(repo: str, policy: str, sha: str, at: datetime, *, timed_out: bool = False) -> ActionEscalation:
     evidence = f"No checks were observed at {iso_utc(at)} on SHA {sha}; " + (
-        "the overall deadline expired and the observation was not reconfirmed"
+        "the overall deadline expired before any check appeared"
         if timed_out
         else "checks are still absent after the ten-minute grace period"
     )

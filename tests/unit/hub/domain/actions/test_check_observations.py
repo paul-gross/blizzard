@@ -33,7 +33,7 @@ def test_observation_scoping_and_historical_timeout() -> None:
     result = timeout_observation((marker,), marker.node_id, 1)
     assert result is not None and result.cause == EscalationCause.MISSING_CHECKS
     assert "sha1" in result.detail and now.isoformat() in result.detail
-    assert "not reconfirmed" in result.detail
+    assert "overall deadline expired" in result.detail
 
 
 def test_observation_uses_first_marker_in_current_epoch() -> None:

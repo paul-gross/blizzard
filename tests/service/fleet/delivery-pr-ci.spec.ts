@@ -570,6 +570,9 @@ test.describe('poll timeout, on the controlled clock', () => {
     expect(bounced.bounces[0]!.cause).toBe('poll-timeout');
     expect(bounced.landed).toBe(false);
     expect(bounced.current_node_name).toBe('build');
+    const findings = bounced.artifacts.filter((artifact) => artifact.name === 'delivery-findings');
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.content).toContain('unfinished when the visit ended');
     const opened = await pulls(forge, repo);
     expect(opened.length).toBeGreaterThan(0);
     expect(opened.some((pull) => pull.merged)).toBe(false);

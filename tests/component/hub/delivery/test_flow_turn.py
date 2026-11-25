@@ -20,7 +20,8 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_turn import TurnRunner
-from blizzard.hub.domain.actions.effects import IEffectSink, Marker, Pass
+from blizzard.hub.domain.actions.check_observations import missing_checks
+from blizzard.hub.domain.actions.effects import ActionEscalation, IEffectSink, Marker, Pass
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.config.capabilities import Capability
@@ -77,7 +78,7 @@ class _Hooked:
         name="test.hooked",
         args=frozenset(),
         required_args=frozenset(),
-        answers=frozenset({"pending", "landed", "failure"}),
+        answers=frozenset({"pending", "awaiting-merge", "landed", "failure"}),
         answers_from_arg=None,
         lands=True,
     )
@@ -917,3 +918,95 @@ def test_only_the_pass_that_ends_the_visit_writes_its_hub_log(world: _World) -> 
     world.tick()
 
     assert _hub_logs(world, chunk_id) == [f"{_REPO} landed at m1\n"]
+
+
+# --- the final pass at the poll deadline ------------------------------------------------------------------------
+
+
+def _past_deadline(world: _World) -> str:
+    """A chunk whose first pass waited, with the clock now past the node's poll deadline."""
+    chunk_id = world.at_step("test.hooked")
+    world.tick()
+    world.hub.clock.advance(timedelta(hours=4))
+    return chunk_id
+
+
+def _polls(world: _World, chunk_id: str) -> list[str]:
+    facts = world.hub.services.chunks.facts.load_facts(chunk_id)
+    assert facts is not None
+    return [poll.kind for poll in facts.hub_node_polls]
+
+
+def _bounce_causes(world: _World, chunk_id: str) -> list[str]:
+    return [bounce["cause"] for bounce in world.detail(chunk_id)["bounces"]]
+
+
+def test_a_final_pass_that_waits_times_out_without_recording_a_wait(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    visits: list[Visit] = []
+    world.hooked.hook = visits.append
+    chunk_id = _past_deadline(world)
+
+    world.tick()
+
+    assert [visit.final_pass for visit in visits] == [False, True]
+    assert _bounce_causes(world, chunk_id) == ["poll-timeout"]
+    assert _polls(world, chunk_id) == ["pending"]
+    assert _hub_logs(world, chunk_id) == ["the poll timeout ended the visit\n"]
+
+
+def test_a_final_pass_that_answers_a_choice_routes_it(world: _World, monkeypatch: pytest.MonkeyPatch) -> None:
+    chunk_id = _past_deadline(world)
+    world.hooked.answer = Pass(choice="landed")
+
+    world.tick()
+
+    assert world.outcomes(chunk_id)[-1] == "landed"
+    assert "poll-timeout" not in _bounce_causes(world, chunk_id)
+
+
+def test_a_final_pass_awaiting_a_person_records_that_wait_and_does_not_bounce(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chunk_id = _past_deadline(world)
+    world.hooked.answer = Pass(choice="awaiting-merge", log=("waiting on a person",))
+
+    world.tick()
+
+    assert _polls(world, chunk_id) == ["pending", "awaiting-merge"]
+    assert _bounce_causes(world, chunk_id) == []
+    assert _hub_logs(world, chunk_id) == []
+
+
+def test_a_final_pass_that_waits_with_an_empty_check_observation_escalates_missing_checks(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chunk_id = _past_deadline(world)
+    passes_when_read: list[int] = []
+
+    def observed(markers: object, node_id: str, epoch: int) -> ActionEscalation:
+        passes_when_read.append(world.hooked.passes)
+        return missing_checks(_REPO, "merge-on-checks", "sha1", world.hub.clock.now(), timed_out=True)
+
+    monkeypatch.setattr("blizzard.hub.delivery.flow_turn.timeout_observation", observed)
+
+    world.tick()
+
+    assert passes_when_read == [2]  # read after the final pass, which may have recorded an observation
+    assert world.detail(chunk_id)["escalation"]["cause"] == "missing-checks"
+    assert _bounce_causes(world, chunk_id) == []
+
+
+def test_a_silent_forge_at_a_final_build_times_out(world: _World, monkeypatch: pytest.MonkeyPatch) -> None:
+    chunk_id = _past_deadline(world)
+
+    def silent(repository: Any, *, cut_off: Any, priority: Any) -> Any:
+        raise ForgeUnavailable("the installation could not be read: ReadTimeout")
+
+    monkeypatch.setattr(world.hub.services.forges, "repository_forge", silent)
+
+    world.tick()
+
+    assert world.hooked.passes == 1
+    assert _bounce_causes(world, chunk_id) == ["poll-timeout"]

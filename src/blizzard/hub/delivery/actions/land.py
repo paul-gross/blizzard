@@ -1,7 +1,7 @@
 """Run each repository's landing policy in its project's landing order and combine their answers.
 
 ``delivery-findings`` is written once, by the pass that ends the visit: a hub artifact keeps its first write per
-epoch, so a waiting pass writes none."""
+epoch, so a waiting pass writes none — the ``pending`` answer of a visit's final pass aside, which ends it."""
 
 from __future__ import annotations
 
@@ -43,7 +43,8 @@ class Land:
     async def take(self, visit: Visit, forges: VisitForges, effects: IEffectSink) -> Pass:
         run = LandingRun(visit, effects)
         answer = await self._answer(run, forges)
-        return answer if answer.waits() else await self._end_visit(run, answer)
+        timed_out = visit.final_pass and answer.choice == PENDING
+        return answer if answer.waits() and not timed_out else await self._end_visit(run, answer)
 
     async def _answer(self, run: LandingRun, forges: VisitForges) -> Pass:
         try:

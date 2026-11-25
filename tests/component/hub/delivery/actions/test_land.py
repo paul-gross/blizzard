@@ -422,6 +422,26 @@ def test_a_refused_findings_write_fails_an_inherited_failure() -> None:
     assert answer.choice == "failure"
 
 
+def test_a_final_pass_that_waits_records_findings_marking_each_unconcluded_check() -> None:
+    double = _forge(checks={_SUBMITTED: (check("lint"), _pending())})
+
+    answer, sink = _land(double, replace(_visit(), final_pass=True))
+
+    assert answer.choice == "pending"
+    findings = sink.markers()["delivery-findings"]
+    assert "lint: success" in findings
+    assert "e2e: in_progress" in findings
+    assert findings.count("unfinished when the visit ended") == 1
+
+
+def test_a_final_pass_awaiting_nothing_it_read_still_says_so() -> None:
+    double = _forge(mergeability=Mergeability.PENDING)
+
+    _, sink = _land(double, replace(_visit(), final_pass=True))
+
+    assert "No check state was read" in sink.markers()["delivery-findings"]
+
+
 def test_a_blocked_head_with_green_checks_merges() -> None:
     double = _forge(mergeability=Mergeability.BLOCKED)
     answer, _ = _land(double)
