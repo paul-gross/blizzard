@@ -486,7 +486,11 @@ def get_envelope(chunk_id: str, services: Services) -> NodeEnvelope:
     facts = ChunkFacts.or_default(services.chunks.facts.load_facts(chunk_id))
     try:
         envelope = Envelope.current(
-            chunk, graph, facts, services.chunks.artifacts.load_artifacts(chunk_id), label=services.work_ref_label
+            chunk,
+            graph,
+            facts,
+            services.chunks.artifacts.load_latest_artifacts(chunk_id),
+            label=services.work_ref_label,
         )
     except NoCurrentNode as exc:
         raise ProblemHTTPException(partial(problems.no_current_node_problem, exc)) from exc

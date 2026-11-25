@@ -2840,6 +2840,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         ),
     ),
     (IReadChunkArtifactsRepository, "load_artifacts"): lambda w: w.read.artifacts.load_artifacts(w.chunk_artifacts),
+    (IReadChunkArtifactsRepository, "load_latest_artifacts"): lambda w: w.read.artifacts.load_latest_artifacts(
+        w.chunk_artifacts
+    ),
     (IReadChunkArtifactsRepository, "load_artifacts_for"): lambda w: w.read.artifacts.load_artifacts_for(
         [w.chunk_artifacts]
     ),

@@ -44,6 +44,11 @@ class IReadChunkArtifactsRepository(Protocol):
         (``bzh:transaction-participation``)."""
         ...
 
+    def load_latest_artifacts(self, chunk_id: str) -> list[StoredArtifact]:
+        """The row per ``(node_name, name)`` that ``LatestArtifacts.of`` keeps from :meth:`load_artifacts` — highest
+        epoch, then earliest ``(seq, artifact_id)`` — in that same ``(seq, artifact_id)`` order."""
+        ...
+
     def load_artifacts_for(self, chunk_ids: Sequence[str]) -> dict[str, list[StoredArtifact]]:
         """`load_artifacts`' bulk sibling (`bzh:bulk-reconstitution`) — each chunk's artifact rows
         in the singular's `(seq, artifact_id)` order, batched by caller-supplied ids. A chunk with no

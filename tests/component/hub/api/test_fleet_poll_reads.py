@@ -1,9 +1,10 @@
 """The runner's poll reads load only what they render (component tier): the answer poll probes for
-a restart rather than loading facts."""
+a restart rather than loading facts, and the envelope reads the newest artifact per key."""
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -89,4 +90,47 @@ def test_the_answer_polls_rows_read_are_flat_in_fact_history_depth(tmp_path: Pat
         _deepen_history(hub, ask_question(hub), depth)
         rows.append(count_rows_read(hub.engine, lambda hub=hub: _superseded(hub)))
 
+    assert rows[0] == rows[1]
+
+
+def _seed_artifacts(hub: HubHarness, chunk_id: str, epochs: range) -> None:
+    conns = hub_store_connections(hub.engine)
+    with conns.write("seed") as conn:
+        for epoch in epochs:
+            for slot, name in enumerate(("spike", "notes")):
+                conn.execute(
+                    conns.insert(s.artifacts).values(
+                        artifact_id=f"art_{epoch}_{slot}",
+                        chunk_id=chunk_id,
+                        node_id="nd_build",
+                        node_name="build",
+                        epoch=epoch,
+                        name=name,
+                        kind="asset",
+                        data=f"{name} at {epoch}",
+                        produced_at=hub.clock.now(),
+                        seq=epoch * 10 + slot,
+                    )
+                )
+
+
+def _envelope(hub: HubHarness, chunk_id: str) -> dict[str, Any]:
+    resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/envelope")
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def test_the_envelope_carries_and_reads_only_the_newest_epoch_of_each_key(tmp_path: Path) -> None:
+    carried: list[list[dict[str, Any]]] = []
+    rows: list[int] = []
+    for first_epoch in (3, 1):
+        (tmp_path / str(first_epoch)).mkdir()
+        hub = build_hub(tmp_path / str(first_epoch))
+        chunk_id = ask_question(hub)
+        _seed_artifacts(hub, chunk_id, range(first_epoch, 4))
+        carried.append(_envelope(hub, chunk_id)["artifacts"])
+        rows.append(count_rows_read(hub.engine, lambda hub=hub, chunk_id=chunk_id: _envelope(hub, chunk_id)))
+
+    assert sorted(a["content"] for a in carried[0]) == ["notes at 3", "spike at 3"]
+    assert carried[0] == carried[1]
     assert rows[0] == rows[1]
