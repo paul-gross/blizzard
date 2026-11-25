@@ -385,10 +385,12 @@ def test_disabled_login_throttle_admits_every_call_and_warns_once_at_boot(
         oauth_providers={"github": github},
         login_throttle=LoginThrottleConfig(enabled=False),
     )
+    at_boot = capsys.readouterr()
+    assert (at_boot.out + at_boot.err).count("sign-ins are unthrottled") == 1
 
     assert 429 not in _throttled_statuses(hub, 40)
-    captured = capsys.readouterr()
-    assert (captured.out + captured.err).count("sign-ins are unthrottled") == 1
+    after_requests = capsys.readouterr()
+    assert "sign-ins are unthrottled" not in after_requests.out + after_requests.err
 
 
 def test_login_throttle_capacity_is_configurable(tmp_path: Path) -> None:

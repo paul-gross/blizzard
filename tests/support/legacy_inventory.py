@@ -34,12 +34,10 @@ def inventory_violations(registry: RecordingRegistry, allowed: Mapping[object, s
     return problems
 
 
-#: The names that reach the hub's legacy bag: the bag, the request bridge's dependency over it, and the core it is
-#: built from.
+#: The names that reach the hub's legacy bag: the bag, the request bridge's dependency, and the core it is built from.
 HUB_BAG_NAMES = frozenset({"HubServices", "Hub", "hub_services", "HubCore"})
 
-#: Each source module, relative to ``src/blizzard``, that still names the hub's legacy bag, and the area that owns it
-#: until the bag is retired.
+#: Each module under ``src/blizzard`` that still names the hub's legacy bag, and the area owning it until it retires.
 BAG_CONSUMERS: Mapping[Path, str] = {
     Path("hub/api/deps.py"): "hub legacy retirement: the request bridge",
     Path("hub/api/hub_level.py"): "hub legacy retirement: the request bridge",

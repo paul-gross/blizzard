@@ -46,7 +46,7 @@ from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.sealing import ISecretCipher, SealedValue
 from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
+from blizzard.foundation.store.factories import store_status_reader
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.foundation.store.readiness import Readiness, ReadinessService
 from blizzard.foundation.trace_export.config import TracingConfig
@@ -1595,7 +1595,7 @@ def _build_host_graph(
         warn_held_keys(log, config.held_keys)
         platform_tracing.instrument_engine(engine)
         readiness = ReadinessService(
-            reader=SqlAlchemyStoreStatusReader(engine), expected_revision=migration_runner(config).script_head()
+            reader=store_status_reader(engine), expected_revision=migration_runner(config).script_head()
         )
         errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
         connections = RunnerStoreConnections(engine, errors)

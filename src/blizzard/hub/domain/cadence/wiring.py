@@ -1,11 +1,9 @@
-"""The cadence area's registrations: its read and write ports over the store's adapters, its services, the sweep's
-tenant half, the clearing of the chore overrides a retiring urgency names, and the one sequence of every area's
-clearing the urgency lifecycle takes. The mint announcement is a key the API edge supplies. The sweep is one per
-process, reaching each tenant's half through the :class:`TenantCadences` accessor the root supplies and binds over its
-tenant scopes, and minting only while the hub's ``cadences`` flag is on.
-
-The urgency area declares only the key, because the areas holding a reference to an urgency sit above it; cadence may
-import garden, so it composes the routine clearing with its own. The store-free graph declares both absent."""
+"""The cadence area's registrations: its ports over the store's adapters, its services, the sweep's tenant half, the
+clearing of the chore overrides a retiring urgency names, and the one sequence of every area's clearing the urgency
+lifecycle takes. The sweep is one per process, reaching each tenant's half through the :class:`TenantCadences`
+accessor the root supplies, and mints only while the ``cadences`` flag is on. Cadence may import garden, so it composes
+the routine clearing with its own; the urgency area declares only the key. The store-free graph declares both
+absent."""
 
 from __future__ import annotations
 

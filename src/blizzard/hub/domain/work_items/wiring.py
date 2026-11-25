@@ -1,12 +1,8 @@
 """The work-items area's registrations: the hub work-item repository's ports over the adapter the root hands in, the
-hub work-item edits over them, and the close drain.
-
-The close drain's tenant half is built once per tenant over that tenant's delivery, artifacts, chunk records, event
-log, work closers and landed-commit links, linking each chunk's board page under the hub's public URL, a key the config
-edge supplies. Its pass is one per process, reaching each tenant's half through the :class:`CloseIntentDrainers`
-accessor the root supplies and binds over its tenant scopes.
-
-The area names no adapter. The store-free graph declares each registration absent, from the same rosters."""
+hub work-item edits over them, and the close drain — its tenant half once per tenant, linking each chunk's board page
+under the hub's public URL, and its pass once per process, reaching each tenant's half through the
+:class:`CloseIntentDrainers` accessor the root supplies. The area names no adapter. The store-free graph declares each
+registration absent, from the same rosters."""
 
 from __future__ import annotations
 

@@ -1,10 +1,8 @@
 """The tenancy area's registrations: tenant administration, tenant teardown and the teardown sweep, once per process,
 over the store's tenant directory, deletion facts and closed-tenant units the root hands in.
 
-The area declares the keys it needs and higher wiring provides: the tenant-set-changed notice, from the wiring that
-holds the open tenants; the packaged-graph mint, from the wiring that owns graph sync; and the closed-tenant
-forgetting, a process value the root supplies and binds over its tenant scopes. The store-free graph declares every
-key absent."""
+The area declares the keys higher wiring provides — the tenant-set-changed notice, the packaged-graph mint, and the
+closed-tenant forgetting the root supplies. The store-free graph declares every key absent."""
 
 from __future__ import annotations
 

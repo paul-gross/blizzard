@@ -1,17 +1,9 @@
-"""The delivery area's registrations: the catalogue of the hub's actions, which the entrypoint borrows, and each
-tenant's flow executor — the hub-node router, the turn runner, and the publishers a turn announces through.
+"""The delivery area's registrations: the catalogue of the hub's actions the entrypoint supplies, each tenant's flow
+executor — hub-node router, turn runner and turn publishers — and, once per process, the action loop as a resource
+whose finalizer stops it, the action pass driver over it, and the step wake the domain names as ``IHubStepWake``.
 
-The process holds the one action loop every tenant's passes run on, as a resource whose finalizer stops it, the action
-pass driver over it, and the flow driver's step wake, which the domain names as ``IHubStepWake``. The loop is started
-by the hosted app's lifespan; the process scope's close stops it after the tenant scopes, so a tenant's configured
-clients close on the loop they run on.
-
-The entrypoint resolves the actions from its environ and supplies them when the process scope opens, so no provider
-reads the environment. The catalogue is a projection of that one value, keyed by the domain type, so a domain consumer
-takes it without importing this package. The router answers the domain's chunk-write refusals, which the domain
-reconciler names without importing it. Each executor class is registered under its own type, never under the driver's
-protocol, so a tenant's turns and its announced turns are two registrations. The values a factory reads off
-:class:`HubConfig` are read there, never keyed on their own. The store-free graph declares each key absent."""
+Each executor class is registered under its own type, never the driver's protocol, so a tenant's turns and its
+announced turns are two registrations. The store-free graph declares each key absent."""
 
 from __future__ import annotations
 

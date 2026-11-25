@@ -12,7 +12,6 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
 
 from blizzard.foundation.flags import Flags, resolve_flags
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
@@ -79,18 +78,23 @@ def test_the_hosted_cleanup_closes_the_tenant_scopes_before_the_loop_and_leaves_
         events.append("loop" if loop._loop is not None else "loop-idle")
         original_stop(loop)
 
+    dispose = engine.dispose
+
+    def record_dispose(close: bool = True) -> None:
+        events.append("dispose")
+        dispose(close)
+
     monkeypatch.setattr(TenantContainers, "close", close_tenants)
     monkeypatch.setattr(ActionLoop, "stop", stop)
+    monkeypatch.setattr(engine, "dispose", record_dispose)
     try:
         app = build_hosted_hub_app(config, engine=engine, connections=connections)
         app.state.hub_process.resolver.get(ActionLoop).start()
         app.state.hosted_cleanup.close()
 
         assert events == ["tenants", "loop"]
-        with engine.connect() as conn:
-            assert conn.execute(text("SELECT 1")).scalar() == 1
     finally:
-        engine.dispose()
+        dispose()
 
 
 def test_a_failed_boot_still_stops_the_loop_it_resolved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

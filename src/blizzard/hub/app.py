@@ -656,11 +656,9 @@ def create_app(
 ) -> FastAPI:
     """Build a fully wired hub app from resolved config and the hub's resolved ``flags``.
 
-    ``readiness``, ``services`` and ``process`` are optional so the store-free paths build the app without opening a
-    database: without a ``process``, the app opens the store-free one, which ``lifespan`` closes. ``services``, the
-    request bridge's tenant opener, is wired only beside the store-backed ``process`` it was built over.
-    ``platform_tracing`` is off unless the composition root passes one.
-    """
+    Without a ``process`` the app opens the store-free one, which ``lifespan`` closes; ``services``, the request
+    bridge's tenant opener, is taken only beside the ``process`` it was built over. ``platform_tracing`` is off unless
+    the composition root passes one."""
     if services is not None and process is None:
         raise ValueError("create_app takes services only beside the process they were built over")
     log = get_logger("blizzard.hub")
@@ -691,6 +689,9 @@ def create_app(
             actions=build_hub_actions(os.environ),
         )
     )
+    if process is not None:
+        # Resolved at build, so a disabled login throttle warns at hub start, not on the first request.
+        process.resolver.get(LiveIpThrottle)
     # Set on shutdown by ``lifespan``; every SSE stream races it.
     app.state.shutdown = asyncio.Event()
     # The hosted hub's flow driver, set by ``build_hosted_app`` alone; ``lifespan`` runs it beside the sweeps.

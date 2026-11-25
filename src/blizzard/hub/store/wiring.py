@@ -20,7 +20,7 @@ from sqlalchemy import Engine
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
 from blizzard.foundation.roles import adapter_model
-from blizzard.foundation.store import readiness
+from blizzard.foundation.store import factories as store_factories
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.store.status import IStoreStatusReader
@@ -374,8 +374,7 @@ def register_observability_absent(registry: Registry) -> None:
     registry.absent(port(HubInvariants), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
 
 
-#: The tenant directory, deletion-fact and closed-tenant unit adapters, built once per hub over the borrowed
-#: connections.
+#: The tenant directory, deletion-fact and closed-tenant unit adapters, once per hub over the borrowed connections.
 _TENANCY_SERVICES: tuple[type[Any], ...] = (
     TenantAdministrationStore,
     TenantTeardownStore,
@@ -441,7 +440,7 @@ def open_tenant_reads(reads: HubScopedReads) -> IReadOpenTenants:
 
 def store_status_reader(engine: Engine) -> IStoreStatusReader:
     """Reads the borrowed engine's reachability and applied revision."""
-    return readiness.store_status_reader(engine)
+    return store_factories.store_status_reader(engine)
 
 
 def readiness_service(reader: IStoreStatusReader, config: HubConfig) -> ReadinessService:

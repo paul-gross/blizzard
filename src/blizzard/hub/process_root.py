@@ -62,6 +62,7 @@ from blizzard.hub.egress import wiring as egress
 from blizzard.hub.events import wiring as events
 from blizzard.hub.forge import wiring as forge
 from blizzard.hub.graph_sync import GraphReconciliation, GraphReconciliations
+from blizzard.hub.graph_sync import wiring as graph_sync_wiring
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
 from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.live_config import wiring as live_config
@@ -121,14 +122,10 @@ def register_hub(
     egress_export: bool = False,
     controlled_clock: bool = False,
 ) -> None:
-    """Declare the hub graph: the scope inputs, the legacy bridge's transitional ports, the store adapters, the
-    process lifecycle owners and the adopted areas over them — or, store-free, each store-backed registration absent.
-    The settings ports resolve from the borrowed settings graph when ``settings`` is set, and are absent otherwise,
-    whether or not the graph is store-backed. The version window is the supplied one when ``versions`` is set on a
-    store-backed graph, and is absent otherwise. The trace export's sweep runs over the supplied exporter when
-    ``trace_export`` is set, and the fact export's sweep over its writers when ``egress_export`` is; each sweep is
-    ``None`` otherwise. The clock controls are present only when ``controlled_clock`` says the process clock the root
-    supplies is controlled, on either graph."""
+    """Declare the hub graph: the scope inputs, the legacy bridge's ports, the store adapters, the process lifecycle
+    owners and the areas over them — or, store-free, each store-backed registration absent. ``settings``,
+    ``versions``, ``trace_export`` and ``egress_export`` each make their keys present, else absent or ``None``;
+    ``controlled_clock`` adds the clock controls on either graph."""
     scopes.register(registry)
     documents.register(registry)
     platform_tracing_wiring.register(registry)
@@ -217,7 +214,7 @@ def register_hub(
         api.register_absent(registry)
         store.register_tenancy_absent(registry)
         tenancy.register_absent(registry)
-        api.register_graph_sync_absent(registry)
+        graph_sync_wiring.register_absent(registry)
         sweeps.register_absent(registry)
     if store_backed and settings:
         settings_wiring.register(registry)
@@ -258,7 +255,7 @@ def _register_tenancy(registry: LegacyRegistry) -> Ref[TenantTeardownSweep]:
     through, handing back the teardown sweep's ``Ref``."""
     refs = store.register_tenancy(registry)
     teardown = tenancy.register(registry, directory=refs.directory, teardowns=refs.teardowns, units=refs.units)
-    api.register_graph_sync(registry)
+    graph_sync_wiring.register(registry)
     return teardown
 
 

@@ -1,6 +1,6 @@
 """The observability area as the hub container holds it: each tenant key is one instance every holder shares and no
-other tenant holds, the hub event log and the invariant check are each one process instance the legacy consumers hold,
-and the derivation and annotation passes reach the very instances a request beneath the tenant resolves (component
+other tenant holds, the hub event log and the invariant check are each one process instance every holder shares, and
+the derivation and annotation passes reach the very instances a request beneath the tenant resolves (component
 tier)."""
 
 from __future__ import annotations
@@ -124,7 +124,7 @@ def test_no_tenant_owned_observability_instance_is_shared_across_tenants(tmp_pat
     assert [key.__qualname__ for key, instance in first.items() if instance is second[key]] == []
 
 
-def test_the_hub_event_log_and_invariant_check_are_each_one_process_instance_the_legacy_consumers_hold(
+def test_the_hub_event_log_and_invariant_check_are_each_one_process_instance_every_holder_shares(
     tmp_path: Path,
 ) -> None:
     hub = build_hub(tmp_path)

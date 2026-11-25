@@ -405,10 +405,6 @@ class HubCore:
         """``scope``'s tenant's services, refused as :meth:`open` refuses."""
         return self.tenants.open_services(scope)
 
-    def open_tenants(self) -> dict[TenantId, str]:
-        """Every open tenant's name by id, read from the store."""
-        return self.hub_scoped_reads.tenants.open_tenants()
-
 
 def build_hub_settings(
     connections: HubStoreConnections, clock: IClock, footing: HubSettingsFooting

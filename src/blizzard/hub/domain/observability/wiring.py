@@ -1,21 +1,9 @@
 """The observability area's registrations: the transcript, analytics, env-timeline, annotation, hub event log and
-invariant ports over the adapters it is handed, and the services over them; and the trace and egress exports.
+invariant ports over the adapters it is handed, the services over them, and the trace and egress exports.
 
-Each port aliases the one adapter instance the root hands in, so a reader and a writer in one tenant share it; the area
-names no adapter. The tenant's transcript ingest and event derivation are built by explicit factory, since their
-constructors default what the graph supplies: the ingest's fallback caps are the boot config's ``TranscriptCaps``, and
-the derivation's extractors the shipped set this area registers. The hub event log and the invariant check are one
-instance per process. The event-derivation and forge-status passes are one per process each, reaching each tenant's
-half through the :class:`TenantEventDerivations` and :class:`TenantAnnotations` accessors the root supplies and binds
-over its tenant scopes; the forge-status pass's full-pass floor follows the live annotation interval, a key the config
-edge supplies. The store-free graph declares each registration absent, from the same rosters.
-
-The trace and egress exports are one instance per process each, over the stores and writers handed in. Whether each
-export's sweep runs is decided once, at registration, from a switch the root holds: its sweep is a ``T | None`` the
-roster reads. Their status, replay, reset and backfill are always registered, and read the boot decision from the
-borrowed :class:`EgressBoot`. The process-scoped trace store reaches a tenant's reads only through the
-:class:`StepHydrations` accessor the root binds over its tenant scopes, each tenant's :class:`StepHydration` built
-here."""
+Each port aliases the one adapter the root hands in. The event-derivation and forge-status passes and each export are
+one per process, reaching a tenant's half through the accessors the root supplies; each export's sweep is a ``T |
+None`` decided at registration. The store-free graph declares each registration absent, from the same rosters."""
 
 from __future__ import annotations
 

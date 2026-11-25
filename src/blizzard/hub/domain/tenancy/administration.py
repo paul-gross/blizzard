@@ -134,12 +134,10 @@ class IWriteTenantDirectory(IReadTenantDirectory, Protocol):
 #: The key a tenant's ordinary unit of work is opened through: refuses a tenant that is closed or unknown.
 TenantUnits = Callable[[TenantId], IHubTransactions]
 
-#: The key the tenant-set-changed notice is taken under: told after every committed change to the tenant set or a
-#: tenant's name, supplied by the wiring that holds the open tenants.
+#: The key the tenant-set-changed notice is taken under: told after every committed change to the tenant set or names.
 TenantSetChanged = Callable[[], object]
 
-#: The key the packaged-graph mint is taken under: reconciles the packaged graph set into the graphs it is handed,
-#: supplied by the wiring that owns graph sync.
+#: The key the packaged-graph mint is taken under: reconciles the packaged graph set into the graphs it is handed.
 PackagedGraphMint = Callable[[IWriteGraphRepository], object]
 
 
