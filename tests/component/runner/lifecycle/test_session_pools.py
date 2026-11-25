@@ -16,6 +16,7 @@ from unittest.mock import Mock
 
 import pytest
 from sqlalchemy import update
+from structlog.testing import capture_logs
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
@@ -44,7 +45,7 @@ from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import Advance, Fill, Pull
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import Envelope, GraphArtifact, ProducesSpec, RotateBounds
-from blizzard.runner.node_steps.submissions import ApplyReply
+from blizzard.runner.node_steps.submissions import ApplyReply, Completion
 from blizzard.runner.store.schema import leases
 from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -623,6 +624,103 @@ def test_rebound_claim_with_same_clock_instant_adopts_despite_old_lease(tmp_path
     assert recovered.resume_froms == [None]
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.session_id == "new"
+
+
+@pytest.mark.parametrize("cause", ["paused", "crashed"])
+def test_adopting_after_a_self_loop_transition_enters_the_node_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cause: str
+):
+    """build(`resume:code`) → build, left lease-less by a chunk pause or by a crash after the
+    closure: the adopt is a node entry, so it continues the `code` session."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    provider = FakeProvider({"e1": "/ws/e1"})
+    build = _pooled("build", "nd_build", mode=SessionMode.RESUME)
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", build)
+    first = FakeHarness(
+        handle=WorkerHandle(session_id="sess-code", pid=100, process_start_time="t1", pgid=100), verdict="fail"
+    )
+    Fill(_ctx(store, hub, provider, first)).run()
+    prior = store.active_lease_for_chunk("ch_1")
+    assert prior is not None
+    hub.queue = []
+    hub.envelopes["ch_1"] = build
+    if cause == "paused":
+        hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=build)]
+        submit = hub.submit_completion
+
+        def pause_as_the_step_completes(chunk_id: str, completion: Completion) -> ApplyReply:
+            hub.chunks[chunk_id] = ChunkState(
+                chunk_id=chunk_id, status=ChunkStatus.PAUSED, route_runner_id="r1", latest_epoch=prior.epoch
+            )
+            return submit(chunk_id, completion)
+
+        monkeypatch.setattr(hub, "submit_completion", pause_as_the_step_completes)
+        middle = _ctx(store, hub, provider, first, minutes=1)
+        Advance(middle).run()  # launches the detached elicitation
+        Advance(middle).run()  # collects it
+        Pull(middle).run()
+    else:
+        store.record_closure(
+            lease_id=prior.lease_id,
+            chunk_id="ch_1",
+            node_id="nd_build",
+            reason=LeaseClosureReason.TRANSITIONED,
+            closed_at=_NOW,
+        )
+    assert store.active_lease_for_chunk("ch_1") is None
+    assert store.closure_reason(prior.lease_id) == LeaseClosureReason.TRANSITIONED
+    hub.chunks["ch_1"] = ChunkState(
+        chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id="r1", latest_epoch=prior.epoch
+    )
+    again = FakeHarness(
+        handle=WorkerHandle(session_id="unused", pid=200, process_start_time="t2", pgid=200), verdict="pass"
+    )
+
+    with capture_logs() as logs:
+        Fill(_ctx(store, hub, provider, again, minutes=2)).run()
+
+    assert "adopting held claim — entering its current node" in [entry["event"] for entry in logs]
+    assert again.resume_froms == ["sess-code"]
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and (lease.node_name, lease.session_id) == ("build", "sess-code")
+
+
+def test_adopting_after_a_failed_attempt_at_the_same_node_mints_fresh(tmp_path: Path):
+    store = _store(tmp_path)
+    hub = FakeHub()
+    provider = FakeProvider({"e1": "/ws/e1"})
+    build = _pooled("build", "nd_build", mode=SessionMode.RESUME)
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", build)
+    first = FakeHarness(
+        handle=WorkerHandle(session_id="sess-code", pid=100, process_start_time="t1", pgid=100), verdict="pass"
+    )
+    Fill(_ctx(store, hub, provider, first)).run()
+    prior = store.active_lease_for_chunk("ch_1")
+    assert prior is not None
+    store.record_closure(
+        lease_id=prior.lease_id,
+        chunk_id="ch_1",
+        node_id="nd_build",
+        reason=LeaseClosureReason.FAILED,
+        closed_at=_NOW,
+    )
+    hub.queue = []
+    hub.envelopes["ch_1"] = build
+    hub.chunks["ch_1"] = ChunkState(
+        chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id="r1", latest_epoch=prior.epoch
+    )
+    again = FakeHarness(
+        handle=WorkerHandle(session_id="sess-new", pid=200, process_start_time="t2", pgid=200), verdict="pass"
+    )
+
+    Fill(_ctx(store, hub, provider, again, minutes=1)).run()
+
+    assert again.resume_froms == [None]
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.session_id == "sess-new"
 
 
 def test_a_lease_predating_the_stamps_inherits_unknown_rather_than_a_guess(tmp_path: Path):

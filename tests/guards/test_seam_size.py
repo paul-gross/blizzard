@@ -23,9 +23,17 @@ _SEAM_SIZE_LIMIT = 12
 #: ``SpawnContext`` (14): ``Spawner`` and ``Attempt`` build each other and share one ``ctx``; no split until that breaks.
 #: ``IReadFlows`` and ``IReadGraphRepository`` (13): each reads one aggregate's store and gained the plural a bounded
 #: read needs (``open_turns_of``, ``get_enabled_by_names``); no split while the reads stay one aggregate's.
+#: ``IReadLeaseRecordRepository`` (14): reads one aggregate's store and gained the plurals a bounded read needs
+#: (``latest_epochs``, ``leases_in_binding_tenure``); every consumer of them already holds the whole seam.
 #: ``IChunkStoreBundle`` (16): the structural face of the tenant's chunk-store bundle the chunk wiring registers each
 #: concept's port over; its members are the concepts' seams, read once each at registration, never called as a seam.
-_ACCEPTED_VIOLATIONS: set[str] = {"SpawnContext", "IReadFlows", "IReadGraphRepository", "IChunkStoreBundle"}
+_ACCEPTED_VIOLATIONS: set[str] = {
+    "SpawnContext",
+    "IReadFlows",
+    "IReadGraphRepository",
+    "IReadLeaseRecordRepository",
+    "IChunkStoreBundle",
+}
 
 
 def _is_protocol(node: ast.ClassDef) -> bool:

@@ -352,10 +352,22 @@ def test_adopt_enters_a_node_the_latest_lease_did_not_run_unless_it_is_a_restart
     restarted = ChunkState(
         chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id=_ME, latest_epoch=2, restart_epochs=[2]
     )
-    assert adopt_enters_node(_lease(), held, "nd_review") is True
-    assert adopt_enters_node(_lease(), held, "nd_build") is False
-    assert adopt_enters_node(None, held, "nd_build") is False
-    assert adopt_enters_node(_lease(), restarted, "nd_review") is False
+    assert adopt_enters_node(_lease(), "failed", held, "nd_review") is True
+    assert adopt_enters_node(_lease(), "failed", held, "nd_build") is False
+    assert adopt_enters_node(None, None, held, "nd_build") is False
+    assert adopt_enters_node(_lease(), "failed", restarted, "nd_review") is False
+
+
+@pytest.mark.parametrize(
+    ("reason", "enters"), [("transitioned", True), ("parked", False), ("failed", False), (None, False)]
+)
+def test_adopt_enters_the_same_node_only_after_its_step_transitioned(reason: str | None, enters: bool) -> None:
+    held = ChunkState(chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id=_ME, latest_epoch=1)
+    restarted = ChunkState(
+        chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id=_ME, latest_epoch=2, restart_epochs=[2]
+    )
+    assert adopt_enters_node(_lease(), reason, held, "nd_build") is enters
+    assert adopt_enters_node(_lease(), reason, restarted, "nd_build") is False
 
 
 # --- minting ---------------------------------------------------------------------------------- #

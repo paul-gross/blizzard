@@ -85,9 +85,9 @@ def _recover(rig: Any, caller: str) -> None:
     claims = InterruptedClaims(rig.ctx)
     if caller == "adopt":
         view = ChunkState(chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id="rn", latest_epoch=1)
-        claims.adopt("ch_1", view)
+        claims.adopt("ch_1", view, rig.bindings)
     elif caller == "requeue-resume":
-        claims._resume_requeued("ch_1", 1)  # pyright: ignore[reportPrivateUsage]
+        claims._resume_requeued("ch_1", 1, rig.bindings)  # pyright: ignore[reportPrivateUsage]
     else:
         claims.reclaim("ch_1", rig.bindings)
 

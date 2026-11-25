@@ -388,6 +388,10 @@ class InterruptedClaims:
         # the over-read costs no statement.
         takeovers = self.ctx.stores.takeover.open_takeovers_for(interrupted)
         escalations = self.ctx.stores.escalations.open_escalations_for(interrupted)
+        latest_epochs = self.ctx.stores.lease_record.latest_epochs(interrupted)
+        in_tenure = self.ctx.stores.lease_record.leases_in_binding_tenure(
+            {c: min(binding.bound_at for binding in b) for c, b in interrupted.items()}
+        )
         for chunk_id, bindings in interrupted.items():
             self._reconcile_one(
                 chunk_id,
@@ -397,6 +401,8 @@ class InterruptedClaims:
                 braked=braked,
                 takeover=takeovers.get(chunk_id),
                 open_escalation=escalations.get(chunk_id),
+                local_epoch=latest_epochs.get(chunk_id, 0),
+                lease_in_binding_tenure=chunk_id in in_tenure,
             )
 
     def _reconcile_one(
@@ -409,6 +415,8 @@ class InterruptedClaims:
         braked: bool,
         takeover: OpenTakeover | None,
         open_escalation: ParkedEscalation | None,
+        local_epoch: int,
+        lease_in_binding_tenure: bool,
     ) -> None:
         try:
             view = self.ctx.chunk_views.get(chunk_id)
@@ -435,10 +443,15 @@ class InterruptedClaims:
             )
             return
         if move is InterruptedClaimMove.RESUME_REQUEUED:
-            self._resume_requeued(chunk_id, view.latest_epoch)
+            self._resume_requeued(chunk_id, view.latest_epoch, bindings)
         elif move is InterruptedClaimMove.ADOPT:
-            if self._owns_node_entry(chunk_id, view, bindings, open_escalation):
-                self.adopt(chunk_id, view)
+            if owns_node_entry(
+                view,
+                local_epoch=local_epoch,
+                open_escalation_epoch=open_escalation.epoch if open_escalation is not None else None,
+                lease_in_binding_tenure=lease_in_binding_tenure,
+            ):
+                self.adopt(chunk_id, view, bindings)
         elif move is InterruptedClaimMove.RECLAIM:
             self.reclaim(chunk_id, bindings)  # claim never landed — claim now, reuse the binding
         elif move is InterruptedClaimMove.RELEASE_REQUEUED_ELSEWHERE:
@@ -452,28 +465,12 @@ class InterruptedClaims:
                 hub_status=str(view.status),
             )
 
-    def _owns_node_entry(
-        self, chunk_id: str, view: ChunkState, bindings: list[EnvBinding], open_escalation: ParkedEscalation | None
-    ) -> bool:
-        """``src/blizzard/runner/lifecycle/model.py``'s ``owns_node_entry``, over this chunk's stores."""
-        bound_at = min(binding.bound_at for binding in bindings)
-        return owns_node_entry(
-            view,
-            local_epoch=self.ctx.stores.lease_record.latest_epoch(chunk_id),
-            open_escalation_epoch=open_escalation.epoch if open_escalation is not None else None,
-            lease_in_binding_tenure=self.ctx.stores.lease_record.has_lease_in_binding_tenure(chunk_id, bound_at),
-        )
-
-    def adopt(self, chunk_id: str, view: ChunkState) -> None:
+    def adopt(self, chunk_id: str, view: ChunkState, bindings: list[EnvBinding]) -> None:
         """Spawn the current node for a claimed chunk whose spawn never minted a lease.
 
         The route is confirmed and the binding held, but no lease was ever minted, so recovery is
         a spawn of the current node from its idempotent envelope. Also the route-token recovery
         path: the adopted window spans the claim response, so a missing token re-keys here (#84b)."""
-        bindings = self.ctx.stores.environments.bindings_for_chunk(chunk_id)
-        if not bindings:
-            _log.warning("adopt with no bound env — cannot spawn", chunk_id=chunk_id)
-            return
         if self.ctx.stores.tokens.route_token(chunk_id) is None:
             try:
                 rekeyed = self.ctx.hub.rekey_route_token(chunk_id)
@@ -493,7 +490,8 @@ class InterruptedClaims:
             return
         latest = self.ctx.stores.lease_record.latest_lease_for_chunk(chunk_id)
         acquired = Environments(bindings).acquired
-        if adopt_enters_node(latest, view, envelope.node.node_id):
+        closed_as = self.ctx.stores.lease_record.closure_reason(latest.lease_id) if latest is not None else None
+        if adopt_enters_node(latest, closed_as, view, envelope.node.node_id):
             _log.info("adopting held claim — entering its current node", chunk_id=chunk_id)
             Spawner(self.ctx).enter_node(chunk_id, envelope, acquired, via="adopt")
             return
@@ -502,16 +500,12 @@ class InterruptedClaims:
             chunk_id, envelope, acquired, via="adopt", carried_owner=recovery_owner(latest)
         )
 
-    def _resume_requeued(self, chunk_id: str, latest_epoch: int | None) -> None:
+    def _resume_requeued(self, chunk_id: str, latest_epoch: int | None, bindings: list[EnvBinding]) -> None:
         """Spawn a fresh attempt at the chunk's current node — its local hold is cleared (#53).
 
         The hold-clearing fact is already durable when this runs (``bzh:crash-exemptions-runner``). The
         retry budget is **carried, not reset** — an ordinary mint against the node's existing
         ``retries_max``, so a requeue buys exactly one more try."""
-        bindings = self.ctx.stores.environments.bindings_for_chunk(chunk_id)
-        if not bindings:
-            _log.warning("requeue-resume with no bound env — cannot spawn", chunk_id=chunk_id)
-            return
         envelope = self._envelope(chunk_id, "requeued", latest_epoch)
         if envelope is None:
             return

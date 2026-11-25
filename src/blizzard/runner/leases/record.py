@@ -3,7 +3,7 @@ identity."""
 
 from __future__ import annotations
 
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -85,10 +85,19 @@ class IReadLeaseRecordRepository(Protocol):
         """The highest lease epoch minted for this chunk, or 0 — the fence source."""
         ...
 
+    def latest_epochs(self, chunk_ids: Iterable[str]) -> dict[str, int]:
+        """:meth:`latest_epoch` over many chunks; a chunk with no lease and no takeover fence is omitted."""
+        ...
+
     def has_lease_in_binding_tenure(self, chunk_id: str, bound_at: datetime) -> bool:
         """Whether a local lease was minted since the current binding began.
 
         Release-time epoch floors distinguish an earlier tenure even if clock instants coincide."""
+        ...
+
+    def leases_in_binding_tenure(self, bounds: Mapping[str, datetime]) -> set[str]:
+        """:meth:`has_lease_in_binding_tenure` over many chunks: the chunk ids of ``bounds`` — each mapped to when
+        its current binding began — that have such a lease."""
         ...
 
     def lease_ids_for_chunk(self, chunk_id: str) -> list[str]:
@@ -103,6 +112,10 @@ class IReadLeaseRecordRepository(Protocol):
 class IReadClosedLeaseRepository(Protocol):
     def closed_lease_ids(self, lease_ids: Collection[str]) -> set[str]:
         """The supplied ids owned and closed by this runner; unknown ids are omitted."""
+        ...
+
+    def closure_reason(self, lease_id: str) -> str | None:
+        """The reason the lease closed with, or ``None`` for an open or unknown lease."""
         ...
 
 

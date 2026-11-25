@@ -6,7 +6,7 @@ cross-concept write keeps inside this one ``store/internal/`` package."""
 
 from __future__ import annotations
 
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from datetime import datetime
 
 from sqlalchemy import Connection, and_, func
@@ -109,6 +109,15 @@ class LeaseRecordStore:
             result.update(str(row.lease_id) for row in self._store.all(stmt))
         return result
 
+    def closure_reason(self, lease_id: str) -> str | None:
+        stmt = (
+            self._store.select(lease_closures, lease_closures.c.reason)
+            .where(lease_closures.c.lease_id == lease_id)
+            .limit(1)
+        )
+        rows = self._store.all(stmt)
+        return str(rows[0].reason) if rows else None
+
     def list_closed_leases(self, limit: int) -> list[ClosedLease]:
         stmt = (
             lease_select(self._store)
@@ -181,31 +190,66 @@ class LeaseRecordStore:
             return int(conn.execute(stmt).scalar_one())
 
     def latest_epoch(self, chunk_id: str) -> int:
+        return self.latest_epochs([chunk_id]).get(chunk_id, 0)
+
+    def latest_epochs(self, chunk_ids: Iterable[str]) -> dict[str, int]:
+        keys = sorted(set(chunk_ids))
+        if not keys:
+            return {}
         st = self._store
-        lease_stmt = st.select(leases, func.max(leases.c.epoch)).where(leases.c.chunk_id == chunk_id)
-        # A forced takeover's fence bump mints no local lease, so it is folded
-        # in here alongside the lease-minted epochs.
-        fence_stmt = st.select(takeovers, func.max(takeovers.c.fence_epoch)).where(takeovers.c.chunk_id == chunk_id)
-        with self._store.connect() as conn:
-            lease_max = conn.execute(lease_stmt).scalar_one_or_none()
-            fence_max = conn.execute(fence_stmt).scalar_one_or_none()
-        return max(int(lease_max) if lease_max is not None else 0, int(fence_max) if fence_max is not None else 0)
+        result: dict[str, int] = {}
+        with st.connect() as conn:
+            for batch in id_batches(keys):
+                # A forced takeover's fence bump mints no local lease, so it is folded
+                # in here alongside the lease-minted epochs.
+                for table, epoch in ((leases, leases.c.epoch), (takeovers, takeovers.c.fence_epoch)):
+                    stmt = (
+                        st.select(table, table.c.chunk_id, func.max(epoch).label("latest"))
+                        .where(table.c.chunk_id.in_(batch))
+                        .group_by(table.c.chunk_id)
+                    )
+                    for row in conn.execute(stmt):
+                        if row.latest is not None:
+                            chunk_id = str(row.chunk_id)
+                            result[chunk_id] = max(result.get(chunk_id, 0), int(row.latest))
+        return result
 
     def has_lease_in_binding_tenure(self, chunk_id: str, bound_at: datetime) -> bool:
-        # A release's epoch floor is recorded in the release transaction, so it orders
-        # old and new tenures even when all their timestamps are identical.
+        return chunk_id in self.leases_in_binding_tenure({chunk_id: bound_at})
+
+    def leases_in_binding_tenure(self, bounds: Mapping[str, datetime]) -> set[str]:
+        keys = sorted(bounds)
+        if not keys:
+            return set()
         st = self._store
-        release_floor = st.select(binding_releases, func.max(binding_releases.c.lease_epoch_floor)).where(
-            binding_releases.c.chunk_id == chunk_id
-        )
-        stmt = (
-            st.select(leases, leases.c.lease_id)
-            .where(leases.c.chunk_id == chunk_id)
-            .where(leases.c.created_at >= bound_at)
-            .where(leases.c.epoch > func.coalesce(release_floor.scalar_subquery(), 0))
-            .limit(1)
-        )
-        return bool(self._store.all(stmt))
+        result: set[str] = set()
+        with st.connect() as conn:
+            for batch in id_batches(keys):
+                # A release's epoch floor is recorded in the release transaction, so it orders
+                # old and new tenures even when all their timestamps are identical.
+                floors = (
+                    st.select(
+                        binding_releases,
+                        binding_releases.c.chunk_id,
+                        func.max(binding_releases.c.lease_epoch_floor).label("floor"),
+                    )
+                    .where(binding_releases.c.chunk_id.in_(batch))
+                    .group_by(binding_releases.c.chunk_id)
+                    .subquery()
+                )
+                # The newest mint above the floor decides each chunk's own bound, so one row per chunk comes back.
+                stmt = (
+                    st.select(leases, leases.c.chunk_id, func.max(leases.c.created_at).label("newest"))
+                    .outerjoin(floors, floors.c.chunk_id == leases.c.chunk_id)
+                    .where(leases.c.chunk_id.in_(batch))
+                    .where(leases.c.epoch > func.coalesce(floors.c.floor, 0))
+                    .group_by(leases.c.chunk_id)
+                )
+                for row in conn.execute(stmt):
+                    chunk_id = str(row.chunk_id)
+                    if as_utc(row.newest) >= as_utc(bounds[chunk_id]):
+                        result.add(chunk_id)
+        return result
 
     def lease_ids_for_chunk(self, chunk_id: str) -> list[str]:
         stmt = self._store.select(leases, leases.c.lease_id).where(leases.c.chunk_id == chunk_id)

@@ -33,6 +33,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_ids import step_traceparent
 from blizzard.runner.environments.provider import AcquiredEnvironment, WorktreeTarget
+from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.worktree import IWorktreeGit
 from blizzard.runner.harness.adapter import HarnessSpawnError, HarnessVersionChangedError, WorkerHandle
 from blizzard.runner.harness.capability_snapshot import HarnessCapability, HarnessVersionCache
@@ -2408,9 +2409,9 @@ def test_adopting_an_unleased_claim_passes_the_hubs_epoch(tmp_path: Path, monkey
     epochs: list[int | None] = []
     original = InterruptedClaims.adopt
 
-    def traced_adopt(self: InterruptedClaims, chunk_id: str, view: ChunkState) -> None:
+    def traced_adopt(self: InterruptedClaims, chunk_id: str, view: ChunkState, bindings: list[EnvBinding]) -> None:
         epochs.append(view.latest_epoch)
-        return original(self, chunk_id, view)
+        return original(self, chunk_id, view, bindings)
 
     monkeypatch.setattr(InterruptedClaims, "adopt", traced_adopt)
     Fill(ctx).run()
