@@ -1757,6 +1757,31 @@ def test_a_migration_without_its_route_release_is_a_violation(tmp_path: Path) ->
     assert "hub:migration-route-released" in slugs
 
 
+def test_migration_uses_the_latest_release_not_insertion_order(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _seed_migration(
+            conn,
+            to_graph="gr_triage",
+            model_after=None,
+            pin_graph="gr_triage",
+            pin_default_model=["m"],
+            release_route=False,
+        )
+        for seq, at in ((1, NOW + timedelta(seconds=1)), (2, NOW - timedelta(seconds=1))):
+            conn.execute(
+                insert(hub.route_released).values(stamp(hub.route_released, chunk_id="ch_1", released_at=at, seq=seq))
+            )
+    assert "hub:migration-route-released" not in {v.invariant for v in hub_invariants(engine).run()}
+    with engine.begin() as conn:
+        conn.execute(
+            hub.route_released.delete().where(
+                hub.route_released.c.seq == 1, hub.route_released.c.tenant_id == default_tenant(engine)
+            )
+        )
+    assert "hub:migration-route-released" in {v.invariant for v in hub_invariants(engine).run()}
+
+
 def test_a_hub_landing_migration_retains_its_route_and_is_not_a_violation(tmp_path: Path) -> None:
     """``hub:migration-route-released`` exempts a migration landing on a hub-executed
     node: it deliberately retains the route, so no violation even with no

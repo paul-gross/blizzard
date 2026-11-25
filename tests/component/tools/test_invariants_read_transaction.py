@@ -102,6 +102,27 @@ def test_the_hub_half_does_not_see_a_record_committed_after_it_loaded_a_tenants_
         assert conn.execute(hub_scoped(sa.select(hub.chunks.c.chunk_id))).scalars().all() == ["ch_late"]
 
 
+def test_the_tenant_facts_projection_is_loaded_once_for_both_checks(tmp_path: Path) -> None:
+    engine = create_engine_from_url(init_hub(tmp_path / "hub").db_url)
+    pinned: list[str] = []
+    records: list[str] = []
+
+    def observe(conn: Connection, cursor: Any, statement: str, *args: Any) -> None:
+        if _scoped(conn) and statement.startswith("SELECT chunks.chunk_id, chunks.graph_id \nFROM chunks"):
+            pinned.append(statement)
+        if (
+            _scoped(conn)
+            and statement.startswith("SELECT chunks.chunk_id, chunks.graph_id,")
+            and "ORDER BY" in statement
+        ):
+            records.append(statement)
+
+    event.listen(engine, "after_cursor_execute", observe)
+    assert hub_invariants(engine).run() == []
+    assert len(pinned) == 1
+    assert len(records) == 1
+
+
 def test_connections_borrowed_over_a_read_transaction_refuse_to_write(tmp_path: Path) -> None:
     engine = create_engine_from_url(init_hub(tmp_path / "hub").db_url)
     scope = StoreScope(default_tenant(engine))
