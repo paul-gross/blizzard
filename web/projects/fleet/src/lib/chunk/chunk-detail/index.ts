@@ -24,4 +24,3 @@ export type { TransitionView, ArtifactView, DecisionView, ChunkUsageTotalView } 
 export { ChunkUrgency } from './chunk-urgency';
 
 export type { ChunkArtifact, ChunkArtifactStore } from './artifact.model';
-export type { WorkItem } from './work-item.model';

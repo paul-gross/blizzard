@@ -22,6 +22,7 @@ describe('prerequisite display reads', () => {
   });
   it('only uses returned tenant chunk statuses', () => {
     expect(prerequisiteStatuses([{ data: { chunk_id: 'ch_a', laneStatus: { kind: 'running' } } }, { data: { chunk_id: 'ch_b', laneStatus: { kind: 'ready' } }, isError: true }, {}])).toEqual({ ch_a: 'running' });
+    expect(prerequisiteStatuses([{ data: { chunk_id: 'ch_new', laneStatus: { kind: 'unknown', raw: 'future' } } }])).toEqual({ ch_new: 'future' });
   });
 });
 
