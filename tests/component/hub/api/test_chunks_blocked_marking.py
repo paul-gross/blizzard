@@ -236,11 +236,8 @@ class _CountingFactsStore(ChunkFactsStore):
 def test_detail_routes_blocked_derivation_never_reaches_load_all_facts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``GET /api/chunks/{id}``'s blocked-marking and
-    neighborhood share one standing-edges read and one resulting statuses map,
-    so its one prerequisite's facts are read through the same bulk `status_facts_for` call
-    the neighborhood derivation makes — never a second per-chunk `load_facts`, and never
-    the bulk `load_all_facts` seam."""
+    """``GET /api/chunks/{id}``'s blocked marking and neighborhood read the shared prerequisite through one
+    bulk ``status_facts_for`` — no second per-chunk ``load_facts`` and no ``load_all_facts``."""
     hub = build_hub(tmp_path)
     dependent_id = ingest(hub, [_DEPENDENT], promote=False)
     prerequisite_id = ingest(hub, [_PREREQUISITE], promote=False)
