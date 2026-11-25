@@ -99,6 +99,7 @@ NARROWED_MODULES: tuple[Path, ...] = tuple(
         "traces.py",
         "egress.py",
         "admin_tenants.py",
+        "sweeps.py",
         "trace_continuation.py",
     )
 )

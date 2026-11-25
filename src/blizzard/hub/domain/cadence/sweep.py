@@ -161,6 +161,21 @@ class TenantCadence:
         tally.add(mine)
 
 
+class TenantCadences:
+    """Each tenant's :class:`TenantCadence`, through the typed tenant accessor the process root binds over its tenant
+    scopes once they are built; it refuses a tenant as that tenant's scope refuses."""
+
+    def __init__(self) -> None:
+        self._open: Callable[[TenantId], TenantCadence] | None = None
+
+    def bind(self, open: Callable[[TenantId], TenantCadence]) -> None:
+        self._open = open
+
+    def __call__(self, tenant: TenantId) -> TenantCadence:
+        assert self._open is not None  # bound by the process root before the process is handed out
+        return self._open(tenant)
+
+
 class CadenceSweep:
     """The cadence sweep's one pass per hub, acting in each tenant through its own :class:`TenantCadence`;
     ``minting`` answers, each pass, whether the ``cadences`` flag lets it mint."""

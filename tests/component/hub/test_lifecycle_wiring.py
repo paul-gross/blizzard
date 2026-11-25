@@ -1,7 +1,9 @@
 """The hub's process lifecycle owners as the container holds them: the hosted app boots over the process's one action
 loop, step wake, pass driver, open tenants, readiness and flags, and its one cleanup closes the tenant scopes while the
 loop still runs, stops the loop after, and leaves the borrowed engine open. A tenant's deletion through the container's
-teardown evicts its scope, refreshes the open set and refuses its next request (component tier)."""
+teardown evicts its scope, refreshes the open set and refuses its next request. The sweeps run from the container's
+roster, timed and on request; the close drain acts in each tenant through that tenant's own drainer; and one poisoned
+tenant fails alone in a hub-wide pass (component tier)."""
 
 from __future__ import annotations
 
@@ -17,22 +19,26 @@ from blizzard.foundation.registry.interface import ServiceAbsent
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.hub import app as hub_app
 from blizzard.hub.api.auth_session import TENANT_HEADER
-from blizzard.hub.app import create_app
+from blizzard.hub.app import Sweep, create_app
 from blizzard.hub.composition import open_hub_store
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_pass import ActionPassDriver
 from blizzard.hub.delivery.flow_driver import StepWake
 from blizzard.hub.domain.execution.apply import IHubStepWake
+from blizzard.hub.domain.sweeps.names import SweepName
+from blizzard.hub.domain.sweeps.roster import SweepRoster
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.domain.tenancy.teardown import TenantTeardown
+from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentDrainer
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.process_root import HubProcess
 from blizzard.hub.scopes.tenants import TenantContainers
-from blizzard.hub.tenancy import StoreScope, TenantClosed, UnknownTenant
+from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.wire.tenant import TENANT_NOT_FOUND
 from tests.support.config_inputs import FLAG_REGISTRY, build_hosted_hub_app, init_hub
-from tests.support.scaffolding import build_hub
+from tests.support.scaffolding import HubHarness, build_hub, default_tenant
+from tests.support.tenant_sweeps import close_events, landed_hub_ref
 
 # The owners hold what they were built over privately; reading it is the only way to see it is shared.
 # pyright: reportPrivateUsage=false
@@ -136,3 +142,73 @@ def test_a_tenant_deletion_evicts_its_scope_refreshes_the_open_set_and_refuses_i
         assert (response.status_code, response.json()["type"]) == (404, TENANT_NOT_FOUND)
     finally:
         process.close()
+
+
+def _two_tenants_landed(tmp_path: Path) -> tuple[HubHarness, TenantId, TenantId]:
+    """A hub whose default tenant and a second one each hold a landed chunk with a pending close intent."""
+    hub = build_hub(tmp_path, public_url="https://hub.example")
+    carried = default_tenant(hub.engine)
+    other = hub.add_tenant("other").tenant
+    for tenant, chunk_id in ((carried, "ch_carried"), (other, "ch_other")):
+        landed_hub_ref(hub, tenant, chunk_id)
+    return hub, carried, other
+
+
+def _pending(process: HubProcess, tenant: TenantId) -> list[str]:
+    drainer = process.tenants.resolve(StoreScope(tenant), CloseIntentDrainer)
+    return [intent.chunk_id for intent in drainer._delivery.pending_close_intents()]
+
+
+def test_a_timed_pass_runs_the_containers_roster(tmp_path: Path) -> None:
+    hub, carried, other = _two_tenants_landed(tmp_path)
+    app = hub.wired_app
+    roster = app.state.hub_process.resolver.get(SweepRoster)
+
+    timed = {sweep.config_name: sweep for sweep in Sweep.all(app)}
+    timed[SweepName.CLOSE_DRAIN].reconciler()
+
+    assert set(timed) <= set(roster.names())
+    assert close_events(hub, carried) == ["ch_carried"]
+    assert close_events(hub, other) == ["ch_other"]
+
+
+def test_an_on_request_pass_runs_the_containers_roster(tmp_path: Path) -> None:
+    hub, carried, other = _two_tenants_landed(tmp_path)
+
+    response = hub.client.post("/api/admin/sweeps/close_drain/passes", headers={TENANT_HEADER: carried})
+
+    assert (response.status_code, response.json()["outcome"]) == (200, "completed")
+    assert close_events(hub, carried) == ["ch_carried"]
+    assert close_events(hub, other) == ["ch_other"]
+
+
+def test_the_close_drain_acts_in_each_tenant_through_its_own_drainer(tmp_path: Path) -> None:
+    hub, carried, other = _two_tenants_landed(tmp_path)
+    process: HubProcess = hub.wired_app.state.hub_process
+    drain = process.resolver.get(CloseDrainSweep)
+
+    assert process.resolver.get(SweepRoster)._every_tenant[SweepName.CLOSE_DRAIN] is drain
+    for tenant in (carried, other):
+        drainer = process.tenants.resolve(StoreScope(tenant), CloseIntentDrainer)
+        assert drain._tenant(tenant) is drainer
+        assert drainer._public_url == "https://hub.example"
+    drain.sweep()
+
+    assert (_pending(process, carried), _pending(process, other)) == ([], [])
+
+
+def test_one_poisoned_tenant_fails_alone_in_a_hub_wide_pass(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub, carried, other = _two_tenants_landed(tmp_path)
+    process: HubProcess = hub.wired_app.state.hub_process
+    poisoned = process.tenants.resolve(StoreScope(other), CloseIntentDrainer)
+
+    def refused(*_: object) -> None:
+        raise RuntimeError("the forge refused the close")
+
+    # The tenant scope's own instance, so only that tenant's half raises.
+    monkeypatch.setattr(poisoned, "drain", refused)
+    result = process.resolver.get(SweepRoster).pass_every_tenant(SweepName.CLOSE_DRAIN)
+
+    assert (result.outcome.value, result.error) == ("completed", None)
+    assert _pending(process, carried) == []
+    assert _pending(process, other) == ["ch_other"]

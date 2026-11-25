@@ -235,10 +235,7 @@ def test_hub_scoped_reads_mark_every_statement_they_issue(tmp_path: Path) -> Non
 
 
 def _served(core: HubCore) -> HubServices:
-    return build_services(
-        core,
-        cadences_on=lambda: False,
-    )
+    return build_services(core)
 
 
 def test_a_tenants_services_are_built_once_over_its_own_stores(tmp_path: Path) -> None:

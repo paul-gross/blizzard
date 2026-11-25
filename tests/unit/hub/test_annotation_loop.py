@@ -311,8 +311,9 @@ class _FakeWorkSources:
 class _FakeServices:
     """A minimal stand-in for ``HubServices`` — only the attributes ``lifespan``
     reads: ``sweeps`` (the roster over ``annotation``, when given, ``close_drain``, ``event_derivation`` and
-    ``tenant_teardown_sweep``, with no trace or egress export), ``action_loop`` (resolved through ``process.resolver``,
-    started and stopped around the sweeps), and ``process.tenants`` (closed before the loop stops)."""
+    ``tenant_teardown_sweep``, with no trace or egress export, resolved through ``process.resolver``), ``action_loop``
+    (resolved there too, started and stopped around the sweeps), and ``process.tenants`` (closed before the loop
+    stops)."""
 
     def __init__(
         self,
@@ -333,8 +334,8 @@ class _FakeServices:
             tenants=SimpleNamespace(close=lambda: None), resolver=SimpleNamespace(get=self._resolve)
         )
 
-    def _resolve(self, key: object) -> ActionLoop:
-        return self.action_loop
+    def _resolve(self, key: object) -> ActionLoop | SweepRoster:
+        return self.sweeps if key is SweepRoster else self.action_loop
 
     @property
     def sweeps(self) -> SweepRoster:

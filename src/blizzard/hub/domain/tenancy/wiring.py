@@ -74,9 +74,9 @@ def register(
     directory: Ref[IWriteTenantDirectory],
     teardowns: Ref[IWriteTenantTeardowns],
     units: Ref[TenantUnits],
-) -> None:
+) -> Ref[TenantTeardownSweep]:
     """Declare the area's ports over the adapters handed in, the closed-tenant forgetting the root supplies, and the
-    area's services, each once per process."""
+    area's services, each once per process, handing back the teardown sweep's ``Ref``."""
     registry.alias(port(IWriteTenantDirectory), directory)
     registry.alias(port(IWriteTenantTeardowns), teardowns)
     registry.alias(port(IReadTenantTeardowns), teardowns)
@@ -84,7 +84,7 @@ def register(
     registry.context(port(ClosedTenantForgetting), lifetime=Lifetime.PROCESS)
     registry.factory(tenant_administration, lifetime=Lifetime.PROCESS)
     registry.factory(tenant_teardown, lifetime=Lifetime.PROCESS)
-    registry.factory(tenant_teardown_sweep, lifetime=Lifetime.PROCESS)
+    return registry.factory(tenant_teardown_sweep, lifetime=Lifetime.PROCESS)
 
 
 def register_absent(registry: Registry) -> None:

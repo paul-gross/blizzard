@@ -39,6 +39,7 @@ from blizzard.hub.composition import build_hub_settings
 from blizzard.hub.config import HubConfig
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.delivery.action_registry import SHIPPED_ACTIONS, HubActions
+from blizzard.hub.domain.cadence.sweep import TenantCadences
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ports.escalations import IReadChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
@@ -56,7 +57,7 @@ from blizzard.hub.domain.execution.host_facts import HostFactIngestService
 from blizzard.hub.domain.execution.host_retirement import HostRetirementService
 from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
 from blizzard.hub.domain.graph.authoring import DefaultGraphService
-from blizzard.hub.domain.observability.analytics.derivation import EventDerivationService
+from blizzard.hub.domain.observability.analytics.derivation import EventDerivationService, TenantEventDerivations
 from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
 from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
 from blizzard.hub.domain.observability.egress.backfill import EgressBackfill
@@ -65,6 +66,7 @@ from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.reset import EgressReset
 from blizzard.hub.domain.observability.egress.status import EgressStatusReader
 from blizzard.hub.domain.observability.env_timeline import EnvTimelineReading
+from blizzard.hub.domain.observability.forge_status import TenantAnnotations
 from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
 from blizzard.hub.domain.observability.invariants import HubInvariantCheck
 from blizzard.hub.domain.observability.tracing.replay import TraceReplay
@@ -79,6 +81,7 @@ from blizzard.hub.domain.runners.host_report import HostReportService
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.tenancy.teardown import ClosedTenantForgetting
 from blizzard.hub.domain.urgency.services import UrgencyReading
+from blizzard.hub.domain.work_items.closure import CloseIntentDrainers
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.readiness import CredentialReadiness
@@ -251,6 +254,10 @@ def _process(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[OwnedCh
                 supply(port(StepHydrations), StepHydrations()),
                 supply(port(GraphReconciliations), GraphReconciliations()),
                 supply(port(ClosedTenantForgetting), ClosedTenantForgetting()),
+                supply(port(CloseIntentDrainers), CloseIntentDrainers()),
+                supply(port(TenantCadences), TenantCadences()),
+                supply(port(TenantEventDerivations), TenantEventDerivations()),
+                supply(port(TenantAnnotations), TenantAnnotations()),
                 *exporting,
             )
         ),

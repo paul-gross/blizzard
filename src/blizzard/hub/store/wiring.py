@@ -27,10 +27,14 @@ from blizzard.foundation.store.status import IStoreStatusReader
 from blizzard.hub.auth.invitations import IInvitationTokenReads
 from blizzard.hub.auth.service import InvitationWriters
 from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.cadence.ports import IReadCadenceCorpus
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.chunk.ports.work_refs import IReadWorkRefsCorpus
 from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus
+from blizzard.hub.domain.observability.analytics.derivation import IReadDerivationCorpus
 from blizzard.hub.domain.observability.egress.repository import IReadEgressEvents, IReadUsageCorpus
 from blizzard.hub.domain.observability.tracing.repository import StepHydrations
+from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
 from blizzard.hub.open_tenants import IReadOpenTenants, OpenTenants
 from blizzard.hub.store import MIGRATIONS_DIR
 from blizzard.hub.store.errors import HubStoreConnections
@@ -383,6 +387,10 @@ _PROCESS_KEYS: tuple[type[Any], ...] = (
     HubScopedReads,
     IReadUsageCorpus,
     IReadFlowLinesCorpus,
+    IReadCloseIntentCorpus,
+    IReadCadenceCorpus,
+    IReadDerivationCorpus,
+    IReadWorkRefsCorpus,
     IInvitationTokenReads,
     HubEventLogStore,
     IReadOpenTenants,
@@ -398,6 +406,26 @@ def usage_corpus(reads: HubScopedReads) -> IReadUsageCorpus:
 
 def flow_lines_corpus(reads: HubScopedReads) -> IReadFlowLinesCorpus:
     """The hub-scoped reads' flow-line change probe, as its port."""
+    return reads.corpus
+
+
+def close_intent_corpus(reads: HubScopedReads) -> IReadCloseIntentCorpus:
+    """The hub-scoped reads' pending close intents, as their port."""
+    return reads.corpus
+
+
+def cadence_corpus(reads: HubScopedReads) -> IReadCadenceCorpus:
+    """The hub-scoped reads' live-cadence corpus, as its port."""
+    return reads.corpus
+
+
+def derivation_corpus(reads: HubScopedReads) -> IReadDerivationCorpus:
+    """The hub-scoped reads' derivation corpus, as its port."""
+    return reads.corpus
+
+
+def work_refs_corpus(reads: HubScopedReads) -> IReadWorkRefsCorpus:
+    """The hub-scoped reads' work-ref corpus, as its port."""
     return reads.corpus
 
 
@@ -434,6 +462,8 @@ def register_process(registry: Registry) -> Ref[HubEventLogStore]:
     registry.factory(build_hub_scoped_reads, lifetime=Lifetime.PROCESS)
     registry.factory(usage_corpus, lifetime=Lifetime.PROCESS)
     registry.factory(flow_lines_corpus, lifetime=Lifetime.PROCESS)
+    for corpus in (close_intent_corpus, cadence_corpus, derivation_corpus, work_refs_corpus):
+        registry.factory(corpus, lifetime=Lifetime.PROCESS)
     registry.factory(invitation_token_reads, lifetime=Lifetime.PROCESS)
     registry.factory(invitation_writers, lifetime=Lifetime.PROCESS)
     registry.factory(open_tenant_reads, lifetime=Lifetime.PROCESS)

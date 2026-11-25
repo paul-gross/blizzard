@@ -327,6 +327,21 @@ class TenantEventDerivation:
                 _log.warning("segment derivation skipped", segment_id=segment_id, fault=repr(exc))
 
 
+class TenantEventDerivations:
+    """Each tenant's :class:`TenantEventDerivation`, through the typed tenant accessor the process root binds over its
+    tenant scopes once they are built; it refuses a tenant as that tenant's scope refuses."""
+
+    def __init__(self) -> None:
+        self._open: Callable[[TenantId], TenantEventDerivation] | None = None
+
+    def bind(self, open: Callable[[TenantId], TenantEventDerivation]) -> None:
+        self._open = open
+
+    def __call__(self, tenant: TenantId) -> TenantEventDerivation:
+        assert self._open is not None  # bound by the process root before the process is handed out
+        return self._open(tenant)
+
+
 class EventDerivationReconciler:
     """The standing convergence pass, one per hub: derives each candidate, then drops rows for any
     segment no longer visible. Holds, in memory only, each tenant's last converged signature and

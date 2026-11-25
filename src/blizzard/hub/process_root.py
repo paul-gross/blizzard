@@ -35,6 +35,7 @@ from blizzard.hub.delivery import wiring as delivery
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.documents import wiring as documents
 from blizzard.hub.domain.cadence import wiring as cadence_area
+from blizzard.hub.domain.cadence.sweep import CadenceSweep, TenantCadence, TenantCadences
 from blizzard.hub.domain.chunk import wiring as chunk_area
 from blizzard.hub.domain.config import wiring as config_wiring
 from blizzard.hub.domain.config_apply import wiring as config_apply
@@ -44,15 +45,19 @@ from blizzard.hub.domain.garden import wiring as garden_area
 from blizzard.hub.domain.garden.findings import wiring as findings
 from blizzard.hub.domain.graph import wiring as graph_area
 from blizzard.hub.domain.observability import wiring as observability_area
+from blizzard.hub.domain.observability.analytics.derivation import TenantEventDerivation, TenantEventDerivations
 from blizzard.hub.domain.observability.egress.boot import EgressBoot
+from blizzard.hub.domain.observability.forge_status import TenantAnnotation, TenantAnnotations
 from blizzard.hub.domain.observability.tracing.repository import StepHydration, StepHydrations
 from blizzard.hub.domain.operations import wiring as operations_area
 from blizzard.hub.domain.projects import wiring as projects
 from blizzard.hub.domain.runners import wiring as runners
+from blizzard.hub.domain.sweeps import wiring as sweeps
 from blizzard.hub.domain.tenancy import wiring as tenancy
-from blizzard.hub.domain.tenancy.teardown import ClosedTenantForgetting
+from blizzard.hub.domain.tenancy.teardown import ClosedTenantForgetting, TenantTeardownSweep
 from blizzard.hub.domain.urgency import wiring as urgency_area
 from blizzard.hub.domain.work_items import wiring as work_items_area
+from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentDrainer, CloseIntentDrainers
 from blizzard.hub.egress import wiring as egress
 from blizzard.hub.events import wiring as events
 from blizzard.hub.forge import wiring as forge
@@ -136,14 +141,14 @@ def register_hub(
         register_legacy(registry)
         delivery.register_tenant(registry)
         delivery_area.register(registry, flows=chunk_operations.flows)
-        _register_chunk_operations(registry, chunk_operations)
+        close_drain = _register_chunk_operations(registry, chunk_operations)
         auth.register(registry)
         secrets.register(registry)
         findings.register(registry, store.register_findings(registry))
         graph_area.register(registry, store.register_graphs(registry))
         _register_urgency(registry)
         _register_garden(registry, formats=api.register(registry))
-        _register_cadence(registry)
+        cadence = _register_cadence(registry)
         _register_config(registry)
         _register_projects(registry)
         _register_fleet(registry, versions=versions)
@@ -151,9 +156,19 @@ def register_hub(
         live_config.register(registry)
         forge.register_tenant(registry)
         work_sources.register(registry)
-        _register_observability(registry, hub_events=hub_events)
-        _register_tenancy(registry)
-        _register_exports(registry, trace_export=trace_export, egress_export=egress_export)
+        event_derivation, forge_status = _register_observability(registry, hub_events=hub_events)
+        tenant_teardown = _register_tenancy(registry)
+        trace_sweep, egress_sweep = _register_exports(registry, trace_export=trace_export, egress_export=egress_export)
+        sweeps.register(
+            registry,
+            forge_status=forge_status,
+            event_derivation=event_derivation,
+            close_drain=close_drain,
+            cadence=cadence,
+            tenant_teardown=tenant_teardown,
+            trace_export=trace_sweep,
+            egress=egress_sweep,
+        )
     else:
         store.register_process_absent(registry)
         delivery.register_absent(registry)
@@ -200,6 +215,7 @@ def register_hub(
         store.register_tenancy_absent(registry)
         tenancy.register_absent(registry)
         api.register_graph_sync_absent(registry)
+        sweeps.register_absent(registry)
     if store_backed and settings:
         settings_wiring.register(registry)
     else:
@@ -207,18 +223,21 @@ def register_hub(
         settings_wiring.register_absent(registry)
 
 
-def _register_chunk_operations(registry: LegacyRegistry, refs: store.ChunkOperationsRefs) -> None:
+def _register_chunk_operations(registry: LegacyRegistry, refs: store.ChunkOperationsRefs) -> Ref[CloseDrainSweep]:
     """The chunk, chunk operations and work-items areas, over the tenant's chunk-store bundle and flow and work-item
-    stores."""
+    stores, handing back the close drain's ``Ref``."""
     chunk_area.register(registry, stores=refs.chunks, submissions=refs.flows, work_items=refs.work_items)
     operations_area.register(registry, withdrawals=refs.work_items)
-    work_items_area.register(registry, items=refs.work_items)
+    return work_items_area.register(registry, items=refs.work_items)
 
 
-def _register_observability(registry: LegacyRegistry, *, hub_events: Ref[HubEventLogStore]) -> None:
-    """The observability adapters, and the observability area's ports and services over them and the hub event log."""
+def _register_observability(
+    registry: LegacyRegistry, *, hub_events: Ref[HubEventLogStore]
+) -> observability_area.PassRefs:
+    """The observability adapters, and the observability area's ports and services over them and the hub event log,
+    handing back its passes' ``Ref``s."""
     refs = store.register_observability(registry)
-    observability_area.register(
+    return observability_area.register(
         registry,
         segments=refs.segments,
         events=refs.events,
@@ -231,17 +250,20 @@ def _register_observability(registry: LegacyRegistry, *, hub_events: Ref[HubEven
     )
 
 
-def _register_tenancy(registry: LegacyRegistry) -> None:
+def _register_tenancy(registry: LegacyRegistry) -> Ref[TenantTeardownSweep]:
     """The tenancy adapters, the tenancy area's services over them, and the graph sync its tenant creation mints
-    through."""
+    through, handing back the teardown sweep's ``Ref``."""
     refs = store.register_tenancy(registry)
-    tenancy.register(registry, directory=refs.directory, teardowns=refs.teardowns, units=refs.units)
+    teardown = tenancy.register(registry, directory=refs.directory, teardowns=refs.teardowns, units=refs.units)
     api.register_graph_sync(registry)
+    return teardown
 
 
-def _register_exports(registry: LegacyRegistry, *, trace_export: bool, egress_export: bool) -> None:
+def _register_exports(
+    registry: LegacyRegistry, *, trace_export: bool, egress_export: bool
+) -> observability_area.ExportSweepRefs:
     """The trace and egress stores and the egress adapters, and the observability area's exports over them — each
-    export's sweep present only when its switch is set."""
+    export's sweep present only when its switch is set, and its ``Ref`` handed back, else ``None``."""
     refs = store.register_exports(registry)
     free_space = egress.register_probe(registry)
     writers: observability_area.EgressWriterRefs | None = None
@@ -250,7 +272,7 @@ def _register_exports(registry: LegacyRegistry, *, trace_export: bool, egress_ex
         writers = (held.configured, held.backfill)
     else:
         egress.register_writers_absent(registry)
-    observability_area.register_exports(
+    return observability_area.register_exports(
         registry,
         trace=refs.trace,
         egress=refs.egress,
@@ -309,10 +331,10 @@ def _register_garden(registry: LegacyRegistry, *, formats: Ref[GardenFormats]) -
     )
 
 
-def _register_cadence(registry: LegacyRegistry) -> None:
-    """The cadence adapters, and the cadence area's ports and services over them."""
+def _register_cadence(registry: LegacyRegistry) -> Ref[CadenceSweep]:
+    """The cadence adapters, and the cadence area's ports and services over them, handing back its sweep's ``Ref``."""
     refs = store.register_cadence(registry)
-    cadence_area.register(registry, cadences=refs.cadences, runs=refs.runs)
+    return cadence_area.register(registry, cadences=refs.cadences, runs=refs.runs)
 
 
 def _register_urgency(registry: LegacyRegistry) -> None:
@@ -396,6 +418,10 @@ def store_backed_values(
         supply(port(StepHydrations), StepHydrations()),
         supply(port(GraphReconciliations), GraphReconciliations()),
         supply(port(ClosedTenantForgetting), ClosedTenantForgetting()),
+        supply(port(CloseIntentDrainers), CloseIntentDrainers()),
+        supply(port(TenantCadences), TenantCadences()),
+        supply(port(TenantEventDerivations), TenantEventDerivations()),
+        supply(port(TenantAnnotations), TenantAnnotations()),
         *process_values(
             clock=clock,
             config=config,
@@ -455,12 +481,18 @@ def build_store_backed(
 
 def store_backed_process(owner: OwnedChild) -> HubProcess:
     """The store-backed :class:`HubProcess` over its opened container, which is closed if the tenant reads fail. Its
-    step hydration and graph reconciliation accessors are bound over its tenant scopes, and its closed-tenant
-    forgetting over them and the open tenants, before it is handed out."""
+    step hydration, graph reconciliation, close drain, cadence, event derivation and annotation accessors are bound
+    over its tenant scopes, and its closed-tenant forgetting over them and the open tenants, before it is handed out."""
+    resolver = owner.resolver
     try:
-        reads = owner.resolver.get(HubScopedReads)
-        hydrations = owner.resolver.get(StepHydrations)
-        reconciliations = owner.resolver.get(GraphReconciliations)
+        reads = resolver.get(HubScopedReads)
+        hydrations = resolver.get(StepHydrations)
+        reconciliations = resolver.get(GraphReconciliations)
+        drainers = resolver.get(CloseIntentDrainers)
+        cadences = resolver.get(TenantCadences)
+        derivations = resolver.get(TenantEventDerivations)
+        annotations = resolver.get(TenantAnnotations)
+        open_tenants = resolver.get(OpenTenants)
     except BaseException:
         owner.close()
         raise
@@ -468,6 +500,12 @@ def store_backed_process(owner: OwnedChild) -> HubProcess:
     tenants = process.tenants
     hydrations.bind(lambda tenant: tenants.resolve(StoreScope(tenant), StepHydration))
     reconciliations.bind(lambda tenant: tenants.resolve(StoreScope(tenant), GraphReconciliation))
+    drainers.bind(lambda tenant: tenants.resolve(StoreScope(tenant), CloseIntentDrainer))
+    cadences.bind(lambda tenant: tenants.resolve(StoreScope(tenant), TenantCadence))
+    derivations.bind(lambda tenant: tenants.resolve(StoreScope(tenant), TenantEventDerivation))
+    annotations.bind(
+        lambda tenant: tenants.resolve(StoreScope(tenant), TenantAnnotation), lambda: open_tenants.every().keys()
+    )
     bind_closed_tenant_forgetting(process)
     return process
 

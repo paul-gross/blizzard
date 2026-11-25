@@ -170,6 +170,7 @@ from blizzard.hub.domain.runners.registration import RunnerRetired
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.sweeps.locks import SweepInProgress
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
+from blizzard.hub.domain.sweeps.roster import SweepRoster
 from blizzard.hub.layout import remove_retired_workdirs
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.process_root import HubProcess, open_store_backed, open_store_free
@@ -236,10 +237,10 @@ class Sweep:
         tracer = app.state.platform_tracing.tracer
         settings: HubSettingsGraph | None = getattr(app.state, "hub_settings", None)
         # A hub holding a settings graph reads each pass's config, and each live interval, from its live config source.
-        source: HubConfigSource | None = (
-            app.state.hub_process.resolver.get(HubConfigSource) if settings is not None else None
-        )
-        for name in services.sweeps.names():
+        resolver = app.state.hub_process.resolver
+        source: HubConfigSource | None = resolver.get(HubConfigSource) if settings is not None else None
+        roster = resolver.get(SweepRoster)
+        for name in roster.names():
             if config.sweeps.of(name) is SweepMode.STEPPED:
                 continue
             interval = _sweep_interval(name, config)
@@ -250,7 +251,7 @@ class Sweep:
             }.get(name)
             yield cls(
                 name,
-                partial(services.sweeps.pass_every_tenant, name, tracer),
+                partial(roster.pass_every_tenant, name, tracer),
                 interval,
                 app.state.shutdown,
                 jitter_seconds=random.uniform(0, interval),
@@ -842,11 +843,7 @@ def build_hosted_app(
         core.process.resolver.get(IOAuthProviderRegistry)
         core.process.resolver.get(SigningKeyService | None)
 
-        services = build_services(
-            core,
-            public_url=config.public_url,
-            cadences_on=lambda: flags.on("cadences"),
-        )
+        services = build_services(core)
         # Only once the store is at the expected schema head: a store mid-migration must
         # fail *readiness*, not *boot* (pinned:
         # `tests/component/test_readiness.py::test_ready_probe_false_on_unmigrated_store`).

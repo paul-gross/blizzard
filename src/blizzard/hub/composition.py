@@ -12,7 +12,6 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Protocol
 
 import httpx2
@@ -48,7 +47,7 @@ from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_registry import HubActions, build_hub_actions
 from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores, ITurnRunner, StepWake
 from blizzard.hub.documents.codec import IConfigCodec
-from blizzard.hub.domain.cadence.sweep import CadenceSweep, TenantCadence
+from blizzard.hub.domain.cadence.sweep import CadenceSweep
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
@@ -71,30 +70,22 @@ from blizzard.hub.domain.graph.model import IReadGraphBodies, IReadGraphReposito
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.observability.analytics.derivation import (
     EventDerivationReconciler,
-    TenantEventDerivation,
 )
 from blizzard.hub.domain.observability.egress.boot import EgressPathKey
-from blizzard.hub.domain.observability.egress.sweep import EgressSweep
 from blizzard.hub.domain.observability.forge_status import (
-    FULL_PASS_FLOOR_INTERVALS,
     AnnotationReconciler,
-    TenantAnnotation,
 )
 from blizzard.hub.domain.observability.hub_events import HubEventLogService
-from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.domain.projects.targets import ChunkTargets
 from blizzard.hub.domain.runners.host import IReadHostRegistry
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
-from blizzard.hub.domain.sweeps.locks import SweepLocks
-from blizzard.hub.domain.sweeps.names import SweepName
 from blizzard.hub.domain.sweeps.roster import SweepRoster
-from blizzard.hub.domain.tenancy.teardown import TenantTeardownSweep
 from blizzard.hub.domain.urgency.services import (
     UrgencyReading,
 )
-from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentDrainer
+from blizzard.hub.domain.work_items.closure import CloseDrainSweep
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.egress.factory import egress_boot
 from blizzard.hub.events.broker import EventBroker
@@ -109,7 +100,6 @@ from blizzard.hub.settings.footing import HubSettingsFooting
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.settings.reader import HubSettingsReader
 from blizzard.hub.settings.service import HubSettingsAuthoring
-from blizzard.hub.settings.source import HubConfigSource
 from blizzard.hub.store import wiring as store_wiring
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
@@ -388,14 +378,6 @@ class TenantCache:
             raise RuntimeError("the hub serves no tenant's services: none were wired")
         return served.services
 
-    def open_sweeps(self, scope: StoreScope) -> TenantSweeps:
-        """The halves of the hub's sweeps that act on ``scope``'s tenant's rows, refused as :meth:`open`
-        refuses."""
-        served = self._entry(scope).served
-        if served is None:
-            raise RuntimeError("the hub serves no tenant's sweeps: none were wired")
-        return served.sweeps
-
     def evict(self, tenant: TenantId) -> None:
         """Drop ``tenant``'s entry, if cached; the tenant's deletion calls this when it closes, once its container
         scope — which closes the objects its configured records built and drops its event broker — is evicted."""
@@ -423,19 +405,10 @@ class _TenantEntry:
 
 
 @dataclass(frozen=True)
-class TenantSweeps:
-    """A tenant's halves of the hub's sweeps, built with its services: what each pass does with the
-    rows of that tenant."""
-
-    close_drain: CloseIntentDrainer
-
-
-@dataclass(frozen=True)
 class ServedTenant:
-    """What serving one tenant builds over its :class:`TenantStores`: its services and its sweeps."""
+    """What serving one tenant builds over its :class:`TenantStores`: its services."""
 
     services: TenantServices
-    sweeps: TenantSweeps
 
 
 @collaborator
@@ -652,12 +625,11 @@ class TenantServiceParts:
     tenant, so no adapter or client is built twice."""
 
     clock: IClock
-    public_url: str | None
     step_wake: StepWake
 
 
 def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, events: EventBroker) -> ServedTenant:
-    """Construct and wire one tenant's services and sweeps over its :class:`TenantStores`, publishing to ``events`` —
+    """Construct and wire one tenant's services over its :class:`TenantStores`, publishing to ``events`` —
     the tenant's broker. Every configured adapter is the tenant scope's instance."""
     clock = parts.clock
     tenant = stores.tenant
@@ -747,135 +719,42 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         findings=finding_store,
         finding_bucket=finding_bucket,
     )
-    sweeps = TenantSweeps(
-        close_drain=CloseIntentDrainer(
-            delivery=chunk_delivery,
-            artifacts=chunk_artifacts,
-            chunks=chunk_record,
-            events=event_log,
-            work_sources=work_sources,
-            clock=clock,
-            commit_links=commit_links,
-            public_url=parts.public_url,
-        ),
-    )
-    return ServedTenant(services=services, sweeps=sweeps)
+    return ServedTenant(services=services)
 
 
-def build_services(
-    core: HubCore,
-    *,
-    public_url: str | None = None,
-    cadences_on: Callable[[], bool],
-) -> HubServices:
+def build_services(core: HubCore) -> HubServices:
     """Construct the hub-level services over the shared :class:`HubCore`, its tenant cache serving each tenant's
-    (:func:`build_tenant_services`). Each sweep or export is one pass per hub, acting on a row through its tenant's
-    services; live config is read through the container's :class:`HubConfigSource`, and the trace and egress sweeps are
-    the container's, ``None`` while their export is off. ``cadences_on`` answers whether a cadence pass may mint."""
+    (:func:`build_tenant_services`). Every sweep and the roster are the container's, each born in its area's wiring;
+    the trace and egress sweeps are ``None`` while their export is off."""
     clock = core.clock
     process = core.process.resolver
-    config_source = process.get(HubConfigSource)
-    action_loop = process.get(ActionLoop)
     step_wake = process.get(StepWake)
 
-    parts = TenantServiceParts(
-        clock=clock,
-        public_url=public_url,
-        step_wake=step_wake,
-    )
+    parts = TenantServiceParts(clock=clock, step_wake=step_wake)
     core.tenants.serve(TenantServing(build=lambda stores, events: build_tenant_services(stores, parts, events=events)))
-    hub_event_log = core.process.resolver.get(HubEventLogService)
-    open_tenants = core.process.resolver.get(OpenTenants)
-
-    def scope_of(tenant: TenantId) -> StoreScope:
-        """The scope a hub-level pass or bridge opens a row's tenant in — built in this one place."""
-        return StoreScope(tenant)
-
-    def sweeps_of(tenant: TenantId) -> TenantSweeps:
-        return core.tenants.open_sweeps(scope_of(tenant))
-
-    trace_sweep: TraceExportSweep | None = process.get(TraceExportSweep | None)
-    egress_sweep: EgressSweep | None = process.get(EgressSweep | None)
-    # The identity area's services, each the process scope's one instance.
-    user_store = process.get(UserRepository)
-    identity_store = process.get(IdentityRepository)
-    session_store = process.get(SessionRepository)
-    memberships = process.get(MembershipRepository)
-    auth = process.get(AuthService)
-
-    tenant_teardown_sweep = process.get(TenantTeardownSweep)
-    close_drain = CloseDrainSweep(
-        corpus=core.hub_scoped_reads.corpus,
-        tenant=lambda tenant: sweeps_of(tenant).close_drain,
-        clock=clock,
-    )
-    cadence = CadenceSweep(
-        corpus=core.hub_scoped_reads.corpus,
-        tenant=lambda tenant: core.process.tenants.resolve(scope_of(tenant), TenantCadence),
-        minting=cadences_on,
-    )
-
-    def derivation_of(tenant: TenantId) -> TenantEventDerivation:
-        return core.process.tenants.resolve(scope_of(tenant), TenantEventDerivation)
-
-    def annotation_of(tenant: TenantId) -> TenantAnnotation:
-        return core.process.tenants.resolve(scope_of(tenant), TenantAnnotation)
-
-    event_derivation = EventDerivationReconciler(
-        corpus=core.hub_scoped_reads.corpus,
-        tenant=derivation_of,
-        clock=clock,
-    )
-    annotation = AnnotationReconciler(
-        corpus=core.hub_scoped_reads.corpus,
-        tenants=lambda: open_tenants.every().keys(),
-        tenant=annotation_of,
-        clock=clock,
-        full_pass_floor=lambda: timedelta(
-            seconds=FULL_PASS_FLOOR_INTERVALS * config_source.current().annotation_interval_seconds
-        ),
-    )
     return HubServices(
         step_wake=step_wake,
         tenants=TenantServicesOpener(
             open_services=core.open_services,
-            open_tenants=open_tenants,
+            open_tenants=process.get(OpenTenants),
         ),
         process=core.process,
         hub_scoped_reads=core.hub_scoped_reads,
-        action_loop=action_loop,
-        hub_event_log=hub_event_log,
+        action_loop=process.get(ActionLoop),
+        hub_event_log=process.get(HubEventLogService),
         clock=clock,
-        close_drain=close_drain,
-        cadence=cadence,
-        sessions=session_store,
-        identities=identity_store,
-        users=user_store,
-        memberships=memberships,
-        auth=auth,
+        close_drain=process.get(CloseDrainSweep),
+        cadence=process.get(CadenceSweep),
+        sessions=process.get(SessionRepository),
+        identities=process.get(IdentityRepository),
+        users=process.get(UserRepository),
+        memberships=process.get(MembershipRepository),
+        auth=process.get(AuthService),
         auth_throttle=process.get(LiveIpThrottle),
         auth_facts=process.get(AuthFactsService),
-        event_derivation=event_derivation,
-        annotation=annotation,
-        sweeps=SweepRoster(
-            every_tenant={
-                SweepName.FORGE_STATUS: annotation,
-                SweepName.EVENT_DERIVATION: event_derivation,
-                SweepName.CLOSE_DRAIN: close_drain,
-                SweepName.TENANT_TEARDOWN: tenant_teardown_sweep,
-                **({SweepName.TRACE_EXPORT: trace_sweep} if trace_sweep is not None else {}),
-                **({SweepName.EGRESS: egress_sweep} if egress_sweep is not None else {}),
-                SweepName.CADENCE: cadence,
-            },
-            one_tenant={
-                SweepName.FORGE_STATUS: annotation,
-                SweepName.EVENT_DERIVATION: event_derivation,
-                SweepName.CLOSE_DRAIN: close_drain,
-                SweepName.CADENCE: cadence,
-            },
-            locks=SweepLocks(),
-            clock=clock,
-        ),
+        event_derivation=process.get(EventDerivationReconciler),
+        annotation=process.get(AnnotationReconciler),
+        sweeps=process.get(SweepRoster),
     )
 
 

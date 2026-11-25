@@ -283,6 +283,30 @@ class CloseDrainTally:
             self.failed += 1
 
 
+@domain_model
+@dataclass(frozen=True)
+class BoardPublicUrl:
+    """The hub's public URL a close note links each chunk's board page under; ``None`` links none. Supplied by the
+    config edge, which owns where the hub is served."""
+
+    url: str | None
+
+
+class CloseIntentDrainers:
+    """Each tenant's :class:`CloseIntentDrainer`, through the typed tenant accessor the process root binds over its
+    tenant scopes once they are built; it refuses a tenant as that tenant's scope refuses."""
+
+    def __init__(self) -> None:
+        self._open: Callable[[TenantId], CloseIntentDrainer] | None = None
+
+    def bind(self, open: Callable[[TenantId], CloseIntentDrainer]) -> None:
+        self._open = open
+
+    def __call__(self, tenant: TenantId) -> CloseIntentDrainer:
+        assert self._open is not None  # bound by the process root before the process is handed out
+        return self._open(tenant)
+
+
 class CloseDrainSweep:
     """The close drain's one pass per hub: reads every open tenant's pending intents once, keeps up to
     ``CLOSE_DRAIN_PASS_LIMIT`` due ones by :func:`fair_share`, and hands each tenant its share through

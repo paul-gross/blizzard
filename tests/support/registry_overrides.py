@@ -10,6 +10,7 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import timedelta
 from typing import Any
 
+from blizzard.foundation.flags import Flags
 from blizzard.foundation.registry.interface import Ref
 from blizzard.foundation.registry.internal.overrides import OverrideSet
 from blizzard.foundation.registry.internal.recording import OWNING, RecordingRegistry
@@ -44,11 +45,13 @@ def replaced_adapters(
     oauth_providers: IOAuthProviderRegistry | None = None,
     action_pass_grace: timedelta | None = None,
     extractors: Sequence[ITurnEventExtractor] | None = None,
+    flags: Flags | None = None,
 ) -> OverrideSet:
     """Replacements supplying ``probes`` as every forge kind's credential check, borrowed, and building each tenant's
     forge and work-source registries with ``forges`` and ``work_sources``, and serving ``oauth_providers`` as the
     hub's OAuth provider registry, and letting each action pass go ``action_pass_grace`` past its live bound, and
-    deriving transcript events with ``extractors``; each left ``None`` stays registered."""
+    deriving transcript events with ``extractors``, and resolving the hub's flags as ``flags``; each left ``None`` stays
+    registered."""
     overrides = OverrideSet(registry)
     if probes is not None:
         overrides.replace_value(owned_ref(registry, Mapping[str, ICredentialProbe]), probes)
@@ -62,6 +65,8 @@ def replaced_adapters(
         overrides.replace_factory(owned_ref(registry, ActionPassDriver), _action_passes_graced(action_pass_grace))
     if extractors is not None:
         overrides.replace_value(owned_ref(registry, TurnEventExtractors), TurnEventExtractors(extractors))
+    if flags is not None:
+        overrides.replace_value(owned_ref(registry, Flags), flags)
     return overrides
 
 

@@ -2,7 +2,8 @@
 
 A graph without settings declares each port absent. Every graph holds the borrowed boot ``HubConfig``, the transcript
 caps it resolves, and one :class:`HubConfigSource` over it, reading the settings graph's resolution when one is
-borrowed, the live ``[tracing]`` and ``[egress]`` configs read through that source, and the hub's resolved flags."""
+borrowed, the live ``[tracing]`` and ``[egress]`` configs and annotation interval read through that source, the hub's
+resolved flags, and the public URL a close note links a chunk's board page under."""
 
 from __future__ import annotations
 
@@ -11,8 +12,10 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.registry.interface import Lifetime, Registry, port
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.egress.boot import LiveEgressConfig
+from blizzard.hub.domain.observability.forge_status import LiveAnnotationInterval
 from blizzard.hub.domain.observability.tracing.repository import LiveTracingConfig
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
+from blizzard.hub.domain.work_items.closure import BoardPublicUrl
 from blizzard.hub.settings.footing import HubSettingsFooting
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.settings.model import IReadHubSettingsAdmin
@@ -67,6 +70,16 @@ def live_egress(source: HubConfigSource) -> LiveEgressConfig:
     return LiveEgressConfig(lambda: source.current().egress)
 
 
+def live_annotation_interval(source: HubConfigSource) -> LiveAnnotationInterval:
+    """The forge-status pass's interval read live through ``source``."""
+    return LiveAnnotationInterval(lambda: source.current().annotation_interval_seconds)
+
+
+def board_public_url(boot: HubConfig) -> BoardPublicUrl:
+    """The boot config's public URL, which a close note links each chunk's board page under."""
+    return BoardPublicUrl(boot.public_url)
+
+
 def build_hub_flags(config: HubConfig) -> Flags:
     """The hub's resolved flags: the resolution ``config``'s load made, or — for a config built in code — every ``hub``
     and ``fleet`` flag of the registry it carries at its default, then its ``[flags]`` overrides. Each override the hub
@@ -79,13 +92,15 @@ def build_hub_flags(config: HubConfig) -> Flags:
 
 
 def register_boot(registry: Registry) -> None:
-    """Declare the borrowed boot config, the transcript caps and the flags it resolves, and the live tracing and egress
-    configs."""
+    """Declare the borrowed boot config, the transcript caps, flags and board public URL it resolves, and the live
+    tracing and egress configs and annotation interval."""
     registry.context(port(HubConfig), lifetime=Lifetime.PROCESS)
     registry.factory(build_hub_flags, lifetime=Lifetime.PROCESS)
     registry.factory(boot_transcript_caps, lifetime=Lifetime.PROCESS)
     registry.factory(live_tracing, lifetime=Lifetime.PROCESS)
     registry.factory(live_egress, lifetime=Lifetime.PROCESS)
+    registry.factory(live_annotation_interval, lifetime=Lifetime.PROCESS)
+    registry.factory(board_public_url, lifetime=Lifetime.PROCESS)
 
 
 def register(registry: Registry) -> None:

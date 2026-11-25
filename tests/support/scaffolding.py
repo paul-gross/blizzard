@@ -2030,6 +2030,7 @@ def build_hub(
             oauth_providers=OAuthProviderRegistry(oauth_providers) if oauth_providers is not None else None,
             action_pass_grace=action_pass_grace,
             extractors=extractors,
+            flags=flags or HUB_FLAGS,
         ),
     )
     default_stores = core.open(default)
@@ -2044,11 +2045,7 @@ def build_hub(
     closers[RESERVED_HUB_SOURCE_NAME] = hub_source
     work_source_registry = WorkSourceRegistry(built_sources, closers=closers, editors=editors)
 
-    hub_services = build_services(
-        core,
-        public_url=public_url,
-        cadences_on=lambda: (flags or HUB_FLAGS).on("cadences"),
-    )
+    hub_services = build_services(core)
     hub_services.tenants.open_tenants.refresh()
     services = hub_services.tenants.open_services(default)
     app = create_hub_app(config, services=hub_services, flags=flags)

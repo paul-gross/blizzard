@@ -260,10 +260,7 @@ def _hosted(
         overrides=overrides,
         versions=HubVersionWindow(__version__, VERSION_WINDOW),
     )
-    services = build_services(
-        core,
-        cadences_on=lambda: False,
-    )
+    services = build_services(core)
     return core, services, StoreScope(default_tenant(engine))
 
 
