@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import contextlib
 import os
+import select
+import signal
 import subprocess
+import sys
 import time
 
 from blizzard.runner.process.internal.linux_process_probe import (
@@ -91,21 +94,37 @@ def test_group_alive_leaves_a_still_running_leader_untouched() -> None:
 
 def test_interrupt_group_signals_a_real_process_group() -> None:
     """``interrupt_group`` reaches a real throwaway process group: a child with no SIGINT
-    handler dies on it. Retried under a deadline, since a single delivery has been seen
-    to miss on a heavily loaded host."""
+    handler dies on it. The child explicitly resets inherited signal disposition and
+    signals readiness before the parent sends the interrupt."""
     probe = LinuxProcessProbe()
-    proc = subprocess.Popen(["sleep", "30"], start_new_session=True)
+    read_fd, write_fd = os.pipe()
     try:
-        deadline = time.monotonic() + 5
-        while proc.poll() is None and time.monotonic() < deadline:
+        proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                "import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); "
+                "os.write(int(sys.argv[1]), b'R'); signal.pause()",
+                str(write_fd),
+            ],
+            pass_fds=(write_fd,),
+            start_new_session=True,
+        )
+        os.close(write_fd)
+        write_fd = -1
+        try:
+            assert select.select([read_fd], [], [], 30)[0], "child did not signal readiness"
+            assert os.read(read_fd, 1) == b"R"
             probe.interrupt_group(proc.pid)  # `start_new_session` makes pgid == pid
-            with contextlib.suppress(subprocess.TimeoutExpired):
-                proc.wait(timeout=0.1)
-        assert proc.returncode == -2  # killed by SIGINT
+            assert proc.wait(timeout=30) == -signal.SIGINT
+        finally:
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.killpg(proc.pid, 9)
+            proc.wait()
     finally:
-        with contextlib.suppress(ProcessLookupError, PermissionError):
-            os.killpg(proc.pid, 9)
-        proc.wait()
+        os.close(read_fd)
+        if write_fd != -1:
+            os.close(write_fd)
 
 
 def test_interrupt_group_of_an_already_gone_group_is_a_noop() -> None:
