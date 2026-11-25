@@ -7322,7 +7322,7 @@
           "short_help": "Retire GRAPH_ID: its name no longer resolves to it; chunks already on it run on."
         },
         "sync": {
-          "help": "Reconcile the hub's packaged graphs into every open tenant, minting only what changed, and report per tenant.\n\nIdempotent. The **hub's own** packaged set is what is reconciled, not this CLI's.\nExits non-zero only if a packaged graph failed to load in some tenant. When to run it:\nhttps://github.com/paul-gross/blizzard/blob/master/docs/deployment/install.md#graph-sync-after-a-deploy",
+          "help": "Reconcile the hub's packaged graphs into every open tenant, minting only what changed, and report per tenant.\n\nIdempotent. The **hub's own** packaged set is what is reconciled, not this CLI's.\nExits non-zero if some tenant could not reconcile a packaged graph: one that failed to load or validate,\nor a held one, whose stored definition no longer parses while every mint of its name is retired.\nWhen to run it:\nhttps://github.com/paul-gross/blizzard/blob/master/docs/deployment/install.md#graph-sync-after-a-deploy",
           "params": [
             {
               "help": "Print the raw response body as JSON.",

@@ -386,6 +386,44 @@ def test_reconciling_a_fully_retired_name_with_a_changed_definition_mints_a_new_
     assert listed[first.graph_id]["retired"] is True
 
 
+def _seed_unreadable(hub: HubHarness, path: Path) -> str:
+    """Mint ``path``'s graph beside a stored definition the parser rejects."""
+    doc = GraphDoc.of(YAML_CODEC.decode(path.read_bytes()))
+    body = yaml.safe_load(path.read_text())
+    body["nodes"]["build"]["produces"] = [{"name": "out", "kind": "not-a-kind"}]
+    minted, _ = hub.services.graph_mint.mint(doc, definition_yaml=yaml.safe_dump(body))
+    return minted.graph_id
+
+
+def test_reconciling_a_fully_retired_name_whose_stored_definition_no_longer_parses_holds(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    path = _packaged(tmp_path, "braked")
+    seeded = _seed_unreadable(hub, path)
+    _retire_all(hub, "braked")
+
+    outcomes = _sync(hub, [path])
+
+    assert _statuses(outcomes) == [("braked", "failed")]
+    assert outcomes[0].graph_id is None
+    assert outcomes[0].detail is not None
+    assert "no longer parses" in outcomes[0].detail
+    assert "blizzard hub graph enable" in outcomes[0].detail
+    assert [g["graph_id"] for g in hub.client.get("/api/graphs").json()] == [seeded]
+    assert hub.services.graphs.get_enabled_by_name("braked") is None
+
+
+def test_reconciling_an_enabled_name_whose_stored_definition_no_longer_parses_mints(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    path = _packaged(tmp_path, "unreadable")
+    seeded = _seed_unreadable(hub, path)
+    hub.clock.advance(timedelta(minutes=1))
+
+    outcomes = _sync(hub, [path])
+
+    assert _statuses(outcomes) == [("unreadable", "minted")]
+    assert outcomes[0].graph_id != seeded
+
+
 #: The step each packaged action stood for before the packaged graphs named actions.
 _PRE_ACTION_RUN = {
     "land": [{"name": "land-every-repo", "command": "python3 -m blizzard.hub.graphs.scripts.land_pr_ci"}],

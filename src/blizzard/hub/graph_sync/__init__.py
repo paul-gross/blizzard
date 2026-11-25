@@ -1,9 +1,10 @@
 """Reconcile the packaged graph set against the store — ``blizzard hub graph sync``.
 
 The edge half: load and inline each packaged ``graph.yaml`` and hand it with the stored definition to
-the domain, which owns the mint-only-if-changed rule. Per-graph isolated and additive: nothing re-pins
-a chunk. Every open tenant reconciles through its own stores (:func:`reconcile_open_tenants`); a new
-tenant is minted the set on its creation's transaction (:func:`packaged_minter`)."""
+the domain, which owns the mint-only-if-changed rule and when an unreadable stored definition holds
+instead. Per-graph isolated and additive: nothing re-pins a chunk. Every open tenant reconciles through
+its own stores (:func:`reconcile_open_tenants`); a new tenant is minted the set on its creation's
+transaction (:func:`packaged_minter`)."""
 
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.documents.codec import ConfigDecodeError, IConfigCodec
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
-from blizzard.hub.domain.graph.authoring import GraphMintService
+from blizzard.hub.domain.graph.authoring import GraphMintService, UnreadableDefinitionHeld, reconciliation_basis
 from blizzard.hub.domain.graph.legacy_run import translated
 from blizzard.hub.domain.graph.model import GraphDoc, GraphParseError, IReadGraphRepository, IWriteGraphRepository
 from blizzard.hub.domain.graph.validation import GraphValidationError
@@ -80,10 +81,20 @@ class GraphReconciliation:
             return GraphSyncOutcome(name=path.parent.name, status=GraphSyncStatus.FAILED, detail=str(exc))
 
         stored = self.graphs.newest_definition_yaml(doc.name)
+        minted = self.parsed(stored, doc.name)
+        unreadable = stored is not None and minted is None
         try:
-            graph = self.mint_service.mint_if_changed(
-                doc, definition_yaml=definition_yaml, minted=self.parsed(stored, doc.name)
+            basis = reconciliation_basis(
+                doc.name,
+                minted=minted,
+                unreadable=unreadable,
+                # The name has a stored mint here, so no enabled one means every mint is retired.
+                every_mint_retired=unreadable and self.graphs.graph_id_of_enabled_name(doc.name) is None,
             )
+            graph = self.mint_service.mint_if_changed(doc, definition_yaml=definition_yaml, minted=basis)
+        except UnreadableDefinitionHeld as exc:
+            _log.warning("retired graph held: its stored definition no longer parses", graph=doc.name)
+            return GraphSyncOutcome(name=doc.name, status=GraphSyncStatus.FAILED, detail=str(exc))
         except GraphValidationError as exc:
             _log.warning("packaged graph failed validation", graph=doc.name, error=str(exc))
             return GraphSyncOutcome(name=doc.name, status=GraphSyncStatus.FAILED, detail="; ".join(exc.result.errors))
@@ -97,15 +108,16 @@ class GraphReconciliation:
     def parsed(self, stored: str | None, name: str) -> GraphDoc | None:
         """A stored definition re-parsed into an authoring doc, or ``None``.
 
-        ``None`` — a never-minted name, or a stored definition that no longer parses — mints. A
+        ``None`` is a never-minted name, or a stored definition that no longer parses
+        (:func:`~blizzard.hub.domain.graph.authoring.reconciliation_basis` decides the latter). A
         stored ``run:`` reads as the action it named
         (:func:`~blizzard.hub.domain.graph.legacy_run.translated`)."""
         if stored is None:
             return None
         try:
             return translated(GraphDoc.of(self.yaml.decode(stored.encode("utf-8"))))
-        except (ConfigDecodeError, GraphParseError):
-            _log.warning("stored graph definition no longer parses; treating it as changed", graph=name)
+        except (ConfigDecodeError, GraphParseError) as exc:
+            _log.warning("stored graph definition no longer parses", graph=name, error=str(exc))
             return None
 
 
