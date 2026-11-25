@@ -5,14 +5,20 @@ disturbed the validated work. Entry may follow review, a crash, or a delivery bo
 stand. Fetch first in every repo — the worktree's base-branch view is stale since environment acquisition — then check
 what each branch carries and whether it already sits on the current base.
 
+## Re-attach first
+
+Whatever state a repo carrying the change arrives in — a detached HEAD, the base branch, no upstream — put it back on
+the declared branch (`blizzard runner artifact get branch --node triage --content`, else the branch build declared) at
+that environment's newest declared `git_commit` for the repo before rebasing, using the environment's connect step so
+its upstream is that branch on origin. The local branch may carry another name; the upstream is what must match.
+
 ## Rebase
 
 Rebase every ahead repo onto the latest base branch — the repo's recorded base branch. For a repo with work in several
 environments, rebase those branches onto each other first, then the surviving branch onto the base. Each repo ends with
-exactly one branch (the declared one: `blizzard runner artifact get branch --node triage --content`, else the branch
-build declared) holding all its work, in one environment — always, even with a single environment: delivery refuses a
-repo arriving with two branches, so an un-rolled-up change-set fails there rather than landing half of itself. An
-already-rebased-and-pushed repo needs no second rebase, but still needs its tip declared.
+exactly one branch (the declared one) holding all its work, in one environment — always, even with a single environment:
+delivery refuses a repo arriving with two branches, so an un-rolled-up change-set fails there rather than landing half
+of itself. An already-rebased-and-pushed repo needs no second rebase, but still needs its tip declared.
 
 Resolve every conflict inside the rebase — never abandon it for a merge, never skip a commit. Keep each resolution
 minimal and faithful to both sides' intent, and note every file a resolution touched. The one exception: a commit that
@@ -28,10 +34,11 @@ beyond what that read settles is declared in the triage, not re-verified here.
 
 ## Push and declare
 
-Push each rewritten branch with `--force-with-lease`, never a bare `--force`. Then declare every repo you touched, every
-time: `blizzard runner artifact commit --repo <repo> --branch <branch> --commit <sha>`. `<repo>` is the repo's name in
-the environment's repo manifest — never an `owner/name` slug, a path, or a URL; `<sha>` is the full sha, never
-abbreviated; add `--env <id>` when the chunk holds more than one environment.
+Push each rewritten branch to the declared branch on origin by name — `git push --force-with-lease origin HEAD:<branch>`
+— never a bare `--force`, never relying on the local branch's name. Then declare every repo you touched, every time:
+`blizzard runner artifact commit --repo <repo> --branch <branch> --commit <sha>`. `<repo>` is the repo's name in the
+environment's repo manifest — never an `owner/name` slug, a path, or a URL; `<sha>` is the full sha, never abbreviated;
+add `--env <id>` when the chunk holds more than one environment.
 
 Declare even a no-op rebase: an unchanged tip re-declared is harmless, but an un-redeclared repo is invisible to
 delivery — it opens no PR and never lands — and a chunk with nothing declared fails outright.

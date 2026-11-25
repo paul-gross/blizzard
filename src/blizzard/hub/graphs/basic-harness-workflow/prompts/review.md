@@ -1,10 +1,12 @@
 # Review
 
-Review cold against the work item. Review observes; iterate repairs. Commit no fix here.
+Review cold against the work item. Review observes; iterate repairs. Commit no fix.
 
 ## Open the pass
 
-Run `blizzard runner artifact list`. Take the newest `git_commit` per repo; check it out before reading any diff.
+Run `blizzard runner artifact list`. Confirm each worktree's branch tracks its newest `git_commit`'s branch at that sha;
+restore any that does not (upstream via the environment's connect step) before reading or running anything. Never detach
+HEAD.
 
 ## Judge the change
 
@@ -32,8 +34,7 @@ Earlier `review-findings` make this a re-visit; otherwise read the whole change.
 change if no tip was recorded or it cannot be fetched. Confirm every prior finding fixed or refuted and accepted,
 re-reporting any that is not.
 
-Reworded prose changes how the text around it reads: read each changed passage within its whole section and follow
-anything it renames or re-routes.
+Read each reworded passage within its whole section and follow anything it renames or re-routes.
 
 Across a rebase, scope by the change's own commits with `git range-diff`, not a tip-to-tip diff. Reread the whole change
 only when it moved rather than was repaired: a new repo, or commits that reshape it.
@@ -53,15 +54,13 @@ re-raised and the argument answered. An accepted refutation resolves its finding
 
 ## The `review-finding-delta` asset
 
-Submit `review-finding-delta` via `blizzard runner artifact create --name review-finding-delta`: JSON
-`{"entries": [...]}`. Dispositions: `fixed`, `refuted`, `deferred`. Example:
-`{"entries":[{"ref":"F1","disposition":"fixed"}]}`. Empty: `{"entries": []}`. Shape:
+Submit `review-finding-delta` via `blizzard runner artifact create --name review-finding-delta`. Dispositions: `fixed`,
+`refuted`, `deferred`. Example: `{"entries":[{"ref":"F1","disposition":"fixed"}]}`. Empty: `{"entries": []}`. Shape:
 `blizzard runner artifact get --scope system review/finding-format --content`.
 
-## Submit the findings
+## Submit findings
 
 Each finding is specific, actionable, anchored at file and line; on a `fail` the asset rides back to iterate. Before
-declaring done you MUST run `blizzard runner artifact create --name review-findings` with the findings on stdin,
-recording the tip judged per repo (`<repo> <branch> <full-sha>`), this round's scope, what was checked per axis and the
-path of each criteria document read for it, what passed, and every finding with its severity and, on a should-fix, its
-tag.
+declaring done you MUST run `blizzard runner artifact create --name review-findings`, findings on stdin, recording the
+tip judged per repo (`<repo> <branch> <full-sha>`), this round's scope, what was checked per axis and the path of each
+criteria document read for it, what passed, and every finding with its severity and, on a should-fix, its tag.
