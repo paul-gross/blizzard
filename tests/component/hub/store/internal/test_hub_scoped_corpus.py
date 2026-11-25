@@ -527,6 +527,42 @@ def test_a_row_in_one_tenant_moves_only_that_tenants_work_refs_probe(tmp_path: P
     assert {t: sig for t, sig in after.items() if t != _OPEN} == {t: sig for t, sig in before.items() if t != _OPEN}
 
 
+def test_work_source_changes_alone_move_only_their_tenants_probe_not_the_flow_probe(tmp_path: Path) -> None:
+    world = _World(tmp_path)
+    source_only = TenantId("ten_source_only")
+    world.insert(s.tenants, tenant_id=source_only, name=source_only, created_at=_AT, created_by="test")
+    close_tenant(world.engine, _CLOSED)
+
+    def change(tenant: TenantId, kind: str) -> None:
+        world.insert(
+            s.config_changes,
+            tenant_id=tenant,
+            recorded_at=_AT,
+            actor="test",
+            door="api",
+            record_kind=kind,
+            record_key="key",
+            revision=1,
+            op="edit",
+            diff="[]",
+        )
+
+    before = world.corpus.live_work_refs_signature()
+    flow = world.corpus.flow_lines_signature()
+    change(_OPEN, "secret")
+    assert world.corpus.live_work_refs_signature() == before
+    change(source_only, "work_source")
+    after = world.corpus.live_work_refs_signature()
+    assert source_only in after
+    assert {t: sig for t, sig in after.items() if t != source_only} == before
+    change(_CLOSED, "work_source")
+    closed = world.corpus.live_work_refs_signature()
+    assert closed[_CLOSED] != after[_CLOSED]
+    assert {t: sig for t, sig in closed.items() if t != _CLOSED} == {t: sig for t, sig in after.items() if t != _CLOSED}
+    assert world.corpus.flow_lines_signature() == flow
+    assert count_queries(world.engine, world.corpus.live_work_refs_signature) == 1
+
+
 def test_every_corpus_statement_carries_the_hub_scoped_marker(world: _World) -> None:
     marked: list[bool] = []
 

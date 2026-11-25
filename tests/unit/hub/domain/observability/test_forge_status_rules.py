@@ -85,6 +85,10 @@ def _probe(marks: int = 1, source_change: int = 1) -> AnnotationProbe:
     )
 
 
+def test_a_scoped_work_refs_signature_has_no_source_change_by_default() -> None:
+    assert WorkRefsSignature(marks=()).source_change is None
+
+
 @pytest.mark.parametrize(
     ("last_probe", "probe", "last_pass", "now", "due"),
     [

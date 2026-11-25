@@ -57,9 +57,10 @@ class WorkRefsSignature:
     """A cheap aggregate fingerprint of every input :meth:`IReadChunkWorkRefsRepository.live_work_refs`
     reads: per table, its row count and, where it has an integer ``id``, its highest. Every table
     is append-only, so two equal signatures mean no live work ref or status moved. No per-row
-    content is read."""
+    content is read. A corpus signature also carries the latest work-source configuration change."""
 
     marks: tuple[tuple[str, int, int | None], ...]
+    source_change: int | None = None
 
 
 @domain_model
@@ -96,12 +97,9 @@ class IReadWorkRefsCorpus(Protocol):
 
     def live_work_refs_signature(self) -> Mapping[TenantId, WorkRefsSignature]:
         """A one-statement, hub-wide read of each tenant's fingerprint of what :meth:`live_work_refs`
-        and the status derivation read, per tenant — equal signatures mean neither moved. A tenant
-        holding none of those rows has no entry."""
-        ...
-
-    def work_source_changes_signature(self) -> Mapping[TenantId, int]:
-        """The latest work-source configuration change id per tenant, in one hub-wide statement."""
+        and the status derivation read, plus the latest work-source configuration change. Tenants
+        represented only by work-source changes are included; a tenant holding none of those rows
+        has no entry."""
         ...
 
 

@@ -190,10 +190,13 @@ class _WorkRefs:
         counts: dict[TenantId, int] = {}
         for row in self.rows:
             counts[row.tenant] = counts.get(row.tenant, 0) + 1
-        return {tenant: WorkRefsSignature(marks=(("refs", count, count),)) for tenant, count in counts.items()}
-
-    def work_source_changes_signature(self) -> dict[TenantId, int]:
-        return self.changes
+        return {
+            tenant: WorkRefsSignature(
+                marks=(("refs", counts.get(tenant, 0), counts.get(tenant, 0)),),
+                source_change=self.changes.get(tenant),
+            )
+            for tenant in counts.keys() | self.changes.keys()
+        }
 
 
 class _TenantAnnotation:
@@ -281,6 +284,32 @@ def test_unchanged_annotation_probes_open_no_tenants_and_a_config_edit_selects_o
     clock.advance(timedelta(minutes=10))
     reconciler.sweep()
     assert opened == sorted(tenants)
+
+
+def test_source_only_tenant_edit_selects_only_that_tenant_before_the_floor() -> None:
+    corpus = _WorkRefs([_work_ref(_A, "ch_a")])
+    units = {_A: _TenantAnnotation("forge-a"), _B: _TenantAnnotation("forge-b")}
+    opened: list[TenantId] = []
+
+    def open_tenant(tenant: TenantId) -> TenantAnnotation:
+        opened.append(tenant)
+        return cast(TenantAnnotation, units[tenant])
+
+    reconciler = AnnotationReconciler(
+        corpus=corpus,
+        tenants=lambda: [_A, _B],
+        tenant=open_tenant,
+        clock=FixedClock(_NOW),
+        full_pass_floor=timedelta(minutes=10),
+    )
+    reconciler.sweep()
+    opened.clear()
+    corpus.changes[_B] = 1
+    reconciler.sweep()
+
+    assert opened == [_B]
+    assert units[_A].reconciled == [(_A, ["forge-a"], ["ch_a"])]
+    assert units[_B].reconciled == [(_B, ["forge-b"], []), (_B, ["forge-b"], [])]
 
 
 def test_an_annotation_pass_skips_a_tenant_closed_since_the_open_set_was_read() -> None:

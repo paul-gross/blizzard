@@ -301,8 +301,7 @@ class AnnotationReconciler:
         probe, so any other is retried alone next pass."""
         tenants = sorted(self._tenants())
         signatures = self._corpus.live_work_refs_signature()
-        changes = self._corpus.work_source_changes_signature()
-        probes = {tenant: _probe(tenant, signatures, changes) for tenant in tenants}
+        probes = {tenant: _probe(tenant, signatures) for tenant in tenants}
         now = self._clock.now()
         floor = self._floor()
         self._converged = {tenant: state for tenant, state in self._converged.items() if tenant in probes}
@@ -350,9 +349,7 @@ class AnnotationReconciler:
         and only ``tenant``'s convergence entry touched; a tenant not due is skipped. Its fault is
         returned; a closed tenant's refusal propagates."""
         with bound_contextvars(tenant_id=tenant):
-            probe = _probe(
-                tenant, self._corpus.live_work_refs_signature(), self._corpus.work_source_changes_signature()
-            )
+            probe = _probe(tenant, self._corpus.live_work_refs_signature())
             now = self._clock.now()
             if not self._is_due(tenant, probe, now, self._floor()):
                 _log.info("forge-status sweep skipped", reason="probe unchanged", tenants_skipped=1)
@@ -420,11 +417,10 @@ class AnnotationReconciler:
 _Opened = tuple[TenantAnnotation, Sequence[str]]
 
 
-def _probe(
-    tenant: TenantId, signatures: Mapping[TenantId, WorkRefsSignature], changes: Mapping[TenantId, int]
-) -> AnnotationProbe:
+def _probe(tenant: TenantId, signatures: Mapping[TenantId, WorkRefsSignature]) -> AnnotationProbe:
     """``tenant``'s probe, from a pass's hub-wide signature read."""
-    return AnnotationProbe(work_refs=signatures.get(tenant, _NO_ROWS), source_change=changes.get(tenant))
+    signature = signatures.get(tenant, _NO_ROWS)
+    return AnnotationProbe(work_refs=signature, source_change=signature.source_change)
 
 
 class _PassCorpus:

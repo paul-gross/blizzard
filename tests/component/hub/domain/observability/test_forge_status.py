@@ -352,7 +352,7 @@ def test_a_sweep_with_unchanged_facts_before_the_floor_reads_neither_the_forge_n
     live_reads = count_queries(hub.engine, reconciler.sweep)
 
     assert annotator.read_calls == 1
-    assert live_reads == 2  # work-ref and configuration signatures, no tenant reads
+    assert live_reads == 1  # combined signature, no tenant reads
 
 
 def test_a_new_work_ref_or_status_fact_runs_a_full_pass(tmp_path: Path) -> None:
@@ -392,19 +392,19 @@ def test_work_source_config_probe_tracks_edits_without_tenant_scoped_listing(tmp
     hub, _annotator, reconciler = _gated(tmp_path)
     corpus = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
     tenant = default_tenant(hub.engine)
-    before = corpus.work_source_changes_signature()
-    assert count_queries(hub.engine, corpus.work_source_changes_signature) == 1
+    before = corpus.live_work_refs_signature()
+    assert count_queries(hub.engine, corpus.live_work_refs_signature) == 1
     reconciler.sweep()
 
     edited = hub.client.patch("/api/work-sources/default", json={"annotate": True})
     assert edited.status_code == 200, edited.text
-    after = corpus.work_source_changes_signature()
-    assert after[tenant] > before.get(tenant, 0)
-    assert count_queries(hub.engine, reconciler.sweep) > 2  # selected for reconciliation
-    assert count_queries(hub.engine, reconciler.sweep) == 2  # converged, now probe-only
+    after = corpus.live_work_refs_signature()
+    assert after[tenant] != before[tenant]
+    assert count_queries(hub.engine, reconciler.sweep) > 1  # selected for reconciliation
+    assert count_queries(hub.engine, reconciler.sweep) == 1  # converged, now probe-only
 
 
-def test_unchanged_annotation_pass_has_two_hub_reads_and_no_tenant_opens_as_tenants_grow(tmp_path: Path) -> None:
+def test_unchanged_annotation_pass_has_one_hub_read_and_no_tenant_opens_as_tenants_grow(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     tenants = [default_tenant(hub.engine)]
     opened: list[TenantId] = []
@@ -432,7 +432,9 @@ def test_unchanged_annotation_pass_has_two_hub_reads_and_no_tenant_opens_as_tena
             tenants.append(hub.add_tenant(f"tenant-{index}").tenant)
         reconciler.sweep()  # first pass for newly added tenants
         opened.clear()
-        assert count_queries(hub.engine, reconciler.sweep) == 2
+        assert count_queries(hub.engine, reconciler.sweep) == 1
+        assert opened == []
+        assert count_queries(hub.engine, lambda: reconciler.sweep_tenant(tenants[0])) == 1
         assert opened == []
 
 

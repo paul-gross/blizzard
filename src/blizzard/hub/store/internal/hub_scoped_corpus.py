@@ -21,6 +21,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import CompoundSelect, Connection, Select, Table, and_, func, literal, null
+from sqlalchemy.engine import Row
 
 from blizzard.hub.domain.cadence.ports import IReadCadenceCorpus
 from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkRef, WorkRefLabel
@@ -144,19 +145,13 @@ class SweepCorpusReads:
     def live_work_refs_signature(self) -> dict[TenantId, WorkRefsSignature]:
         """One grouped statement of append-only aggregates per tenant; closed tenants included."""
         tables = sorted((*status_family_tables(), s.chunk_work_refs, *_EPHEMERAL_TABLES), key=lambda t: t.name)
-        marks = self._signature_marks(tables, "corpus live work refs signature")
-        return {tenant: WorkRefsSignature(marks=by_table) for tenant, by_table in marks.items()}
-
-    def work_source_changes_signature(self) -> dict[TenantId, int]:
-        """The latest appended work-source change per tenant, including retirements."""
-        changes = s.config_changes
-        with self._read("corpus work source changes signature") as conn:
-            rows = conn.execute(
-                ALL_TENANTS.select(changes, changes.c.tenant_id, func.max(changes.c.id))
-                .where(changes.c.record_kind == RecordKind.WORK_SOURCE.value)
-                .group_by(changes.c.tenant_id)
-            ).all()
-        return {TenantId(tenant): latest for tenant, latest in rows}
+        rows = self._signature_rows(tables, "corpus live work refs signature", include_work_sources=True)
+        marks = self._marks_by_tenant(tables, rows)
+        changes = {TenantId(row.tenant_id): row.max_id for row in rows if row.table_name == s.config_changes.name}
+        return {
+            tenant: WorkRefsSignature(marks=marks.get(tenant, ()), source_change=changes.get(tenant))
+            for tenant in marks.keys() | changes.keys()
+        }
 
     # --- flow driver ------------------------------------------------------------------
 
@@ -170,6 +165,11 @@ class SweepCorpusReads:
         self, tables: Sequence[Table], operation: str
     ) -> dict[TenantId, tuple[tuple[str, int, int | None], ...]]:
         """Each tenant's ``(table, count, max(id))`` per table of ``tables``, read hub-wide in one statement."""
+        return self._marks_by_tenant(tables, self._signature_rows(tables, operation))
+
+    def _signature_rows(
+        self, tables: Sequence[Table], operation: str, *, include_work_sources: bool = False
+    ) -> Sequence[Row[Any]]:
         per_table = [
             ALL_TENANTS.select(
                 table,
@@ -180,11 +180,30 @@ class SweepCorpusReads:
             ).group_by(table.c.tenant_id)
             for table in tables
         ]
+        if include_work_sources:
+            changes = s.config_changes
+            per_table.append(
+                ALL_TENANTS.select(
+                    changes,
+                    changes.c.tenant_id.label("tenant_id"),
+                    literal(changes.name).label("table_name"),
+                    func.count().label("row_count"),
+                    func.max(changes.c.id).label("max_id"),
+                )
+                .where(changes.c.record_kind == RecordKind.WORK_SOURCE.value)
+                .group_by(changes.c.tenant_id)
+            )
         with self._read(operation) as conn:
-            rows = conn.execute(ALL_TENANTS.union_all(*per_table)).all()
+            return conn.execute(ALL_TENANTS.union_all(*per_table)).all()
+
+    def _marks_by_tenant(
+        self, tables: Sequence[Table], rows: Sequence[Row[Any]]
+    ) -> dict[TenantId, tuple[tuple[str, int, int | None], ...]]:
         seen: dict[str, dict[str, tuple[int, int | None]]] = {}
+        names = {table.name for table in tables}
         for row in rows:
-            seen.setdefault(row.tenant_id, {})[row.table_name] = (row.row_count, row.max_id)
+            if row.table_name in names:
+                seen.setdefault(row.tenant_id, {})[row.table_name] = (row.row_count, row.max_id)
         return {
             TenantId(tenant): tuple((table.name, *by_table.get(table.name, (0, None))) for table in tables)
             for tenant, by_table in seen.items()
