@@ -190,12 +190,13 @@ def test_the_cli_moves_the_cursor_and_renders_a_refusal(tmp_path: Path) -> None:
         ("2026-07-12T03:00:00Z", datetime(2026, 7, 12, 3, tzinfo=UTC)),
         ("2026-07-12T05:00:00+02:00", datetime(2026, 7, 12, 3, tzinfo=UTC)),
         ("2026-07-11T21:30:00-05:30", datetime(2026, 7, 12, 3, tzinfo=UTC)),
-        ("2026-07-12", datetime(2026, 7, 12).astimezone(UTC)),
-        ("2026-07-12T03:00:00", datetime(2026, 7, 12, 3).astimezone(UTC)),
-        ("2026-07-12 03:00:00", datetime(2026, 7, 12, 3).astimezone(UTC)),
+        ("2026-07-12", datetime(2026, 7, 12)),
+        ("2026-07-12T03:00:00", datetime(2026, 7, 12, 3)),
+        ("2026-07-12 03:00:00", datetime(2026, 7, 12, 3)),
     ],
 )
 def test_reset_cli_sends_the_requested_instant_to_the_api(tmp_path: Path, value: str, expected: datetime) -> None:
+    expected = expected.astimezone(UTC)  # a naive one is local time, in the zone the CLI runs under
     hub, _ = egress_hub(tmp_path, SETTLED)
     bodies: list[object] = []
 
