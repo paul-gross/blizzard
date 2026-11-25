@@ -100,7 +100,8 @@ disregards ignore files, as pyright does, and prunes pyright's generated and dep
   its declared registry. The rule's own prose home is `blizzard-context:/architecture/system-shape/configuration.md`;
   this file states none of that prose, only what the rule mechanically checks.
   - Scoped to `src/blizzard/runner/**` and `src/blizzard/hub/**`, except `src/blizzard/runner/host_config.py`,
-    `src/blizzard/hub/config.py` and `src/blizzard/hub/domain/runners/version_window.py`.
+    `src/blizzard/hub/config.py`, `src/blizzard/hub/domain/runners/version_window.py`, and
+    `src/blizzard/hub/documents/internal/toml_codec.py`.
   - Matches `import tomllib`, `import tomllib as …` and `from tomllib import …`.
 
 - **`bzh:runner-child-launch`** (`rules/runner-child-launch.yml`) — every child the runner launches goes through the

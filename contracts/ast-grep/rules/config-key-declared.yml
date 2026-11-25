@@ -4,8 +4,8 @@ id: bzh:config-key-declared
 language: Python
 severity: error
 message: >-
-  tomllib is imported only by the daemons' config loaders. Decode host-file text through
-  blizzard.runner.host_config and read its keys through a ConfigView over the declared registry.
+  Decode daemon config through its loader and read keys through a ConfigView over the declared
+  registry; ingested TOML documents decode through the config codec.
 files:
   - src/blizzard/runner/**
   - src/blizzard/hub/**
@@ -13,6 +13,7 @@ ignores:
   - src/blizzard/runner/host_config.py
   - src/blizzard/hub/config.py
   - src/blizzard/hub/domain/runners/version_window.py
+  - src/blizzard/hub/documents/internal/toml_codec.py
 rule:
   any:
     - pattern: import tomllib

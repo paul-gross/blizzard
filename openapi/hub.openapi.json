@@ -33332,7 +33332,18 @@
             "application/json": {
               "schema": {
                 "additionalProperties": true,
-                "title": "Document",
+                "type": "object"
+              }
+            },
+            "application/toml": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            },
+            "application/yaml": {
+              "schema": {
+                "additionalProperties": true,
                 "type": "object"
               }
             }
@@ -43007,7 +43018,7 @@
     },
     "/api/config/apply": {
       "post": {
-        "description": "Reconcile a version-2 or version-3 document (YAML or JSON, by `Content-Type`; told apart by `version`) in one\ntransaction: create what is absent, edit only the fields an entry states, enable what is retired, leave unnamed\nrecords alone. Forges are declared, and every work source and repository names its forge by id or slug; a\nversion-3 document declares credentials too, and each work source and repository names the one it acts with by id\nor slug, as `credential`. `dry_run` rolls the same transaction back, with the same `outcomes` and no `apply_id`.\n422 invalid \u2014 `config_version_retired` for any `version` but 2 or 3, a missing one included \u2014 409 conflict, 415\nunknown `Content-Type`; a refusal leaves the store unchanged. 403 when a cadence write would leave it promoting its\nruns and the caller may not promote chunks.",
+        "description": "Reconcile a version-2 or version-3 document (YAML, JSON or TOML, by `Content-Type`; told apart by `version`)\nin one transaction: create what is absent, edit only the fields an entry states, enable what is retired, and leave\nunnamed records alone. Forges are declared, and every work source and repository names its forge by id or slug; a\nversion-3 document declares credentials too, and each work source and repository names the one it acts with by id\nor slug, as `credential`. `dry_run` rolls the same transaction back, with the same `outcomes` and no `apply_id`.\n422 invalid \u2014 `config_version_retired` for any `version` but 2 or 3, a missing one included \u2014 409 conflict, 415\nunknown `Content-Type`; a refusal leaves the store unchanged. 403 when a cadence write would leave it promoting its\nruns and the caller may not promote chunks.",
         "operationId": "apply_config_api_config_apply_post",
         "parameters": [
           {
@@ -43024,6 +43035,25 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "2": "#/components/schemas/ConfigDocumentV2",
+                    "3": "#/components/schemas/ConfigDocumentV3"
+                  },
+                  "propertyName": "version"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ConfigDocumentV2"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ConfigDocumentV3"
+                  }
+                ]
+              }
+            },
+            "application/toml": {
               "schema": {
                 "discriminator": {
                   "mapping": {

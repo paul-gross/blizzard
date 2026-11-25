@@ -758,6 +758,31 @@ def test_yaml_and_json_bodies_apply_identically(hub: HubHarness, tmp_path: Path)
     assert from_json.json()["apply_id"].startswith("apl_")
 
 
+def test_toml_apply_preview_apply_and_reapply(hub: HubHarness) -> None:
+    document = b"""version = 2
+secrets = ["gh"]
+[[work_sources]]
+slug = "demo"
+provider = "github"
+locator = "acme/demo"
+forge = "github"
+secret = "gh"
+annotate = true
+"""
+    headers = {"Content-Type": "application/toml"}
+    before = _changes(hub)
+    preview = hub.client.post(_APPLY, params={"dry_run": True}, content=document, headers=headers)
+    assert preview.status_code == 200, preview.text
+    assert _changes(hub) == before
+    applied = hub.client.post(_APPLY, content=document, headers=headers)
+    assert applied.status_code == 200, applied.text
+    after = _changes(hub)
+    repeated = hub.client.post(_APPLY, content=document, headers=headers)
+    assert repeated.status_code == 200, repeated.text
+    assert all(row["op"] == "unchanged" for row in repeated.json()["outcomes"])
+    assert _changes(hub) == after
+
+
 def test_a_dry_run_writes_nothing_and_matches_the_real_apply(hub: HubHarness) -> None:
     before = _changes(hub)
     dry = _apply_yaml(hub, _YAML_DOCUMENT, dry_run=True)

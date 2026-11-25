@@ -1,9 +1,9 @@
 # Configuration documents
 
 A configuration document declares forges, credentials, work sources, repositories, projects, urgencies, the tenant's
-settings, scopes, routines, and cadences in one YAML or JSON file. `blizzard hub config apply` reconciles the hub's
-stored records to it in a single transaction, and `blizzard hub config export` writes the current records back out as a
-document.
+settings, scopes, routines, and cadences in one YAML, JSON, or TOML file. `blizzard hub config apply` reconciles the
+hub's stored records to it in a single transaction, and `blizzard hub config export` writes the current records back out
+as a document.
 
 ```bash
 blizzard hub config apply config.yaml --dry-run
@@ -12,7 +12,7 @@ blizzard hub config export --format json > config.json
 ```
 
 This is a **tenant** document: its `settings` section sets the tenant default urgency, not hub-wide operational
-settings. For those, use the separate TOML [hub settings document](./hub-settings.md#documents-and-history).
+settings. For those, use the separate [hub settings document](./hub-settings.md#documents-and-history).
 
 ## The document
 
@@ -166,8 +166,10 @@ naming a routine nobody declared is applied, and the cadence's view shows it as 
 ([cadences.md](./cadences.md#attention)). A cadence entry is compared by its effective value, so a spacing stated as
 `240m` matches a stored `4h`, and an entry leaving `anchor`, `promote`, or `name` out matches their defaults.
 
-The file's extension picks the format: `.yaml` and `.yml` read as YAML, `.json` as JSON. Over HTTP the `Content-Type`
-does: `POST /api/config/apply` takes `application/yaml` or `application/json`, and any other type is refused with 415.
+The CLI picks the format by extension: `.yaml` and `.yml` read as YAML, `.json` as JSON, and `.toml` as TOML. It decodes
+the file and sends JSON to the hub. Over HTTP, `POST /api/config/apply` selects the format by `Content-Type`:
+`application/yaml`, `application/json`, or `application/toml`; an unsupported type is refused with 415. Graph mint also
+accepts TOML input by extension.
 
 ## Version 3
 

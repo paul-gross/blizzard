@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Final, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from blizzard.foundation.config_keys import Lifetime
 from blizzard.foundation.hub_setting_source import HubSettingSource
@@ -17,6 +17,7 @@ from blizzard.wire.vocabulary import OPEN
 
 #: ``GET /api/admin/settings/export``: the hub's non-default pass-lifetime settings as a nested TOML-shaped document.
 SettingsExportDocument = dict[str, object]
+SETTINGS_EXPORT_ADAPTER = TypeAdapter(SettingsExportDocument)
 
 
 class HubSettingRow(WireModel):

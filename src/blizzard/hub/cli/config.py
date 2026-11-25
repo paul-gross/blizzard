@@ -144,7 +144,7 @@ def config_changes(cli: CliContext, kind: str | None, key: str | None, everythin
 @click.argument("file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option("--dry-run", "dry_run", is_flag=True, default=False, help="Show what would change and write nothing.")
 def config_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
-    """Apply the declarative document FILE (.yaml, .yml or .json) in one transaction.
+    """Apply the declarative document FILE (.yaml, .yml, .json or .toml) in one transaction.
 
     Creates what is absent, edits only the fields the document states, enables what is retired, and never
     touches a record it leaves out. Any refusal leaves everything unchanged; --dry-run prints the same outcome. The

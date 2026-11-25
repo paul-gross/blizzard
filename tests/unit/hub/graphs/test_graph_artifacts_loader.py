@@ -58,6 +58,14 @@ def test_body_inlines_the_artifact_file_reference(tmp_path: Path) -> None:
     assert GraphFile(graph_path).body["artifacts"] == {"docket": _DOCKET_TEXT}
 
 
+def test_toml_graph_inlines_the_artifact_file_reference(tmp_path: Path) -> None:
+    graph_path = tmp_path / "graph.toml"
+    graph_path.write_text('name = "t"\nentry = "build"\n[artifacts]\ndocket = "./reference-notes.md"\n')
+    (tmp_path / _DOCKET_FILENAME).write_text(_DOCKET_TEXT)
+
+    assert GraphFile(graph_path).body["artifacts"] == {"docket": _DOCKET_TEXT}
+
+
 def test_doc_carries_the_baked_content(tmp_path: Path) -> None:
     graph_path = _write_graph(tmp_path)
 

@@ -35,14 +35,19 @@ blizzard hub admin settings apply hub-settings.toml --dry-run
 blizzard hub admin settings apply hub-settings.toml
 ```
 
-The document is TOML with the same nested keys as the hub configuration, but may contain only live settings. Apply is
-atomic and sets only the keys present; it never unsets omitted keys. Export contains explicitly set live values,
-including values equal to their declared defaults; it omits absent and unset entries. It is not a complete replacement
-or a backup of boot settings: applying it to another hub leaves that hub's omitted values untouched. Use `unset`
-explicitly to reset a key. The hub settings change log is separate from the tenant configuration log; it records
-changes, their actor, door and revision, and groups an apply by its apply id.
+The document uses the same nested keys as the hub configuration, but may contain only live settings. Apply accepts YAML
+(`.yaml` or `.yml`), JSON (`.json`), or TOML (`.toml`), selected by file extension; the CLI decodes the file and sends
+JSON to the hub. Apply is atomic and sets only the keys present; it never unsets omitted keys. Export defaults to TOML
+(`--json` selects JSON) and contains explicitly set live values, including values equal to their declared defaults; it
+omits absent and unset entries. It is not a complete replacement or a backup of boot settings: applying it to another
+hub leaves that hub's omitted values untouched. Use `unset` explicitly to reset a key. The hub settings change log is
+separate from the tenant configuration log; it records changes, their actor, door and revision, and groups an apply by
+its apply id.
 
 Over HTTP a hub administrator uses `GET` and `PATCH /api/admin/settings`, `GET /api/admin/settings/changes`,
 `POST /api/admin/settings/apply` and `GET /api/admin/settings/export`. PATCH accepts `set` and `unset` and requires an
-`If-Match` revision; missing or stale revisions are refused. Apply accepts a JSON object and `?dry_run=true` previews
-it. The CLI reads the current revision before a set or unset. Runner credentials cannot use these routes.
+`If-Match` revision; missing or stale revisions are refused. `?dry_run=true` previews an apply. Apply selects YAML,
+JSON, or TOML by `Content-Type` (`application/yaml`, `application/json`, or `application/toml`); unsupported types are
+refused. TOML cannot represent null; use JSON or YAML for it. Quote dates and times as strings: TOML date/time values
+are not configuration values. TOML export is limited to values TOML can represent; use `--json` for values such as null.
+The CLI reads the current revision before a set or unset. Runner credentials cannot use these routes.

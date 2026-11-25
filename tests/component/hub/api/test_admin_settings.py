@@ -335,3 +335,41 @@ def test_export_applies_back_without_refusal(tmp_path: Path) -> None:
     reapplied = client.post(path + "/apply", json=exported)
     assert reapplied.status_code == 200, reapplied.text
     assert all(outcome["op"] == "unchanged" for outcome in reapplied.json()["outcomes"])
+
+
+def test_apply_cross_format_and_refusals_are_atomic(tmp_path: Path) -> None:
+    client = _hub(tmp_path).client
+    path = "/api/admin/settings"
+    documents = [
+        ("application/json; charset=utf-8", b'{"action_pass_seconds": 5, "transcripts": {"record_max_bytes": 1024}}'),
+        ("application/yaml", b"action_pass_seconds: 5\ntranscripts:\n  record_max_bytes: 1024\n"),
+        ("application/toml", b"action_pass_seconds = 5\n[transcripts]\nrecord_max_bytes = 1024\n"),
+    ]
+    for index, (media_type, body) in enumerate(documents):
+        response = client.post(path + "/apply", headers={"Content-Type": media_type, "If-Match": "999"}, content=body)
+        assert response.status_code == 200, response.text
+        assert all(item["op"] == ("edit" if index == 0 else "unchanged") for item in response.json()["outcomes"])
+    before = client.get(path + "/changes").json()
+    for media_type, body, code, status in [
+        ("text/plain", b"{}", None, 415),
+        ("application/json", b"[]", "settings_invalid", 422),
+        ("application/json", b'{"action_pass_seconds": 5, "action_pass_seconds": 6}', "settings_invalid", 422),
+        ("application/yaml", b"- item", "settings_invalid", 422),
+        ("application/toml", b"action_pass_seconds = [", "settings_invalid", 422),
+        ("application/toml", b"action_pass_seconds = 6\nhost = 'x'", "setting_not_live", 422),
+        ("application/yaml", b"action_pass_seconds: 6\nunknown: 1", "setting_unknown", 422),
+        ("application/json", b'{"action_pass_seconds": 6, "annotation_interval_seconds": -1}', "settings_invalid", 422),
+    ]:
+        response = client.post(path + "/apply", headers={"Content-Type": media_type}, content=body)
+        assert response.status_code == status, response.text
+        if code:
+            assert response.json()["code"] == code
+    assert client.get(path).json()["revision"] == 1
+    assert client.get(path + "/changes").json() == before
+
+
+def test_apply_openapi_declares_document_media(tmp_path: Path) -> None:
+    schema = _hub(tmp_path).client.get("/openapi.json").json()
+    content = schema["paths"]["/api/admin/settings/apply"]["post"]["requestBody"]["content"]
+    assert set(content) == {"application/json", "application/yaml", "application/toml"}
+    assert content["application/json"]["schema"]["type"] == "object"

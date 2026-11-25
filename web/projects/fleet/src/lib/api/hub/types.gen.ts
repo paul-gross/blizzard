@@ -21104,9 +21104,6 @@ export type PatchSettingsApiAdminSettingsPatchResponses = {
 export type PatchSettingsApiAdminSettingsPatchResponse = PatchSettingsApiAdminSettingsPatchResponses[keyof PatchSettingsApiAdminSettingsPatchResponses];
 
 export type ApplyDocumentApiAdminSettingsApplyPostData = {
-    /**
-     * Document
-     */
     body: {
         [key: string]: unknown;
     };

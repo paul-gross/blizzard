@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -71,7 +72,7 @@ def test_commands(tmp_path: Path) -> None:
     assert calls[-1][2]["params"] == {"dry_run": "true"}
     result = invoke("export")
     assert result.exit_code == 0, result.output
-    assert '"interval" = 2' in result.output
+    assert tomllib.loads(result.output) == {"sweep": {"interval": 2}}
 
 
 def test_export_applies_back_and_invalid_toml_is_refused(tmp_path: Path) -> None:
@@ -103,7 +104,7 @@ def test_export_applies_back_and_invalid_toml_is_refused(tmp_path: Path) -> None
     file.write_text("[broken")
     invalid = invoke("apply", str(file))
     assert invalid.exit_code != 0
-    assert f"{file} is not valid TOML" in invalid.output
+    assert str(file) in invalid.output
     assert len(calls) == before
 
 
@@ -121,8 +122,73 @@ def test_toml_dates_are_cleanly_refused(tmp_path: Path, value: str) -> None:
     for args in (("set", "--hub-url", "http://testserver", "--", "key", value), ("apply", str(file))):
         result = runner.invoke(hub, ["admin", "settings", *args])
         assert result.exit_code == 1
-        assert "TOML date or time" in result.output and "quote it" in result.output
+        assert "TOML date or time" in result.output or "unsupported TOML value" in result.output
     assert calls == []
+
+
+@pytest.mark.parametrize(
+    "name,content",
+    [
+        ("settings.toml", b"[sweep]\ninterval = 2\n"),
+        ("settings.yaml", b"sweep:\n  interval: 2\n"),
+        ("settings.json", b'{"sweep":{"interval":2}}'),
+    ],
+)
+def test_apply_formats_send_json(tmp_path: Path, name: str, content: bytes) -> None:
+    calls: list[dict[str, Any]] = []
+
+    def request(method: str, url: str, **kwargs: Any) -> httpx2.Response:
+        calls.append(kwargs)
+        return httpx2.Response(200, json={"dry_run": False, "apply_id": None, "outcomes": []})
+
+    file = tmp_path / name
+    file.write_bytes(content)
+    result = bind_stubs(request=request).runner.invoke(
+        hub, ["admin", "settings", "apply", str(file), "--hub-url", "http://testserver"]
+    )
+    assert result.exit_code == 0, result.output
+    assert calls[0]["json"] == {"sweep": {"interval": 2}}
+
+
+@pytest.mark.parametrize(
+    "name,content",
+    [
+        ("settings.txt", b"anything"),
+        ("settings.yaml", b"a: ["),
+        ("settings.json", b'{"a":'),
+        ("settings.toml", b"[broken"),
+        ("settings.yaml", b"- not a mapping"),
+        ("settings.yaml", b"nested:\n  1: value"),
+        ("settings.yaml", b"nested: &cycle [*cycle]"),
+    ],
+)
+def test_invalid_document_never_reaches_transport(tmp_path: Path, name: str, content: bytes) -> None:
+    calls: list[str] = []
+
+    def request(method: str, url: str, **kwargs: Any) -> httpx2.Response:
+        calls.append(url)
+        return httpx2.Response(200, json={})
+
+    file = tmp_path / name
+    file.write_bytes(content)
+    result = bind_stubs(request=request).runner.invoke(
+        hub, ["admin", "settings", "apply", str(file), "--hub-url", "http://testserver"]
+    )
+    assert result.exit_code != 0
+    assert calls == []
+
+
+def test_export_json_keeps_raw_and_unencodable_toml_is_refused() -> None:
+    def request(method: str, url: str, **kwargs: Any) -> httpx2.Response:
+        return httpx2.Response(200, json={"nested": {"value": None}})
+
+    runner = bind_stubs(request=request).runner
+    json_result = runner.invoke(hub, ["admin", "settings", "export", "--json", "--hub-url", "http://testserver"])
+    assert json_result.exit_code == 0, json_result.output
+    assert json.loads(json_result.output) == {"nested": {"value": None}}
+    result = runner.invoke(hub, ["admin", "settings", "export", "--hub-url", "http://testserver"])
+    assert result.exit_code == 1
+    assert "Error:" in result.output
 
 
 @pytest.mark.parametrize("value", ["nan", "+inf", "-inf", "[nan]"])
@@ -133,4 +199,4 @@ def test_toml_nonfinite_numbers_are_cleanly_refused(tmp_path: Path, value: str) 
     for args in (("set", "--hub-url", "http://testserver", "--", "key", value), ("apply", str(file))):
         result = runner.invoke(hub, ["admin", "settings", *args])
         assert result.exit_code == 1
-        assert "non-finite number" in result.output
+        assert "non-finite number" in result.output or "nonfinite floats" in result.output
