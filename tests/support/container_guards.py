@@ -98,6 +98,8 @@ NARROWED_MODULES: tuple[Path, ...] = tuple(
         "chunk_events.py",
         "traces.py",
         "egress.py",
+        "admin_tenants.py",
+        "sweeps.py",
         "trace_continuation.py",
     )
 )

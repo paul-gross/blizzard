@@ -35,7 +35,7 @@ from tests.support.scaffolding import HubHarness, add_tenant, build_hub, default
 
 def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
     """Every holder of each chunk operations instance in ``tenant``, by what the instance is."""
-    scope = hub.hub_services.process.tenants.open(tenant).resolver
+    scope = hub.process.tenants.open(tenant).resolver
     services = hub.hub_services.tenants.open_services(tenant)
     chunks = scope.get(ChunkStores)
     # The services hold what they were built over privately; reading it is the only way to see it is shared.
@@ -111,6 +111,6 @@ def test_the_chunk_operations_keys_share_identity_within_a_tenant_and_differ_acr
     for (name, held), (_, other) in zip(mine.items(), theirs.items(), strict=True):
         assert held[0] is not other[0], name
     for tenant in (first, second):
-        scope = hub.hub_services.process.tenants.open(tenant).resolver
+        scope = hub.process.tenants.open(tenant).resolver
         # The event log publishes live on its own tenant's broker.
         assert scope.get(EventLogService)._publisher is scope.get(EventBroker)  # pyright: ignore[reportPrivateUsage]

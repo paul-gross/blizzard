@@ -16,6 +16,7 @@ from blizzard.auth_core import Role
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.errors import RepoErrorFactory
+from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
 from blizzard.hub.auth.models import Identity, User
 from tests.support.scaffolding import (
@@ -295,7 +296,7 @@ def test_a_hub_administrators_grant_to_a_non_member_emits_one_user_role_changed_
 
     hub.client.post(f"/api/users/{pending.user_id}/role", json={"role": "guest"}, headers=_cookie(token))
 
-    facts = hub.hub_services.auth_facts.list_recent()
+    facts = hub.resolve_hub(AuthFactsService).list_recent()
     assert len(facts) == 1
     assert facts[0].kind == "user_role_changed"
     assert facts[0].actor == "root"
@@ -330,7 +331,7 @@ def test_each_role_change_emits_a_user_role_changed_fact(tmp_path: Path) -> None
 
     hub.client.post(f"/api/users/{guest.user_id}/role", json={"role": "contributor"}, headers=_cookie(token))
 
-    facts = hub.hub_services.auth_facts.list_recent()
+    facts = hub.resolve_hub(AuthFactsService).list_recent()
     assert len(facts) == 1
     assert facts[0].kind == "user_role_changed"
     assert facts[0].actor == "ada"

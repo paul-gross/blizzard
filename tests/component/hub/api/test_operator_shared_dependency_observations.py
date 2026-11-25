@@ -151,6 +151,8 @@ _STORE_REQUESTS: dict[Operation, dict[str, Any]] = {
     ("POST", "/api/egress/backfill"): {"json": _SPAN},
     ("POST", "/api/egress/reset"): {"json": {"dataset": "steps", "to": _SPAN["since"]}},
     ("POST", "/api/traces/replay"): {"json": _SPAN},
+    ("POST", "/api/admin/tenants"): {"json": {"name": "acme"}},
+    ("PATCH", "/api/admin/tenants/{tenant_id}"): {"json": {"name": "acme"}},
 }
 
 

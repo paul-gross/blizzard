@@ -14,8 +14,10 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub import app as hub_app
 from blizzard.hub.cli.egress import StatusView
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
+from blizzard.hub.domain.observability.egress.boot import EgressBoot
 from blizzard.hub.domain.observability.egress.event_rows import derivation_id
 from blizzard.hub.domain.observability.egress.repository import EventsPosition
+from blizzard.hub.domain.observability.hub_events import HubEventLogService
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.wire.egress import EgressStatusResponse
@@ -175,7 +177,12 @@ def test_a_hashing_policy_without_its_key_keeps_exporting_everything_but_events(
 ) -> None:
     world = Events(tmp_path, file_paths=file_paths)
     hub = world.hub
-    hub_app.announce_rejected_egress(_config(tmp_path, file_paths=file_paths), hub.hub_services)
+    hub_app.announce_rejected_egress(
+        _config(tmp_path, file_paths=file_paths),
+        hub.resolve_hub(EgressBoot),
+        hub.resolve_hub(HubEventLogService),
+        hub.clock,
+    )
     world.segment("sg_a")
     world.derive("sg_a", 1)
     world.sweep()
@@ -213,7 +220,12 @@ def test_a_hashing_policy_without_its_key_keeps_exporting_everything_but_events(
 
 def test_a_hashing_policy_with_its_key_exports_events_and_records_no_rejection(tmp_path: Path) -> None:
     world = Events(tmp_path, file_paths="hashed", path_key=b"k" * 32)
-    hub_app.announce_rejected_egress(_config(tmp_path, file_paths="hashed"), world.hub.hub_services)
+    hub_app.announce_rejected_egress(
+        _config(tmp_path, file_paths="hashed"),
+        world.hub.resolve_hub(EgressBoot),
+        world.hub.resolve_hub(HubEventLogService),
+        world.hub.clock,
+    )
     world.segment("sg_a")
     world.derive("sg_a", 1)
     world.sweep()

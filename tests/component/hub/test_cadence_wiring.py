@@ -27,7 +27,7 @@ from tests.support.scaffolding import HubHarness, add_tenant, build_hub, default
 
 def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
     """Every holder of each cadence instance in ``tenant``, by what the instance is."""
-    scope = hub.hub_services.process.tenants.open(tenant).resolver
+    scope = hub.process.tenants.open(tenant).resolver
     attention = scope.get(CadenceAttention)
     cadence = scope.get(TenantCadence)
     return {
@@ -89,12 +89,12 @@ def test_the_sweeps_tenant_half_is_the_tenant_containers_own_and_the_routes_hold
 ) -> None:
     hub = build_hub(tmp_path)
     tenant = StoreScope(default_tenant(hub.engine))
-    sweep = hub.hub_services.cadence
+    sweep = hub.resolve_hub(CadenceSweep)
     assert isinstance(sweep, CadenceSweep)
 
     swept = sweep._tenant(tenant.tenant)
 
-    scope = hub.hub_services.process.tenants.open(tenant).resolver
+    scope = hub.process.tenants.open(tenant).resolver
     assert swept is scope.get(TenantCadence)
     assert swept._attention is scope.get(CadenceReading)._attention
     assert swept._planning is hub.default_adapter(ErrandPlanning)

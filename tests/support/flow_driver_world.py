@@ -20,6 +20,7 @@ from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.landing import VisitForges
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.tenancy import TenantId
 from tests.support.scaffolding import (
     TEST_HUB_ACTIONS,
@@ -96,7 +97,7 @@ class World:
         self.tenant = default_tenant(self.hub.engine)
         self.driver = self.hub.flow_driver
         self.stores = FlowLineStores(
-            corpus=self.hub.hub_services.hub_scoped_reads.corpus,
+            corpus=self.hub.resolve_hub(HubScopedReads).corpus,
             tenants=lambda: self.hub.hub_services.tenants.open_tenants.every().keys(),
             lines=self.lines,
             turns=lambda tenant: self.hub.resolve(tenant, TurnRunner),

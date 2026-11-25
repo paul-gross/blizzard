@@ -9,18 +9,19 @@ from __future__ import annotations
 from functools import partial
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Request, status
+from dishka.integrations.fastapi import FromDishka, inject_sync
+from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import Permission
+from blizzard.foundation.platform_tracing.handle import IPlatformTracing
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import AdmittedTenant, require, require_hub, resolve_tenant, tenant_bound
-from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.domain.sweeps.locks import SweepInProgress
-from blizzard.hub.domain.sweeps.roster import SweepPassResult, SweepServesNoTenant, UnknownSweep
+from blizzard.hub.domain.sweeps.roster import SweepPassResult, SweepRoster, SweepServesNoTenant, UnknownSweep
 from blizzard.wire.sweep_passes import SweepPassResponse
 
 router = APIRouter(
@@ -61,13 +62,14 @@ def _in_progress() -> JSONResponse:
         **_IN_PROGRESS,
     },
 )
+@inject_sync
 def run_tenant_pass(
-    name: str, tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)], hub: Hub
+    name: str, tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)], roster: FromDishka[SweepRoster]
 ) -> SweepPassResponse | JSONResponse:
     """One pass of ``forge_status``, ``event_derivation``, ``close_drain`` or ``cadence`` over the request's tenant
     alone: ``failed`` with the fault its tenant met."""
     try:
-        return _response(hub.sweeps.pass_one_tenant(name, tenant.scope.tenant))
+        return _response(roster.pass_one_tenant(name, tenant.scope.tenant))
     except UnknownSweep as exc:
         raise ProblemHTTPException(partial(problems_garden.sweep_not_found_problem, str(exc))) from exc
     except SweepServesNoTenant as exc:
@@ -82,11 +84,14 @@ def run_tenant_pass(
     dependencies=[Depends(require_hub(Permission.TENANT_ADMIN))],
     responses={**_UNKNOWN, **_IN_PROGRESS},
 )
-def run_every_tenant_pass(name: str, request: Request, hub: Hub) -> SweepPassResponse | JSONResponse:
+@inject_sync
+def run_every_tenant_pass(
+    name: str, roster: FromDishka[SweepRoster], tracing: FromDishka[IPlatformTracing]
+) -> SweepPassResponse | JSONResponse:
     """One pass of any sweep this hub builds over every tenant, under its ``sweep <name>`` root: ``failed`` only
     when the pass itself raised."""
     try:
-        return _response(hub.sweeps.pass_every_tenant(name, request.app.state.platform_tracing.tracer))
+        return _response(roster.pass_every_tenant(name, tracing.tracer))
     except UnknownSweep as exc:
         raise ProblemHTTPException(partial(problems_garden.sweep_not_found_problem, str(exc))) from exc
     except SweepInProgress:

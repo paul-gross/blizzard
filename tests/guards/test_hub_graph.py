@@ -39,6 +39,7 @@ from blizzard.hub.composition import build_hub_settings
 from blizzard.hub.config import HubConfig
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.delivery.action_registry import SHIPPED_ACTIONS, HubActions
+from blizzard.hub.domain.cadence.sweep import TenantCadences
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ports.escalations import IReadChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
@@ -56,7 +57,7 @@ from blizzard.hub.domain.execution.host_facts import HostFactIngestService
 from blizzard.hub.domain.execution.host_retirement import HostRetirementService
 from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
 from blizzard.hub.domain.graph.authoring import DefaultGraphService
-from blizzard.hub.domain.observability.analytics.derivation import EventDerivationService
+from blizzard.hub.domain.observability.analytics.derivation import EventDerivationService, TenantEventDerivations
 from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
 from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
 from blizzard.hub.domain.observability.egress.backfill import EgressBackfill
@@ -65,6 +66,7 @@ from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.reset import EgressReset
 from blizzard.hub.domain.observability.egress.status import EgressStatusReader
 from blizzard.hub.domain.observability.env_timeline import EnvTimelineReading
+from blizzard.hub.domain.observability.forge_status import TenantAnnotations
 from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
 from blizzard.hub.domain.observability.invariants import HubInvariantCheck
 from blizzard.hub.domain.observability.tracing.replay import TraceReplay
@@ -77,10 +79,13 @@ from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.host_enrollment import HostEnrollmentService
 from blizzard.hub.domain.runners.host_report import HostReportService
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
+from blizzard.hub.domain.tenancy.teardown import ClosedTenantForgetting
 from blizzard.hub.domain.urgency.services import UrgencyReading
+from blizzard.hub.domain.work_items.closure import CloseIntentDrainers
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.readiness import CredentialReadiness
+from blizzard.hub.graph_sync import GraphReconciliations
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
 from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.open_tenants import OpenTenants
@@ -114,6 +119,7 @@ def _hub(
     versions: bool = False,
     trace_export: bool = False,
     egress_export: bool = False,
+    controlled_clock: bool = False,
 ) -> LegacyRegistry:
     registry = LegacyRegistry()
     register_hub(
@@ -123,6 +129,7 @@ def _hub(
         versions=versions,
         trace_export=trace_export,
         egress_export=egress_export,
+        controlled_clock=controlled_clock,
     )
     return registry
 
@@ -151,27 +158,36 @@ def _second_memberships(connections: HubStoreConnections) -> MembershipRepositor
 
 
 @pytest.mark.parametrize(
-    ("store_backed", "settings", "versions", "exports"),
+    ("store_backed", "settings", "versions", "exports", "controlled"),
     [
-        (True, True, True, False),
-        (True, True, True, True),
-        (True, False, True, False),
-        (True, True, False, False),
-        (False, False, False, False),
+        (True, True, True, False, False),
+        (True, True, True, True, False),
+        (True, False, True, False, False),
+        (True, True, False, False, False),
+        (True, True, True, False, True),
+        (False, False, False, False, False),
+        (False, False, False, False, True),
     ],
     ids=[
         "store-backed",
         "store-backed-exporting",
         "store-backed-settings-less",
         "store-backed-windowless",
+        "store-backed-controlled-clock",
         "store-free",
+        "store-free-controlled-clock",
     ],
 )
 def test_the_hub_graph_builds_and_keeps_every_registration_rule(
-    store_backed: bool, settings: bool, versions: bool, exports: bool
+    store_backed: bool, settings: bool, versions: bool, exports: bool, controlled: bool
 ) -> None:
     registry = _hub(
-        store_backed=store_backed, settings=settings, versions=versions, trace_export=exports, egress_export=exports
+        store_backed=store_backed,
+        settings=settings,
+        versions=versions,
+        trace_export=exports,
+        egress_export=exports,
+        controlled_clock=controlled,
     )
     assert graph_builds(registry, HUB_LIFETIMES, ScopeValues()) == []
     assert duplicate_owners(registry) == []
@@ -247,6 +263,12 @@ def _process(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[OwnedCh
                 supply(port(TracingSettings), TracingSettings("disabled")),
                 supply(port(EgressBoot), boot),
                 supply(port(StepHydrations), StepHydrations()),
+                supply(port(GraphReconciliations), GraphReconciliations()),
+                supply(port(ClosedTenantForgetting), ClosedTenantForgetting()),
+                supply(port(CloseIntentDrainers), CloseIntentDrainers()),
+                supply(port(TenantCadences), TenantCadences()),
+                supply(port(TenantEventDerivations), TenantEventDerivations()),
+                supply(port(TenantAnnotations), TenantAnnotations()),
                 *exporting,
             )
         ),

@@ -11,6 +11,7 @@ import pytest
 
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.domain.execution.claim import ClaimService
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
@@ -62,7 +63,7 @@ def test_the_harness_serves_the_default_tenants_cached_services(tmp_path: Path) 
     assert tenant_services_of(hub.app) is hub.services
     assert hub.hub_services is hub.app.state.services
     assert hub.events is hub.services.events
-    assert hub.services.users is hub.hub_services.users
+    assert hub.services.users is hub.resolve_hub(UserRepository)
 
 
 def test_a_second_tenant_gets_its_own_services_and_leaves_the_default_one_named(tmp_path: Path) -> None:
@@ -136,8 +137,8 @@ def test_a_background_resolution_and_the_retained_bag_share_one_finding_service(
     tenant = default_tenant(hub.engine)
     services = hub.open_services(tenant)
 
-    exits = hub.hub_services.process.tenants.resolve(StoreScope(tenant), FindingExitService)
-    every = dict(hub.hub_services.process.tenants.every_open(IReadFindingRepository))
+    exits = hub.process.tenants.resolve(StoreScope(tenant), FindingExitService)
+    every = dict(hub.process.tenants.every_open(IReadFindingRepository))
 
     assert hub.resolve(tenant, IReadFindingRepository) is services.findings
     assert hub.resolve(tenant, FindingBucketReader) is services.finding_bucket
@@ -150,7 +151,7 @@ def test_every_retained_process_field_is_its_container_instance(tmp_path: Path) 
     hub = build_hub(tmp_path)
     assert hub.core is not None
 
-    assert process_identity_violations(hub.core, hub.hub_services) == []
+    assert process_identity_violations(hub.core) == []
 
 
 def test_the_process_identity_gate_fails_a_planted_second_copy(tmp_path: Path) -> None:
@@ -159,9 +160,7 @@ def test_the_process_identity_gate_fails_a_planted_second_copy(tmp_path: Path) -
 
     planted = replace(hub.core, hub_scoped_reads=build_hub_scoped_reads(hub.core.store_connections))
 
-    assert process_identity_violations(planted, hub.hub_services) == [
-        "HubCore.hub_scoped_reads is not its container instance"
-    ]
+    assert process_identity_violations(planted) == ["HubCore.hub_scoped_reads is not its container instance"]
 
 
 def test_every_tenant_resolves_the_process_actions_codec_and_packaged_loaders(tmp_path: Path) -> None:

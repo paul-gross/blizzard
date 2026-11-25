@@ -33,7 +33,7 @@ from tests.support.scaffolding import HubHarness, add_tenant, build_hub, default
 
 def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
     """Every holder of each fleet instance in ``tenant``, by what the instance is."""
-    scope = hub.hub_services.process.tenants.open(tenant).resolver
+    scope = hub.process.tenants.open(tenant).resolver
     services = hub.hub_services.tenants.open_services(tenant)
     fleet = scope.get(FleetService)
     # The execution services hold what they were built over privately; reading it is the only way to see it is shared.
@@ -98,12 +98,12 @@ def test_every_tenant_judges_versions_through_the_one_supplied_window(tmp_path: 
     first = StoreScope(default_tenant(hub.engine))
     second = StoreScope(add_tenant(hub.engine, "second"))
     hub.hub_services.tenants.open_tenants.refresh()
-    tenants = hub.hub_services.process.tenants
+    tenants = hub.process.tenants
 
-    window = hub.hub_services.process.resolver.get(HubVersionWindow)
+    window = hub.process.resolver.get(HubVersionWindow)
 
     assert window.hub_version == "0.3"
-    assert hub.hub_services.process.resolver.get(IVersionWindow) is window
+    assert hub.process.resolver.get(IVersionWindow) is window
     assert tenants.open(first).resolver.get(IVersionWindow) is window
     assert tenants.open(second).resolver.get(IVersionWindow) is window
     assert tenants.open(first).resolver.get(FleetService)._versions is window  # pyright: ignore[reportPrivateUsage]

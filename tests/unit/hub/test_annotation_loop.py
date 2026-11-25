@@ -308,11 +308,10 @@ class _FakeWorkSources:
         return list(self._annotating)
 
 
-class _FakeServices:
-    """A minimal stand-in for ``HubServices`` — only the attributes ``lifespan``
-    reads: ``sweeps`` (the roster over ``annotation``, when given, ``close_drain``, ``event_derivation`` and
-    ``tenant_teardown_sweep``, with no trace or egress export), ``action_loop`` (started and stopped around the
-    sweeps), and ``process.tenants`` (closed before the loop stops)."""
+class _FakeProcess:
+    """A minimal stand-in for the hub's process — only what ``lifespan`` resolves through ``process.resolver``: the
+    sweep roster over ``annotation`` when given, ``close_drain``, ``event_derivation`` and ``tenant_teardown_sweep``,
+    with no export; the action loop started and stopped around the sweeps; and ``process.tenants``, closed first."""
 
     def __init__(
         self,
@@ -328,7 +327,13 @@ class _FakeServices:
         self.tenant_teardown_sweep = _CountingReconciler()
         self.annotation = annotation
         self.action_loop = ActionLoop()
-        self.process = SimpleNamespace(tenants=SimpleNamespace(close=lambda: None))
+        # The process ``lifespan`` resolves the action loop from and closes the tenant scopes of.
+        self.process = SimpleNamespace(
+            tenants=SimpleNamespace(close=lambda: None), resolver=SimpleNamespace(get=self._resolve)
+        )
+
+    def _resolve(self, key: object) -> ActionLoop | SweepRoster:
+        return self.sweeps if key is SweepRoster else self.action_loop
 
     @property
     def sweeps(self) -> SweepRoster:
@@ -343,12 +348,13 @@ class _FakeServices:
 
 
 class _FakeApp(FastAPI):
-    """A real ``FastAPI`` carrying only the ``app.state.{services,config,shutdown,platform_tracing,flow_driver}``
-    ``lifespan`` reads, with fake services."""
+    """A real ``FastAPI`` carrying only the
+    ``app.state.{hub_process,config,shutdown,platform_tracing,flow_driver}`` ``lifespan`` reads, over a fake
+    process."""
 
-    def __init__(self, services: _FakeServices, config: HubConfig) -> None:
+    def __init__(self, services: _FakeProcess, config: HubConfig) -> None:
         super().__init__()
-        self.state.services = services
+        self.state.hub_process = services.process
         self.state.config = config
         self.state.shutdown = asyncio.Event()
         self.state.platform_tracing = DisabledPlatformTracing()
@@ -371,7 +377,7 @@ async def test_lifespan_starts_the_event_derivation_loop_unconditionally(tmp_pat
     """No work source opts a chunk's transcript events into anything —
     the sweep is yielded and started regardless."""
     event_derivation = _CountingReconciler()
-    services = _FakeServices(work_sources=_FakeWorkSources())
+    services = _FakeProcess(work_sources=_FakeWorkSources())
     services.event_derivation = event_derivation
     app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
 
@@ -387,7 +393,7 @@ async def test_lifespan_starts_the_close_drain_loop_unconditionally(tmp_path: Pa
     any source is close-capable today — the sweep is yielded and started regardless,
     like its sibling above."""
     close_drain = _CountingReconciler()
-    services = _FakeServices(work_sources=_FakeWorkSources())
+    services = _FakeProcess(work_sources=_FakeWorkSources())
     services.close_drain = close_drain
     app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
 
@@ -399,7 +405,7 @@ async def test_lifespan_starts_the_close_drain_loop_unconditionally(tmp_path: Pa
 
 async def test_the_sweep_set_carries_the_injected_annotator_when_one_is_present(tmp_path: Path) -> None:
     annotator = _CountingReconciler()
-    services = _FakeServices(work_sources=_FakeWorkSources(annotating=("widget",)), annotation=annotator)
+    services = _FakeProcess(work_sources=_FakeWorkSources(annotating=("widget",)), annotation=annotator)
     app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
 
     sweeps = list(Sweep.all(app))
@@ -414,7 +420,7 @@ async def test_the_sweep_set_carries_the_injected_annotator_when_one_is_present(
 
 
 async def test_the_sweep_set_has_no_forge_status_sweep_without_an_annotator(tmp_path: Path) -> None:
-    services = _FakeServices(work_sources=_FakeWorkSources())
+    services = _FakeProcess(work_sources=_FakeWorkSources())
     app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
 
     sweeps = list(Sweep.all(app))
@@ -533,7 +539,7 @@ async def test_a_pass_within_its_interval_logs_no_overrun_warning() -> None:
 
 
 async def test_the_sweep_set_has_no_sweep_for_a_stepped_one(tmp_path: Path) -> None:
-    services = _FakeServices(work_sources=_FakeWorkSources())
+    services = _FakeProcess(work_sources=_FakeWorkSources())
     config = HubConfig(
         root=tmp_path,
         db_url="sqlite:///:memory:",
@@ -548,9 +554,7 @@ async def test_the_sweep_set_has_no_sweep_for_a_stepped_one(tmp_path: Path) -> N
 @pytest.mark.usefixtures("no_early_second_pass")
 async def test_a_stepped_sweep_runs_no_pass_at_boot_and_a_timed_one_runs_as_today(tmp_path: Path) -> None:
     close_drain, event_derivation = _CountingReconciler(), _CountingReconciler()
-    services = _FakeServices(
-        work_sources=_FakeWorkSources(), close_drain=close_drain, event_derivation=event_derivation
-    )
+    services = _FakeProcess(work_sources=_FakeWorkSources(), close_drain=close_drain, event_derivation=event_derivation)
     config = HubConfig(
         root=tmp_path, db_url="sqlite:///:memory:", sweeps=SweepModes({SweepName.CLOSE_DRAIN: SweepMode.STEPPED})
     )

@@ -26,6 +26,7 @@ from blizzard.foundation.registry.internal.recording import RecordingRegistry
 from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.composition import HubCore, HubServices, build_services, connections_for_engine
 from blizzard.hub.config import HubConfig
+from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.chunk.model import WorkRef, WorkRefLabel
 from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
@@ -167,7 +168,7 @@ def test_editing_a_forge_record_rebuilds_its_adapter_and_the_replacement_keeps_i
     adapters = _Adapters(headers=_rate(10))
     hub = build_hub(tmp_path, forges=adapters.forges)
     repository = _repository(hub)
-    loop = hub.hub_services.action_loop
+    loop = hub.resolve_hub(ActionLoop)
     budgets = hub.services.forge_budgets
     loop.start()
     try:
@@ -190,9 +191,9 @@ def test_editing_a_forge_record_rebuilds_its_adapter_and_the_replacement_keeps_i
 
 def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
     """Each configured adapter of ``tenant``, as its every port resolves and as its bag field holds it."""
-    scope = hub.hub_services.process.tenants.open(tenant).resolver
+    scope = hub.process.tenants.open(tenant).resolver
     services = hub.hub_services.tenants.open_services(tenant)
-    objects = hub.hub_services.process.tenants.resolve(tenant, ConfigObjectCache)
+    objects = hub.process.tenants.resolve(tenant, ConfigObjectCache)
     return {
         "forge records": [scope.get(IReadForgeRepository), scope.get(IWriteForgeRepository), services.forge_records],
         "landed commit links": [scope.get(LandedCommitLinks), scope.get(IReadLandedCommitLinks), services.commit_links],
@@ -220,7 +221,7 @@ def test_one_adapters_aliases_and_bag_field_share_identity_within_a_tenant_and_d
         assert all(each is held[0] for each in held), name
     for name in mine:
         assert mine[name][0] is not theirs[name][0], name
-    scope = hub.hub_services.process.tenants.open(first).resolver
+    scope = hub.process.tenants.open(first).resolver
     label: WorkRefLabel = scope.get(WorkRefLabel)
     assert label == hub.services.work_ref_label
     assert label(WorkRef("hub", "w1")) == hub.services.work_sources.label(WorkRef("hub", "w1"))
@@ -260,19 +261,16 @@ def _hosted(
         overrides=overrides,
         versions=HubVersionWindow(__version__, VERSION_WINDOW),
     )
-    services = build_services(
-        core,
-        cadences_on=lambda: False,
-    )
+    services = build_services(core)
     return core, services, StoreScope(default_tenant(engine))
 
 
-def _build_adapter(services: HubServices, scope: StoreScope) -> None:
+def _build_adapter(core: HubCore, services: HubServices, scope: StoreScope) -> None:
     """Build ``scope``'s adapter for its one repository by reading a change through it on the action loop."""
     tenant = services.tenants.open_services(scope)
     (repository,) = [each.repository_id for each in tenant.repository_records.list_all(include_retired=False)]
     forge = tenant.forges.changes(repository, priority=ForgePriority.LANDING)
-    assert services.action_loop.submit(forge.change(7)).result(5).number == 7
+    assert core.process.resolver.get(ActionLoop).submit(forge.change(7)).result(5).number == 7
 
 
 def test_eviction_and_shutdown_close_owned_clients_on_the_running_loop_and_leave_borrowed_ones_open(
@@ -282,16 +280,16 @@ def test_eviction_and_shutdown_close_owned_clients_on_the_running_loop_and_leave
     tracing = _RecordingTracing()
     borrowed = WorkSourceRegistry({"default": FakeWorkSource()})
     core, services, scope = _hosted(tmp_path, adapters, tracing, borrowed)
-    app = create_hub_app(HubConfig(root=tmp_path, db_url="sqlite://"), services=services)
+    app = create_hub_app(HubConfig(root=tmp_path, db_url="sqlite://"), services=services, process=core.process)
 
     with TestClient(app):
-        _build_adapter(services, scope)
+        _build_adapter(core, services, scope)
         # As a tenant's deletion evicts it: its container scope, then its cached services.
         core.process.tenants.evict(scope.tenant)
         core.tenants.evict(scope.tenant)
         assert _closed(adapters.transports[0]) == _LOOP_THREAD
 
-        _build_adapter(services, scope)
+        _build_adapter(core, services, scope)
         assert adapters.transports[1].closed_on is None
         assert core.process.tenants.open(scope).resolver.get(IWorkSourceRegistry) is borrowed
 

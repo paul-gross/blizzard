@@ -29,6 +29,7 @@ from blizzard.hub.domain.garden.routines import Routine, RoutineAuthoring, Routi
 from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, RunService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.projects.model import Project, ProjectId
+from blizzard.hub.domain.sweeps.roster import SweepRoster
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.hub.store import schema as s
@@ -70,7 +71,7 @@ def _cadence(hub: HubHarness, tenant: TenantId, project: Project, *chores: Chore
 
 
 def _sweep(hub: HubHarness) -> None:
-    assert hub.hub_services.sweeps.pass_every_tenant("cadence").error is None
+    assert hub.resolve_hub(SweepRoster).pass_every_tenant("cadence").error is None
 
 
 def _runs(hub: HubHarness, tenant: TenantId) -> list[tuple[str, str]]:
@@ -116,7 +117,7 @@ def test_a_pass_with_the_flag_off_mints_nothing(tmp_path: Path) -> None:
     _cadence(hub, default_tenant(hub.engine), project, ChoreShape("plain", "sweep"))
 
     _sweep(hub)
-    assert hub.hub_services.sweeps.pass_one_tenant("cadence", default_tenant(hub.engine)).error is None
+    assert hub.resolve_hub(SweepRoster).pass_one_tenant("cadence", default_tenant(hub.engine)).error is None
 
     assert _runs(hub, default_tenant(hub.engine)) == []
 

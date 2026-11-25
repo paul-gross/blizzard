@@ -124,7 +124,7 @@ def test_a_seeded_hub_breach_comes_back_as_its_slug_and_detail(hub: HubHarness) 
 
 def test_a_hub_check_while_another_runs_answers_409(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> None:
     headers = _hub_admin(hub)
-    check = hub.hub_services.process.resolver.get(HubInvariantCheck)
+    check = hub.process.resolver.get(HubInvariantCheck)
     held = _Held()
     monkeypatch.setattr(check, "_checker", held)
     running = threading.Thread(target=lambda: hub.client.get(_HUB_ROUTE, headers=headers))

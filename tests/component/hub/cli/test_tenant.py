@@ -15,6 +15,7 @@ import sqlalchemy as sa
 from click.testing import Result
 
 from blizzard.auth_core import Role
+from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.store import schema
@@ -79,7 +80,7 @@ def test_create_names_its_admin_and_rename_keeps_the_id(hub: HubHarness, cli: Cl
     assert listed.exit_code == 0, listed.output
     assert f"{tenant}  acme two  open" in listed.output
     assert f"{default_tenant(hub.engine)}  default  open" in listed.output
-    assert hub.hub_services.memberships.role_in(TenantId(tenant), ada.user_id) is Role.ADMIN
+    assert hub.resolve_hub(MembershipRepository).role_in(TenantId(tenant), ada.user_id) is Role.ADMIN
 
 
 def test_a_created_tenants_default_project_records_the_cli_as_its_door(hub: HubHarness, cli: Cli) -> None:

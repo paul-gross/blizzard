@@ -180,7 +180,7 @@ def test_the_window_is_half_open(tmp_path: Path) -> None:
 def test_a_real_directory_holds_backfill_files_per_date_partition_and_the_cursors_stay(tmp_path: Path) -> None:
     config = _real(tmp_path)
     hub, graph = egress_hub(tmp_path, config)
-    sweep = egress_sweep_of(hub.hub_services)
+    sweep = egress_sweep_of(hub)
     assert sweep is not None
     sweep.sweep()
     since = hub.clock.now()
@@ -210,7 +210,7 @@ def test_a_real_directory_holds_backfill_files_per_date_partition_and_the_cursor
 def test_a_dry_run_writes_nothing_and_counts_what_a_wet_run_counts(tmp_path: Path) -> None:
     config = _real(tmp_path, max_rows_per_file=2)
     hub, graph = egress_hub(tmp_path, config)
-    sweep = egress_sweep_of(hub.hub_services)
+    sweep = egress_sweep_of(hub)
     assert sweep is not None
     sweep.sweep()
     since = hub.clock.now()
@@ -281,7 +281,7 @@ def test_a_writer_failure_stops_the_backfill_with_502_and_the_counts_so_far(
     def failing_writer(config: EgressConfig) -> InMemoryEgressWriter:
         return failing
 
-    monkeypatch.setattr(hub.hub_services.process.resolver.get(EgressBackfill), "_writer_for", failing_writer)
+    monkeypatch.setattr(hub.process.resolver.get(EgressBackfill), "_writer_for", failing_writer)
     until = hub.clock.now() + timedelta(seconds=1)
     hub.clock.advance(timedelta(seconds=1))
 
@@ -301,7 +301,7 @@ def test_a_writer_failure_stops_the_backfill_with_502_and_the_counts_so_far(
 def test_the_cli_reports_counts_and_renders_refusals(tmp_path: Path) -> None:
     config = _real(tmp_path, backfill_max_window=3600)
     hub, graph = egress_hub(tmp_path, config)
-    sweep = egress_sweep_of(hub.hub_services)
+    sweep = egress_sweep_of(hub)
     assert sweep is not None
     sweep.sweep()
     closed_step(hub, graph, 1)

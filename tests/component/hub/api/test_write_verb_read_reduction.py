@@ -16,6 +16,7 @@ from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.chunk_views import ChunkViewReads
+from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
@@ -88,7 +89,7 @@ class _CountingSessions:
 
 
 def _wire_counting_sessions(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> _CountingSessions:
-    return _CountingSessions(_record_calls(monkeypatch, type(hub.hub_services.sessions), "get_by_hash"))
+    return _CountingSessions(_record_calls(monkeypatch, type(hub.resolve_hub(SessionRepository)), "get_by_hash"))
 
 
 # --- facts-load counting: pause, stop, question-answer -----------------------------

@@ -14,6 +14,7 @@ from sqlalchemy.exc import OperationalError
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerAddition, TokenRotation
+from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore, locked_token_hash
 from tests.support.scaffolding import HubHarness, build_hub, hub_store_connections, migrated_hub_at, runner_token
 
@@ -29,7 +30,7 @@ def _bearer(token: str) -> dict[str, str]:
 
 
 def _revoked(hub: HubHarness, token: str) -> bool:
-    return hub.hub_services.hub_scoped_reads.credentials.revoked_token_runner(TokenHash(token).hex) is not None
+    return hub.resolve_hub(HubScopedReads).credentials.revoked_token_runner(TokenHash(token).hex) is not None
 
 
 def test_a_first_enrollment_revokes_the_token_minted_with_the_runner(tmp_path: Path) -> None:

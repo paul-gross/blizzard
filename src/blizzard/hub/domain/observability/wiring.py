@@ -1,21 +1,13 @@
 """The observability area's registrations: the transcript, analytics, env-timeline, annotation, hub event log and
-invariant ports over the adapters it is handed, and the services over them; and the trace and egress exports.
+invariant ports over the adapters it is handed, the services over them, and the trace and egress exports.
 
-Each port aliases the one adapter instance the root hands in, so a reader and a writer in one tenant share it; the area
-names no adapter. The tenant's transcript ingest and event derivation are built by explicit factory, since their
-constructors default what the graph supplies: the ingest's fallback caps are the boot config's ``TranscriptCaps``, and
-the derivation's extractors the shipped set this area registers. The hub event log and the invariant check are one
-instance per process. The store-free graph declares each registration absent, from the same rosters.
-
-The trace and egress exports are one instance per process each, over the stores and writers handed in. Whether each
-export's sweep runs is decided once, at registration, from a switch the root holds: its sweep is a ``T | None`` the
-roster reads. Their status, replay, reset and backfill are always registered, and read the boot decision from the
-borrowed :class:`EgressBoot`. The process-scoped trace store reaches a tenant's reads only through the
-:class:`StepHydrations` accessor the root binds over its tenant scopes, each tenant's :class:`StepHydration` built
-here."""
+Each port aliases the one adapter the root hands in. The event-derivation and forge-status passes and each export are
+one per process, reaching a tenant's half through the accessors the root supplies; each export's sweep is a ``T |
+None`` decided at registration. The store-free graph declares each registration absent, from the same rosters."""
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any, Protocol, cast
 
 from blizzard.foundation.clock import IClock
@@ -25,10 +17,17 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadWorkRefsCorpus
 from blizzard.hub.domain.chunk.ports.work_sources import IWorkAnnotators
 from blizzard.hub.domain.graph.model import IReadManyGraphs
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
-from blizzard.hub.domain.observability.analytics.derivation import EventDerivationService, TenantEventDerivation
+from blizzard.hub.domain.observability.analytics.derivation import (
+    EventDerivationReconciler,
+    EventDerivationService,
+    IReadDerivationCorpus,
+    TenantEventDerivation,
+    TenantEventDerivations,
+)
 from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents, IWriteTranscriptEvents
 from blizzard.hub.domain.observability.analytics.extraction import TurnEventExtractors, shipped_extractors
 from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
@@ -48,9 +47,13 @@ from blizzard.hub.domain.observability.egress.status import EgressStatusReader
 from blizzard.hub.domain.observability.egress.sweep import EgressSweep
 from blizzard.hub.domain.observability.env_timeline import EnvTimelineReading, IReadEnvTimelineFacts
 from blizzard.hub.domain.observability.forge_status import (
+    FULL_PASS_FLOOR_INTERVALS,
+    AnnotationReconciler,
     IReadAnnotatedSources,
     IWriteAnnotatedSources,
+    LiveAnnotationInterval,
     TenantAnnotation,
+    TenantAnnotations,
 )
 from blizzard.hub.domain.observability.hub_events import HubEventLogService, IReadHubEventLog, IWriteHubEventLog
 from blizzard.hub.domain.observability.invariants import HubInvariantCheck, IHubInvariantChecker
@@ -103,6 +106,31 @@ def event_derivation_service(
     return EventDerivationService(events=events, facts=facts, record=record, clock=clock, extractors=extractors)
 
 
+def event_derivation_reconciler(
+    corpus: IReadDerivationCorpus, derivations: TenantEventDerivations, clock: IClock
+) -> EventDerivationReconciler:
+    """The event-derivation pass, one per hub, handing each segment to its own tenant's half."""
+    return EventDerivationReconciler(corpus=corpus, tenant=derivations, clock=clock)
+
+
+def annotation_reconciler(
+    corpus: IReadWorkRefsCorpus, annotations: TenantAnnotations, clock: IClock, interval: LiveAnnotationInterval
+) -> AnnotationReconciler:
+    """The forge-status pass, one per hub, over every open tenant, its full-pass floor a fixed number of live
+    annotation intervals."""
+    return AnnotationReconciler(
+        corpus=corpus,
+        tenants=annotations.every,
+        tenant=annotations,
+        clock=clock,
+        full_pass_floor=lambda: timedelta(seconds=FULL_PASS_FLOOR_INTERVALS * interval.seconds()),
+    )
+
+
+#: The area's passes: the event derivation's, then the forge status's.
+type PassRefs = tuple[Ref[EventDerivationReconciler], Ref[AnnotationReconciler]]
+
+
 #: The tenant ports the area aliases onto the adapters it is handed.
 _TENANT_PORTS: tuple[type[Any], ...] = (
     IReadTranscriptSegments,
@@ -128,6 +156,14 @@ _PROCESS_PORTS: tuple[type[Any], ...] = (IReadHubEventLog, IWriteHubEventLog, IH
 #: The process services, each one instance per hub.
 _PROCESS_SERVICES: tuple[type[Any], ...] = (HubEventLogService, HubInvariantCheck)
 
+#: The passes and the tenant accessors they reach each tenant through, each one instance per hub.
+_PROCESS_PASSES: tuple[type[Any], ...] = (
+    TenantEventDerivations,
+    TenantAnnotations,
+    EventDerivationReconciler,
+    AnnotationReconciler,
+)
+
 
 def register(
     registry: Registry,
@@ -140,9 +176,10 @@ def register(
     annotations: Ref[IWriteAnnotatedSources],
     hub_events: Ref[IWriteHubEventLog],
     invariants: Ref[IHubInvariantChecker],
-) -> None:
+) -> PassRefs:
     """Declare the area's ports over the adapters handed in, its tenant services once per tenant, and the hub event
-    log, the invariant check and the shipped extractor set once per process."""
+    log, the invariant check, the shipped extractor set, and the event-derivation and forge-status passes with the
+    accessors they reach each tenant through, once per process, handing back each pass's ``Ref``."""
     registry.alias(port(IReadTranscriptSegments), segments)
     registry.alias(port(IWriteTranscriptSegments), segments)
     registry.alias(port(IReadTranscriptEvents), events)
@@ -162,13 +199,18 @@ def register(
         registry.service(service, lifetime=Lifetime.TENANT)
     for service in _PROCESS_SERVICES:
         registry.service(service, lifetime=Lifetime.PROCESS)
+    registry.context(port(TenantEventDerivations), lifetime=Lifetime.PROCESS)
+    registry.context(port(TenantAnnotations), lifetime=Lifetime.PROCESS)
+    derivation = registry.factory(event_derivation_reconciler, lifetime=Lifetime.PROCESS)
+    return derivation, registry.factory(annotation_reconciler, lifetime=Lifetime.PROCESS)
 
 
 def register_absent(registry: Registry) -> None:
-    """Declare the area's ports, services and extractor set absent, for the store-free graph."""
+    """Declare the area's ports, services, extractor set and passes absent, for the store-free graph. The live
+    annotation interval is declared by its provider."""
     for missing in (*_TENANT_PORTS, *_TENANT_SERVICES, *_TENANT_FACTORY_KEYS):
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
-    for missing in (*_PROCESS_PORTS, *_PROCESS_SERVICES, TurnEventExtractors):
+    for missing in (*_PROCESS_PORTS, *_PROCESS_SERVICES, *_PROCESS_PASSES, TurnEventExtractors):
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
 
 
@@ -322,6 +364,9 @@ class ITraceStorePorts(IWriteTraceCursor, IReadTraceStatus, Protocol):
 #: The running export's writers the area aliases its writer roles onto: the kept writer, then the backfill's factory.
 type EgressWriterRefs = tuple[Ref[IConfiguredEgressWriter], Ref[IEgressBackfillWriters]]
 
+#: The running exports' sweeps, each ``None`` while its export is off: the trace export's, then the egress export's.
+type ExportSweepRefs = tuple[Ref[TraceExportSweep] | None, Ref[EgressSweep] | None]
+
 
 def _optional(missing: Any) -> Any:
     """The ``T | None`` key :meth:`Registry.optional` registers ``missing`` under."""
@@ -364,10 +409,11 @@ def register_exports(
     free_space: Ref[IEgressFreeSpace],
     trace_export: bool,
     egress_writers: EgressWriterRefs | None,
-) -> None:
+) -> ExportSweepRefs:
     """Declare the trace and egress ports over the stores handed in, their services once per process and each
     tenant's step hydration. The trace sweep and its exporter are present only with ``trace_export``, and the egress
-    sweep and its writers only with ``egress_writers``; each is otherwise absent, and its ``T | None`` is ``None``."""
+    sweep and its writers only with ``egress_writers``; each is otherwise absent, and its ``T | None`` is ``None``.
+    Hands back each running sweep's ``Ref``, ``None`` for an export that is off."""
     registry.alias(port(IReadTraceSteps), trace)
     registry.alias(port(IReadTraceStatus), trace)
     registry.alias(port(IWriteTraceCursor), trace)
@@ -380,11 +426,13 @@ def register_exports(
     registry.factory(step_hydration, lifetime=Lifetime.TENANT)
     for build in (trace_replay, trace_status, egress_status, egress_reset, egress_backfill):
         registry.factory(build, lifetime=Lifetime.PROCESS)
+    trace_sweep_ref: Ref[TraceExportSweep] | None = None
+    egress_sweep_ref: Ref[EgressSweep] | None = None
     if trace_export:
         exporter = registry.context(port(ITraceExporter), lifetime=Lifetime.PROCESS)
         registry.optional(port(ITraceExporter), exporter, lifetime=Lifetime.PROCESS)
-        sweep = registry.factory(trace_export_sweep, lifetime=Lifetime.PROCESS)
-        registry.optional(port(TraceExportSweep), sweep, lifetime=Lifetime.PROCESS)
+        trace_sweep_ref = registry.factory(trace_export_sweep, lifetime=Lifetime.PROCESS)
+        registry.optional(port(TraceExportSweep), trace_sweep_ref, lifetime=Lifetime.PROCESS)
     else:
         for missing in _TRACE_ON_KEYS:
             registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=EXPORT_OFF)
@@ -401,6 +449,7 @@ def register_exports(
             registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=EXPORT_OFF)
         for missing in (IEgressBackfillWriters, EgressSweep):
             registry.optional(port(missing), None, lifetime=Lifetime.PROCESS)
+    return trace_sweep_ref, egress_sweep_ref
 
 
 def register_exports_absent(registry: Registry) -> None:

@@ -28,7 +28,7 @@ from starlette.exceptions import HTTPException
 from starlette.routing import Route
 
 from blizzard import __version__
-from blizzard.foundation.clock import ControlledClock, IClock, resolve_clock
+from blizzard.foundation.clock import IClock, resolve_clock
 from blizzard.foundation.flags import FlagOffError, FlagRegistry, Flags, resolve_flags
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.attributes import annotate
@@ -41,7 +41,6 @@ from blizzard.foundation.roles import collaborator
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.rotation import RotationResult
 from blizzard.foundation.secrets.sealing import IRotatableKeyProvider
-from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.trace_attributes import CHUNK_ID
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
@@ -59,7 +58,7 @@ from blizzard.hub.api.cadences import project_router as project_cadences_router
 from blizzard.hub.api.cadences import router as cadences_router
 from blizzard.hub.api.chunk_dependencies import router as chunk_dependencies_router
 from blizzard.hub.api.chunks import router as chunks_router
-from blizzard.hub.api.clock import clock_router
+from blizzard.hub.api.clock import ClockControlLock, ClockControls
 from blizzard.hub.api.config import router as config_router
 from blizzard.hub.api.credentials import router as credentials_router
 from blizzard.hub.api.decisions import router as decisions_router
@@ -130,12 +129,12 @@ from blizzard.hub.auth.memberships import MembershipRoleRefused
 from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
 from blizzard.hub.auth.service import AuthService
 from blizzard.hub.auth.signing import SigningKeyService
+from blizzard.hub.auth.throttle import LiveIpThrottle
 from blizzard.hub.composition import (
     HubServices,
     HubSettingsGraph,
     build_flow_driver,
     build_hub_core,
-    build_hub_flags,
     build_services,
     build_system_clock,
     open_hub_store,
@@ -147,6 +146,7 @@ from blizzard.hub.config import (
     legacy_keys_from_document,
     read_legacy_keys,
 )
+from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_registry import build_hub_actions
 from blizzard.hub.delivery.flow_driver import FlowDriver
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
@@ -159,6 +159,7 @@ from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.observability.egress.boot import EgressBoot, EgressPathKey
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
+from blizzard.hub.domain.observability.hub_events import HubEventLogService
 from blizzard.hub.domain.observability.tracing.attributes import (
     INSTRUMENTATION_SCOPE,
     INSTRUMENTATION_SCOPE_VERSION,
@@ -171,10 +172,10 @@ from blizzard.hub.domain.runners.registration import RunnerRetired
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.sweeps.locks import SweepInProgress
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
+from blizzard.hub.domain.sweeps.roster import SweepRoster
 from blizzard.hub.layout import remove_retired_workdirs
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.process_root import HubProcess, open_store_backed, open_store_free
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.settings.pass_config import bind_pass_config
@@ -228,20 +229,21 @@ class Sweep:
 
     @classmethod
     def all(cls, app: FastAPI) -> Iterator[Sweep]:
-        """One timed sweep per sweep the hub built, none for a ``stepped`` one, and none on the store-free app.
-        Each pass opens its ``sweep <name>`` root on the app's platform tracer. Each sweep's jitter is drawn
-        uniformly from ``[0, interval_seconds)`` so their recurring cadence decorrelates from its second pass on."""
-        services: HubServices | None = app.state.services
-        if services is None:
+        """One timed sweep per sweep the process's roster holds, none for a ``stepped`` one, and none on the
+        store-free app, whose graph declares no roster. Each pass opens its ``sweep <name>`` root on the app's
+        platform tracer. Each sweep's jitter is drawn uniformly from ``[0, interval_seconds)`` so their recurring
+        cadence decorrelates from its second pass on."""
+        resolver = app.state.hub_process.resolver
+        try:
+            roster = resolver.get(SweepRoster)
+        except ServiceAbsent:
             return
         config: HubConfig = app.state.config
         tracer = app.state.platform_tracing.tracer
         settings: HubSettingsGraph | None = getattr(app.state, "hub_settings", None)
         # A hub holding a settings graph reads each pass's config, and each live interval, from its live config source.
-        source: HubConfigSource | None = (
-            app.state.hub_process.resolver.get(HubConfigSource) if settings is not None else None
-        )
-        for name in services.sweeps.names():
+        source: HubConfigSource | None = resolver.get(HubConfigSource) if settings is not None else None
+        for name in roster.names():
             if config.sweeps.of(name) is SweepMode.STEPPED:
                 continue
             interval = _sweep_interval(name, config)
@@ -252,7 +254,7 @@ class Sweep:
             }.get(name)
             yield cls(
                 name,
-                partial(services.sweeps.pass_every_tenant, name, tracer),
+                partial(roster.pass_every_tenant, name, tracer),
                 interval,
                 app.state.shutdown,
                 jitter_seconds=random.uniform(0, interval),
@@ -582,20 +584,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message
     and drive the sweeps across the app's lifetime (pinned:
     ``tests/unit/hub/test_annotation_loop.py::test_lifespan_starts_the_event_derivation_loop_unconditionally``)."""
-    services: HubServices | None = app.state.services
+    process: HubProcess = app.state.hub_process
+    # The store-free graph declares no action loop: nothing it serves takes a pass.
+    action_loop = _resolved_or_none(process, ActionLoop)
     async with contextlib.AsyncExitStack() as cleanup:
         hosted_cleanup: contextlib.ExitStack | None = getattr(app.state, "hosted_cleanup", None)
         if hosted_cleanup is not None:
+            # The process close stops the action loop after the tenant scopes close their configured clients on it.
             cleanup.callback(hosted_cleanup.close)
+        elif action_loop is not None:
+            # A process lent to the app stays open; only its tenant scopes, and then the loop, are closed.
+            cleanup.callback(action_loop.stop)
+            cleanup.callback(process.tenants.close)
         else:
-            if services is not None:
-                cleanup.callback(services.action_loop.stop)
-                cleanup.callback(services.process.tenants.close)
-            else:
-                cleanup.callback(app.state.hub_process.close)
+            cleanup.callback(process.close)
         try:
-            if services is not None:
-                services.action_loop.start()
+            if action_loop is not None:
+                action_loop.start()
             for sweep in Sweep.all(app):
                 task = asyncio.create_task(sweep.run())
                 cleanup.push_async_callback(_wait_for_task, task)
@@ -612,9 +617,16 @@ async def _wait_for_task(task: asyncio.Task[None]) -> None:
     await task
 
 
+def _resolved_or_none[T](process: HubProcess, dependency_type: type[T]) -> T | None:
+    """``process``'s ``dependency_type``, or ``None`` where its graph declares it absent — the store-free graph."""
+    try:
+        return process.resolver.get(dependency_type)
+    except ServiceAbsent:
+        return None
+
+
 async def _bind_request_config(request: Request) -> AsyncGenerator[None, None]:
-    services = request.app.state.services
-    throttle = services.auth_throttle if services is not None else None
+    throttle = _resolved_or_none(request.app.state.hub_process, LiveIpThrottle)
     if throttle is None:
         with bind_pass_config(request_config(request)):
             yield
@@ -636,6 +648,7 @@ def create_app(
     *,
     readiness: ReadinessService | None = None,
     services: HubServices | None = None,
+    process: HubProcess | None = None,
     platform_tracing: IPlatformTracing | None = None,
     flags: Flags,
     test_flow_router: APIRouter | None = None,
@@ -643,9 +656,11 @@ def create_app(
 ) -> FastAPI:
     """Build a fully wired hub app from resolved config and the hub's resolved ``flags``.
 
-    ``readiness`` and ``services`` are optional so the store-free paths build the app
-    without opening a database. ``platform_tracing`` is off unless the composition root passes one.
-    """
+    Without a ``process`` the app opens the store-free one, which ``lifespan`` closes; ``services``, the request
+    bridge's tenant opener, is taken only beside the ``process`` it was built over. ``platform_tracing`` is off unless
+    the composition root passes one."""
+    if services is not None and process is None:
+        raise ValueError("create_app takes services only beside the process they were built over")
     log = get_logger("blizzard.hub")
 
     platform_tracing = platform_tracing or DisabledPlatformTracing()
@@ -664,8 +679,8 @@ def create_app(
     app.state.services = services
     # The store-backed process the services were built over, else the store-free one, which lifespan closes.
     app.state.hub_process = (
-        services.process
-        if services is not None
+        process
+        if process is not None
         else open_store_free(
             clock=build_system_clock(),
             config=config,
@@ -674,6 +689,9 @@ def create_app(
             actions=build_hub_actions(os.environ),
         )
     )
+    if process is not None:
+        # Resolved at build, so a disabled login throttle warns at hub start, not on the first request.
+        process.resolver.get(LiveIpThrottle)
     # Set on shutdown by ``lifespan``; every SSE stream races it.
     app.state.shutdown = asyncio.Event()
     # The hosted hub's flow driver, set by ``build_hosted_app`` alone; ``lifespan`` runs it beside the sweeps.
@@ -795,11 +813,7 @@ def build_hosted_app(
     ``oauth_http_client`` replaces the OAuth providers' client, and is never closed here.
     ``version_window`` judges each registering runner's version."""
     resolved_clock = clock if clock is not None else resolve_clock(os.environ)
-    controlled = isinstance(resolved_clock, ControlledClock)
     with contextlib.ExitStack() as cleanup:
-        reader = SqlAlchemyStoreStatusReader(engine)
-        expected = migration_runner(config).script_head()
-        readiness = ReadinessService(reader=reader, expected_revision=expected)
         tracing = TracingSettings.of(os.environ)
 
         core = build_hub_core(
@@ -825,9 +839,15 @@ def build_hosted_app(
             tracing=tracing,
             egress_path_key=_egress_path_key(config.egress),
         )
-        # Closed after everything registered below: the tenant scopes, then the process scope; the engine, tracing
-        # and settings stay borrowed from `hub host`.
+        # The hosted resources' one cleanup: the tenant scopes close their configured clients on the running action
+        # loop, then the process scope stops the loop; the engine, tracing and settings stay borrowed from `hub host`.
         cleanup.callback(core.process.close)
+        resolver = core.process.resolver
+        # Resolved now: the container builds lazily, and only a resolved resource is finalized on close.
+        resolver.get(ActionLoop)
+        readiness = resolver.get(ReadinessService)
+        expected = readiness.expected_revision
+        flags = resolver.get(Flags)
         # Minted here on first start when no key source exists yet.
         secret_keys = core.process.resolver.get(IRotatableKeyProvider)
         remove_retired_workdirs(config.data_dir)
@@ -837,26 +857,17 @@ def build_hosted_app(
         core.process.resolver.get(IOAuthProviderRegistry)
         core.process.resolver.get(SigningKeyService | None)
 
-        flags = build_hub_flags(config)
-        services = build_services(
-            core,
-            public_url=config.public_url,
-            cadences_on=lambda: flags.on("cadences"),
-        )
-        # Closed before the action loop stops: each tenant scope's finalizer closes the configured clients its
-        # records built on the loop they run on.
-        cleanup.callback(services.action_loop.stop)
-        cleanup.callback(core.process.tenants.close)
+        services = build_services(core)
         # Only once the store is at the expected schema head: a store mid-migration must
         # fail *readiness*, not *boot* (pinned:
         # `tests/component/test_readiness.py::test_ready_probe_false_on_unmigrated_store`).
         flow_driver: FlowDriver | None = None
         if readiness.evaluate().ready:
-            tenants = core.every_open()
+            open_tenants = core.process.tenants
             try:
                 # The import is the hub's, recorded once into the one tenant it wrote, so any tenant answers it.
                 LegacyStart(
-                    recorded=any(stores.config_import.recorded() for stores in tenants),
+                    recorded=any(imports.recorded() for _tenant, imports in open_tenants.every_open(ConfigImportStore)),
                     keys=(
                         legacy_keys_from_document(
                             config.config_path,
@@ -880,7 +891,11 @@ def build_hosted_app(
             warn_forge_refusals(engine)
             try:
                 require_keys_covered(
-                    {key_id for stores in tenants for key_id in stores.secrets.key_ids_in_use()},
+                    {
+                        key_id
+                        for _tenant, secrets in open_tenants.every_open(SecretStore)
+                        for key_id in secrets.key_ids_in_use()
+                    },
                     secret_keys.available_ids(),
                 )
             except KeysUncovered as refusal:
@@ -893,76 +908,77 @@ def build_hosted_app(
             # reconcile finds those chunks escalated and submits none of them, then the turns the last process
             # left open.
             flow_driver = build_flow_driver(core.process)
-            for stores in tenants:
-                core.process.tenants.resolve(stores.scope, FlowLineReconciler).escalate_actionless()
+            for tenant, reconciler in open_tenants.every_open(FlowLineReconciler):
+                reconciler.escalate_actionless()
                 try:
-                    flow_driver.recover_turns(stores.scope.tenant)
+                    flow_driver.recover_turns(tenant)
                 except Exception:
                     # Observe-only: a tenant whose lines cannot be recovered now is reconciled by the driver's ticks.
                     get_logger("blizzard.hub.flow_driver").exception(
-                        "flow driver boot recovery failed", tenant_id=stores.scope.tenant
+                        "flow driver boot recovery failed", tenant_id=tenant
                     )
-            Superuser(email=config.auth.superuser, auth=core.process.resolver.get(AuthService)).ensure()
-            _announce_started(expected, services)
-            announce_rejected_tracing(tracing, services)
-            announce_rejected_egress(config.egress, services)
-        control_lock = asyncio.Lock() if controlled else None
+            Superuser(email=config.auth.superuser, auth=resolver.get(AuthService)).ensure()
+            hub_events = resolver.get(HubEventLogService)
+            _announce_started(expected, hub_events, resolved_clock)
+            announce_rejected_tracing(tracing, hub_events, resolved_clock)
+            announce_rejected_egress(config.egress, resolver.get(EgressBoot), hub_events, resolved_clock)
+        # Present only under a controlled process clock; the test flow steps under the clock moves' one lock.
+        control_lock = resolver.get(ClockControlLock | None)
+        clock_controls = resolver.get(ClockControls | None)
         app = create_app(
             config,
             readiness=readiness,
             services=services,
+            process=core.process,
             platform_tracing=platform_tracing,
             flags=flags,
             test_flow_router=(
                 flow_control_router(flow_driver, resolved_clock, control_lock)
-                if isinstance(resolved_clock, ControlledClock) and control_lock is not None and flow_driver
+                if control_lock is not None and flow_driver is not None
                 else None
             ),
-            controlled_clock_router=(
-                clock_router(resolved_clock, control_lock)
-                if isinstance(resolved_clock, ControlledClock) and control_lock is not None
-                else None
-            ),
+            controlled_clock_router=clock_controls.router if clock_controls is not None else None,
         )
         # Lifespan and the CLI fallback share the hosted resources' one-shot cleanup.
         app.state.engine = engine
         app.state.hub_settings = settings
         # Only a store at the expected head is reconciled; `lifespan` runs the driver it finds here.
-        app.state.flow_driver = None if controlled else flow_driver
+        app.state.flow_driver = None if control_lock is not None else flow_driver
         app.state.hosted_cleanup = cleanup.pop_all()
         return app
 
 
-def _announce_started(revision: str | None, services: HubServices) -> None:
+def _announce_started(revision: str | None, hub_events: HubEventLogService, clock: IClock) -> None:
     """Every start that reaches a migrated store records one ``hub-started`` in the hub's own event log, naming the
     version and the store revision it serves."""
-    services.hub_event_log.record(
+    hub_events.record(
         kind="hub-started",
         message=f"hub {__version__} started on store revision {revision}",
         detail={"version": __version__, "revision": revision},
-        at=services.clock.now(),
+        at=clock.now(),
     )
 
 
-def announce_rejected_tracing(tracing: TracingSettings, services: HubServices) -> None:
+def announce_rejected_tracing(tracing: TracingSettings, hub_events: HubEventLogService, clock: IClock) -> None:
     """A rejected tracing setting never stops startup: the hub serves with tracing off and
     records one ``trace-config-rejected`` in the hub's own event log per start, naming the setting."""
     if tracing.state != "rejected":
         return
-    services.hub_event_log.record(
+    hub_events.record(
         kind="trace-config-rejected",
         message=tracing.rejection_message("hub"),
         detail={"setting": tracing.setting, "value": tracing.value},
-        at=services.clock.now(),
+        at=clock.now(),
     )
 
 
-def announce_rejected_egress(egress: EgressConfig, services: HubServices) -> None:
+def announce_rejected_egress(
+    egress: EgressConfig, boot: EgressBoot, hub_events: HubEventLogService, clock: IClock
+) -> None:
     """An export the hub cannot fully honor never stops startup, and records one ``egress-config-rejected`` in the
     hub's own event log per start. Without its format's extra the export is off and the event names the format;
     without the path hash key a hashing file path policy needs, only the events dataset is off and the event names the
     variable — never a key value."""
-    boot = services.process.resolver.get(EgressBoot)
     variable = boot.missing_path_key()
     if boot.rejected is not None:
         message = f"fact egress is off: {boot.rejected}"
@@ -972,11 +988,11 @@ def announce_rejected_egress(egress: EgressConfig, services: HubServices) -> Non
         detail = {"setting": "egress.path_key_env", "value": variable}
     else:
         return
-    services.hub_event_log.record(
+    hub_events.record(
         kind="egress-config-rejected",
         message=message,
         detail=detail,
-        at=services.clock.now(),
+        at=clock.now(),
     )
 
 

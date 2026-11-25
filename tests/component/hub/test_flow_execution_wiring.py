@@ -24,7 +24,7 @@ from tests.support.scaffolding import TENANT_HEADER, HubHarness, add_tenant, bui
 def _held(hub: HubHarness, tenant: StoreScope) -> dict[str, object]:
     """What the driver's accessors hand back for ``tenant``, each by its role, beside the same type's request-scope
     resolution."""
-    tenants = hub.hub_services.process.tenants
+    tenants = hub.process.tenants
     return {
         "reconciler": tenants.resolve(tenant, FlowLineReconciler),
         "announced turns": tenants.resolve(tenant, AnnouncedTurns),
@@ -41,7 +41,7 @@ def test_the_drivers_accessors_hold_the_instances_a_request_beneath_the_tenant_r
     tenant = StoreScope(default_tenant(hub.engine))
     held = _held(hub, tenant)
 
-    request = hub.hub_services.process.tenants.request(tenant, ScopeValues())
+    request = hub.process.tenants.request(tenant, ScopeValues())
     try:
         resolved = {
             "reconciler": request.resolver.get(FlowLineReconciler),

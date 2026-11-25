@@ -246,7 +246,7 @@ def test_settings_audit_uses_hosted_clock(tmp_path: Path, monkeypatch: pytest.Mo
         )
         try:
             assert isinstance(clock, ControlledClock)
-            assert app.state.services.clock is clock
+            assert app.state.hub_process.resolver.get(IClock) is clock
             clock.set(clock.now() + timedelta(days=1))
             settings.authoring.apply(
                 Change("edit", sets={"action_pass_seconds": 45}),

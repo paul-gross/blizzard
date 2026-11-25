@@ -31,6 +31,7 @@ from blizzard.hub.store.internal import chunk_lifecycle_store
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.flow_store import FlowStore
+from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.store.transactions import HubTransactions
 from tests.support.github_double import DoubleRepo, GitHubDouble
 from tests.support.scaffolding import (
@@ -334,7 +335,7 @@ def test_the_sweep_publishes_the_facts_of_a_turn_it_ends_interrupted(tmp_path: P
     chunk_id = _turning(hub, _WIDGET)
     since, after = hub.events.latest_id(), _newest_fact_id(hub)
     stores = FlowLineStores(
-        corpus=hub.hub_services.hub_scoped_reads.corpus,
+        corpus=hub.resolve_hub(HubScopedReads).corpus,
         tenants=lambda: hub.hub_services.tenants.open_tenants.every().keys(),
         lines=lambda tenant: hub.resolve(tenant, FlowLineReconciler),
         turns=lambda tenant: hub.resolve(tenant, TurnRunner),

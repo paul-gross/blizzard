@@ -259,7 +259,7 @@ def test_a_hub_shut_down_closes_its_cached_adapters_before_the_action_loop_stops
 
     with TestClient(hub.app):
         forge = hub.services.forges.changes(record.repository_id, priority=ForgePriority.LANDING)
-        assert hub.hub_services.action_loop.submit(forge.change(7)).result(5).number == 7
+        assert hub.resolve_hub(ActionLoop).submit(forge.change(7)).result(5).number == 7
         assert transport.closed_on is None
 
     assert transport.closed_on == "hub-action-loop"

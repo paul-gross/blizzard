@@ -35,8 +35,10 @@ from blizzard.hub.domain.observability.tracing.repository import (
 from blizzard.hub.domain.observability.tracing.status import TraceStatusReader
 from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
 from blizzard.hub.domain.sweeps.names import SweepName
+from blizzard.hub.domain.sweeps.roster import SweepRoster
 from blizzard.hub.egress.factory import BackfillWriters, ConfiguredWriter
 from blizzard.hub.store.internal.egress_store import EgressStore
+from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.tenancy import StoreScope, TenantClosed, UnknownTenant
 from tests.support.scaffolding import (
@@ -68,16 +70,16 @@ def _exporting(tmp_path: Path, exporter: InMemoryTraceExporter) -> HubHarness:
 def test_the_roster_and_the_routes_serve_the_containers_export_instances(tmp_path: Path) -> None:
     exporter = InMemoryTraceExporter()
     hub = _exporting(tmp_path, exporter)
-    process = hub.hub_services.process.resolver
+    process = hub.process.resolver
     trace_sweep = process.get(TraceExportSweep | None)
     egress_sweep = process.get(EgressSweep | None)
     assert isinstance(trace_sweep, TraceExportSweep) and isinstance(egress_sweep, EgressSweep)
 
-    roster = hub.hub_services.sweeps._every_tenant
+    roster = hub.resolve_hub(SweepRoster)._every_tenant
     assert roster[SweepName.TRACE_EXPORT] is trace_sweep is process.get(TraceExportSweep)
     assert roster[SweepName.EGRESS] is egress_sweep is process.get(EgressSweep)
 
-    request = hub.hub_services.process.tenants.request(StoreScope(default_tenant(hub.engine)), ScopeValues())
+    request = hub.process.tenants.request(StoreScope(default_tenant(hub.engine)), ScopeValues())
     try:
         assert [key.__qualname__ for key in _SERVED if request.resolver.get(key) is not process.get(key)] == []
     finally:
@@ -87,7 +89,7 @@ def test_the_roster_and_the_routes_serve_the_containers_export_instances(tmp_pat
     egress = process.get(EgressStore)
     assert process.get(IReadTraceSteps) is process.get(IReadTraceStatus) is process.get(IWriteTraceCursor) is trace
     assert process.get(IReadEgress) is process.get(IWriteEgressCursor) is egress
-    assert process.get(IReadEgressEvents) is hub.hub_services.hub_scoped_reads.corpus
+    assert process.get(IReadEgressEvents) is hub.resolve_hub(HubScopedReads).corpus
     event_log = process.get(HubEventLogService)
     assert trace_sweep._steps is trace and trace_sweep._exporter is exporter and trace_sweep._events is event_log
     assert process.get(TraceReplay)._exporter is exporter
@@ -99,11 +101,11 @@ def test_the_roster_and_the_routes_serve_the_containers_export_instances(tmp_pat
 
 def test_with_both_exports_off_neither_sweep_is_built_and_the_services_still_answer(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    process = hub.hub_services.process.resolver
+    process = hub.process.resolver
 
     assert process.get(TraceExportSweep | None) is None
     assert process.get(EgressSweep | None) is None
-    names = hub.hub_services.sweeps.names()
+    names = hub.resolve_hub(SweepRoster).names()
     assert SweepName.TRACE_EXPORT not in names and SweepName.EGRESS not in names
     assert process.get(TraceReplay)._exporter is None
     assert process.get(EgressBackfill)._writer_for is None
@@ -112,7 +114,7 @@ def test_with_both_exports_off_neither_sweep_is_built_and_the_services_still_ans
 
 def test_step_facts_are_hydrated_through_the_tenant_accessor_and_a_closed_tenant_refuses(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    process = hub.hub_services.process
+    process = hub.process
     hydrations = process.resolver.get(StepHydrations)
     tenant = default_tenant(hub.engine)
 

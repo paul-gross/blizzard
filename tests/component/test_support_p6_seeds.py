@@ -13,6 +13,7 @@ import sqlalchemy as sa
 
 from blizzard.auth_core import Role
 from blizzard.hub.auth.internal.hub_admin_repository import HubAdminRepository
+from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantClosed
 from tests.support.scaffolding import (
@@ -35,7 +36,7 @@ def test_a_seeded_membership_is_the_role_the_hub_reads_in_that_tenant_only(tmp_p
 
     seed_membership(hub.engine, other.tenant, user.user_id, Role.CONTRIBUTOR)
 
-    memberships = hub.hub_services.memberships
+    memberships = hub.resolve_hub(MembershipRepository)
     assert memberships.role_in(other.tenant, user.user_id) is Role.CONTRIBUTOR
     assert memberships.role_in(default_tenant(hub.engine), user.user_id) is None
 
@@ -47,7 +48,7 @@ def test_a_seeded_hub_administrator_holds_no_membership(tmp_path: Path) -> None:
     seed_hub_admin(hub.engine, user.user_id)
 
     assert HubAdminRepository(hub_level_connections(hub.engine)).is_hub_admin(user.user_id)
-    assert hub.hub_services.memberships.memberships_for(user.user_id) == []
+    assert hub.resolve_hub(MembershipRepository).memberships_for(user.user_id) == []
 
 
 def test_a_seeded_invitation_stores_its_token_only_as_a_hash(tmp_path: Path) -> None:

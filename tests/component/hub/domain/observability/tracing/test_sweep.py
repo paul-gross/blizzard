@@ -25,6 +25,7 @@ from blizzard.hub import app as hub_app
 from blizzard.hub.app import Sweep
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.repository import TraceCheckpoint
+from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
 from blizzard.hub.domain.sweeps.names import SweepName
 from blizzard.hub.store import schema
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
@@ -388,7 +389,7 @@ def test_a_gap_that_closed_nothing_jumps_without_an_event(tmp_path: Path) -> Non
 def test_a_hub_with_tracing_off_has_no_trace_sweep_and_writes_no_cursor(tmp_path: Path) -> None:
     hub, _graph = trace_hub(tmp_path)
     closed_pair(hub)
-    assert trace_sweep_of(hub.hub_services) is None
+    assert trace_sweep_of(hub) is None
     assert hub.app is not None
     hub.app.state.shutdown = None
 
@@ -432,7 +433,7 @@ def test_the_hosted_app_builds_no_exporter_without_an_endpoint(tmp_path: Path, m
 
     app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
 
-    assert trace_sweep_of(app.state.services) is None
+    assert app.state.hub_process.resolver.get(TraceExportSweep | None) is None
 
 
 def test_the_hosted_app_wires_the_sweep_when_an_endpoint_enables_tracing(
@@ -452,7 +453,7 @@ def test_the_hosted_app_wires_the_sweep_when_an_endpoint_enables_tracing(
     app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
 
     assert len(built) == 1
-    assert trace_sweep_of(app.state.services) is not None
+    assert app.state.hub_process.resolver.get(TraceExportSweep | None) is not None
 
 
 def _open_steps(hub: HubHarness, count: int, seqs: itertools.count[int]) -> None:

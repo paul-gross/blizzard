@@ -39,6 +39,7 @@ from blizzard.hub.domain.observability.forge_status import IReadAnnotatedSources
 from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceStatus, IReadTraceSteps
 from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
+from blizzard.hub.open_tenants import IReadOpenTenants
 from blizzard.hub.settings.model import IReadHubSettingsAdmin
 from blizzard.runner.host_records.ports import IReadHostRecordRepository
 from blizzard.runner.hosting.ports import IReadHostedRunnerRepository
@@ -521,6 +522,14 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         ("tenants",),
         "reads at most two tenants to tell whether the hub holds exactly one — a LIMIT 2 read of the key index's "
         "first entries, never a walk of it, whatever the tenant count.",
+    ),
+    MethodScopedAllowance(
+        IReadOpenTenants,
+        "open_tenants",
+        "tenants",
+        200,
+        "every open tenant's name, read once into memory and again only when the tenant set changes — the hub's open "
+        "tenant set, bounded by the tenants its administrators create.",
     ),
     IndexWalkAllowance(
         IReadTenantDirectory,

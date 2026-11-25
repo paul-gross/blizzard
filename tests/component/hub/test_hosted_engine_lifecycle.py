@@ -123,7 +123,7 @@ def test_failed_shutdown_releases_engine(tmp_path: Path, monkeypatch: pytest.Mon
     monkeypatch.setattr(ActionLoop, "stop", stop)
     app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
     # The hosted hub's own tenant scopes fail to close at its shutdown.
-    monkeypatch.setattr(app.state.services.process.tenants, "close", fail)
+    monkeypatch.setattr(app.state.hub_process.tenants, "close", fail)
     raw = _pooled_connection(app.state.engine)
     with pytest.raises(RuntimeError, match="shutdown failed"), TestClient(app):
         pass
@@ -276,7 +276,7 @@ def test_cli_failure_before_lifespan_closes_hosted_resources(tmp_path: Path, mon
             oauth_http_client=oauth_http_client,
         )
         pooled_connections.append(_pooled_connection(app.state.engine))
-        app.state.services.action_loop.start()
+        app.state.hub_process.resolver.get(ActionLoop).start()
         return app
 
     def stop(loop: ActionLoop) -> None:
@@ -321,7 +321,7 @@ def test_owned_oauth_client_closes(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(hub_app.httpx2, "Client", client)
     if fail_construction:
-        monkeypatch.setattr(hub_app, "build_hub_flags", fail)
+        monkeypatch.setattr(hub_app, "build_flow_driver", fail)
         with pytest.raises(RuntimeError, match="instrumentation failed"):
             build_hosted_hub_app(config)
     else:

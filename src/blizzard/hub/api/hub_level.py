@@ -1,8 +1,8 @@
-"""The hub-level services dependency (``bzh:dependency-injection``).
+"""The request bridge's hub-level dependency (``bzh:dependency-injection``).
 
-The composition root stashes the wired hub-level :class:`~blizzard.hub.composition.HubServices` on
-``app.state.services``; a route serving no tenant — identity, sessions, signing, exports — names
-:data:`Hub` for it. With no services wired, a route reports the store is unwired (503) rather than
+``create_app`` stashes the request bridge's :class:`~blizzard.hub.composition.HubServices`, the opener of each
+tenant's services, on ``app.state.services``; every hub-level owner is the process container's, which a route names
+with ``FromDishka``. With no services wired, a route naming :data:`Hub` reports the store is unwired (503) rather than
 serving on none."""
 
 from __future__ import annotations

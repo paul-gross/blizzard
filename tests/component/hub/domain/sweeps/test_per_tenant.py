@@ -8,6 +8,7 @@ from pathlib import Path
 
 import sqlalchemy as sa
 
+from blizzard.hub.domain.work_items.closure import CloseDrainSweep
 from blizzard.hub.store import schema as s
 from tests.support.scaffolding import (
     build_hub,
@@ -32,7 +33,7 @@ def test_one_drain_pass_closes_each_tenants_intent_in_its_own_tenant(tmp_path: P
         other.tenant: landed_hub_ref(hub, other.tenant, "ch_other"),
     }
 
-    hub.hub_services.close_drain.sweep()
+    hub.resolve_hub(CloseDrainSweep).sweep()
 
     assert stores[carried].delivery.pending_close_intents() == []
     assert stores[other.tenant].delivery.pending_close_intents() == []
@@ -48,7 +49,7 @@ def test_a_drain_pass_leaves_a_closed_tenants_intent_untouched(tmp_path: Path) -
     other_stores = landed_hub_ref(hub, other.tenant, "ch_other")
     close_tenant(hub.engine, other.tenant)
 
-    hub.hub_services.close_drain.sweep()
+    hub.resolve_hub(CloseDrainSweep).sweep()
 
     assert carried_stores.delivery.pending_close_intents() == []
     assert [intent.chunk_id for intent in other_stores.delivery.pending_close_intents()] == ["ch_other"]

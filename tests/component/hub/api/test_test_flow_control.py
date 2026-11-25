@@ -42,6 +42,7 @@ def test_step_route_requires_hub_admin_and_rejects_runners(tmp_path: Path) -> No
     app = create_hub_app(
         hub.wired_app.state.config,
         services=hub.hub_services,
+        process=hub.process,
         test_flow_router=flow_control_router(hub.flow_driver, clock, asyncio.Lock()),
     )
     tenant = seed_session(hub, seed_user(hub, username="tenant-admin", role=Role.ADMIN))

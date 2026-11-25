@@ -8,17 +8,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from blizzard.hub.auth.facts import AuthFactsService
-from blizzard.hub.auth.internal.identity_repository import IdentityRepository
-from blizzard.hub.auth.internal.membership_repository import MembershipRepository
-from blizzard.hub.auth.internal.session_repository import SessionRepository
-from blizzard.hub.auth.internal.user_repository import UserRepository
-from blizzard.hub.auth.service import AuthService
-from blizzard.hub.auth.throttle import LiveIpThrottle
-from blizzard.hub.composition import HubCore, HubServices, TenantServices, TenantStores
-from blizzard.hub.delivery.action_loop import ActionLoop
+from blizzard.hub.composition import HubCore, TenantServices, TenantStores
 from blizzard.hub.delivery.action_registry import HubActions
-from blizzard.hub.delivery.flow_driver import StepWake
 from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.cadence.ports import IReadCadenceRepository, IReadErrandRunsRepository, IWriteCadenceRepository
 from blizzard.hub.domain.chunk.event_log import EventLogService
@@ -70,7 +61,7 @@ from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEv
 from blizzard.hub.domain.observability.egress.repository import IReadEgress, IWriteEgressCursor
 from blizzard.hub.domain.observability.env_timeline import IReadEnvTimelineFacts
 from blizzard.hub.domain.observability.forge_status import IReadAnnotatedSources, IWriteAnnotatedSources
-from blizzard.hub.domain.observability.hub_events import HubEventLogService, IReadHubEventLog, IWriteHubEventLog
+from blizzard.hub.domain.observability.hub_events import IReadHubEventLog, IWriteHubEventLog
 from blizzard.hub.domain.observability.invariants import IHubInvariantChecker
 from blizzard.hub.domain.observability.tracing.repository import (
     IReadProjectLabels,
@@ -291,13 +282,11 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
     return problems
 
 
-def process_identity_violations(core: HubCore, services: HubServices) -> list[str]:
-    """Each retained hub-level field that is not the process container's instance."""
+def process_identity_violations(core: HubCore) -> list[str]:
+    """Each retained hub-level field, and each process port, that is not the process container's instance."""
     process = core.process.resolver
     retained: tuple[tuple[str, object, Any], ...] = (
         ("HubCore.hub_scoped_reads", core.hub_scoped_reads, HubScopedReads),
-        ("HubServices.hub_scoped_reads", services.hub_scoped_reads, HubScopedReads),
-        ("HubServices.hub_event_log", services.hub_event_log, HubEventLogService),
         ("IReadHubEventLog", process.get(IReadHubEventLog), HubEventLogStore),
         ("IWriteHubEventLog", process.get(IWriteHubEventLog), HubEventLogStore),
         ("IHubInvariantChecker", process.get(IHubInvariantChecker), HubInvariants),
@@ -307,15 +296,6 @@ def process_identity_violations(core: HubCore, services: HubServices) -> list[st
         ("IReadEgress", process.get(IReadEgress), EgressStore),
         ("IWriteEgressCursor", process.get(IWriteEgressCursor), EgressStore),
         ("HubActions.catalogue", process.get(HubActions).catalogue, HubActionCatalogue),
-        ("HubServices.action_loop", services.action_loop, ActionLoop),
-        ("HubServices.step_wake", services.step_wake, StepWake),
-        ("HubServices.users", services.users, UserRepository),
-        ("HubServices.sessions", services.sessions, SessionRepository),
-        ("HubServices.identities", services.identities, IdentityRepository),
-        ("HubServices.memberships", services.memberships, MembershipRepository),
-        ("HubServices.auth", services.auth, AuthService),
-        ("HubServices.auth_throttle", services.auth_throttle, LiveIpThrottle),
-        ("HubServices.auth_facts", services.auth_facts, AuthFactsService),
     )
     return [f"{name} is not its container instance" for name, field, key in retained if field is not process.get(key)]
 

@@ -15,16 +15,28 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
+from sqlalchemy import Engine
+
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
 from blizzard.foundation.roles import adapter_model
+from blizzard.foundation.store import factories as store_factories
+from blizzard.foundation.store.migrations import MigrationRunner
+from blizzard.foundation.store.readiness import ReadinessService
+from blizzard.foundation.store.status import IStoreStatusReader
 from blizzard.hub.auth.invitations import IInvitationTokenReads
 from blizzard.hub.auth.service import InvitationWriters
+from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.cadence.ports import IReadCadenceCorpus
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.chunk.ports.work_refs import IReadWorkRefsCorpus
 from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus
+from blizzard.hub.domain.observability.analytics.derivation import IReadDerivationCorpus
 from blizzard.hub.domain.observability.egress.repository import IReadEgressEvents, IReadUsageCorpus
 from blizzard.hub.domain.observability.tracing.repository import StepHydrations
-from blizzard.hub.open_tenants import OpenTenants
+from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
+from blizzard.hub.open_tenants import IReadOpenTenants, OpenTenants
+from blizzard.hub.store import MIGRATIONS_DIR
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
@@ -362,8 +374,8 @@ def register_observability_absent(registry: Registry) -> None:
     registry.absent(port(HubInvariants), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
 
 
-#: The adapters built once per hub, as services over the borrowed connections.
-_PROCESS_SERVICES: tuple[type[Any], ...] = (
+#: The tenant directory, deletion-fact and closed-tenant unit adapters, once per hub over the borrowed connections.
+_TENANCY_SERVICES: tuple[type[Any], ...] = (
     TenantAdministrationStore,
     TenantTeardownStore,
     ClosedTenantUnits,
@@ -374,9 +386,15 @@ _PROCESS_KEYS: tuple[type[Any], ...] = (
     HubScopedReads,
     IReadUsageCorpus,
     IReadFlowLinesCorpus,
+    IReadCloseIntentCorpus,
+    IReadCadenceCorpus,
+    IReadDerivationCorpus,
+    IReadWorkRefsCorpus,
     IInvitationTokenReads,
     HubEventLogStore,
-    *_PROCESS_SERVICES,
+    IReadOpenTenants,
+    IStoreStatusReader,
+    ReadinessService,
 )
 
 
@@ -390,9 +408,45 @@ def flow_lines_corpus(reads: HubScopedReads) -> IReadFlowLinesCorpus:
     return reads.corpus
 
 
+def close_intent_corpus(reads: HubScopedReads) -> IReadCloseIntentCorpus:
+    """The hub-scoped reads' pending close intents, as their port."""
+    return reads.corpus
+
+
+def cadence_corpus(reads: HubScopedReads) -> IReadCadenceCorpus:
+    """The hub-scoped reads' live-cadence corpus, as its port."""
+    return reads.corpus
+
+
+def derivation_corpus(reads: HubScopedReads) -> IReadDerivationCorpus:
+    """The hub-scoped reads' derivation corpus, as its port."""
+    return reads.corpus
+
+
+def work_refs_corpus(reads: HubScopedReads) -> IReadWorkRefsCorpus:
+    """The hub-scoped reads' work-ref corpus, as its port."""
+    return reads.corpus
+
+
 def invitation_token_reads(reads: HubScopedReads) -> IInvitationTokenReads:
     """The hub-scoped reads' invitation-token reads, as their port."""
     return reads.invitations
+
+
+def open_tenant_reads(reads: HubScopedReads) -> IReadOpenTenants:
+    """The hub-scoped reads' open-tenant read, as its port."""
+    return reads.tenants
+
+
+def store_status_reader(engine: Engine) -> IStoreStatusReader:
+    """Reads the borrowed engine's reachability and applied revision."""
+    return store_factories.store_status_reader(engine)
+
+
+def readiness_service(reader: IStoreStatusReader, config: HubConfig) -> ReadinessService:
+    """The hub's readiness: the store's status against the head revision this build's migration tree carries."""
+    head = MigrationRunner(script_location=MIGRATIONS_DIR, url=config.db_url).script_head()
+    return ReadinessService(reader=reader, expected_revision=head)
 
 
 def invitation_writers() -> InvitationWriters:
@@ -401,17 +455,20 @@ def invitation_writers() -> InvitationWriters:
 
 
 def register_process(registry: Registry) -> Ref[HubEventLogStore]:
-    """Declare every hub-level adapter once per process, handing back the hub event log's ``Ref``, which the
-    observability area's hub event log ports alias."""
+    """Declare every hub-level adapter once per process — the open-tenant read, and the store status reader and the
+    readiness over it among them — handing back the hub event log's ``Ref``, which the observability area's hub event
+    log ports alias."""
     registry.factory(build_hub_scoped_reads, lifetime=Lifetime.PROCESS)
     registry.factory(usage_corpus, lifetime=Lifetime.PROCESS)
     registry.factory(flow_lines_corpus, lifetime=Lifetime.PROCESS)
+    for corpus in (close_intent_corpus, cadence_corpus, derivation_corpus, work_refs_corpus):
+        registry.factory(corpus, lifetime=Lifetime.PROCESS)
     registry.factory(invitation_token_reads, lifetime=Lifetime.PROCESS)
     registry.factory(invitation_writers, lifetime=Lifetime.PROCESS)
-    hub_events = registry.service(HubEventLogStore, lifetime=Lifetime.PROCESS)
-    for each in _PROCESS_SERVICES:
-        registry.service(each, lifetime=Lifetime.PROCESS)
-    return hub_events
+    registry.factory(open_tenant_reads, lifetime=Lifetime.PROCESS)
+    registry.factory(store_status_reader, lifetime=Lifetime.PROCESS)
+    registry.factory(readiness_service, lifetime=Lifetime.PROCESS)
+    return registry.service(HubEventLogStore, lifetime=Lifetime.PROCESS)
 
 
 def register_process_absent(registry: Registry) -> None:
@@ -420,6 +477,33 @@ def register_process_absent(registry: Registry) -> None:
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
     # A callable alias keys the opener, so it is named as its key rather than as a class.
     registry.absent(port(cast("type[Any]", InvitationWriters)), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+
+
+@adapter_model
+@dataclass(frozen=True)
+class TenancyRefs:
+    """The ``Ref`` of each tenancy adapter, which the tenancy area's ports alias."""
+
+    directory: Ref[TenantAdministrationStore]
+    teardowns: Ref[TenantTeardownStore]
+    units: Ref[ClosedTenantUnits]
+
+
+def register_tenancy(registry: Registry) -> TenancyRefs:
+    """Declare the tenant directory, deletion-fact and closed-tenant unit adapters once per process, handing back the
+    ``Ref`` of each."""
+    refs = StoreRefs({each: registry.service(each, lifetime=Lifetime.PROCESS) for each in _TENANCY_SERVICES})
+    return TenancyRefs(
+        directory=refs.of(TenantAdministrationStore),
+        teardowns=refs.of(TenantTeardownStore),
+        units=refs.of(ClosedTenantUnits),
+    )
+
+
+def register_tenancy_absent(registry: Registry) -> None:
+    """Declare the tenancy adapters absent, for the store-free graph."""
+    for missing in _TENANCY_SERVICES:
+        registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
 
 
 def trace_store(

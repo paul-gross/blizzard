@@ -284,7 +284,7 @@ def test_all_routes_require_hub_administrator(tmp_path: Path) -> None:
 def test_the_settings_ports_are_the_members_of_the_one_borrowed_graph(tmp_path: Path) -> None:
     hub = _hub(tmp_path)
     graph = hub.wired_app.state.hub_settings
-    resolver = hub.hub_services.process.resolver
+    resolver = hub.process.resolver
     assert resolver.get(IReadHubSettingsAdmin) is graph.store
     assert resolver.get(HubSettingsReader) is graph.reader
     assert resolver.get(HubSettingsAuthoring) is graph.authoring

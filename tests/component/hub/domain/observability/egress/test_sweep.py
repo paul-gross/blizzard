@@ -39,7 +39,7 @@ from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint
 from blizzard.hub.domain.observability.egress.reset import plan_reset
 from blizzard.hub.domain.observability.egress.rows import ExportedInvocation, ExportedStep
 from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
-from blizzard.hub.domain.observability.hub_events import HubEventKind
+from blizzard.hub.domain.observability.hub_events import HubEventKind, HubEventLogService
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.repository import ClosingCandidates, IReadTraceSteps, TraceCheckpoint
 from blizzard.hub.egress.factory import EgressUnavailable
@@ -112,8 +112,8 @@ def test_no_directory_yields_no_sweep_and_writes_no_cursor_row(tmp_path: Path) -
     hub, graph = egress_hub(tmp_path)
     closed_step(hub, graph, 1)
 
-    assert egress_sweep_of(hub.hub_services) is None
-    assert hub.hub_services.process.resolver.get(EgressBoot).rejected is None
+    assert egress_sweep_of(hub) is None
+    assert hub.process.resolver.get(EgressBoot).rejected is None
     assert [s.logger_name for s in Sweep.all(_app(hub)) if "egress" in s.logger_name] == []
     assert egress_cursor_rows(hub) == 0
 
@@ -882,7 +882,7 @@ def test_a_real_directory_holds_files_and_manifests_that_agree(tmp_path: Path) -
     (tmp_path / "out").mkdir()
     config = EgressConfig(directory=tmp_path / "out", settle_seconds=0, min_free_bytes=0)
     hub, graph = egress_hub(tmp_path, config)
-    sweep = egress_sweep_of(hub.hub_services)
+    sweep = egress_sweep_of(hub)
     assert sweep is not None
     sweep.sweep()
     closed_step(hub, graph, 1, usage=2)
@@ -905,7 +905,7 @@ def test_a_real_directory_holds_files_and_manifests_that_agree(tmp_path: Path) -
 def test_a_missing_directory_fails_the_first_write_not_startup(tmp_path: Path) -> None:
     config = EgressConfig(directory=tmp_path / "never-made", settle_seconds=0, min_free_bytes=0)
     hub, graph = egress_hub(tmp_path, config)
-    sweep = egress_sweep_of(hub.hub_services)
+    sweep = egress_sweep_of(hub)
     assert sweep is not None
     sweep.sweep()
     closed_step(hub, graph, 1)
@@ -925,9 +925,11 @@ def test_parquet_without_its_extra_keeps_the_hub_serving_and_records_one_rejecti
     config = EgressConfig(directory=tmp_path / "out", format="parquet")
     hub, _graph = egress_hub(tmp_path, config)
 
-    assert egress_sweep_of(hub.hub_services) is None
+    assert egress_sweep_of(hub) is None
     assert [s for s in Sweep.all(_app(hub)) if "egress" in s.logger_name] == []
-    hub_app.announce_rejected_egress(config, hub.hub_services)
+    hub_app.announce_rejected_egress(
+        config, hub.resolve_hub(EgressBoot), hub.resolve_hub(HubEventLogService), hub.clock
+    )
     assert kinds(hub) == ["egress-config-rejected"]
     assert hub.client.get("/api/health").status_code == 200
 

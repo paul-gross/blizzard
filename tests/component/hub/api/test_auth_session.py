@@ -12,6 +12,7 @@ from pathlib import Path
 
 from blizzard.auth_core import Role
 from blizzard.hub.auth.hashing import SessionId
+from blizzard.hub.auth.internal.session_repository import SessionRepository
 from tests.support.scaffolding import build_hub, pointer_token, seed_session, seed_user
 
 _POINTER = {"source": "default", "ref": "7"}
@@ -190,12 +191,12 @@ def test_a_second_read_within_touch_granularity_issues_no_session_write(tmp_path
 
     hub.clock.advance(timedelta(hours=1))  # slide well past the default touch_granularity
     assert hub.client.get("/api/chunks", headers=_cookie(token)).status_code == 200
-    touched = hub.hub_services.sessions.get_by_hash(id_hash)
+    touched = hub.resolve_hub(SessionRepository).get_by_hash(id_hash)
     assert touched is not None
 
     hub.clock.advance(timedelta(minutes=1))  # under the default touch_granularity
     assert hub.client.get("/api/chunks", headers=_cookie(token)).status_code == 200
-    still = hub.hub_services.sessions.get_by_hash(id_hash)
+    still = hub.resolve_hub(SessionRepository).get_by_hash(id_hash)
     assert still is not None
     assert still.expires_at == touched.expires_at
     assert still.last_seen_at == touched.last_seen_at

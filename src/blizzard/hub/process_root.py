@@ -12,8 +12,9 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx2
+from sqlalchemy import Engine
 
-from blizzard.foundation.clock import IClock
+from blizzard.foundation.clock import ControlledClock, IClock
 from blizzard.foundation.platform_tracing import wiring as platform_tracing_wiring
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing
 from blizzard.foundation.registry.interface import Ref, port
@@ -34,6 +35,7 @@ from blizzard.hub.delivery import wiring as delivery
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.documents import wiring as documents
 from blizzard.hub.domain.cadence import wiring as cadence_area
+from blizzard.hub.domain.cadence.sweep import CadenceSweep, TenantCadence, TenantCadences
 from blizzard.hub.domain.chunk import wiring as chunk_area
 from blizzard.hub.domain.config import wiring as config_wiring
 from blizzard.hub.domain.config_apply import wiring as config_apply
@@ -43,19 +45,28 @@ from blizzard.hub.domain.garden import wiring as garden_area
 from blizzard.hub.domain.garden.findings import wiring as findings
 from blizzard.hub.domain.graph import wiring as graph_area
 from blizzard.hub.domain.observability import wiring as observability_area
+from blizzard.hub.domain.observability.analytics.derivation import TenantEventDerivation, TenantEventDerivations
 from blizzard.hub.domain.observability.egress.boot import EgressBoot
+from blizzard.hub.domain.observability.forge_status import TenantAnnotation, TenantAnnotations
 from blizzard.hub.domain.observability.tracing.repository import StepHydration, StepHydrations
 from blizzard.hub.domain.operations import wiring as operations_area
 from blizzard.hub.domain.projects import wiring as projects
 from blizzard.hub.domain.runners import wiring as runners
+from blizzard.hub.domain.sweeps import wiring as sweeps
+from blizzard.hub.domain.tenancy import wiring as tenancy
+from blizzard.hub.domain.tenancy.teardown import ClosedTenantForgetting, TenantTeardownSweep
 from blizzard.hub.domain.urgency import wiring as urgency_area
 from blizzard.hub.domain.work_items import wiring as work_items_area
+from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentDrainer, CloseIntentDrainers
 from blizzard.hub.egress import wiring as egress
 from blizzard.hub.events import wiring as events
 from blizzard.hub.forge import wiring as forge
+from blizzard.hub.graph_sync import GraphReconciliation, GraphReconciliations
+from blizzard.hub.graph_sync import wiring as graph_sync_wiring
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
 from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.live_config import wiring as live_config
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.scopes import wiring as scopes
 from blizzard.hub.scopes.environ import HubEnviron
 from blizzard.hub.scopes.tenants import TenantContainers
@@ -109,34 +120,35 @@ def register_hub(
     versions: bool = False,
     trace_export: bool = False,
     egress_export: bool = False,
+    controlled_clock: bool = False,
 ) -> None:
-    """Declare the hub graph: the scope inputs, the legacy bridge's leaves, the store adapters and the adopted areas
-    over them — or, store-free, each store-backed registration absent. The settings ports resolve from the borrowed
-    settings graph when ``settings`` is set, and are absent otherwise, whether or not the graph is store-backed. The
-    version window is the supplied one when ``versions`` is set on a store-backed graph, and is absent otherwise. The
-    trace export's sweep runs over the supplied exporter when ``trace_export`` is set, and the fact export's sweep
-    over its writers when ``egress_export`` is; each sweep is ``None`` otherwise."""
+    """Declare the hub graph: the scope inputs, the legacy bridge's ports, the store adapters, the process lifecycle
+    owners and the areas over them — or, store-free, each store-backed registration absent. ``settings``,
+    ``versions``, ``trace_export`` and ``egress_export`` each make their keys present, else absent or ``None``;
+    ``controlled_clock`` adds the clock controls on either graph."""
     scopes.register(registry)
     documents.register(registry)
     platform_tracing_wiring.register(registry)
     events.register(registry)
     settings_wiring.register_boot(registry)
     forge.register_process(registry)
+    api.register_clock_controls(registry, controlled=controlled_clock)
     if store_backed:
         delivery.register(registry)
+        scopes.register_tenants(registry)
         chunk_operations = store.register_chunk_operations(registry)
         hub_events = store.register_process(registry)
         register_legacy(registry)
         delivery.register_tenant(registry)
         delivery_area.register(registry, flows=chunk_operations.flows)
-        _register_chunk_operations(registry, chunk_operations)
+        close_drain = _register_chunk_operations(registry, chunk_operations)
         auth.register(registry)
         secrets.register(registry)
         findings.register(registry, store.register_findings(registry))
         graph_area.register(registry, store.register_graphs(registry))
         _register_urgency(registry)
         _register_garden(registry, formats=api.register(registry))
-        _register_cadence(registry)
+        cadence = _register_cadence(registry)
         _register_config(registry)
         _register_projects(registry)
         _register_fleet(registry, versions=versions)
@@ -144,10 +156,23 @@ def register_hub(
         live_config.register(registry)
         forge.register_tenant(registry)
         work_sources.register(registry)
-        _register_observability(registry, hub_events=hub_events)
-        _register_exports(registry, trace_export=trace_export, egress_export=egress_export)
+        event_derivation, forge_status = _register_observability(registry, hub_events=hub_events)
+        tenant_teardown = _register_tenancy(registry)
+        trace_sweep, egress_sweep = _register_exports(registry, trace_export=trace_export, egress_export=egress_export)
+        sweeps.register(
+            registry,
+            forge_status=forge_status,
+            event_derivation=event_derivation,
+            close_drain=close_drain,
+            cadence=cadence,
+            tenant_teardown=tenant_teardown,
+            trace_export=trace_sweep,
+            egress=egress_sweep,
+        )
     else:
         store.register_process_absent(registry)
+        delivery.register_absent(registry)
+        scopes.register_tenants_absent(registry)
         register_legacy_absent(registry)
         delivery.register_tenant_absent(registry)
         delivery_area.register_absent(registry)
@@ -187,6 +212,10 @@ def register_hub(
         egress.register_absent(registry)
         observability_area.register_exports_absent(registry)
         api.register_absent(registry)
+        store.register_tenancy_absent(registry)
+        tenancy.register_absent(registry)
+        graph_sync_wiring.register_absent(registry)
+        sweeps.register_absent(registry)
     if store_backed and settings:
         settings_wiring.register(registry)
     else:
@@ -194,18 +223,21 @@ def register_hub(
         settings_wiring.register_absent(registry)
 
 
-def _register_chunk_operations(registry: LegacyRegistry, refs: store.ChunkOperationsRefs) -> None:
+def _register_chunk_operations(registry: LegacyRegistry, refs: store.ChunkOperationsRefs) -> Ref[CloseDrainSweep]:
     """The chunk, chunk operations and work-items areas, over the tenant's chunk-store bundle and flow and work-item
-    stores."""
+    stores, handing back the close drain's ``Ref``."""
     chunk_area.register(registry, stores=refs.chunks, submissions=refs.flows, work_items=refs.work_items)
     operations_area.register(registry, withdrawals=refs.work_items)
-    work_items_area.register(registry, items=refs.work_items)
+    return work_items_area.register(registry, items=refs.work_items)
 
 
-def _register_observability(registry: LegacyRegistry, *, hub_events: Ref[HubEventLogStore]) -> None:
-    """The observability adapters, and the observability area's ports and services over them and the hub event log."""
+def _register_observability(
+    registry: LegacyRegistry, *, hub_events: Ref[HubEventLogStore]
+) -> observability_area.PassRefs:
+    """The observability adapters, and the observability area's ports and services over them and the hub event log,
+    handing back its passes' ``Ref``s."""
     refs = store.register_observability(registry)
-    observability_area.register(
+    return observability_area.register(
         registry,
         segments=refs.segments,
         events=refs.events,
@@ -218,9 +250,20 @@ def _register_observability(registry: LegacyRegistry, *, hub_events: Ref[HubEven
     )
 
 
-def _register_exports(registry: LegacyRegistry, *, trace_export: bool, egress_export: bool) -> None:
+def _register_tenancy(registry: LegacyRegistry) -> Ref[TenantTeardownSweep]:
+    """The tenancy adapters, the tenancy area's services over them, and the graph sync its tenant creation mints
+    through, handing back the teardown sweep's ``Ref``."""
+    refs = store.register_tenancy(registry)
+    teardown = tenancy.register(registry, directory=refs.directory, teardowns=refs.teardowns, units=refs.units)
+    graph_sync_wiring.register(registry)
+    return teardown
+
+
+def _register_exports(
+    registry: LegacyRegistry, *, trace_export: bool, egress_export: bool
+) -> observability_area.ExportSweepRefs:
     """The trace and egress stores and the egress adapters, and the observability area's exports over them — each
-    export's sweep present only when its switch is set."""
+    export's sweep present only when its switch is set, and its ``Ref`` handed back, else ``None``."""
     refs = store.register_exports(registry)
     free_space = egress.register_probe(registry)
     writers: observability_area.EgressWriterRefs | None = None
@@ -229,7 +272,7 @@ def _register_exports(registry: LegacyRegistry, *, trace_export: bool, egress_ex
         writers = (held.configured, held.backfill)
     else:
         egress.register_writers_absent(registry)
-    observability_area.register_exports(
+    return observability_area.register_exports(
         registry,
         trace=refs.trace,
         egress=refs.egress,
@@ -288,10 +331,10 @@ def _register_garden(registry: LegacyRegistry, *, formats: Ref[GardenFormats]) -
     )
 
 
-def _register_cadence(registry: LegacyRegistry) -> None:
-    """The cadence adapters, and the cadence area's ports and services over them."""
+def _register_cadence(registry: LegacyRegistry) -> Ref[CadenceSweep]:
+    """The cadence adapters, and the cadence area's ports and services over them, handing back its sweep's ``Ref``."""
     refs = store.register_cadence(registry)
-    cadence_area.register(registry, cadences=refs.cadences, runs=refs.runs)
+    return cadence_area.register(registry, cadences=refs.cadences, runs=refs.runs)
 
 
 def _register_urgency(registry: LegacyRegistry) -> None:
@@ -333,8 +376,11 @@ def process_values(
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> list[ScopeValue[Any]]:
-    """The scope values every hub graph opens with."""
+    """The scope values every hub graph opens with; a controlled ``clock`` is also supplied as itself, for the graph
+    its switch registers the clock controls in."""
+    controlled = [supply(port(ControlledClock), clock)] if isinstance(clock, ControlledClock) else []
     return [
+        *controlled,
         supply(port(IClock), clock),
         supply(port(HubConfig), config),
         supply(port(IPlatformTracing), platform_tracing),
@@ -368,10 +414,17 @@ def store_backed_values(
     without ``tracing`` or ``egress_boot``, tracing is disabled and the fact export off."""
     values: list[ScopeValue[Any]] = [
         supply(port(HubStoreConnections), connections),
+        supply(port(Engine), connections.engine),
         supply(port(BorrowedOAuthClient), BorrowedOAuthClient(oauth_http_client)),
         supply(port(TracingSettings), tracing if tracing is not None else TracingSettings("disabled")),
         supply(port(EgressBoot), egress_boot if egress_boot is not None else EgressBoot.off()),
         supply(port(StepHydrations), StepHydrations()),
+        supply(port(GraphReconciliations), GraphReconciliations()),
+        supply(port(ClosedTenantForgetting), ClosedTenantForgetting()),
+        supply(port(CloseIntentDrainers), CloseIntentDrainers()),
+        supply(port(TenantCadences), TenantCadences()),
+        supply(port(TenantEventDerivations), TenantEventDerivations()),
+        supply(port(TenantAnnotations), TenantAnnotations()),
         *process_values(
             clock=clock,
             config=config,
@@ -431,17 +484,50 @@ def build_store_backed(
 
 def store_backed_process(owner: OwnedChild) -> HubProcess:
     """The store-backed :class:`HubProcess` over its opened container, which is closed if the tenant reads fail. Its
-    step hydration accessor is bound over its tenant scopes before it is handed out."""
+    step hydration, graph reconciliation, close drain, cadence, event derivation and annotation accessors are bound
+    over its tenant scopes, and its closed-tenant forgetting over them and the open tenants, before it is handed out."""
+    resolver = owner.resolver
     try:
-        reads = owner.resolver.get(HubScopedReads)
-        hydrations = owner.resolver.get(StepHydrations)
+        reads = resolver.get(HubScopedReads)
+        hydrations = resolver.get(StepHydrations)
+        reconciliations = resolver.get(GraphReconciliations)
+        drainers = resolver.get(CloseIntentDrainers)
+        cadences = resolver.get(TenantCadences)
+        derivations = resolver.get(TenantEventDerivations)
+        annotations = resolver.get(TenantAnnotations)
+        open_tenants = resolver.get(OpenTenants)
     except BaseException:
         owner.close()
         raise
     process = _process(owner, confirm_open=reads.tenants.confirm_open, open_tenants=reads.tenants.open_tenants)
     tenants = process.tenants
     hydrations.bind(lambda tenant: tenants.resolve(StoreScope(tenant), StepHydration))
+    reconciliations.bind(lambda tenant: tenants.resolve(StoreScope(tenant), GraphReconciliation))
+    drainers.bind(lambda tenant: tenants.resolve(StoreScope(tenant), CloseIntentDrainer))
+    cadences.bind(lambda tenant: tenants.resolve(StoreScope(tenant), TenantCadence))
+    derivations.bind(lambda tenant: tenants.resolve(StoreScope(tenant), TenantEventDerivation))
+    annotations.bind(
+        lambda tenant: tenants.resolve(StoreScope(tenant), TenantAnnotation), lambda: open_tenants.every().keys()
+    )
+    bind_closed_tenant_forgetting(process)
     return process
+
+
+def bind_closed_tenant_forgetting(process: HubProcess, *, legacy: Callable[[TenantId], None] | None = None) -> None:
+    """Bind ``process``'s closed-tenant forgetting: a closed tenant's container scope goes first, whose finalizers close
+    its configured clients and drop its broker; then ``legacy``, the legacy cache's entry, when the legacy core holds
+    one; and the in-memory open set is read again last, so a request resolving the tenant meanwhile misses both caches
+    and is refused by the store. Binding again replaces the binding."""
+    tenants = process.tenants
+    open_tenants = process.resolver.get(OpenTenants)
+
+    def forget(tenant: TenantId) -> None:
+        tenants.evict(tenant)
+        if legacy is not None:
+            legacy(tenant)
+        open_tenants.refresh()
+
+    process.resolver.get(ClosedTenantForgetting).bind(forget)
 
 
 def build_store_free(
@@ -496,6 +582,7 @@ def open_store_backed(
             versions=versions is not None,
             trace_export=trace_exporter is not None,
             egress_export=egress_boot is not None and egress_boot.on(),
+            controlled_clock=isinstance(clock, ControlledClock),
         ),
         connections,
         clock=clock,
@@ -526,7 +613,7 @@ def open_store_free(
 ) -> HubProcess:
     """The hub's store-free process, registered and opened."""
     return build_store_free(
-        registered(store_backed=False),
+        registered(store_backed=False, controlled_clock=isinstance(clock, ControlledClock)),
         clock=clock,
         config=config,
         platform_tracing=platform_tracing,
@@ -544,6 +631,7 @@ def registered(
     versions: bool = False,
     trace_export: bool = False,
     egress_export: bool = False,
+    controlled_clock: bool = False,
 ) -> LegacyRegistry:
     """A fresh registry holding the hub graph :func:`register_hub` declares."""
     registry = LegacyRegistry()
@@ -554,6 +642,7 @@ def registered(
         versions=versions,
         trace_export=trace_export,
         egress_export=egress_export,
+        controlled_clock=controlled_clock,
     )
     return registry
 

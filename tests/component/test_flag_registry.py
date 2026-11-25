@@ -11,8 +11,8 @@ import structlog
 from fastapi.testclient import TestClient
 from structlog.typing import EventDict
 
-from blizzard.hub.composition import build_hub_flags
 from blizzard.hub.config import HubConfig
+from blizzard.hub.settings.wiring import build_hub_flags
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import build_host_process
 from blizzard.runner.host_config import BuiltRunner

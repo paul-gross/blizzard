@@ -24,7 +24,7 @@ def test_hosted_services_follow_committed_settings(tmp_path: Path) -> None:
     )
     client = TestClient(app)
     try:
-        assert isinstance(app.state.services.auth_throttle, LiveIpThrottle)
+        assert isinstance(app.state.hub_process.resolver.get(LiveIpThrottle), LiveIpThrottle)
         response = client.post(
             "/api/admin/settings/apply",
             json={"tracing": {"replay_max_window": 123}, "egress": {"backfill_max_window": 456}},

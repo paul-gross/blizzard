@@ -11,6 +11,7 @@ from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.observability.analytics.derivation import EventDerivationService
 from blizzard.hub.domain.observability.analytics.extraction import FileReadExtractor
+from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION
 from tests.support.scaffolding import HubHarness, build_hub
@@ -36,8 +37,8 @@ def test_a_new_tenant_is_minted_against_the_actions_the_hub_was_built_with(tmp_p
     bare = build_hub(tmp_path / "bare", actions=HubActions.of([]))
     served_before, bare_before = _graph_count(served), _graph_count(bare)
 
-    served.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator")
-    bare.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator")
+    served.resolve_hub(TenantAdministration).create("acme", admin_user_id=None, by="usr_creator")
+    bare.resolve_hub(TenantAdministration).create("acme", admin_user_id=None, by="usr_creator")
 
     # A catalogue naming no actions refuses each packaged graph that names one; only the injected catalogue can say so.
     assert _graph_count(served) - served_before > _graph_count(bare) - bare_before

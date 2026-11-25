@@ -271,6 +271,40 @@ class TenantAnnotation:
             self._memory.record_annotated_sources(entered=change.entered, left=change.left, at=self._clock.now())
 
 
+class TenantAnnotations:
+    """Each open tenant's :class:`TenantAnnotation`, and the open tenants' ids, through the typed tenant accessors the
+    process root binds over its tenant scopes and open tenants once they are built; it refuses a tenant as that
+    tenant's scope refuses."""
+
+    def __init__(self) -> None:
+        self._open: Callable[[TenantId], TenantAnnotation] | None = None
+        self._every: Callable[[], Iterable[TenantId]] | None = None
+
+    def bind(self, open: Callable[[TenantId], TenantAnnotation], every: Callable[[], Iterable[TenantId]]) -> None:
+        self._open = open
+        self._every = every
+
+    def __call__(self, tenant: TenantId) -> TenantAnnotation:
+        assert self._open is not None  # bound by the process root before the process is handed out
+        return self._open(tenant)
+
+    def every(self) -> Iterable[TenantId]:
+        """Every open tenant's id."""
+        assert self._every is not None  # bound by the process root before the process is handed out
+        return self._every()
+
+
+class LiveAnnotationInterval:
+    """The forge-status pass's interval in seconds, read live: what bounds how stale a skipped pass may leave the
+    forge."""
+
+    def __init__(self, read: Callable[[], int]) -> None:
+        self._read = read
+
+    def seconds(self) -> int:
+        return self._read()
+
+
 class AnnotationReconciler:
     """The forge-status pass, one per hub. Holds, in memory only, each tenant's probe, last converged
     instant and sources in a read outage (a skip is announced once per outage; a restart announces a
