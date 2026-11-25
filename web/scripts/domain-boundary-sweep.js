@@ -40,6 +40,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 const ts = require("typescript");
 const { createProgram } = require("./placement-sweep");
 
@@ -70,7 +71,12 @@ const BACKEND_CITATION = new RegExp(
 /** @param {string} p */
 const toPosix = (p) => p.split(path.sep).join("/");
 
-/** Every `.ts` file under `dir`, as `projects/`-relative posix paths.
+const IGNORED_SOURCE_DIRS = new Set([
+  "node_modules", "dist", "build", ".git", ".angular", ".venv", "__pycache__", ".pytest_cache",
+  ".ruff_cache", ".hypothesis", ".vitest-attachments",
+]);
+
+/** Every `.ts` file under `dir`, including hidden source folders.
  * @param {string} dir absolute
  * @returns {string[]}
  */
@@ -80,9 +86,9 @@ function walkTs(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name === "node_modules") continue;
+      if (IGNORED_SOURCE_DIRS.has(entry.name)) continue;
       out.push(...walkTs(full));
-    } else if (entry.name.endsWith(".ts")) {
+    } else if (entry.isFile() && entry.name.endsWith(".ts")) {
       out.push(full);
     }
   }
@@ -512,7 +518,43 @@ function sweepDomainBoundary({ root, memory = null, unitOf, exempt }) {
  * must-catch or a must-pass, `fleet` barrels and a same-name domain declaration included, beside an
  * exempted unit that fails without its entry and an entry that excuses nothing.
  */
+// Use a disk-backed tree: an in-memory program alone cannot prove source enumeration.
+function assertDomainBoundaryDiskEnumerationWorks() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "domain-boundary-"));
+  try {
+    const projects = path.join(root, "projects");
+    const files = {
+      "fleet/src/lib/api/hub/types.gen.ts": "export type ChunkDetail = { id: string };",
+      "fleet/src/public-api.ts": "export type { ChunkDetail as Detail } from './lib/api/hub/types.gen';",
+      "fleet/src/lib/testing/transport/stub.ts": "export const stub = 1;",
+      "fleet/src/lib/testing/public-api.ts": "export { stub } from './transport/stub';",
+      "fleet/.storybook/indirect.ts": "import type { Detail } from 'fleet'; export let d: Detail;",
+      "fleet/.storybook/transport.ts": "import { stub } from 'fleet/testing'; export const x = stub;",
+      "fleet/node_modules/ignored.ts": "export const x = 1;",
+      "fleet/.angular/ignored.ts": "export const x = 1;",
+    };
+    for (const [name, text] of Object.entries(files)) {
+      const file = path.join(projects, name);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, text);
+    }
+    const sources = walkSources(projects);
+    if (!sources.includes(toPosix(path.join(projects, "fleet/.storybook/indirect.ts"))) ||
+        sources.some((file) => file.endsWith("/ignored.ts"))) {
+      throw new Error("domain-boundary disk enumeration missed Storybook or entered an ignored directory");
+    }
+    const result = sweepDomainBoundary({ root, unitOf: () => "fixture", exempt: [] });
+    if (!result.consumers.some((c) => c.file === "fleet/.storybook/indirect.ts") ||
+        !result.reach.some((r) => r.file === "fleet/.storybook/transport.ts")) {
+      throw new Error("domain-boundary disk fixture missed Storybook generated-origin or transport reach");
+    }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function assertDomainBoundaryDetectorWorks() {
+  assertDomainBoundaryDiskEnumerationWorks();
   const root = "/boundary-fixture";
   const p = `${root}/projects`;
   const wire = "../../../../fleet/src/lib/api/hub/types.gen";

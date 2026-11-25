@@ -8,7 +8,7 @@ const { createProgram } = require('./placement-sweep');
 const ROOT = path.resolve(__dirname, '..');
 const INVENTORY = {
   'hub/src/app/core/projects.query.ts': ['projectsQueryOptions', 'injectProjectsQuery'],
-  'hub/src/app/core/chunks.query.ts': ['injectHubBoardChunksQuery'],
+  'hub/src/app/core/chunks.query.ts': ['injectHubBoardChunksQuery', 'boardChunksQueryOptions', 'runnerChunksQueryOptions'],
   'hub/src/app/core/runners.query.ts': ['injectHubRunnersQuery'],
   'hub/src/app/admin/forges/forges.query.ts': ['injectForgesQuery', 'injectForgeQuery'],
   'hub/src/app/board/questions/questions.query.ts': ['injectHubQuestionsQuery'],
@@ -285,6 +285,11 @@ function assertRetirementCensusWorks() {
   const base = `${root}/projects/hub/src/app`;
   const memory = new Map(Object.entries({
     [`${base}/core/projects.query.ts`]: 'export function injectProjectsQuery() {}',
+    [`${base}/core/chunks.query.ts`]: 'export function boardChunksQueryOptions() {} export function runnerChunksQueryOptions() {} export function boardChunksReadOptions() {} export interface BoardChunksRead {}',
+    [`${base}/chunks-barrel.ts`]: "export { boardChunksQueryOptions as boardOld, runnerChunksQueryOptions as runnerOld } from './core/chunks.query';",
+    [`${base}/chunks-consumer.ts`]: "import { boardOld, runnerOld } from './chunks-barrel'; boardOld(); runnerOld();",
+    [`${base}/chunks-legal.ts`]: "import { boardChunksReadOptions, type BoardChunksRead } from './core/chunks.query'; boardChunksReadOptions(); let x: BoardChunksRead;",
+
     [`${base}/barrel.ts`]: "export { injectProjectsQuery as old } from './core/projects.query';",
     [`${base}/nested.ts`]: "export { old as renamed } from './barrel';",
     [`${root}/projects/fleet/.storybook/retired-proof.ts`]: "import { renamed as forbidden } from '../../hub/src/app/nested'; forbidden();",
@@ -330,16 +335,23 @@ function assertRetirementCensusWorks() {
     throw new Error('retirement census source enumeration missed Storybook or traversed dependencies');
   }
   const result = census(root, enumerated, memory).join('\n');
-  for (const name of ['retired-proof.ts', 'projects.query.ts', 'barrel.ts', 'nested.ts', 'consumer.ts', 'star.ts', 'local.ts', 'final.ts', 'ns-consumer.ts', 'ns-barrel.ts', 'ns-use.ts', 'ns-named.ts', 'ns-bracket.ts', 'ns-type.ts']) {
+  for (const name of ['chunks-barrel.ts', 'chunks-consumer.ts', 'retired-proof.ts', 'projects.query.ts', 'barrel.ts', 'nested.ts', 'consumer.ts', 'star.ts', 'local.ts', 'final.ts', 'ns-consumer.ts', 'ns-barrel.ts', 'ns-use.ts', 'ns-named.ts', 'ns-bracket.ts', 'ns-type.ts']) {
     if (!result.includes(name)) throw new Error(`retirement census missed ${name}`);
   }
-  for (const name of ['legal.ts', 'private.translate.ts', 'transport.ts', 'legal-ns.ts', 'legal-generated.ts', 'generated.gen.ts']) {
+  for (const name of ['boardChunksQueryOptions', 'runnerChunksQueryOptions']) {
+    if (!result.includes(`retired ${name}`)) throw new Error(`retirement census missed ${name}`);
+  }
+  for (const name of ['chunks-legal.ts', 'legal.ts', 'private.translate.ts', 'transport.ts', 'legal-ns.ts', 'legal-generated.ts', 'generated.gen.ts']) {
     if (result.includes(name)) throw new Error(`retirement census falsely reported ${name}`);
   }
   memory.set(`${base}/core/projects.query.ts`, 'export const unrelated = 1;');
+  memory.set(`${base}/core/chunks.query.ts`, 'export function boardChunksReadOptions() {} export interface BoardChunksRead {}');
   const dangling = census(root, [...memory.keys()], memory).join('\n');
-  for (const name of ['retired-proof.ts', 'barrel.ts', 'nested.ts', 'consumer.ts', 'star.ts', 'local.ts', 'final.ts', 'ns-consumer.ts', 'ns-barrel.ts', 'ns-use.ts', 'ns-named.ts', 'ns-bracket.ts', 'ns-type.ts']) {
+  for (const name of ['chunks-barrel.ts', 'chunks-consumer.ts', 'retired-proof.ts', 'barrel.ts', 'nested.ts', 'consumer.ts', 'star.ts', 'local.ts', 'final.ts', 'ns-consumer.ts', 'ns-barrel.ts', 'ns-use.ts', 'ns-named.ts', 'ns-bracket.ts', 'ns-type.ts']) {
     if (!dangling.includes(name)) throw new Error(`retirement census missed dangling ${name}`);
+  }
+  for (const name of ['boardOld', 'runnerOld']) {
+    if (!dangling.includes(`retired reference ${name}`)) throw new Error(`retirement census missed dangling ${name}`);
   }
   for (const name of RETIRED_NAMES) {
     if (!proseLines('guide.md', `Use \`${name}\` instead`).length) throw new Error(`prose census missed ${name}`);
