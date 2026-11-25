@@ -29,7 +29,7 @@ from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.auth.auth_state import IReadAuthStateRepository
 from blizzard.hub.auth.errors import RepoErrorFactory
-from blizzard.hub.auth.facts import IReadAuthFactsRepository
+from blizzard.hub.auth.facts import AuthFactsService, IReadAuthFactsRepository
 from blizzard.hub.auth.hub_admins import HubAdminFact, IReadHubAdminRepository
 from blizzard.hub.auth.identities import IReadIdentityRepository
 from blizzard.hub.auth.internal.auth_facts_repository import AuthFactsRepository
@@ -37,6 +37,7 @@ from blizzard.hub.auth.internal.auth_state_repository import AuthStateRepository
 from blizzard.hub.auth.internal.hub_admin_repository import HubAdminRepository
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
 from blizzard.hub.auth.internal.membership_repository import MembershipRepository
+from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.invitations import (
@@ -48,6 +49,7 @@ from blizzard.hub.auth.invitations import (
 )
 from blizzard.hub.auth.memberships import IReadMembershipRepository, MembershipFact
 from blizzard.hub.auth.models import AuthStateEntry, Identity, SuperuserBootstrap, User
+from blizzard.hub.auth.service import AuthService
 from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IReadSuperuserBootstrapRepository
 from blizzard.hub.auth.users import IReadUserRepository
@@ -161,7 +163,7 @@ from blizzard.hub.domain.graph.model import (
     IReadManyGraphs,
     IReadNodeExecutors,
 )
-from blizzard.hub.domain.observability.analytics.derivation import IReadDerivationCorpus
+from blizzard.hub.domain.observability.analytics.derivation import EventDerivationReconciler, IReadDerivationCorpus
 from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics, OperationalCriteria
@@ -242,6 +244,7 @@ from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
 from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads
 from blizzard.hub.store.internal.hub_scoped_invitations import InvitationReads
+from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.store.internal.hub_settings_store import HubSettingsStore
 from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
@@ -1241,7 +1244,7 @@ def _trace_store_of(connections: ScopedConnections, hub: HubHarness) -> TraceSto
     return TraceStore(
         connections,
         hub_events=_hub_events_of(hub),
-        corpus=hub.hub_services.hub_scoped_reads.corpus,
+        corpus=hub.resolve_hub(HubScopedReads).corpus,
         hydration=lambda _tenant: StepHydration(
             graphs=hub.services.graphs,
             names=hub.services.registry,
@@ -1254,7 +1257,7 @@ def _trace_store_of(connections: ScopedConnections, hub: HubHarness) -> TraceSto
 
 
 def _egress_store_of(connections: ScopedConnections, hub: HubHarness) -> EgressStore:
-    return EgressStore(connections, hub_events=_hub_events_of(hub), usage=hub.hub_services.hub_scoped_reads.corpus)
+    return EgressStore(connections, hub_events=_hub_events_of(hub), usage=hub.resolve_hub(HubScopedReads).corpus)
 
 
 def _hub_events_of(hub: HubHarness) -> HubEventLogStore:
@@ -1530,7 +1533,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     user_store.create(user_1)
     user_store.create(user_2)
 
-    _plaintext, session_1 = hub.hub_services.auth.mint_session(user_1)
+    _plaintext, session_1 = hub.resolve_hub(AuthService).mint_session(user_1)
     session_id_hash = session_1.id_hash
 
     identity_store.link(
@@ -1553,8 +1556,8 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         )
     )
 
-    hub.hub_services.auth_facts.login_failed(actor="anon", subject="alice@example.com", detail="bad state")
-    hub.hub_services.auth_facts.sso_refused(actor="anon", subject="alice@example.com", detail="wrong provider")
+    hub.resolve_hub(AuthFactsService).login_failed(actor="anon", subject="alice@example.com", detail="bad state")
+    hub.resolve_hub(AuthFactsService).sso_refused(actor="anon", subject="alice@example.com", detail="wrong provider")
 
     superuser_bootstrap_store.upsert(
         SuperuserBootstrap(email="root@example.com", claimed_user_id=None, updated_at=_ht(5))
@@ -1893,7 +1896,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         headers={"Authorization": f"Bearer {runner_token}"},
     )
     assert pushed.status_code == 200, pushed.text
-    hub.hub_services.event_derivation.sweep()
+    hub.resolve_hub(EventDerivationReconciler).sweep()
 
     # --- chunk record / queue ----------------------------------------------------------------
     chunk_ready_1 = "ch_hub_ready_1"
@@ -2713,15 +2716,19 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadUrgencyChunks, "open_chunks"): lambda w: w.urgency_chunks.open_chunks(w.urgency_id),
     (IReadAuthStateRepository, "get"): lambda w: w.auth_state.get(w.auth_state_value),
     (IReadAuthFactsRepository, "list_recent"): lambda w: w.auth_facts.list_recent(limit=50),
-    (IReadIdentityRepository, "get"): lambda w: w.hub.hub_services.identities.get("github", "12345"),
-    (IReadIdentityRepository, "list_for_user"): lambda w: w.hub.hub_services.identities.list_for_user(w.user_1.user_id),
-    (IReadIdentityRepository, "list_for_users"): lambda w: w.hub.hub_services.identities.list_for_users(
+    (IReadIdentityRepository, "get"): lambda w: w.hub.resolve_hub(IdentityRepository).get("github", "12345"),
+    (IReadIdentityRepository, "list_for_user"): lambda w: w.hub.resolve_hub(IdentityRepository).list_for_user(
+        w.user_1.user_id
+    ),
+    (IReadIdentityRepository, "list_for_users"): lambda w: w.hub.resolve_hub(IdentityRepository).list_for_users(
         [w.user_1.user_id, w.user_2.user_id]
     ),
-    (IReadIdentityRepository, "distinct_provider_names"): lambda w: (
-        w.hub.hub_services.identities.distinct_provider_names()
+    (IReadIdentityRepository, "distinct_provider_names"): lambda w: w.hub.resolve_hub(
+        IdentityRepository
+    ).distinct_provider_names(),
+    (IReadSessionRepository, "get_by_hash"): lambda w: w.hub.resolve_hub(SessionRepository).get_by_hash(
+        w.session_id_hash
     ),
-    (IReadSessionRepository, "get_by_hash"): lambda w: w.hub.hub_services.sessions.get_by_hash(w.session_id_hash),
     (IReadSuperuserBootstrapRepository, "get"): lambda w: w.superuser_bootstrap.get(),
     (IReadUserRepository, "get"): lambda w: w.hub.services.users.get(w.user_1.user_id),
     (IReadUserRepository, "get_by_username"): lambda w: w.hub.services.users.get_by_username("alice"),
@@ -2751,25 +2758,25 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadTranscriptEvents, "segment_contexts"): lambda w: w.transcript_events.segment_contexts(
         [w.transcript_segment_id]
     ),
-    (IReadDerivationCorpus, "derivation_signature"): lambda w: (
-        w.hub.hub_services.hub_scoped_reads.corpus.derivation_signature()
-    ),
-    (IReadDerivationCorpus, "candidacy"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.candidacy(
+    (IReadDerivationCorpus, "derivation_signature"): lambda w: w.hub.resolve_hub(
+        HubScopedReads
+    ).corpus.derivation_signature(),
+    (IReadDerivationCorpus, "candidacy"): lambda w: w.hub.resolve_hub(HubScopedReads).corpus.candidacy(
         EXTRACTOR_VERSION
     ),
-    (IReadDerivationCorpus, "derived_segment_ids"): lambda w: (
-        w.hub.hub_services.hub_scoped_reads.corpus.derived_segment_ids()
-    ),
-    (IReadWorkRefsCorpus, "live_work_refs"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.live_work_refs(),
-    (IReadWorkRefsCorpus, "live_work_refs_signature"): lambda w: (
-        w.hub.hub_services.hub_scoped_reads.corpus.live_work_refs_signature()
-    ),
-    (IReadFlowLinesCorpus, "flow_lines_signature"): lambda w: (
-        w.hub.hub_services.hub_scoped_reads.corpus.flow_lines_signature()
-    ),
-    (IReadCloseIntentCorpus, "pending_close_intents"): lambda w: (
-        w.hub.hub_services.hub_scoped_reads.corpus.pending_close_intents()
-    ),
+    (IReadDerivationCorpus, "derived_segment_ids"): lambda w: w.hub.resolve_hub(
+        HubScopedReads
+    ).corpus.derived_segment_ids(),
+    (IReadWorkRefsCorpus, "live_work_refs"): lambda w: w.hub.resolve_hub(HubScopedReads).corpus.live_work_refs(),
+    (IReadWorkRefsCorpus, "live_work_refs_signature"): lambda w: w.hub.resolve_hub(
+        HubScopedReads
+    ).corpus.live_work_refs_signature(),
+    (IReadFlowLinesCorpus, "flow_lines_signature"): lambda w: w.hub.resolve_hub(
+        HubScopedReads
+    ).corpus.flow_lines_signature(),
+    (IReadCloseIntentCorpus, "pending_close_intents"): lambda w: w.hub.resolve_hub(
+        HubScopedReads
+    ).corpus.pending_close_intents(),
     (IReadOperationalAnalytics, "durations_by_node"): lambda w: (
         w.hub.default_adapter(IReadOperationalAnalytics).durations_by_node(OperationalCriteria()),
         w.hub.default_adapter(IReadOperationalAnalytics).durations_by_node(OperationalCriteria(project=w.project_id)),
@@ -3167,27 +3174,27 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadRunnerRegistry, "runners_serving"): lambda w: w.hub.services.registry.runners_serving("proj_census"),
     (IReadRunnerRegistry, "is_retired"): lambda w: w.hub.services.registry.is_retired(HUB_RUNNER_ID),
     (IReadRunnerRegistry, "list_runners"): lambda w: w.hub.services.registry.list_runners(),
-    (CredentialReads, "runner_for_token_hash"): lambda w: (
-        w.hub.hub_services.hub_scoped_reads.credentials.runner_for_token_hash(w.runner_token_hash)
-    ),
-    (CredentialReads, "revoked_token_runner"): lambda w: (
-        w.hub.hub_services.hub_scoped_reads.credentials.revoked_token_runner(w.runner_token_hash)
-    ),
-    (CredentialReads, "runner_by_id"): lambda w: w.hub.hub_services.hub_scoped_reads.credentials.runner_by_id(
+    (CredentialReads, "runner_for_token_hash"): lambda w: w.hub.resolve_hub(
+        HubScopedReads
+    ).credentials.runner_for_token_hash(w.runner_token_hash),
+    (CredentialReads, "revoked_token_runner"): lambda w: w.hub.resolve_hub(
+        HubScopedReads
+    ).credentials.revoked_token_runner(w.runner_token_hash),
+    (CredentialReads, "runner_by_id"): lambda w: w.hub.resolve_hub(HubScopedReads).credentials.runner_by_id(
         HUB_RUNNER_ID
     ),
     (IReadHostRegistry, "get_host"): lambda w: w.hub.services.hosts.get_host(w.host_id),
     (IReadHostRegistry, "list_hosts"): lambda w: w.hub.services.hosts.list_hosts(),
     (IReadHostRegistry, "get_hosts"): lambda w: w.hub.services.hosts.get_hosts([w.host_id]),
     (IReadHostRegistry, "live_names"): lambda w: w.hub.services.hosts.live_names(),
-    (CredentialReads, "host_by_id"): lambda w: w.hub.hub_services.hub_scoped_reads.credentials.host_by_id(w.host_id),
+    (CredentialReads, "host_by_id"): lambda w: w.hub.resolve_hub(HubScopedReads).credentials.host_by_id(w.host_id),
     (IReadHostRegistry, "high_water"): lambda w: w.hub.services.hosts.high_water(w.host_id),
     (IReadHostRegistry, "usage_of"): lambda w: w.hub.services.hosts.usage_of([w.host_id]),
-    (CredentialReads, "host_for_token_hash"): lambda w: (
-        w.hub.hub_services.hub_scoped_reads.credentials.host_for_token_hash(w.host_token_hash)
-    ),
-    (CredentialReads, "revoked_token_host"): lambda w: (
-        w.hub.hub_services.hub_scoped_reads.credentials.revoked_token_host(w.revoked_host_token_hash)
+    (CredentialReads, "host_for_token_hash"): lambda w: w.hub.resolve_hub(
+        HubScopedReads
+    ).credentials.host_for_token_hash(w.host_token_hash),
+    (CredentialReads, "revoked_token_host"): lambda w: w.hub.resolve_hub(HubScopedReads).credentials.revoked_token_host(
+        w.revoked_host_token_hash
     ),
     (IReadRunnerRegistry, "list_pause_facts_since"): lambda w: w.hub.services.registry.list_pause_facts_since(
         _HUB_BASE, limit=50
@@ -3362,9 +3369,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadCadenceRepository, "get"): lambda w: w.hub.default_adapter(IReadCadenceRepository).get(w.cadence_id),
     (IReadErrandRunsRepository, "last_runs"): lambda w: w.hub.default_adapter(ErrandRunsStore).last_runs(w.errand_keys),
-    (IReadCadenceCorpus, "tenants_with_live_cadences"): lambda w: (
-        w.hub.hub_services.hub_scoped_reads.corpus.tenants_with_live_cadences()
-    ),
+    (IReadCadenceCorpus, "tenants_with_live_cadences"): lambda w: w.hub.resolve_hub(
+        HubScopedReads
+    ).corpus.tenants_with_live_cadences(),
     (IReadCadenceRepository, "get_by_slug"): lambda w: w.hub.default_adapter(IReadCadenceRepository).get_by_slug(
         w.project_id, "census-cadence"
     ),
@@ -3410,15 +3417,15 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadTraceSteps, "closing_step_facts_for"): lambda w: _trace_store_of(
         w.store_connections, w.hub
     ).closing_step_facts_for([w.chunk_transition, w.chunk_migration, w.chunk_decision_1]),
-    (IReadStepCorpus, "closing_candidates"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.closing_candidates(
+    (IReadStepCorpus, "closing_candidates"): lambda w: w.hub.resolve_hub(HubScopedReads).corpus.closing_candidates(
         _HUB_BASE, _ht(10_000), 50
     ),
-    (IReadStepCorpus, "step_facts_for"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.step_facts_for(
+    (IReadStepCorpus, "step_facts_for"): lambda w: w.hub.resolve_hub(HubScopedReads).corpus.step_facts_for(
         [w.chunk_transition, w.chunk_question, w.chunk_dependency_dependent], lambda _tenant: _label
     ),
     (IReadTraceSteps, "snapshot"): lambda w: _window_in_one_snapshot(_trace_store_of(w.store_connections, w.hub)),
-    (IReadStepCorpus, "snapshot"): lambda w: _corpus_window_in_one_snapshot(w.hub.hub_services.hub_scoped_reads.corpus),
-    (IReadUsageCorpus, "usage_after"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.usage_after(
+    (IReadStepCorpus, "snapshot"): lambda w: _corpus_window_in_one_snapshot(w.hub.resolve_hub(HubScopedReads).corpus),
+    (IReadUsageCorpus, "usage_after"): lambda w: w.hub.resolve_hub(HubScopedReads).corpus.usage_after(
         UsagePosition(_HUB_BASE), _HUB_UNTIL, 50
     ),
     (IReadTraceSteps, "newest_cursor"): lambda w: _trace_store_of(w.store_connections, w.hub).newest_cursor(),
@@ -3457,9 +3464,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadHubAdminRepository, "holders"): lambda w: _hub_admins_of(w.hub).holders(),
     (IReadInvitationRepository, "get"): lambda w: w.invitations.get(w.invitation_id),
     (IReadInvitationRepository, "list"): lambda w: w.invitations.list(),
-    (InvitationReads, "invitation_for_token_hash"): lambda w: (
-        w.hub.hub_services.hub_scoped_reads.invitations.invitation_for_token_hash(w.invitation_token_hash)
-    ),
+    (InvitationReads, "invitation_for_token_hash"): lambda w: w.hub.resolve_hub(
+        HubScopedReads
+    ).invitations.invitation_for_token_hash(w.invitation_token_hash),
     (IReadHubEventLog, "newest"): lambda w: _hub_events_of(w.hub).newest(
         ("egress-write-failed", "trace-export-failed")
     ),
@@ -3468,26 +3475,24 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadTenantTeardowns, "deletion"): lambda w: _teardowns_of(w.hub).deletion(TenantId("ten_census_missing")),
     (IReadTenantDirectory, "list_tenants"): lambda w: w.hub.resolve_hub(TenantAdministration).list_tenants(),
     (IReadOpenTenants, "open_tenants"): lambda w: w.hub.resolve_hub(IReadOpenTenants).open_tenants(),
-    (IReadEgressEvents, "markers_after"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.markers_after(
+    (IReadEgressEvents, "markers_after"): lambda w: w.hub.resolve_hub(HubScopedReads).corpus.markers_after(
         EventsPosition(_HUB_BASE), _HUB_UNTIL, 50, extractor_version=EXTRACTOR_VERSION
     ),
-    (IReadEgressEvents, "drops_after"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.drops_after(
+    (IReadEgressEvents, "drops_after"): lambda w: w.hub.resolve_hub(HubScopedReads).corpus.drops_after(
         EventsPosition(_HUB_BASE), _HUB_UNTIL, 50
     ),
     (IReadEgressEvents, "derivations"): lambda w: (
         lambda events: events.derivations(
             events.markers_after(EventsPosition(_HUB_BASE), _HUB_UNTIL, 50, extractor_version=None)
         )
-    )(w.hub.hub_services.hub_scoped_reads.corpus),
-    (IReadEgressEvents, "epochs_minted_between"): lambda w: (
-        w.hub.hub_services.hub_scoped_reads.corpus.epochs_minted_between(
-            _HUB_BASE, _HUB_UNTIL, EpochKey(w.transcript_chunk, 0), 50
-        )
-    ),
-    (IReadEgressEvents, "epoch_markers"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.epoch_markers(
+    )(w.hub.resolve_hub(HubScopedReads).corpus),
+    (IReadEgressEvents, "epochs_minted_between"): lambda w: w.hub.resolve_hub(
+        HubScopedReads
+    ).corpus.epochs_minted_between(_HUB_BASE, _HUB_UNTIL, EpochKey(w.transcript_chunk, 0), 50),
+    (IReadEgressEvents, "epoch_markers"): lambda w: w.hub.resolve_hub(HubScopedReads).corpus.epoch_markers(
         [EpochKey(w.transcript_chunk, 1)], extractor_version=EXTRACTOR_VERSION
     ),
-    (IReadEgressEvents, "epoch_drops"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.epoch_drops(
+    (IReadEgressEvents, "epoch_drops"): lambda w: w.hub.resolve_hub(HubScopedReads).corpus.epoch_drops(
         [EpochKey(w.transcript_chunk, 1)]
     ),
     (IReadTraceStatus, "newest_export_cursor"): lambda w: _trace_store_of(

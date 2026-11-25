@@ -23,7 +23,7 @@ from tests.support.scaffolding import HubHarness, add_tenant, build_hub, default
 
 def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
     """Every holder of each project-area instance in ``tenant``, by what the instance is."""
-    scope = hub.hub_services.process.tenants.open(tenant).resolver
+    scope = hub.process.tenants.open(tenant).resolver
     services = hub.hub_services.tenants.open_services(tenant)
     return {
         "project records": [
@@ -75,9 +75,9 @@ def test_every_tenant_shares_the_one_color_draw(tmp_path: Path) -> None:
     first = StoreScope(default_tenant(hub.engine))
     second = StoreScope(add_tenant(hub.engine, "second"))
     hub.hub_services.tenants.open_tenants.refresh()
-    tenants = hub.hub_services.process.tenants
+    tenants = hub.process.tenants
 
-    process_draw = hub.hub_services.process.resolver.get(ColorPick)
+    process_draw = hub.process.resolver.get(ColorPick)
 
     assert tenants.open(first).resolver.get(ColorPick) is process_draw
     assert tenants.open(second).resolver.get(ColorPick) is process_draw

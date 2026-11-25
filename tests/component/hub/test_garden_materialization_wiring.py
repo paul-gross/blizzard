@@ -33,7 +33,7 @@ from tests.support.scaffolding import HubHarness, add_tenant, build_hub, default
 
 def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
     """Every holder of each materialization collaborator in ``tenant``, by what the instance is."""
-    scope = hub.hub_services.process.tenants.open(tenant).resolver
+    scope = hub.process.tenants.open(tenant).resolver
     delivery = scope.get(GardenDeliveryRecorder)
     review = scope.get(ReviewFindingsRecorder)
     delivering = scope.get(GardenDelivery)

@@ -156,6 +156,7 @@ def test_controlled_step_reports_probe_failure_and_recovers(world: World, monkey
     app = create_hub_app(
         world.hub.wired_app.state.config,
         services=world.hub.hub_services,
+        process=world.hub.process,
         test_flow_router=flow_control_router(driver, clock, asyncio.Lock()),
     )
     probe = world.stores.corpus.flow_lines_signature
@@ -178,6 +179,7 @@ def test_controlled_step_completes_turn_and_move_does_not_run_or_publish(world: 
     app = create_hub_app(
         world.hub.wired_app.state.config,
         services=world.hub.hub_services,
+        process=world.hub.process,
         test_flow_router=flow_control_router(driver, clock, lock),
         controlled_clock_router=clock_router(clock, lock),
     )

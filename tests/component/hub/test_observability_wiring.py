@@ -9,13 +9,18 @@ from pathlib import Path
 
 from blizzard.foundation.registry.scopes import ScopeValues
 from blizzard.hub.domain.chunk.ports.work_sources import IWorkAnnotators
-from blizzard.hub.domain.observability.analytics.derivation import EventDerivationService, TenantEventDerivation
+from blizzard.hub.domain.observability.analytics.derivation import (
+    EventDerivationReconciler,
+    EventDerivationService,
+    TenantEventDerivation,
+)
 from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents, IWriteTranscriptEvents
 from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
 from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
 from blizzard.hub.domain.observability.egress.reset import EgressReset
 from blizzard.hub.domain.observability.env_timeline import EnvTimelineReading, IReadEnvTimelineFacts
 from blizzard.hub.domain.observability.forge_status import (
+    AnnotationReconciler,
     IReadAnnotatedSources,
     IWriteAnnotatedSources,
     TenantAnnotation,
@@ -62,13 +67,13 @@ _TENANT_KEYS: tuple[type[object], ...] = (
 
 def _held(hub: HubHarness, tenant: StoreScope) -> dict[type[object], object]:
     """The tenant scope's instance of each tenant key."""
-    return {key: hub.hub_services.process.tenants.resolve(tenant, key) for key in _TENANT_KEYS}
+    return {key: hub.process.tenants.resolve(tenant, key) for key in _TENANT_KEYS}
 
 
 def test_each_tenant_key_is_one_instance_every_holder_shares(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     tenant = StoreScope(default_tenant(hub.engine))
-    tenants = hub.hub_services.process.tenants
+    tenants = hub.process.tenants
     held = _held(hub, tenant)
 
     ports = {
@@ -123,14 +128,14 @@ def test_the_hub_event_log_and_invariant_check_are_each_one_process_instance_the
     tmp_path: Path,
 ) -> None:
     hub = build_hub(tmp_path)
-    process = hub.hub_services.process.resolver
+    process = hub.process.resolver
     event_log = process.get(HubEventLogService)
     check = process.get(HubInvariantCheck)
     tenant = StoreScope(default_tenant(hub.engine))
     assert hub.core is not None
 
-    assert hub.hub_services.process.tenants.resolve(tenant, HubEventLogService) is event_log
-    assert hub.hub_services.hub_event_log is event_log
+    assert hub.process.tenants.resolve(tenant, HubEventLogService) is event_log
+    assert hub.resolve_hub(HubEventLogService) is event_log
     assert hub.resolve_hub(TenantTeardown)._events is event_log
     assert process.get(EgressReset)._events is event_log
     assert event_log._events is process.get(HubEventLogStore)
@@ -142,11 +147,11 @@ def test_the_hub_event_log_and_invariant_check_are_each_one_process_instance_the
 def test_the_reconcilers_accessors_return_the_request_scopes_instance(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     tenant = StoreScope(default_tenant(hub.engine))
-    derivation = hub.hub_services.event_derivation
-    annotation = hub.hub_services.annotation
+    derivation = hub.resolve_hub(EventDerivationReconciler)
+    annotation = hub.resolve_hub(AnnotationReconciler)
     assert annotation is not None
 
-    request = hub.hub_services.process.tenants.request(tenant, ScopeValues())
+    request = hub.process.tenants.request(tenant, ScopeValues())
     try:
         assert derivation._tenant(tenant.tenant) is request.resolver.get(TenantEventDerivation)
         assert annotation._tenant(tenant.tenant) is request.resolver.get(TenantAnnotation)
@@ -159,5 +164,5 @@ def test_the_ingest_falls_back_to_the_boot_configs_transcript_caps(tmp_path: Pat
 
     hub = build_hub(tmp_path, transcript_caps=caps)
 
-    assert hub.hub_services.process.resolver.get(TranscriptCaps) == caps
+    assert hub.process.resolver.get(TranscriptCaps) == caps
     assert hub.default_adapter(TranscriptIngestService)._caps == caps

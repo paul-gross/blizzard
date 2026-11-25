@@ -2,7 +2,7 @@
 
 One place the store-backed collaborators are constructed and injected. Controllers read
 the stores through their **read** Protocols and mutate only through the services
-(``bzh:controller-read-only``); every chunk seam below — ``HubServices.chunks``'s bundle and
+(``bzh:controller-read-only``); every chunk seam below — ``TenantServices.chunks``'s bundle and
 every domain service's own narrow parameter alike — is the same instance built here."""
 
 from __future__ import annotations
@@ -30,24 +30,12 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub.api.chunk_events import AnnouncedTurns
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.version_window import HubVersionWindow
-from blizzard.hub.auth.facts import AuthFactsService
-from blizzard.hub.auth.identities import IReadIdentityRepository
-from blizzard.hub.auth.internal.identity_repository import IdentityRepository
-from blizzard.hub.auth.internal.membership_repository import MembershipRepository
-from blizzard.hub.auth.internal.session_repository import SessionRepository
-from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.invitations import IWriteInvitationRepository
-from blizzard.hub.auth.memberships import IReadMembershipRepository
-from blizzard.hub.auth.service import AuthService
-from blizzard.hub.auth.sessions import IReadSessionRepository
-from blizzard.hub.auth.throttle import LiveIpThrottle
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import HubConfig
-from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_registry import HubActions, build_hub_actions
 from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores, ITurnRunner, StepWake
 from blizzard.hub.documents.codec import IConfigCodec
-from blizzard.hub.domain.cadence.sweep import CadenceSweep
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
@@ -68,24 +56,15 @@ from blizzard.hub.domain.garden.findings.model import (
 from blizzard.hub.domain.graph.authoring import DefaultGraphService, GraphMintService
 from blizzard.hub.domain.graph.model import IReadGraphBodies, IReadGraphRepository, IReadNodeExecutors
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
-from blizzard.hub.domain.observability.analytics.derivation import (
-    EventDerivationReconciler,
-)
 from blizzard.hub.domain.observability.egress.boot import EgressPathKey
-from blizzard.hub.domain.observability.forge_status import (
-    AnnotationReconciler,
-)
-from blizzard.hub.domain.observability.hub_events import HubEventLogService
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.domain.projects.targets import ChunkTargets
 from blizzard.hub.domain.runners.host import IReadHostRegistry
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
-from blizzard.hub.domain.sweeps.roster import SweepRoster
 from blizzard.hub.domain.urgency.services import (
     UrgencyReading,
 )
-from blizzard.hub.domain.work_items.closure import CloseDrainSweep
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.egress.factory import egress_boot
 from blizzard.hub.events.broker import EventBroker
@@ -129,7 +108,7 @@ from blizzard.hub.store.tenant_guard import install_tenant_guard
 from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
-from blizzard.hub.tenancy import STORE_UNAVAILABLE, StoreScope, TenantClosed, TenantId, UnknownTenant
+from blizzard.hub.tenancy import STORE_UNAVAILABLE, StoreScope, TenantId
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 if TYPE_CHECKING:
@@ -211,48 +190,11 @@ class TenantServices:
 
 @dataclass(frozen=True)
 class HubServices:
-    """The hub-level services — identity, sessions, signing and sweeps — shared by every
-    tenant and stashed on ``app.state.services``; a tenant's own services are opened through
-    :attr:`tenants`."""
+    """The request bridge's way to a tenant's services, built by :func:`build_services` and handed to ``create_app``;
+    every hub-level owner is the process container's, resolved from ``app.state.hub_process``."""
 
-    #: Opens a tenant's services — the only way from the hub-level services to a tenant's.
+    #: Opens a tenant's services — the only way from the request bridge to a tenant's.
     tenants: TenantServicesOpener
-    #: The hub's open process container and its tenant scopes — what a request resolves through.
-    process: HubProcess
-    #: The hub-scoped reads a runner's credential resolves its tenant through — held only by the
-    #: runner-auth edge (``bzh:hub-scoped-reads-confined``).
-    hub_scoped_reads: HubScopedReads
-    #: The one thread every tenant's hub action passes run on.
-    action_loop: ActionLoop
-    #: What every tenant's services wake the flow driver through, once ``build_flow_driver`` binds it.
-    step_wake: StepWake
-    #: The hub's own occurrences — its exports', its startup — recorded in ``hub_event_log``, published to no stream.
-    hub_event_log: HubEventLogService
-    clock: IClock
-    #: The close-intent drain sweep — one pass per hub, acting in each intent's tenant.
-    close_drain: CloseDrainSweep
-    #: The cadence sweep — one pass per hub, judging and minting in each tenant holding a live cadence.
-    cadence: CadenceSweep
-    #: The session read repository — reads only (``bzh:controller-read-only``).
-    sessions: IReadSessionRepository
-    #: The identity-link read repository — a plain read, no domain service.
-    identities: IReadIdentityRepository
-    #: The user read repository — every write still goes through ``auth``.
-    users: IReadUserRepository
-    #: The membership read repository — whose memberships a request's tenant is resolved against.
-    memberships: IReadMembershipRepository
-    #: The identity domain service — sessions, the first-login linking rule, ``state``.
-    auth: AuthService
-    #: Per-IP token-bucket login throttle — ``None`` when ``[auth.login_throttle]`` turns the throttle off.
-    auth_throttle: LiveIpThrottle | None
-    #: The non-chunk auth/security fact log — ``login_failed``/``sso_refused``.
-    auth_facts: AuthFactsService
-    #: The transcript-event derivation sweep — one pass per hub, acting in each segment's tenant.
-    event_derivation: EventDerivationReconciler
-    #: The forge-status annotation sweep — one pass per hub, acting in each tenant over its own sources.
-    annotation: AnnotationReconciler | None
-    #: Every sweep built here by name, each pass under its lock — stepped by the timer and run on request.
-    sweeps: SweepRoster
 
 
 @dataclass(frozen=True)
@@ -272,13 +214,13 @@ class TenantStores:
     chunk_stores: ChunkStores
     finding_store: FindingStore
     work_item_edits: WorkItemEditService
-    #: Sealed secret rows — composition-only, never a ``HubServices`` field.
+    #: Sealed secret rows — composition-only, never a ``TenantServices`` field.
     secrets: SecretStore
-    #: Work-source records — composition-only write half; ``HubServices`` carries the read half.
+    #: Work-source records — composition-only write half; ``TenantServices`` carries the read half.
     work_source_records: WorkSourceRecordStore
-    #: Repository records — composition-only write half; ``HubServices`` carries the read half.
+    #: Repository records — composition-only write half; ``TenantServices`` carries the read half.
     repository_records: RepositoryRecordStore
-    #: Forge records — composition-only write half; ``HubServices`` carries the read half.
+    #: Forge records — composition-only write half; ``TenantServices`` carries the read half.
     forge_records: ForgeRecordStore
     #: Credential records — composition-only write half; ``TenantServices`` carries the read half.
     credential_records: CredentialRecordStore
@@ -287,9 +229,9 @@ class TenantStores:
     forge_referrers: ForgeReferrersStore
     credential_referrers: CredentialReferrersStore
     config_changes: ConfigChangeStore
-    #: Projects — composition-only write half; ``HubServices`` carries the read half.
+    #: Projects — composition-only write half; ``TenantServices`` carries the read half.
     projects: ProjectStore
-    #: Project links — composition-only write half; ``HubServices`` carries the read half.
+    #: Project links — composition-only write half; ``TenantServices`` carries the read half.
     project_links: ProjectLinkStore
     config_apply: ConfigApplyStore
     config_import: ConfigImportStore
@@ -433,7 +375,7 @@ class IOpenTenantServices(Protocol):
 
 @dataclass(frozen=True)
 class TenantServicesOpener:
-    """Opens a tenant's services — the hub-level services' only way to a tenant's."""
+    """Opens a tenant's services — the request bridge's only way to a tenant's."""
 
     open_services: IOpenTenantServices
     #: The open tenants and their names, held in memory — what a request's tenant is resolved against.
@@ -466,18 +408,6 @@ class HubCore:
     def open_tenants(self) -> dict[TenantId, str]:
         """Every open tenant's name by id, read from the store."""
         return self.hub_scoped_reads.tenants.open_tenants()
-
-    def every_open(self) -> list[TenantStores]:
-        """Every open tenant's stores, in tenant-id order — how a hub-wide job that is not a sweep (a
-        boot check, key rotation) acts in each tenant in turn. A tenant closed since the read is left
-        out: nothing acts in it again."""
-        opened: list[TenantStores] = []
-        for tenant in sorted(self.open_tenants()):
-            try:
-                opened.append(self.open(StoreScope(tenant)))
-            except (TenantClosed, UnknownTenant):
-                continue
-        return opened
 
 
 def build_hub_settings(
@@ -723,38 +653,17 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
 
 
 def build_services(core: HubCore) -> HubServices:
-    """Construct the hub-level services over the shared :class:`HubCore`, its tenant cache serving each tenant's
-    (:func:`build_tenant_services`). Every sweep and the roster are the container's, each born in its area's wiring;
-    the trace and egress sweeps are ``None`` while their export is off."""
-    clock = core.clock
+    """Serve each tenant's services from the shared :class:`HubCore`'s tenant cache (:func:`build_tenant_services`),
+    and hand back the request bridge's opener over it. Every hub-level owner is the process container's, born in its
+    area's wiring."""
     process = core.process.resolver
-    step_wake = process.get(StepWake)
-
-    parts = TenantServiceParts(clock=clock, step_wake=step_wake)
+    parts = TenantServiceParts(clock=core.clock, step_wake=process.get(StepWake))
     core.tenants.serve(TenantServing(build=lambda stores, events: build_tenant_services(stores, parts, events=events)))
     return HubServices(
-        step_wake=step_wake,
         tenants=TenantServicesOpener(
             open_services=core.open_services,
             open_tenants=process.get(OpenTenants),
         ),
-        process=core.process,
-        hub_scoped_reads=core.hub_scoped_reads,
-        action_loop=process.get(ActionLoop),
-        hub_event_log=process.get(HubEventLogService),
-        clock=clock,
-        close_drain=process.get(CloseDrainSweep),
-        cadence=process.get(CadenceSweep),
-        sessions=process.get(SessionRepository),
-        identities=process.get(IdentityRepository),
-        users=process.get(UserRepository),
-        memberships=process.get(MembershipRepository),
-        auth=process.get(AuthService),
-        auth_throttle=process.get(LiveIpThrottle),
-        auth_facts=process.get(AuthFactsService),
-        event_derivation=process.get(EventDerivationReconciler),
-        annotation=process.get(AnnotationReconciler),
-        sweeps=process.get(SweepRoster),
     )
 
 

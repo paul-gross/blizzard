@@ -169,6 +169,7 @@ def test_authorization(tmp_path: Path) -> None:
     app = create_hub_app(
         hub.wired_app.state.config,
         services=hub.hub_services,
+        process=hub.process,
         test_flow_router=flow_control_router(hub.flow_driver, clock, lock),
         controlled_clock_router=clock_router(clock, lock),
     )

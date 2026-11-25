@@ -11,6 +11,7 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.config import AUTH_MODE_OAUTH
+from blizzard.hub.domain.observability.hub_events import HubEventLogService
 from tests.support.scaffolding import HubHarness, build_hub, default_tenant, seed_hub_admin, seed_session, seed_user
 
 _T0 = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
@@ -19,7 +20,7 @@ _T0 = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
 @pytest.fixture
 def hub(tmp_path: Path) -> HubHarness:
     hub = build_hub(tmp_path, auth_mode=AUTH_MODE_OAUTH)
-    record = hub.hub_services.hub_event_log.record
+    record = hub.resolve_hub(HubEventLogService).record
     record(kind="trace-export-failed", message="export failed", detail={"error": "disk"}, at=_T0)
     record(kind="trace-export-recovered", message="export recovered", detail=None, at=_T0 + timedelta(minutes=1))
     record(kind="egress-cursor-reset", message="cursor moved", detail=None, at=_T0 + timedelta(minutes=2))

@@ -121,7 +121,7 @@ def test_a_pass_whose_lock_is_held_is_refused_and_runs_nothing() -> None:
 def test_the_hubs_roster_holds_every_sweep_it_built(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
 
-    assert hub.hub_services.sweeps.names() == [
+    assert hub.resolve_hub(SweepRoster).names() == [
         SweepName.FORGE_STATUS,
         SweepName.EVENT_DERIVATION,
         SweepName.CLOSE_DRAIN,

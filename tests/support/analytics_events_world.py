@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from blizzard.auth_core import Role
+from blizzard.hub.domain.observability.analytics.derivation import EventDerivationReconciler
 from tests.support.hub_request_auth import cookie, ingest_chunk
 from tests.support.scaffolding import HubHarness, build_hub, seed_session, seed_user
 
@@ -76,5 +77,5 @@ def seeded_hub(tmp_path: Path) -> tuple[HubHarness, str, str]:
         "/api/fleet/transcripts", json={"runner_id": "r1", "records": [record_transcript(chunk_id, turns=turns)]}
     )
     assert push.status_code == 200, push.text
-    hub.hub_services.event_derivation.sweep()
+    hub.resolve_hub(EventDerivationReconciler).sweep()
     return hub, token, chunk_id

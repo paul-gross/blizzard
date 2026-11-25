@@ -16,6 +16,7 @@ import pytest
 
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.garden.run_context import RunContext
+from blizzard.hub.domain.observability.analytics.derivation import EventDerivationReconciler
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from tests.support.scaffolding import (
     HubHarness,
@@ -152,7 +153,7 @@ def _push_transcript(hub: HubHarness, *, chunk_id: str, node_id: str, segment_id
     }
     resp = hub.client.post("/api/fleet/transcripts", json={"runner_id": "r1", "records": [record]})
     assert resp.status_code == 200, resp.text
-    hub.hub_services.event_derivation.sweep()
+    hub.resolve_hub(EventDerivationReconciler).sweep()
 
 
 def _seeded_hub(tmp_path: Path) -> tuple[HubHarness, str]:

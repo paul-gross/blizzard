@@ -21,6 +21,7 @@ from blizzard.foundation.store.utc import as_utc
 from blizzard.foundation.tenants import TenantState
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
+from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.graph.model import IWriteGraphRepository
@@ -239,7 +240,7 @@ def test_the_named_admin_is_granted_admin_and_the_creator_nothing(hub: HubHarnes
     named = hub.resolve_hub(TenantAdministration).create("acme", admin_user_id=admin.user_id, by=creator.user_id)
     unnamed = hub.resolve_hub(TenantAdministration).create("bravo", admin_user_id=None, by=creator.user_id)
 
-    memberships = hub.hub_services.memberships
+    memberships = hub.resolve_hub(MembershipRepository)
     assert memberships.role_in(named.tenant_id, admin.user_id) is Role.ADMIN
     assert memberships.role_in(named.tenant_id, creator.user_id) is None
     assert memberships.members(unnamed.tenant_id) == []

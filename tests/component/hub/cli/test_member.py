@@ -12,6 +12,7 @@ import pytest
 from click.testing import CliRunner, Result
 
 from blizzard.auth_core import Role
+from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.auth.models import User
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import AUTH_MODE_OAUTH
@@ -63,7 +64,7 @@ def test_a_tenant_admin_lists_grants_and_revokes_their_tenants_members(hub: HubH
     assert f"{cara.user_id}  cara  contributor  email=cara@example.com" in listed.output
     assert f"{ada.user_id}  ada  admin" in listed.output
     assert revoked.exit_code == 0, revoked.output
-    assert hub.hub_services.memberships.role_in(default_tenant(hub.engine), cara.user_id) is None
+    assert hub.resolve_hub(MembershipRepository).role_in(default_tenant(hub.engine), cara.user_id) is None
 
 
 def test_a_user_who_is_no_member_answers_like_an_unknown_one(hub: HubHarness) -> None:
@@ -78,7 +79,7 @@ def test_a_user_who_is_no_member_answers_like_an_unknown_one(hub: HubHarness) ->
     assert [line.replace(outsider.user_id, "<id>") for line in _said(outside)] == [
         line.replace("usr_nobody", "<id>") for line in _said(unknown)
     ]
-    assert hub.hub_services.memberships.role_in(default_tenant(hub.engine), outsider.user_id) is None
+    assert hub.resolve_hub(MembershipRepository).role_in(default_tenant(hub.engine), outsider.user_id) is None
 
 
 def test_a_hub_administrator_grants_anyone_into_the_tenant_named(hub: HubHarness) -> None:
@@ -91,8 +92,8 @@ def test_a_hub_administrator_grants_anyone_into_the_tenant_named(hub: HubHarness
     granted = cli("member", "grant", otto.user_id, "admin", "--tenant", bravo.tenant)
 
     assert granted.exit_code == 0, granted.output
-    assert hub.hub_services.memberships.role_in(bravo.tenant, otto.user_id) is Role.ADMIN
-    assert hub.hub_services.memberships.role_in(default_tenant(hub.engine), otto.user_id) is None
+    assert hub.resolve_hub(MembershipRepository).role_in(bravo.tenant, otto.user_id) is Role.ADMIN
+    assert hub.resolve_hub(MembershipRepository).role_in(default_tenant(hub.engine), otto.user_id) is None
 
 
 def test_the_hubs_refusals_reach_the_operator(hub: HubHarness) -> None:
@@ -103,7 +104,7 @@ def test_the_hubs_refusals_reach_the_operator(hub: HubHarness) -> None:
 
     assert own.exit_code != 0
     assert "Error:" in own.output
-    assert hub.hub_services.memberships.role_in(default_tenant(hub.engine), ada.user_id) is Role.ADMIN
+    assert hub.resolve_hub(MembershipRepository).role_in(default_tenant(hub.engine), ada.user_id) is Role.ADMIN
 
 
 @pytest.mark.parametrize("role", ["superuser", "pending"])

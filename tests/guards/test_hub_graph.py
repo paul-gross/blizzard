@@ -119,6 +119,7 @@ def _hub(
     versions: bool = False,
     trace_export: bool = False,
     egress_export: bool = False,
+    controlled_clock: bool = False,
 ) -> LegacyRegistry:
     registry = LegacyRegistry()
     register_hub(
@@ -128,6 +129,7 @@ def _hub(
         versions=versions,
         trace_export=trace_export,
         egress_export=egress_export,
+        controlled_clock=controlled_clock,
     )
     return registry
 
@@ -156,27 +158,36 @@ def _second_memberships(connections: HubStoreConnections) -> MembershipRepositor
 
 
 @pytest.mark.parametrize(
-    ("store_backed", "settings", "versions", "exports"),
+    ("store_backed", "settings", "versions", "exports", "controlled"),
     [
-        (True, True, True, False),
-        (True, True, True, True),
-        (True, False, True, False),
-        (True, True, False, False),
-        (False, False, False, False),
+        (True, True, True, False, False),
+        (True, True, True, True, False),
+        (True, False, True, False, False),
+        (True, True, False, False, False),
+        (True, True, True, False, True),
+        (False, False, False, False, False),
+        (False, False, False, False, True),
     ],
     ids=[
         "store-backed",
         "store-backed-exporting",
         "store-backed-settings-less",
         "store-backed-windowless",
+        "store-backed-controlled-clock",
         "store-free",
+        "store-free-controlled-clock",
     ],
 )
 def test_the_hub_graph_builds_and_keeps_every_registration_rule(
-    store_backed: bool, settings: bool, versions: bool, exports: bool
+    store_backed: bool, settings: bool, versions: bool, exports: bool, controlled: bool
 ) -> None:
     registry = _hub(
-        store_backed=store_backed, settings=settings, versions=versions, trace_export=exports, egress_export=exports
+        store_backed=store_backed,
+        settings=settings,
+        versions=versions,
+        trace_export=exports,
+        egress_export=exports,
+        controlled_clock=controlled,
     )
     assert graph_builds(registry, HUB_LIFETIMES, ScopeValues()) == []
     assert duplicate_owners(registry) == []

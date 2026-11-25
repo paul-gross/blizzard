@@ -24,7 +24,7 @@ from tests.support.scaffolding import HubHarness, add_tenant, build_hub, default
 
 def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
     """Every holder of each garden run-read instance in ``tenant``, by what the instance is."""
-    scope = hub.hub_services.process.tenants.open(tenant).resolver
+    scope = hub.process.tenants.open(tenant).resolver
     return {
         "trends": [
             scope.get(GardenTrendStore),

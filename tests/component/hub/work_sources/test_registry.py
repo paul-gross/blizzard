@@ -23,6 +23,7 @@ from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ForgeEdit
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceEdit, WorkSourceId, WorkSourceSlug
 from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
+from blizzard.hub.domain.observability.forge_status import AnnotationReconciler
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
@@ -42,6 +43,11 @@ from tests.support.work_source_registry_ops import (
 
 # Re-exported so pytest resolves the shared `forge` fixture here; the tests request it by name.
 _FIXTURES = (forge,)
+
+
+def _annotation(client: TestClient) -> AnnotationReconciler:
+    """The hosted hub's forge-status annotation sweep, resolved from its process container."""
+    return cast(FastAPI, client.app).state.hub_process.resolver.get(AnnotationReconciler)
 
 
 @pytest.fixture
@@ -145,17 +151,16 @@ def test_the_annotation_sweep_reads_the_annotating_set_each_pass(
     double, forge_url = forge
     source_id = create(client, services, forge_url)
     promote(client, "widget:1")
-    assert services.annotation is not None
 
-    services.annotation.sweep()
+    _annotation(client).sweep()
     assert forge_state(double)["issue_labels"] == {}
 
     assert client.patch(f"/api/work-sources/{source_id}", json={"annotate": True}).status_code == 200
-    services.annotation.sweep()
+    _annotation(client).sweep()
     assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}
 
     assert client.patch(f"/api/work-sources/{source_id}", json={"annotate": False}).status_code == 200
-    services.annotation.sweep()
+    _annotation(client).sweep()
     assert forge_state(double)["issue_labels"]["acme/widget#1"] == set()
 
 

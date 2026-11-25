@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.event_log import EventLogSeverity
+from blizzard.hub.domain.observability.analytics.derivation import EventDerivationReconciler
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.internal.chunk_events_store import ChunkEventsStore
 from blizzard.hub.store.internal.chunk_usage_store import ChunkUsageStore
@@ -149,7 +150,7 @@ def test_event_analytics_and_their_stream_narrow_to_a_projects_chunks(tmp_path: 
     b1 = _ingest(hub, "2", "beta")
     _push_transcript(hub, d1, "src/default.py")
     _push_transcript(hub, b1, "src/beta.py")
-    hub.hub_services.event_derivation.sweep()
+    hub.resolve_hub(EventDerivationReconciler).sweep()
 
     def event_chunks(**params: str) -> list[str]:
         resp = hub.client.get("/api/analytics/events", params=params)

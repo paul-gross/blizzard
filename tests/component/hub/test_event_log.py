@@ -18,7 +18,7 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub import app as hub_app
 from blizzard.hub import event_log_opener
 from blizzard.hub import runtime as hub_runtime
-from blizzard.hub.domain.observability.hub_events import HubEvent
+from blizzard.hub.domain.observability.hub_events import HubEvent, HubEventLogService
 from blizzard.hub.secrets import ENV_SECRET_KEY
 from blizzard.hub.store import schema
 from tests.support.config_inputs import build_hosted_hub_app, init_hub, load_hub_config, migrate_hub
@@ -85,7 +85,9 @@ def test_a_rejected_tracing_setting_is_announced_in_the_hub_log_not_the_tenants(
     hub = build_hub(tmp_path)
 
     hub_app.announce_rejected_tracing(
-        TracingSettings(state="rejected", setting="OTEL_EXPORTER_OTLP_PROTOCOL", value="grpc"), hub.hub_services
+        TracingSettings(state="rejected", setting="OTEL_EXPORTER_OTLP_PROTOCOL", value="grpc"),
+        hub.resolve_hub(HubEventLogService),
+        hub.clock,
     )
 
     assert hub_event_kinds(hub.engine) == ["trace-config-rejected"]

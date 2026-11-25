@@ -29,8 +29,10 @@ from blizzard.auth_core import Role
 from blizzard.foundation.sign_in_refusal import SignInRefusal
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
+from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.auth.invitations import InvitationToken, TenantInvitation
 from blizzard.hub.auth.models import Identity, ProviderIdentity
+from blizzard.hub.auth.service import AuthService
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantClosed, TenantId
 from tests.support.invitation_reads import resolved_after_first_read
@@ -155,7 +157,7 @@ def test_an_existing_member_records_the_acceptance_and_keeps_their_role(tmp_path
     assert landed.status_code == 302, landed.text
     assert parse_qs(urlsplit(landed.headers["location"]).query) == {"tenant": [tenant]}
     assert _rows(hub, schema.membership_facts) == memberships_before
-    assert hub.hub_services.memberships.role_in(tenant, member.user_id) is Role.ADMIN
+    assert hub.resolve_hub(MembershipRepository).role_in(tenant, member.user_id) is Role.ADMIN
     [fact] = _rows(hub, schema.invitation_facts)
     assert (fact.invitation_id, fact.kind, fact.actor_user_id) == (invitation_id, "accepted", member.user_id)
 
@@ -175,8 +177,8 @@ def test_an_unlinked_identity_joins_the_account_holding_the_invited_address_in_a
     assert [user.id for user in _rows(hub, schema.users)] == [member.user_id]
     [link] = _rows(hub, schema.identities)
     assert (link.provider_name, link.subject, link.user_id) == ("github", "4242", member.user_id)
-    assert hub.hub_services.memberships.role_in(other.tenant, member.user_id) is Role.GUEST
-    assert hub.hub_services.memberships.role_in(default_tenant(hub.engine), member.user_id) is Role.CONTRIBUTOR
+    assert hub.resolve_hub(MembershipRepository).role_in(other.tenant, member.user_id) is Role.GUEST
+    assert hub.resolve_hub(MembershipRepository).role_in(default_tenant(hub.engine), member.user_id) is Role.CONTRIBUTOR
     [fact] = _rows(hub, schema.invitation_facts)
     assert (fact.invitation_id, fact.actor_user_id) == (invitation_id, member.user_id)
 
@@ -193,8 +195,8 @@ def test_the_account_holding_the_invited_address_exactly_wins_over_one_holding_i
     _sign_in(hub, token)
 
     assert len(_rows(hub, schema.users)) == 2
-    assert hub.hub_services.memberships.role_in(other.tenant, exact.user_id) is Role.GUEST
-    assert hub.hub_services.memberships.role_in(other.tenant, other_case.user_id) is None
+    assert hub.resolve_hub(MembershipRepository).role_in(other.tenant, exact.user_id) is Role.GUEST
+    assert hub.resolve_hub(MembershipRepository).role_in(other.tenant, other_case.user_id) is None
 
 
 def test_several_accounts_holding_the_invited_address_in_other_cases_name_no_one_and_are_recorded(
@@ -213,8 +215,8 @@ def test_several_accounts_holding_the_invited_address_in_other_cases_name_no_one
     assert parse_qs(urlsplit(landed.headers["location"]).query) == {"tenant": [other.tenant]}
     [minted] = [user for user in _rows(hub, schema.users) if user.id not in {h.user_id for h in holders}]
     assert (minted.username, minted.email) == ("ada", "ada@home.example")
-    assert hub.hub_services.memberships.role_in(other.tenant, minted.id) is Role.GUEST
-    assert all(hub.hub_services.memberships.role_in(other.tenant, h.user_id) is None for h in holders)
+    assert hub.resolve_hub(MembershipRepository).role_in(other.tenant, minted.id) is Role.GUEST
+    assert all(hub.resolve_hub(MembershipRepository).role_in(other.tenant, h.user_id) is None for h in holders)
     [ambiguous] = [fact for fact in _rows(hub, schema.auth_facts) if fact.kind == "invitation_address_ambiguous"]
     assert (ambiguous.actor, ambiguous.subject) == (invitation_id, _WORK.lower())
 
@@ -320,7 +322,7 @@ def test_an_acceptance_claims_the_superuser_only_through_an_identity_vouching_fo
         IdentityRepository(hub_store_connections(hub.engine), RepoErrorFactory(structlog.get_logger("test"))).link(
             Identity("github", "4242", holder.user_id, "ada", hub.clock.now())
         )
-    hub.hub_services.auth.record_superuser_bootstrap(email=target, claimed_user_id=None)
+    hub.resolve_hub(AuthService).record_superuser_bootstrap(email=target, claimed_user_id=None)
     other = hub.add_tenant("other")
     _invitation_id, token = seed_invitation(hub.engine, other.tenant, _WORK, Role.GUEST)
 
@@ -339,15 +341,15 @@ def test_a_signed_in_person_is_admitted_into_one_more_tenant_when_their_account_
 ) -> None:
     hub, _github = _hub(tmp_path, _ada())
     member = seed_user(hub, username="ada", role=Role.CONTRIBUTOR, email="ada@home.example")
-    session, _ = hub.hub_services.auth.mint_session(member)
+    session, _ = hub.resolve_hub(AuthService).mint_session(member)
     other = hub.add_tenant("other")
     _invitation_id, token = seed_invitation(hub.engine, other.tenant, _WORK, Role.GUEST)
 
     landed = _sign_in(hub, token, session=session)
 
     assert parse_qs(urlsplit(landed.headers["location"]).query) == {"tenant": [other.tenant]}
-    assert hub.hub_services.memberships.role_in(other.tenant, member.user_id) is Role.GUEST
-    assert hub.hub_services.memberships.role_in(default_tenant(hub.engine), member.user_id) is Role.CONTRIBUTOR
+    assert hub.resolve_hub(MembershipRepository).role_in(other.tenant, member.user_id) is Role.GUEST
+    assert hub.resolve_hub(MembershipRepository).role_in(default_tenant(hub.engine), member.user_id) is Role.CONTRIBUTOR
 
 
 def test_a_signed_in_person_whose_account_lacks_the_address_is_refused_and_keeps_their_session(
@@ -355,7 +357,7 @@ def test_a_signed_in_person_whose_account_lacks_the_address_is_refused_and_keeps
 ) -> None:
     hub, _github = _hub(tmp_path, _ada(emails=("ada@home.example",)))
     member = seed_user(hub, username="ada", role=Role.CONTRIBUTOR, email="ada@home.example")
-    session, _ = hub.hub_services.auth.mint_session(member)
+    session, _ = hub.resolve_hub(AuthService).mint_session(member)
     other = hub.add_tenant("other")
     _invitation_id, token = seed_invitation(hub.engine, other.tenant, _WORK, Role.GUEST)
     before = _written(hub)
@@ -363,7 +365,7 @@ def test_a_signed_in_person_whose_account_lacks_the_address_is_refused_and_keeps
     _refused(_sign_in(hub, token, session=session), SignInRefusal.INVITATION_EMAIL_MISMATCH)
 
     assert _written(hub) == before
-    assert hub.hub_services.memberships.role_in(other.tenant, member.user_id) is None
+    assert hub.resolve_hub(MembershipRepository).role_in(other.tenant, member.user_id) is None
     me = _me(hub, session)
     assert me.status_code == 200, me.text
 
@@ -373,10 +375,13 @@ def test_an_invitation_is_accepted_at_most_once(tmp_path: Path) -> None:
     tenant = default_tenant(hub.engine)
     invitation_id, _token = seed_invitation(hub.engine, tenant, _WORK, Role.GUEST)
     invitation = TenantInvitation(tenant, invitation_id)
-    assert hub.hub_services.auth.accept_invitation(_ada(), provider_name="github", invitation=invitation) is not None
+    assert (
+        hub.resolve_hub(AuthService).accept_invitation(_ada(), provider_name="github", invitation=invitation)
+        is not None
+    )
     after_first = _written(hub)
 
-    again = hub.hub_services.auth.accept_invitation(_ada(), provider_name="github", invitation=invitation)
+    again = hub.resolve_hub(AuthService).accept_invitation(_ada(), provider_name="github", invitation=invitation)
 
     assert again is SignInRefusal.INVITATION_UNUSABLE
     assert _written(hub) == after_first
@@ -424,7 +429,7 @@ def test_a_failure_part_way_leaves_nothing_behind(tmp_path: Path) -> None:
     before = _written(hub)
 
     with pytest.raises(TenantClosed):
-        hub.hub_services.auth.accept_invitation(
+        hub.resolve_hub(AuthService).accept_invitation(
             _ada(), provider_name="github", invitation=TenantInvitation(other.tenant, invitation_id)
         )
 

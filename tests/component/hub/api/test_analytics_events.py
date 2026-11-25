@@ -10,6 +10,7 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.hub.api.analytics import EventScopeFilters, ScopeFilters, ndjson_lines
 from blizzard.hub.domain.kernel.pagination import encode_cursor
+from blizzard.hub.domain.observability.analytics.derivation import EventDerivationReconciler
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
 from tests.support.analytics_events_world import record_transcript, seeded_hub, tool_turn
@@ -147,7 +148,7 @@ def test_events_filter_by_provenance(tmp_path: Path) -> None:
         },
     )
     assert push.status_code == 200, push.text
-    hub.hub_services.event_derivation.sweep()
+    hub.resolve_hub(EventDerivationReconciler).sweep()
 
     resp = hub.client.get("/api/analytics/events", params={"harness_id": "opencode"}, headers=cookie(token))
     assert [e["subject"] for e in resp.json()["events"]] == ["src/b.py"]
@@ -264,7 +265,7 @@ def test_both_encodings_carry_each_stored_payload_verbatim_including_non_ascii(t
         "/api/fleet/transcripts", json={"runner_id": "r1", "records": [record_transcript(chunk_id, turns=turns)]}
     )
     assert push.status_code == 200, push.text
-    hub.hub_services.event_derivation.sweep()
+    hub.resolve_hub(EventDerivationReconciler).sweep()
     criteria = EventScopeFilters(ScopeFilters(None, None, None, None), None, None, None, None, None).criteria
     stored = [
         e.payload
@@ -357,7 +358,7 @@ def test_counts_by_agent_type_counts_the_work_done_under_a_sidechain_not_the_spa
         "/api/fleet/transcripts", json={"runner_id": "r1", "records": [record_transcript(chunk_id, turns=[spawn])]}
     )
     assert push.status_code == 200, push.text
-    hub.hub_services.event_derivation.sweep()
+    hub.resolve_hub(EventDerivationReconciler).sweep()
 
     resp = hub.client.get("/api/analytics/counts/agent-types", headers=cookie(token))
 

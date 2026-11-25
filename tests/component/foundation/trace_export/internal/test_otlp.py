@@ -123,7 +123,7 @@ def test_the_sweep_tells_assembled_steps_to_the_sink(tmp_path: Path, sink: OtlpS
         resource=_RESOURCE, scope=INSTRUMENTATION_SCOPE, scope_version=INSTRUMENTATION_SCOPE_VERSION
     )
     hub, graph = trace_hub(tmp_path, trace_exporter=exporter, tracing=TracingConfig(settle_seconds=0))
-    sweep = trace_sweep_of(hub.hub_services)
+    sweep = trace_sweep_of(hub)
     assert sweep is not None
     sweep.sweep()
     moved, stopped = transitioned_and_stopped(hub, graph, 1)

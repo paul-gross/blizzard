@@ -1,19 +1,20 @@
 """The API edge's registrations: each tenant's one chunk-frame loader, over the frame reads and the tenant's broker, the
 reads a flow line and a chunk read render from, and the hub's version window, the process value a root serving runners
-supplies.
+supplies, and the hidden clock controls a controlled process clock is served with.
 
-The store-free graph declares the tenant records absent, and a root that supplies no window declares the window
-absent."""
+The store-free graph declares the tenant records absent, a root that supplies no window declares the window absent, and
+a process whose clock is not controlled holds no clock controls."""
 
 from __future__ import annotations
 
 from typing import Any, cast
 
-from blizzard.foundation.clock import IClock
+from blizzard.foundation.clock import ControlledClock, IClock
 from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
 from blizzard.hub.api.chunk_events import AnnouncedTurns, announce_minted
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.chunk_views import ChunkViewReads
+from blizzard.hub.api.clock import ClockControlLock, ClockControls, clock_control_lock, clock_controls
 from blizzard.hub.api.flow_places import FlowLineReads
 from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.api.queue import QueueReads
@@ -110,3 +111,17 @@ def register_version_window(registry: Registry) -> Ref[HubVersionWindow]:
 def register_version_window_absent(registry: Registry) -> None:
     """Declare the hub's version window absent, for a root that supplies none."""
     registry.absent(port(HubVersionWindow), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+
+
+def register_clock_controls(registry: Registry, *, controlled: bool) -> None:
+    """Declare the clock-control lock and the controlled clock's routes once per process, over the controlled clock the
+    root supplies, when ``controlled`` is set; each ``T | None`` is ``None`` otherwise."""
+    if controlled:
+        registry.context(port(ControlledClock), lifetime=Lifetime.PROCESS)
+        lock = registry.factory(clock_control_lock, lifetime=Lifetime.PROCESS)
+        controls = registry.factory(clock_controls, lifetime=Lifetime.PROCESS)
+        registry.optional(port(ClockControlLock), lock, lifetime=Lifetime.PROCESS)
+        registry.optional(port(ClockControls), controls, lifetime=Lifetime.PROCESS)
+        return
+    for missing in (ClockControlLock, ClockControls):
+        registry.optional(port(missing), None, lifetime=Lifetime.PROCESS)

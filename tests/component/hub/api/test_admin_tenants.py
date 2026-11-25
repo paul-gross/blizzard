@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
+from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.domain.tenancy import teardown
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
@@ -84,7 +85,9 @@ def test_a_hub_administrator_creates_lists_and_renames_tenants(hub: HubHarness) 
         (default_tenant(hub.engine), "default", "open"),
         (created["tenant_id"], "acme-two", "open"),
     }
-    assert hub.hub_services.memberships.role_in(TenantId(str(created["tenant_id"])), admin.user_id) is Role.ADMIN
+    assert (
+        hub.resolve_hub(MembershipRepository).role_in(TenantId(str(created["tenant_id"])), admin.user_id) is Role.ADMIN
+    )
 
 
 def test_a_tenant_created_through_the_route_holds_its_default_project_created_by_the_administrator(

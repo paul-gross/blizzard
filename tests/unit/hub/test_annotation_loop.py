@@ -309,8 +309,7 @@ class _FakeWorkSources:
 
 
 class _FakeServices:
-    """A minimal stand-in for ``HubServices`` — only the attributes ``lifespan``
-    reads: ``sweeps`` (the roster over ``annotation``, when given, ``close_drain``, ``event_derivation`` and
+    """A minimal stand-in for the hub's process — only what ``lifespan`` resolves: ``sweeps`` (the roster over ``annotation``, when given, ``close_drain``, ``event_derivation`` and
     ``tenant_teardown_sweep``, with no trace or egress export, resolved through ``process.resolver``), ``action_loop``
     (resolved there too, started and stopped around the sweeps), and ``process.tenants`` (closed before the loop
     stops)."""
@@ -351,12 +350,11 @@ class _FakeServices:
 
 class _FakeApp(FastAPI):
     """A real ``FastAPI`` carrying only the
-    ``app.state.{services,hub_process,config,shutdown,platform_tracing,flow_driver}`` ``lifespan`` reads, with fake
-    services."""
+    ``app.state.{hub_process,config,shutdown,platform_tracing,flow_driver}`` ``lifespan`` reads, over a fake
+    process."""
 
     def __init__(self, services: _FakeServices, config: HubConfig) -> None:
         super().__init__()
-        self.state.services = services
         self.state.hub_process = services.process
         self.state.config = config
         self.state.shutdown = asyncio.Event()

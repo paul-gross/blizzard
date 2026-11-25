@@ -16,6 +16,8 @@ import sqlalchemy as sa
 
 from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
+from blizzard.hub.auth.facts import AuthFactsService
+from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.auth.models import User
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
@@ -92,7 +94,7 @@ def test_a_tenant_admin_grants_admin(tmp_path: Path) -> None:
 
     assert resp.status_code == 200, resp.text
     assert (resp.json()["role"], resp.json()["revocable"]) == ("admin", True)
-    assert hub.hub_services.memberships.role_in(default_tenant(hub.engine), grace.user_id) is Role.ADMIN
+    assert hub.resolve_hub(MembershipRepository).role_in(default_tenant(hub.engine), grace.user_id) is Role.ADMIN
 
 
 def test_nobody_changes_their_own_role(tmp_path: Path) -> None:
@@ -168,12 +170,12 @@ def test_a_hub_administrator_grants_and_revokes_in_a_tenant_they_hold_no_members
 
     granted = hub.client.put(f"/api/members/{grace.user_id}", json={"role": "contributor"}, headers=headers)
     assert granted.status_code == 200, granted.text
-    assert hub.hub_services.memberships.role_in(other.tenant, grace.user_id) is Role.CONTRIBUTOR
-    assert hub.hub_services.memberships.role_in(default_tenant(hub.engine), grace.user_id) is None
+    assert hub.resolve_hub(MembershipRepository).role_in(other.tenant, grace.user_id) is Role.CONTRIBUTOR
+    assert hub.resolve_hub(MembershipRepository).role_in(default_tenant(hub.engine), grace.user_id) is None
 
     revoked = hub.client.delete(f"/api/members/{grace.user_id}", headers=headers)
     assert revoked.status_code == 204, revoked.text
-    assert hub.hub_services.memberships.role_in(other.tenant, grace.user_id) is None
+    assert hub.resolve_hub(MembershipRepository).role_in(other.tenant, grace.user_id) is None
 
 
 def test_a_hub_administrator_naming_no_open_tenant_is_answered_as_anyone(tmp_path: Path) -> None:
@@ -215,7 +217,7 @@ def test_a_grant_of_the_role_in_force_writes_nothing(tmp_path: Path) -> None:
 
     assert (resp.status_code, resp.json()["role"]) == (200, "contributor")
     assert _facts(hub) == before
-    assert hub.hub_services.auth_facts.list_recent() == []
+    assert hub.resolve_hub(AuthFactsService).list_recent() == []
 
 
 @pytest.mark.parametrize(("method", "body"), [("PUT", {"role": "guest"}), ("DELETE", None)])
@@ -229,7 +231,7 @@ def test_the_last_admin_is_kept(tmp_path: Path, method: str, body: dict[str, str
     )
 
     assert resp.status_code == 409, resp.text
-    assert hub.hub_services.memberships.role_in(default_tenant(hub.engine), ada.user_id) is Role.ADMIN
+    assert hub.resolve_hub(MembershipRepository).role_in(default_tenant(hub.engine), ada.user_id) is Role.ADMIN
 
 
 @pytest.mark.parametrize("role", ["pending", "superuser", "wizard"])

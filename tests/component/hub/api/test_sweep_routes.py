@@ -16,7 +16,7 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepModes, SweepName
-from blizzard.hub.domain.work_items.closure import CloseIntentDrainer
+from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentDrainer
 from blizzard.hub.tenancy import TenantId
 from tests.support.scaffolding import (
     HubHarness,
@@ -126,7 +126,7 @@ def test_a_tenant_pass_of_a_sweep_over_every_tenant_only_answers_422(tmp_path: P
 
 def test_a_pass_whose_lock_is_held_answers_409_at_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     world = _two_tenants(tmp_path)
-    drain = world.hub.hub_services.close_drain
+    drain = world.hub.resolve_hub(CloseDrainSweep)
     entered, release = threading.Event(), threading.Event()
     hub_wide = drain.sweep
 

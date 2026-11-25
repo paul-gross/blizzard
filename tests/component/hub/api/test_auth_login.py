@@ -19,9 +19,11 @@ from click.testing import CliRunner
 from fastapi import FastAPI
 from httpx2 import Response
 
+from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.models import ProviderIdentity
 from blizzard.hub.auth.oauth.internal.factory import ProviderEntry
 from blizzard.hub.auth.oauth.registry import OAuthProviderRegistry
+from blizzard.hub.auth.service import AuthService
 from blizzard.hub.cli import runtime
 from blizzard.hub.config import AuthConfig, LoginThrottleConfig
 from blizzard.hub.store import schema
@@ -257,7 +259,7 @@ def test_the_configured_superuser_signs_in_without_an_invitation(tmp_path: Path)
     github = FakeOAuthProvider(name="github")
     github.codes["c1"] = ADA
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github})
-    hub.hub_services.auth.record_superuser_bootstrap(email="ada@example.com", claimed_user_id=None)
+    hub.resolve_hub(AuthService).record_superuser_bootstrap(email="ada@example.com", claimed_user_id=None)
 
     _login(hub, github, "c1")
 
@@ -280,7 +282,7 @@ def test_callback_rejects_a_bad_state_and_emits_a_login_failed_fact(tmp_path: Pa
     assert resp.json()["instance"] == "/api/auth/github/callback"
     assert "never-minted" not in resp.text
 
-    facts = hub.hub_services.auth_facts.list_recent()
+    facts = hub.resolve_hub(AuthFactsService).list_recent()
     assert any(f.kind == "login_failed" for f in facts)
 
 
@@ -310,7 +312,7 @@ def test_callback_refuses_a_state_minted_for_a_different_provider(tmp_path: Path
     assert resp.json()["type"] == auth_wire.SSO_REFUSED
     assert state not in resp.text
 
-    facts = hub.hub_services.auth_facts.list_recent()
+    facts = hub.resolve_hub(AuthFactsService).list_recent()
     assert any(f.kind == "sso_refused" for f in facts)
 
 

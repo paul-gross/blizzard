@@ -14,7 +14,7 @@ from typing import Any
 import httpx2
 from sqlalchemy import Engine
 
-from blizzard.foundation.clock import IClock
+from blizzard.foundation.clock import ControlledClock, IClock
 from blizzard.foundation.platform_tracing import wiring as platform_tracing_wiring
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing
 from blizzard.foundation.registry.interface import Ref, port
@@ -119,6 +119,7 @@ def register_hub(
     versions: bool = False,
     trace_export: bool = False,
     egress_export: bool = False,
+    controlled_clock: bool = False,
 ) -> None:
     """Declare the hub graph: the scope inputs, the legacy bridge's transitional ports, the store adapters, the
     process lifecycle owners and the adopted areas over them — or, store-free, each store-backed registration absent.
@@ -126,13 +127,15 @@ def register_hub(
     whether or not the graph is store-backed. The version window is the supplied one when ``versions`` is set on a
     store-backed graph, and is absent otherwise. The trace export's sweep runs over the supplied exporter when
     ``trace_export`` is set, and the fact export's sweep over its writers when ``egress_export`` is; each sweep is
-    ``None`` otherwise."""
+    ``None`` otherwise. The clock controls are present only when ``controlled_clock`` says the process clock the root
+    supplies is controlled, on either graph."""
     scopes.register(registry)
     documents.register(registry)
     platform_tracing_wiring.register(registry)
     events.register(registry)
     settings_wiring.register_boot(registry)
     forge.register_process(registry)
+    api.register_clock_controls(registry, controlled=controlled_clock)
     if store_backed:
         delivery.register(registry)
         scopes.register_tenants(registry)
@@ -376,8 +379,11 @@ def process_values(
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> list[ScopeValue[Any]]:
-    """The scope values every hub graph opens with."""
+    """The scope values every hub graph opens with; a controlled ``clock`` is also supplied as itself, for the graph
+    its switch registers the clock controls in."""
+    controlled = [supply(port(ControlledClock), clock)] if isinstance(clock, ControlledClock) else []
     return [
+        *controlled,
         supply(port(IClock), clock),
         supply(port(HubConfig), config),
         supply(port(IPlatformTracing), platform_tracing),
@@ -579,6 +585,7 @@ def open_store_backed(
             versions=versions is not None,
             trace_export=trace_exporter is not None,
             egress_export=egress_boot is not None and egress_boot.on(),
+            controlled_clock=isinstance(clock, ControlledClock),
         ),
         connections,
         clock=clock,
@@ -609,7 +616,7 @@ def open_store_free(
 ) -> HubProcess:
     """The hub's store-free process, registered and opened."""
     return build_store_free(
-        registered(store_backed=False),
+        registered(store_backed=False, controlled_clock=isinstance(clock, ControlledClock)),
         clock=clock,
         config=config,
         platform_tracing=platform_tracing,
@@ -627,6 +634,7 @@ def registered(
     versions: bool = False,
     trace_export: bool = False,
     egress_export: bool = False,
+    controlled_clock: bool = False,
 ) -> LegacyRegistry:
     """A fresh registry holding the hub graph :func:`register_hub` declares."""
     registry = LegacyRegistry()
@@ -637,6 +645,7 @@ def registered(
         versions=versions,
         trace_export=trace_export,
         egress_export=egress_export,
+        controlled_clock=controlled_clock,
     )
     return registry
 

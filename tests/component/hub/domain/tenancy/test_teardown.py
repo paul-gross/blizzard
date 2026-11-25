@@ -19,12 +19,13 @@ from fastapi import Request
 from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.utc import as_utc
 from blizzard.foundation.tenants import TenantDeletionState
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.domain.execution.fleet import FleetService
-from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
+from blizzard.hub.domain.observability.hub_events import HubEventLogService, IReadHubEventLog
 from blizzard.hub.domain.tenancy import teardown
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.domain.tenancy.teardown import (
@@ -34,6 +35,7 @@ from blizzard.hub.domain.tenancy.teardown import (
     TenantTeardown,
     TenantTeardownSweep,
 )
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.tenant_teardown_store import DRAIN_ORDER, TenantTeardownStore
 from blizzard.hub.store.scoped import is_tenant_owned
@@ -98,20 +100,20 @@ def _deletions(hub: HubHarness) -> list[sa.Row[Any]]:
 def _hub_events(hub: HubHarness) -> list[tuple[str, Mapping[str, object] | None]]:
     return [
         (e.kind, e.detail)
-        for e in reversed(hub.hub_services.process.resolver.get(IReadHubEventLog).recent(50))
+        for e in reversed(hub.process.resolver.get(IReadHubEventLog).recent(50))
         if e.kind.startswith("tenant")
     ]
 
 
 def _small_teardown(hub: HubHarness, *, batch_rows: int) -> tuple[TenantTeardown, TenantTeardownStore]:
     store = TenantTeardownStore(hub_level_connections(hub.engine))
-    services = hub.hub_services
+    open_tenants = hub.resolve_hub(OpenTenants)
     torn = TenantTeardown(
         teardowns=store,
         units=lambda tenant: HubTransactions(hub_level_connections(hub.engine).scoped(StoreScope(tenant))),
-        closed=lambda _tenant: services.tenants.open_tenants.refresh(),
-        events=services.hub_event_log,
-        clock=services.clock,
+        closed=lambda _tenant: open_tenants.refresh(),
+        events=hub.resolve_hub(HubEventLogService),
+        clock=hub.clock,
         batch_rows=batch_rows,
     )
     return torn, store
@@ -144,7 +146,7 @@ def test_a_close_records_the_fact_and_drops_the_tenant_from_memory(hub: HubHarne
         None,
         0,
     )
-    assert as_utc(fact.closed_at) == hub.hub_services.clock.now()
+    assert as_utc(fact.closed_at) == hub.resolve_hub(IClock).now()
     assert tenant not in hub.hub_services.tenants.open_tenants.every()
     with pytest.raises(TenantClosed):
         hub.open_services(tenant)

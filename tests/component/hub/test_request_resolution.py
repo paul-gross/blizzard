@@ -68,7 +68,7 @@ def _created(hub: HubHarness, name: str = "acme") -> TenantId:
 
 
 def _containers(hub: HubHarness) -> TenantContainers:
-    return hub.hub_services.process.tenants
+    return hub.process.tenants
 
 
 def _spy_open(monkeypatch: pytest.MonkeyPatch, record: Callable[[StoreScope], None]) -> None:
@@ -149,7 +149,7 @@ def test_a_deleted_tenant_leaves_no_scope_closes_its_clients_once_and_refuses_th
     hub.resolve_hub(TenantTeardown).delete(tenant, by="usr_deleter")
     # Only this tenant's cache is counted: another tenant's cache closing in the same process is not its deletion.
     closed = [identity for identity in closed if identity == deleted]
-    hub.hub_services.process.tenants.close()
+    hub.process.tenants.close()
 
     with pytest.raises(TenantClosed):
         before.resolver.get(StoreScope)

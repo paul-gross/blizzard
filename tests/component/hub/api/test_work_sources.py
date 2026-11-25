@@ -146,9 +146,7 @@ def test_list_work_items_resolves_liveness_with_one_bulk_call_regardless_of_item
         hub.client.post("/api/work-sources/hub/items", json={"title": f"t{i}", "body": "b"}).json() for i in range(3)
     ]
 
-    work_refs = hub.hub_services.process.tenants.resolve(
-        StoreScope(default_tenant(hub.engine)), IReadChunkWorkRefsRepository
-    )
+    work_refs = hub.process.tenants.resolve(StoreScope(default_tenant(hub.engine)), IReadChunkWorkRefsRepository)
 
     with (
         patch.object(work_refs, "live_holders", wraps=work_refs.live_holders) as live_holders,

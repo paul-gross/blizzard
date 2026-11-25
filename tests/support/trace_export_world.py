@@ -11,7 +11,7 @@ from tests.support.trace_hub import transitioned_and_stopped
 
 
 def trace_export_sweep(hub: HubHarness) -> TraceExportSweep:
-    sweep = trace_sweep_of(hub.hub_services)
+    sweep = trace_sweep_of(hub)
     assert sweep is not None
     return sweep
 

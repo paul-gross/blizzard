@@ -8,8 +8,10 @@ from __future__ import annotations
 from collections.abc import Iterator
 from datetime import timedelta
 from pathlib import Path
+from typing import cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.chunk_status import ChunkStatus
@@ -271,6 +273,11 @@ def test_a_hub_that_never_annotated_clears_nothing(tmp_path: Path) -> None:
     assert labelled.set_calls == []
 
 
+def _annotation(client: TestClient) -> AnnotationReconciler:
+    """The hosted hub's forge-status annotation sweep, resolved from its process container."""
+    return cast(FastAPI, client.app).state.hub_process.resolver.get(AnnotationReconciler)
+
+
 @pytest.fixture
 def hosted(
     tmp_path: Path, request: pytest.FixtureRequest
@@ -293,20 +300,19 @@ def test_a_retired_source_has_its_labels_cleared_once(
     client, services, memory, double, forge_url = hosted
     source_id = create(client, services, forge_url, annotate=True)
     promote(client, "widget:1")
-    assert services.annotation is not None
-    services.annotation.sweep()
+    _annotation(client).sweep()
     assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}
     assert memory.annotated_sources() == {source_id}
 
     assert client.post(f"/api/work-sources/{source_id}/retire").status_code == 200
-    services.annotation.sweep()
+    _annotation(client).sweep()
 
     assert forge_state(double)["issue_labels"]["acme/widget#1"] == set()
     assert memory.annotated_sources() == frozenset()
 
     # Once: a label put back by hand after the departure is never cleared again.
     forge_state(double)["issue_labels"]["acme/widget#1"] = {"blizzard:ingested"}
-    services.annotation.sweep()
+    _annotation(client).sweep()
     assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}
 
 
@@ -318,14 +324,13 @@ def test_a_retired_source_whose_secret_is_also_retired_keeps_its_labels(
     client, services, memory, double, forge_url = hosted
     source_id = create(client, services, forge_url, annotate=True)
     promote(client, "widget:1")
-    assert services.annotation is not None
-    services.annotation.sweep()
+    _annotation(client).sweep()
     assert memory.annotated_sources() == {source_id}
 
     assert client.post(f"/api/work-sources/{source_id}/retire").status_code == 200
     retire_credential(services, "gh")
     assert client.post("/api/secrets/gh/retire").status_code == 200
-    services.annotation.sweep()
+    _annotation(client).sweep()
 
     assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}
     assert memory.annotated_sources() == frozenset()

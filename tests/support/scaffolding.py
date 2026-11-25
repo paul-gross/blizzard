@@ -38,7 +38,7 @@ from typing_extensions import TypeIs
 
 from blizzard import __version__
 from blizzard.auth_core import Role
-from blizzard.foundation.clock import FixedClock, IClock
+from blizzard.foundation.clock import ControlledClock, FixedClock, IClock
 from blizzard.foundation.flags import FlagRegistry, Flags
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.landing_policy import LandingPolicy
@@ -66,6 +66,7 @@ from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.oauth.provider import IOAuthProvider
 from blizzard.hub.auth.oauth.registry import OAuthProviderRegistry
+from blizzard.hub.auth.service import AuthService
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.composition import (
     HubCore,
@@ -174,7 +175,7 @@ from blizzard.hub.forge.auth import IForgeAuthorizations
 from blizzard.hub.forge.readiness import ICredentialProbe
 from blizzard.hub.layout import DATA_DIRNAME
 from blizzard.hub.live_config import ConfigObjectCache
-from blizzard.hub.process_root import HUB_OWNER, registered, store_backed_process, store_backed_values
+from blizzard.hub.process_root import HUB_OWNER, HubProcess, registered, store_backed_process, store_backed_values
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.settings.footing import HubSettingsFooting
@@ -682,6 +683,7 @@ def overridden_core(
         versions=versions is not None,
         trace_export=trace_exporter is not None,
         egress_export=egress is not None and egress.on(),
+        controlled_clock=isinstance(clock, ControlledClock),
     )
     values = store_backed_values(
         connections,
@@ -1526,7 +1528,7 @@ class HubHarness:
     client: TestClient
     #: The default tenant's services — the tenant every one-tenant test is served in.
     services: TenantServices
-    #: The hub-level services — identity, sessions, signing, exports and sweeps.
+    #: The request bridge's tenant opener; every hub-level owner is resolved from :attr:`process`.
     hub_services: HubServices
     work_sources: WorkSourceRegistry
     clock: FixedClock
@@ -1542,10 +1544,16 @@ class HubHarness:
     _driver: FlowDriver | None = field(default=None, repr=False)
 
     @property
+    def process(self) -> HubProcess:
+        """The hub's open process container and its tenant scopes — what a request resolves through."""
+        assert self.core is not None
+        return self.core.process
+
+    @property
     def flow_driver(self) -> FlowDriver:
         """The hub's flow driver, built on first use as the hosted hub builds it — an in-process hub runs none."""
         if self._driver is None:
-            self._driver = build_flow_driver(self.hub_services.process)
+            self._driver = build_flow_driver(self.process)
         return self._driver
 
     def take_turns(self, *, ticks: int = 1) -> list[TickResult]:
@@ -1607,11 +1615,11 @@ class HubHarness:
 
     def resolve[T](self, tenant: TenantId, dependency_type: type[T]) -> T:
         """``tenant``'s one ``dependency_type``, resolved through its container scope as a background pass would."""
-        return self.hub_services.process.tenants.resolve(StoreScope(tenant), dependency_type)
+        return self.process.tenants.resolve(StoreScope(tenant), dependency_type)
 
     def resolve_hub[T](self, dependency_type: type[T]) -> T:
         """The hub's one process-scoped ``dependency_type``, resolved through its process container."""
-        return self.hub_services.process.resolver.get(dependency_type)
+        return self.process.resolver.get(dependency_type)
 
     def default_adapter[T](self, adapter_type: type[T]) -> T:
         """The default tenant's one ``adapter_type``, resolved through its container scope."""
@@ -1660,7 +1668,7 @@ class TenantHarness:
 
 def tenant_services_of(app: FastAPI) -> TenantServices:
     """The services of a wired ``app``'s only open tenant — the name every test reads a tenant field of an
-    app through; a hub-level field is read off ``app.state.services`` itself."""
+    app through; a hub-level owner is resolved from ``app.state.hub_process``."""
     tenants = app.state.services.tenants
     tenant = tenants.open_tenants.only()
     assert tenant is not None, "tenant_services_of needs an app serving exactly one open tenant"
@@ -1672,7 +1680,7 @@ def tenant_fleet_of(app: FastAPI) -> FleetService:
     tenants = app.state.services.tenants
     tenant = tenants.open_tenants.only()
     assert tenant is not None, "tenant_fleet_of needs an app serving exactly one open tenant"
-    return app.state.services.process.tenants.resolve(StoreScope(tenant), FleetService)
+    return app.state.hub_process.tenants.resolve(StoreScope(tenant), FleetService)
 
 
 def serve_default_tenant(hub: HubHarness, services: TenantServices) -> None:
@@ -1726,7 +1734,7 @@ def resolve_default_tenant_with(
 ) -> None:
     """Resolve each of ``overrides``' keys, in every request the default tenant admits, to its stand-in — a test's
     counting double for a seam a narrowed route names; every other key resolves as the container resolves it."""
-    tenants = hub.hub_services.process.tenants
+    tenants = hub.process.tenants
     default = default_tenant(hub.engine)
     opened = tenants.request
 
@@ -2048,9 +2056,9 @@ def build_hub(
     hub_services = build_services(core)
     hub_services.tenants.open_tenants.refresh()
     services = hub_services.tenants.open_services(default)
-    app = create_hub_app(config, services=hub_services, flags=flags)
+    app = create_hub_app(config, services=hub_services, process=core.process, flags=flags)
     app.state.hub_settings = settings
-    fleet = hub_services.process.tenants.resolve(default, FleetService)
+    fleet = core.process.tenants.resolve(default, FleetService)
     client = RunnerFleetClient(app, services=services, fleet=fleet, register_claimants=auto_register_claimants)
     # Warm FastAPI's per-router route-resolution cache: it lazily caches routes on first
     # use, which is thread-unsafe under the component tier's OS-thread races.
@@ -2586,7 +2594,7 @@ def seed_session(hub: HubHarness, user: User) -> str:
     """Mint a real session for ``user`` via ``AuthService.mint_session`` (#92) and return
     the plaintext session id — a test sets this as the ``bz_session`` cookie or an
     ``Authorization: Bearer`` header."""
-    plaintext, _ = hub.hub_services.auth.mint_session(user)
+    plaintext, _ = hub.resolve_hub(AuthService).mint_session(user)
     return plaintext
 
 
@@ -3150,11 +3158,11 @@ def seed_drainable_history(
         )
 
 
-def trace_sweep_of(services: HubServices) -> TraceExportSweep | None:
+def trace_sweep_of(hub: HubHarness) -> TraceExportSweep | None:
     """The process container's fleet-trace export sweep, ``None`` while the trace export is off."""
-    return services.process.resolver.get(TraceExportSweep | None)
+    return hub.process.resolver.get(TraceExportSweep | None)
 
 
-def egress_sweep_of(services: HubServices) -> EgressSweep | None:
+def egress_sweep_of(hub: HubHarness) -> EgressSweep | None:
     """The process container's fact-egress export sweep, ``None`` while the export is off."""
-    return services.process.resolver.get(EgressSweep | None)
+    return hub.process.resolver.get(EgressSweep | None)

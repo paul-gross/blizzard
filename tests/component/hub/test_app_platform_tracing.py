@@ -27,7 +27,9 @@ from blizzard.foundation.platform_tracing.attributes import TENANT, TENANT_NAME
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub import app as hub_app
+from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.auth.models import ResolvedIdentity, Session, User
+from blizzard.hub.auth.service import AuthService
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import AUTH_MODE_OAUTH, AuthConfig, HubConfig
 from blizzard.hub.domain.observability.tracing.attributes import (
@@ -36,6 +38,7 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     resource_attributes,
 )
 from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads, TenantRunner
+from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.tenancy import TenantId
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
 from tests.support.scaffolding import (
@@ -272,7 +275,7 @@ def test_a_traced_runner_request_resolves_its_token_once(tmp_path: Path) -> None
     app = build_hosted_hub_app(config, platform_tracing=handle)
     with TestClient(app) as client:
         token = _registered_runner_token(config, "runner-a")
-        credentials: CredentialReads = app.state.services.hub_scoped_reads.credentials
+        credentials: CredentialReads = app.state.hub_process.resolver.get(HubScopedReads).credentials
         resolutions: list[str] = []
         original = credentials.runner_for_token_hash
 
@@ -469,7 +472,7 @@ def test_an_operator_command_span_parents_the_hubs_server_span_for_an_authentica
             )
 
         bound = bind_transport(answer)
-        session = app.state.services.auth.mint_session(_seed_operator(app))[0]
+        session = app.state.hub_process.resolver.get(AuthService).mint_session(_seed_operator(app))[0]
         bound.sessions.save("http://testserver", session)
         result = bound.runner.invoke(
             hub_group,
@@ -490,11 +493,11 @@ def test_a_traced_session_request_resolves_its_session_once(tmp_path: Path, monk
     handle = _handle(config, exporter)
     app = build_hosted_hub_app(config, platform_tracing=handle)
     with TestClient(app) as client:
-        services = app.state.services
-        session = services.auth.mint_session(_seed_operator(app))[0]
+        resolver = app.state.hub_process.resolver
+        session = resolver.get(AuthService).mint_session(_seed_operator(app))[0]
         calls: list[str] = []
-        lookup: Callable[[str], Session | None] = services.sessions.get_by_hash
-        touch: Callable[..., ResolvedIdentity | None] = services.auth.touch_session
+        lookup: Callable[[str], Session | None] = resolver.get(SessionRepository).get_by_hash
+        touch: Callable[..., ResolvedIdentity | None] = resolver.get(AuthService).touch_session
 
         def counted_lookup(id_hash: str) -> Session | None:
             calls.append("get_by_hash")
@@ -504,8 +507,8 @@ def test_a_traced_session_request_resolves_its_session_once(tmp_path: Path, monk
             calls.append("touch_session")
             return touch(session, tenant=tenant)
 
-        monkeypatch.setattr(services.sessions, "get_by_hash", counted_lookup)
-        monkeypatch.setattr(services.auth, "touch_session", counted_touch)
+        monkeypatch.setattr(resolver.get(SessionRepository), "get_by_hash", counted_lookup)
+        monkeypatch.setattr(resolver.get(AuthService), "touch_session", counted_touch)
         response = client.get(
             "/api/chunks",
             headers={"Authorization": f"Bearer {session}", "traceparent": f"00-{'a' * 32}-{'b' * 16}-01"},

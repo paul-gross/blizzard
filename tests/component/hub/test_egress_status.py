@@ -15,6 +15,7 @@ from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, UsagePosition
 from blizzard.hub.egress.factory import EgressUnavailable
 from blizzard.hub.store.internal.egress_store import EgressStore
+from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from tests.support.egress_world import closed_step, egress_hub
 from tests.support.hub_event_rows import hub_events_of
 from tests.support.scaffolding import HubHarness, egress_sweep_of, hub_level_connections
@@ -58,7 +59,7 @@ def test_a_rejected_export_names_the_setting_and_value(tmp_path: Path, monkeypat
 
 def test_the_cursors_their_lag_the_last_pass_the_last_file_and_the_free_space(tmp_path: Path) -> None:
     hub, graph = egress_hub(tmp_path, _on(tmp_path))
-    sweep = egress_sweep_of(hub.hub_services)
+    sweep = egress_sweep_of(hub)
     assert sweep is not None
     sweep.sweep()
     start = _status(hub)
@@ -90,9 +91,7 @@ def test_the_cursors_their_lag_the_last_pass_the_last_file_and_the_free_space(tm
 def test_status_uses_append_order_for_position_and_recorded_time_for_pass_and_file(tmp_path: Path) -> None:
     hub, _ = egress_hub(tmp_path, _on(tmp_path))
     connections = hub_level_connections(hub.engine)
-    store = EgressStore(
-        connections, hub_events=hub_events_of(hub.engine), usage=hub.hub_services.hub_scoped_reads.corpus
-    )
+    store = EgressStore(connections, hub_events=hub_events_of(hub.engine), usage=hub.resolve_hub(HubScopedReads).corpus)
     now = hub.clock.now()
     written = EgressCheckpoint(
         "invocations",
@@ -125,7 +124,7 @@ def test_status_uses_append_order_for_position_and_recorded_time_for_pass_and_fi
 def test_the_last_error_is_ongoing_until_a_write_recovers(tmp_path: Path) -> None:
     config = EgressConfig(directory=tmp_path / "never-made", settle_seconds=0, min_free_bytes=0)
     hub, graph = egress_hub(tmp_path, config)
-    sweep = egress_sweep_of(hub.hub_services)
+    sweep = egress_sweep_of(hub)
     assert sweep is not None
     sweep.sweep()
     assert _status(hub)["last_error_at"] is None
@@ -146,7 +145,7 @@ def test_the_last_error_is_ongoing_until_a_write_recovers(tmp_path: Path) -> Non
 
 def test_the_cli_renders_the_status_and_its_json(tmp_path: Path) -> None:
     hub, _ = egress_hub(tmp_path, _on(tmp_path))
-    sweep = egress_sweep_of(hub.hub_services)
+    sweep = egress_sweep_of(hub)
     assert sweep is not None
     sweep.sweep()
 

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from blizzard.hub.auth.facts import AuthFactsService
 from tests.support.oauth_login_double import ADA, FakeOAuthProvider, known_ada, state_from_redirect
 from tests.support.scaffolding import HubHarness, build_hub
 
@@ -125,7 +126,7 @@ def test_login_failed_fact_records_the_forwarded_client_ip(tmp_path: Path) -> No
         follow_redirects=False,
     )
     assert resp.status_code == 400
-    facts = hub.hub_services.auth_facts.list_recent()
+    facts = hub.resolve_hub(AuthFactsService).list_recent()
     failed = [f for f in facts if f.kind == "login_failed"]
     assert failed and failed[0].actor == "198.51.100.7"
 
@@ -141,6 +142,6 @@ def test_login_failed_fact_records_the_direct_peer_for_an_untrusted_client(tmp_p
         follow_redirects=False,
     )
     assert resp.status_code == 400
-    facts = hub.hub_services.auth_facts.list_recent()
+    facts = hub.resolve_hub(AuthFactsService).list_recent()
     failed = [f for f in facts if f.kind == "login_failed"]
     assert failed and failed[0].actor == _DIRECT_IP
