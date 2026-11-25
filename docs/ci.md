@@ -33,11 +33,10 @@ branch protection once the job exists on `master`.
 
 `gate / restatement sweep (blizzard:restatement-sweep)` runs `mise run restatement-check`, the one-home census, over
 `blizzard`, `blizzard-mock` and `blizzard-context` checked out side by side. Both siblings resolve through
-[`resolve-mock-ref`](../.github/actions/resolve-mock-ref/action.yml): the pull request's same-named branch if the
-sibling has one, else `master`. blizzard-context's own gate runs the same sweep. The job runs on the hotfix lane and is
-skipped on a tag and on a pull request into `release/*`, since blizzard-context has no release lines or tags. It is a
-required check in both repositories; an operator adds it to each one's branch protection once the job exists on that
-`master`.
+[`resolve-mock-ref`](../.github/actions/resolve-mock-ref/action.yml), which owns the ref rule. blizzard-context's own
+gate runs the same sweep. The job runs on the hotfix lane and is skipped on a tag and on a pull request into
+`release/*`, since blizzard-context has no release lines or tags. It is a required check in both repositories; an
+operator adds it to each one's branch protection once the job exists on that `master`.
 
 The pytest tier runs as six parallel shard jobs. The service tier below runs three Python shards and six Playwright
 shards. `BLIZZARD_TEST_SHARD=<index>/<count>` (`tests/support/suite_plugin.py`) keeps one disjoint slice of the suite,

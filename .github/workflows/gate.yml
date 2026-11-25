@@ -6,7 +6,8 @@
 #
 # Every check here is seams-mocked and token-free: it installs dependencies and
 # runs, needing no real forge, no tokens, and no network beyond the package
-# installs (blizzard-context verification/blizzard/tier-rules.md).
+# installs and the sibling checkouts the restatement sweep reads
+# (blizzard-context verification/blizzard/tier-rules.md).
 name: gate
 
 on:

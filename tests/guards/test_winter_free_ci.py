@@ -1,9 +1,7 @@
 """The platform tiers and the CI workflows stay winter-free.
 
-The service and crash tiers run their runners on the built-in ``basic`` provider over a fixture minted without a
-winter source, and the workflows check out only ``blizzard`` and its public siblings, never the winter workspace. The winter binding's own tests are
-the local-only ``winter_binding`` tier (``tests/winter/``). A static scan keeps either from drifting back, and pins that
-every checkout in a job that runs tests leaves no credentials behind.
+The platform tiers run on the built-in ``basic`` provider, and no workflow checks out the winter workspace; the winter
+binding is proven by ``tests/winter/``. A checkout in a job that runs tests leaves no credentials behind.
 """
 
 from __future__ import annotations
