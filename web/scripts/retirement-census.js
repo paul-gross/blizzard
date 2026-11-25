@@ -2,6 +2,7 @@
 // Retirement inventory: identity is the declaration's path AND name, not the spelling alone.
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const ts = require('typescript');
 const { createProgram } = require('./placement-sweep');
 
@@ -364,16 +365,37 @@ function assertRetirementCensusWorks() {
       !sourceProse('web/scripts/example.js', 'injectHubQuestionsQuery();').length) {
     throw new Error('source prose census failed');
   }
+  // Use a real tree to prove the exact generated-output exclusions do not hide source siblings.
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'retirement-sources-'));
+  try {
+    for (const name of ['src/blizzard/static/hub/generated.js', 'src/blizzard/static/runner/generated.js',
+      'src/blizzard/static/other/handwritten.js', 'src/blizzard/hub/handwritten.py']) {
+      const file = path.join(fixture, name);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, 'injectProjectsQuery');
+    }
+    const files = walk(path.join(fixture, 'src'), fixture).map((file) => path.relative(fixture, file));
+    for (const name of ['src/blizzard/static/other/handwritten.js', 'src/blizzard/hub/handwritten.py']) {
+      if (!files.includes(name)) throw new Error(`retirement census skipped handwritten source ${name}`);
+    }
+    if (files.some((file) => file.includes('/generated.js'))) throw new Error('retirement census entered generated static output');
+    if (!files.every((file) => proseLines(file, fs.readFileSync(path.join(fixture, file), 'utf8')).length)) {
+      throw new Error('retirement census failed to inspect handwritten source');
+    }
+  } finally {
+    fs.rmSync(fixture, { recursive: true, force: true });
+  }
   if (citationLines('doc', 'see bzh:frontend-wire-conformist').length !== 1 || citationLines('doc', 'bzh:frontend-domain-boundary').length) {
     throw new Error('retirement citation census failed');
   }
 }
 
-function walk(dir) {
-  if (!fs.existsSync(dir)) return [];
+function walk(dir, repo = path.dirname(ROOT)) {
+  const generated = [path.join(repo, 'src/blizzard/static/hub'), path.join(repo, 'src/blizzard/static/runner')];
+  if (generated.includes(dir) || !fs.existsSync(dir)) return [];
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const file = path.join(dir, entry.name);
-    if (entry.isDirectory()) return ['node_modules', 'dist', 'build', '.git', '.angular', '.venv', '__pycache__', '.pytest_cache', '.ruff_cache', '.hypothesis', '.vitest-attachments'].includes(entry.name) ? [] : walk(file);
+    if (entry.isDirectory()) return ['node_modules', 'dist', 'build', '.git', '.angular', '.venv', '__pycache__', '.pytest_cache', '.ruff_cache', '.hypothesis', '.vitest-attachments'].includes(entry.name) ? [] : walk(file, repo);
     return /\.(?:ts|js|mjs|cjs|html|css|md|py|sh|ya?ml|toml)$/.test(file) && !/\.gen\.(?:ts|js)$/.test(file) && file !== __filename ? [file] : [];
   });
 }

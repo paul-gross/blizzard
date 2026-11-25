@@ -46,8 +46,7 @@
  * symbol-origin sweep resolves every symbol a file references to its declaration and fails a file outside
  * the boundary — `fleet/src/lib/api/`, `fleet/src/lib/testing/transport/`, and `*.query.ts`,
  * `*.mutations.ts`, and `*.translate.ts` files with their focused specs — that consumes one declared in
- * a generated `types.gen.ts`; a unit still migrating is named in `DOMAIN_BOUNDARY_EXEMPT`, and an entry
- * whose unit no longer consumes the wire fails as stale. It also fails a production file or a story
+ * a generated `types.gen.ts`. The domain-boundary exemption list is empty. It also fails a production file or a story
  * reaching a symbol declared under `testing/transport/`. Beside it, with no exemption list: hand-written
  * TS never cites a backend `.py` file, and a generated client function from
  * `fleet/src/lib/api/{hub,runner}/sdk.gen.ts` is named only inside a `*.query.ts` or `*.mutations.ts` file.
@@ -1541,7 +1540,7 @@ function main() {
       console.error(
         '\nRead the wire only in a `*.query.ts`, `*.mutations.ts`, or `*.translate.ts` file (or its focused spec) ' +
           'and hand the rest of the feature a domain type; a generated type re-exported through a barrel is still ' +
-          'the wire. DOMAIN_BOUNDARY_EXEMPT only shrinks: move the unit behind the boundary instead of adding it.',
+          'the wire. Move the unit behind the boundary rather than adding an exemption.',
       );
     }
     if (domainBoundary.stale.length > 0) {
