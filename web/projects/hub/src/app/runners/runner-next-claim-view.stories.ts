@@ -23,3 +23,6 @@ export const OlderHub: Story = { args: { data: olderHub(data) as NextClaim } };
 export const NothingClaimable: Story = { args: { data: { ...data, next: null, without_repository_targets: { ...alternative, next: null } } } };
 export const Unavailable: Story = { args: { state: 'error', data: null } };
 export const PhoneSmall: Story = { globals: { viewport: { value: 'phone-sm', isRotated: false } } };
+export const LongProjectName: Story = {
+  args: { data: { ...data, next: { ...entry, project_name: 'x'.repeat(200) }, passed: [{ ...blocked, project_name: 'x'.repeat(200) }] } },
+};
