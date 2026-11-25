@@ -198,13 +198,13 @@ def test_a_cold_cache_and_a_second_cache_build_equivalent_objects(world: _World)
     assert (other.locator, other.annotate, other.token) == (warm.locator, warm.annotate, warm.token)
 
 
-def test_a_close_landing_inside_a_build_does_not_deadlock(world: _World) -> None:
+def test_a_close_landing_inside_a_build_closes_what_it_built_and_keeps_nothing(world: _World) -> None:
     """A finalizer can run ``close`` on the building thread, which already holds the cache's lock."""
-    built: list[object] = []
+    built: list[_Client | None] = []
 
-    def build() -> object:
+    def build() -> _Client:
         world.live.objects.close()
-        return object()
+        return _Client("locator", False, "token")
 
     def hand_out() -> None:
         built.append(world.live.objects.get(RecordKind.WORK_SOURCE, world.source_id, build))
@@ -215,7 +215,8 @@ def test_a_close_landing_inside_a_build_does_not_deadlock(world: _World) -> None
     thread.join(timeout=30)
 
     assert not thread.is_alive()
-    assert len(built) == 1
+    assert built[0] is not None and built[0].closed
+    assert world.client() is not built[0]
 
 
 def test_an_unknown_record_builds_nothing(world: _World) -> None:

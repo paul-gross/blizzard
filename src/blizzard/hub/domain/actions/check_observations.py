@@ -14,6 +14,8 @@ from blizzard.hub.domain.actions.effects import ActionEscalation
 from blizzard.hub.domain.artifact.model import StoredArtifact
 
 PREFIX = "empty-checks/"
+#: Names an empty observation a later read of its repository's checks has overtaken.
+SUPERSEDED_PREFIX = "empty-checks-superseded/"
 GRACE = timedelta(minutes=10)
 
 
@@ -66,6 +68,24 @@ def marker_content(repo: str, policy: str, sha: str, now: datetime) -> str:
     return json.dumps({"repo": repo, "policy": policy, "sha": sha, "at": iso_utc(now)})
 
 
+def superseded_name(repository: str, sha: str) -> str:
+    return f"{SUPERSEDED_PREFIX}{repository}/{sha}"
+
+
+def overtaken_by_checks(markers: tuple[StoredArtifact, ...], epoch: int, repository: str) -> tuple[str, ...]:
+    """The revisions of ``repository`` observed empty this epoch that no read of checks has yet superseded — what
+    a read finding checks supersedes."""
+    observed = f"{PREFIX}{repository}/"
+    named = {row.name for row in markers if row.epoch == epoch}
+    return tuple(
+        sorted(
+            name.removeprefix(observed)
+            for name in named
+            if name.startswith(observed) and superseded_name(repository, name.removeprefix(observed)) not in named
+        )
+    )
+
+
 def observation(markers: tuple[StoredArtifact, ...], epoch: int, repository: str, sha: str) -> datetime | None:
     name = marker_name(repository, sha)
     return next(
@@ -93,8 +113,12 @@ def missing_checks(repo: str, policy: str, sha: str, at: datetime, *, timed_out:
 
 
 def timeout_observation(markers: tuple[StoredArtifact, ...], node_id: str, epoch: int) -> ActionEscalation | None:
-    for row in markers:
-        if row.node_id == node_id and row.epoch == epoch and row.name.startswith(PREFIX):
+    """The missing-checks escalation a visit past its deadline owes: its newest empty observation no later read of
+    checks superseded, ``None`` when every one was. ``markers`` are in durable write order."""
+    visit = [row for row in markers if row.node_id == node_id and row.epoch == epoch]
+    names = {row.name for row in visit}
+    for row in reversed(visit):
+        if row.name.startswith(PREFIX) and f"{SUPERSEDED_PREFIX}{row.name.removeprefix(PREFIX)}" not in names:
             data = json.loads(row.data)
             return missing_checks(
                 data["repo"], data["policy"], data["sha"], datetime.fromisoformat(data["at"]), timed_out=True

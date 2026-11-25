@@ -44,6 +44,8 @@ _MARKER_PREFIX = "merged/"
 
 #: A findings record's decision for a repository the base now holds.
 LANDED_RECORD = "landed"
+#: A findings record's decision for a repository whose base cannot be brought in mechanically.
+CONFLICT_RECORD = "conflict"
 
 
 class NotRecorded(Exception):
@@ -93,6 +95,8 @@ class LandingRun:
         match state:
             case Waiting(findings=dict() as record) | Ready(findings=dict() as record):
                 self.records[repo] = record
+            case Conflict(detail=detail):
+                self.records[repo] = {"repo": repo, "decision": CONFLICT_RECORD, "detail": detail}
             case Failure(findings=records) | Inherited(findings=records):
                 for record in records:
                     self.records[repo] = record

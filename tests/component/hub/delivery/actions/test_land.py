@@ -1805,6 +1805,53 @@ def test_empty_grace_only_escalates_on_a_current_empty_read(policy: LandingPolic
 
 
 @pytest.mark.parametrize("policy", [LandingPolicy.MERGE_ON_CHECKS, LandingPolicy.FAST_FORWARD])
+def test_a_read_finding_checks_supersedes_the_empty_observation(policy: LandingPolicy) -> None:
+    double = _forge(checks={_SUBMITTED: ()}, compares={("base-tip", _SUBMITTED): comparison()})
+    visit = _visit()
+    target = replace(visit.resolution.targets[0], landing_policy=policy)
+    visit = replace(visit, resolution=replace(visit.resolution, targets=(target,)))
+    _, sink = _land(double, visit)
+    name = f"empty-checks/re_widget/{_SUBMITTED}"
+    marker = _row(ArtifactKind.ASSET, name, sink.markers()[name])
+    double.repos[_WIDGET].checks[_SUBMITTED] = (check(outcome=CheckOutcome.PENDING),)
+
+    answer, later = _land(double, replace(visit, markers=(marker,)))
+
+    assert answer.choice == "pending"
+    assert later.markers()[f"empty-checks-superseded/re_widget/{_SUBMITTED}"] == _SUBMITTED
+
+
+def test_a_conflict_is_named_in_the_visit_s_findings() -> None:
+    answer, sink = _land(_forge(mergeability=Mergeability.CONFLICTING))
+
+    assert answer.choice == "conflict"
+    assert "Conflict:" in sink.markers()["delivery-findings"]
+    assert "is dirty (a real merge conflict)" in sink.markers()["delivery-findings"]
+
+
+@pytest.mark.parametrize("appeared", [True, False])
+def test_a_timeout_claims_no_check_appeared_only_when_none_did(tmp_path: Path, appeared: bool) -> None:
+    double = _forge(_WIDGET, checks={_SUBMITTED: ()})
+    hub = _hub(tmp_path, double)
+    chunk_id = _chunk(hub, _WIDGET)
+    _take(hub, chunk_id)
+    if appeared:
+        double.repos[_WIDGET].checks[_SUBMITTED] = (check(outcome=CheckOutcome.PENDING),)
+        hub.clock.advance(timedelta(minutes=5))
+        _take(hub, chunk_id)
+
+    hub.clock.advance(timedelta(days=2))
+    _take(hub, chunk_id)
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    if appeared:
+        assert [bounce["cause"] for bounce in detail["bounces"]] == ["poll-timeout"]
+        assert "unfinished when the visit ended" in (_artifact(hub, chunk_id, "delivery-findings") or "")
+    else:
+        assert detail["escalation"]["cause"] == "missing-checks"
+
+
+@pytest.mark.parametrize("policy", [LandingPolicy.MERGE_ON_CHECKS, LandingPolicy.FAST_FORWARD])
 def test_degraded_checks_do_not_land_even_with_no_ci_opt_in(policy: LandingPolicy) -> None:
     double = _forge(checks={_SUBMITTED: None}, compares={("base-tip", _SUBMITTED): comparison()})
     visit = _visit()

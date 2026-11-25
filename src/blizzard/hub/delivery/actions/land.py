@@ -43,8 +43,7 @@ class Land:
     async def take(self, visit: Visit, forges: VisitForges, effects: IEffectSink) -> Pass:
         run = LandingRun(visit, effects)
         answer = await self._answer(run, forges)
-        timed_out = visit.final_pass and answer.choice == PENDING
-        return answer if answer.waits() and not timed_out else await self._end_visit(run, answer)
+        return await self._end_visit(run, answer) if visit.ends_with(answer) else answer
 
     async def _answer(self, run: LandingRun, forges: VisitForges) -> Pass:
         try:
@@ -113,6 +112,7 @@ class Land:
                 assert marker is not None
                 await run.post(reopen_marker_name(first.repo, marker), reopen_marker_content())
                 return run.answer(PENDING)
+            run.note(first.repo, state)
             if not isinstance(state, Landed):
                 return await combine(run, [(first, state)])
             await run.settle(first, state)

@@ -100,7 +100,10 @@ def _refused(reason: str) -> Ready:
 
 def _combine(states: Sequence[tuple[str, RepoState]]) -> tuple[Pass, _Sink, LandingRun]:
     run, sink = _run()
-    return asyncio.run(combine(run, [(_repo(run, slug), state) for slug, state in states])), sink, run
+    stepped = [(_repo(run, slug), state) for slug, state in states]
+    for repo, state in stepped:
+        run.note(repo.repo, state)  # as the pass that stepped them does
+    return asyncio.run(combine(run, stepped)), sink, run
 
 
 def _fold(states: Sequence[tuple[str, RepoState]]) -> tuple[Pass, _Sink]:
@@ -155,6 +158,15 @@ def test_the_records_that_decided_the_answer_are_handed_on_first_and_none_is_wri
     run.visit = replace(_visit(), markers=())
     assert [record["repo"] for record in run.visit_records()] == ["acme/b", "acme/c", "acme/a"]
     assert sink.markers() == {}
+
+
+def test_a_conflicting_repository_hands_on_a_record_of_its_conflict_first() -> None:
+    answer, _, run = _combine([("a", Waiting("checks", _record("a", "wait"))), ("b", Conflict("acme/b#2 is dirty"))])
+
+    assert answer.choice == "conflict"
+    run.visit = replace(_visit(), markers=())
+    assert [(r["repo"], r["decision"]) for r in run.visit_records()] == [("acme/b", "conflict"), ("acme/a", "wait")]
+    assert run.visit_records()[0]["detail"] == "acme/b#2 is dirty"
 
 
 def test_pending_while_any_repository_is_unprepared_and_none_lands() -> None:

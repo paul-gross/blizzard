@@ -8,6 +8,7 @@ rendering, and the ``parse``/registry ``resolve`` that give it its production ca
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -72,6 +73,15 @@ def _github(locator: str, *, secret: str = "gh", api_base: str = GITHUB_API_BASE
     return _Source(locator, secret, api_base, annotate)
 
 
+_HELD_SCOPES: list[TenantStores] = []
+
+
+@pytest.fixture(autouse=True)
+def _release_held_scopes() -> Iterator[None]:
+    yield
+    _HELD_SCOPES.clear()
+
+
 def _registry_world(
     tmp_path: Path,
     *sources: tuple[str, _Source],
@@ -94,6 +104,8 @@ def _registry_world(
         ).work_source_id
         for slug, source in sources
     }
+    # The registry holds the tenant's cache, not its scope: unheld, collection would close the cache under it.
+    _HELD_SCOPES.append(stores)
     live = tenant_live(stores)
     registry = WorkSourceEntry.registry(
         records=stores.work_source_records,

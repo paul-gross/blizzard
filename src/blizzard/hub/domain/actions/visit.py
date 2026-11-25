@@ -13,6 +13,7 @@ from types import MappingProxyType
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.actions.declarations import GitCommits, UnconvergedDeliveryError
+from blizzard.hub.domain.actions.effects import Pass
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import LandedRepos, WorkRef
 from blizzard.hub.domain.chunk.no_code import finished_repos, no_code_marker, no_code_repos
@@ -169,6 +170,15 @@ class Visit:
     first_turn_at: datetime
     now: datetime
     final_pass: bool = False
+
+    def times_out(self, answer: Pass) -> bool:
+        """Whether ``answer`` leaves this visit to its poll timeout: the final pass still ``pending``.
+        ``awaiting-merge`` is never charged against the deadline."""
+        return self.final_pass and answer.escalation is None and answer.choice == "pending"
+
+    def ends_with(self, answer: Pass) -> bool:
+        """Whether ``answer`` is the visit's last: any answer but a reserved wait, or one that times it out."""
+        return not answer.waits() or self.times_out(answer)
 
     def marker_names(self) -> frozenset[str]:
         """The names of the markers recorded at this node, in any epoch."""

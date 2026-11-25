@@ -760,12 +760,11 @@ class TurnRunner:
         chunk, graph, node, epoch = ready.at.chunk, ready.at.graph, ready.at.node, ready.at.epoch
         spec = ready.action.spec
         answer = self._answer(chunk, node, spec, run, epoch=epoch, final_pass=ready.visit.final_pass)
-        # `awaiting-merge` is never charged against the poll deadline, so only `pending` times out.
-        timed_out = ready.visit.final_pass and answer.escalation is None and answer.choice == _PENDING
+        timed_out = ready.visit.times_out(answer)
+        # A hub artifact keeps its first write per epoch, so the log is left for the pass that ends the visit.
+        ends_visit = ready.visit.ends_with(answer)
         if timed_out:
             answer = replace(answer, log=(*answer.log, "the poll timeout ended the visit"))
-        # A hub artifact keeps its first write per epoch, so the log is left for the pass that ends the visit.
-        ends_visit = timed_out or not answer.waits()
         log_artifact = self._record_pass_log(chunk, node, spec.name, answer, epoch=epoch) if ends_visit else None
         if answer.escalation is not None:
             self._escalate_pass(chunk, node, ready, answer.escalation, epoch=epoch, ending=ending)

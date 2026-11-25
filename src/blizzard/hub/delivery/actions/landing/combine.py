@@ -4,8 +4,8 @@ Repositories sort by the landing position their visit took at its first turn —
 place the rule is written. The fold answers, in priority: a person's call; a foreign head's ``failure``; a
 ``conflict``; the repositories' own check ``failure``; ``inherited-failure``; ``pending`` while any repository is
 not yet prepared. Only once every one is prepared does it land them, one at a time in order, each landing handed
-over before the next is taken — so a refusal after a landing leaves the landed repository standing. Each
-repository's findings record is handed to the run, with those that decided the answer named."""
+over before the next is taken — so a refusal after a landing leaves the landed repository standing. The fold
+names the repositories whose findings records decided its answer."""
 
 from __future__ import annotations
 
@@ -62,7 +62,6 @@ async def combine(run: LandingRun, stepped: Sequence[tuple[RepoLanding, RepoStat
     ordered = sorted(stepped, key=lambda pair: _landing_key(pair[0]))
     states = [state for _, state in ordered]
     for repo, state in ordered:
-        run.note(repo.repo, state)
         if isinstance(state, Landed):
             await run.settle(repo, state)
 
@@ -76,6 +75,7 @@ async def combine(run: LandingRun, stepped: Sequence[tuple[RepoLanding, RepoStat
         return run.answer(FAILURE)
     if conflict := next((state for state in states if isinstance(state, Conflict)), None):
         run.say(f"conflict: {conflict.detail}")
+        run.decided_by(repo.repo for repo, state in ordered if isinstance(state, Conflict))
         return run.answer(CONFLICT)
     if failures := _findings(state for state in states if isinstance(state, Failure)):
         # Nothing lands (chunk atomicity).

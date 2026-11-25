@@ -941,9 +941,7 @@ def _bounce_causes(world: _World, chunk_id: str) -> list[str]:
     return [bounce["cause"] for bounce in world.detail(chunk_id)["bounces"]]
 
 
-def test_a_final_pass_that_waits_times_out_without_recording_a_wait(
-    world: _World, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_final_pass_that_waits_times_out_without_recording_a_wait(world: _World) -> None:
     visits: list[Visit] = []
     world.hooked.hook = visits.append
     chunk_id = _past_deadline(world)
@@ -956,7 +954,7 @@ def test_a_final_pass_that_waits_times_out_without_recording_a_wait(
     assert _hub_logs(world, chunk_id) == ["the poll timeout ended the visit\n"]
 
 
-def test_a_final_pass_that_answers_a_choice_routes_it(world: _World, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_final_pass_that_answers_a_choice_routes_it(world: _World) -> None:
     chunk_id = _past_deadline(world)
     world.hooked.answer = Pass(choice="landed")
 
@@ -966,9 +964,7 @@ def test_a_final_pass_that_answers_a_choice_routes_it(world: _World, monkeypatch
     assert "poll-timeout" not in _bounce_causes(world, chunk_id)
 
 
-def test_a_final_pass_awaiting_a_person_records_that_wait_and_does_not_bounce(
-    world: _World, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_final_pass_awaiting_a_person_records_that_wait_and_does_not_bounce(world: _World) -> None:
     chunk_id = _past_deadline(world)
     world.hooked.answer = Pass(choice="awaiting-merge", log=("waiting on a person",))
 

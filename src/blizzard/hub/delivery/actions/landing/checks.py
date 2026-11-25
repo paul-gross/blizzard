@@ -9,6 +9,7 @@ from typing import Any, ClassVar
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.delivery.actions.landing.repo import (
+    CONFLICT_RECORD,
     LANDED_RECORD,
     Failure,
     Inherited,
@@ -23,6 +24,8 @@ from blizzard.hub.domain.actions.check_observations import (
     marker_content,
     marker_name,
     missing_checks,
+    overtaken_by_checks,
+    superseded_name,
 )
 from blizzard.hub.domain.actions.check_observations import (
     eligibility as decide_eligibility,
@@ -174,14 +177,20 @@ def rerun_marker(repo: str, name: str, head_sha: str) -> str:
 
 
 async def read_verdict(repo: RepoLanding, ref: str) -> Verdict:
-    """``ref``'s checks, degrading to ``None`` on any read the forge refused or did not answer."""
+    """``ref``'s checks, degrading to ``None`` on any read the forge refused or did not answer. A read finding
+    checks supersedes the repository's empty observations, so a later timeout does not claim none appeared."""
     try:
-        return Verdict(await repo.ask(repo.forge.checks.checks(ref)))
+        verdict = Verdict(await repo.ask(repo.forge.checks.checks(ref)))
     except (ForgeRejected, ForgeNotFound):
         return Verdict(None)
     except ForgeUnavailable as exc:
         repo.run.hold(exc)
         return Verdict(None)
+    if verdict.checks:
+        visit = repo.run.visit
+        for sha in overtaken_by_checks(visit.markers, visit.epoch, repo.record.record):
+            await repo.run.post(superseded_name(repo.record.record, sha), sha)
+    return verdict
 
 
 async def eligibility(repo: RepoLanding, sha: str, verdict: Verdict) -> bool | Waiting | NeedsPerson:
@@ -319,6 +328,8 @@ class _Section:
             return _ForeignHead(record)
         if record["decision"] == LANDED_RECORD:
             return _Landed(record)
+        if record["decision"] == CONFLICT_RECORD:
+            return _Conflicted(record)
         return _Checks(record)
 
     def rows(self) -> Iterator[str]:
@@ -357,6 +368,13 @@ class _Checks(_Section):
 class _Landed(_Checks):
     def heading(self) -> str:
         return f"Landed at {self.record['revision']}:"
+
+
+class _Conflicted(_Section):
+    label = "Conflict:"
+
+    def rows(self) -> Iterator[str]:
+        yield f"  {self.record['detail']}"
 
 
 class _Failed(_Section):
