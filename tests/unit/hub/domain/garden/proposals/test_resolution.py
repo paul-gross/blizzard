@@ -228,9 +228,6 @@ class _FakeFindings:
     ) -> list[str]:
         raise NotImplementedError
 
-    def count_by_class(self, project_id: str, routine_name: str, class_: str) -> int:
-        raise NotImplementedError
-
     def has_delivery_for_proposal(self, proposal_id: str) -> bool:
         return proposal_id in self.delivered_proposal_ids
 

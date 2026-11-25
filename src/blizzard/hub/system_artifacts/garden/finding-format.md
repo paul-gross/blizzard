@@ -14,9 +14,8 @@ live findings — related to a candidate but not the same shape, because a delta
 ever mints a real id.
 
 - `ref` — a local reference, stable only within this submission.
-- `class` — the deployment's own vocabulary for a kind of weed. blizzard indexes it and never interprets it: it can
-  count how often a class recurs without knowing what the name means. Keep the spelling stable across runs — two
-  spellings of one class split its own recurrence count and hide the case for automating a fix.
+- `class` — the deployment's own vocabulary for a kind of weed. blizzard indexes it and never interprets it. Keep the
+  spelling stable across runs — two spellings of one class split it in two and hide the case for automating a fix.
 - `locus` — where it lives: normally a repo-relative path, optionally `:line` or `::symbol`. A finding about a whole
   body of ground rather than one point inside it may name that ground instead. blizzard stores the string and never
   resolves it.
@@ -60,8 +59,8 @@ finding.
 - `findings` — the operations below. Emit one only for a finding the run actually visited: a finding the run did not
   look at gets no entry, and keeps its last word. Silence about a finding is never a claim about it.
 
-One finding takes at most one op across every delta a delivery carries. A delivery that names a finding in more than
-one op, in one delta or in two, is refused whole.
+One finding takes at most one op across every delta a delivery carries. A delivery that names a finding in more than one
+op, in one delta or in two, is refused whole.
 
 ### FindingDelta
 

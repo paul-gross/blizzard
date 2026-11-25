@@ -3062,9 +3062,6 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
             project_id=w.project_id, routine_name="gardening", scope_slug="blizzard"
         ),
     ),
-    (IReadFindingRepository, "count_by_class"): lambda w: w.hub.services.findings.count_by_class(
-        w.project_id, "gardening", "stale-docstring"
-    ),
     (IReadFindingRepository, "has_delivery_for_proposal"): lambda w: w.hub.services.findings.has_delivery_for_proposal(
         w.garden_proposal_2
     ),

@@ -2,7 +2,7 @@
 
 Migrated-to-head sqlite-on-disk — the ``tests/component/hub/store/internal/test_scope_store.py`` shape. Proves a
 finding named by id across two runs, and the two indexed reads (`list_for`'s
-routine+scope bucket, `count_by_class`'s routine+class recurrence) plan as an index
+routine+scope bucket, `distinct_classes`' routine's classes) plan as an index
 search rather than a table scan."""
 
 from __future__ import annotations
@@ -392,18 +392,6 @@ def test_get_many_query_cost_scales_linearly_with_batch_count(tmp_path: Path, mo
     assert three_batch_count == one_batch_count + 2 * per_batch_cost  # the trailing size-1 batch costs the same
 
 
-def test_count_by_class_counts_across_the_named_routine(tmp_path: Path) -> None:
-    store, engine = _store_and_engine(tmp_path)
-    project = default_project(engine)
-    _add(store, project, finding_id="fin_1", class_="stale-docstring")
-    _add(store, project, finding_id="fin_2", class_="stale-docstring")
-    _add(store, project, finding_id="fin_3", class_="dead-code")
-
-    assert store.count_by_class(project, "nightly", "stale-docstring") == 2
-    assert store.count_by_class(project, "nightly", "dead-code") == 1
-    assert store.count_by_class(project, "nightly", "unseen-class") == 0
-
-
 def _add_review_finding(engine: Engine, finding_id: str = "fin_review", *, scope_slug: str = "blizzard") -> None:
     with engine.begin() as conn:
         conn.execute(
@@ -487,7 +475,7 @@ def test_list_for_query_plans_as_an_index_search(tmp_path: Path) -> None:
     assert any("ix_findings_tenant_project_routine_scope" in str(row) for row in plan), plan
 
 
-def test_count_by_class_query_plans_as_an_index_search(tmp_path: Path) -> None:
+def test_distinct_classes_for_a_routine_query_plans_as_an_index_search(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
     project = default_project(engine)
     _add(store, project)
@@ -495,8 +483,8 @@ def test_count_by_class_query_plans_as_an_index_search(tmp_path: Path) -> None:
     with engine.connect() as conn:
         plan = conn.execute(
             sa.text(
-                "EXPLAIN QUERY PLAN SELECT COUNT(*) FROM findings "
-                "WHERE tenant_id = :tenant AND project_id = :project AND routine_name = 'nightly' AND class = 'stale-docstring'"
+                "EXPLAIN QUERY PLAN SELECT DISTINCT class FROM findings "
+                "WHERE tenant_id = :tenant AND project_id = :project AND routine_name = 'nightly' ORDER BY class"
             ),
             {"tenant": default_tenant(engine), "project": default_project(engine)},
         ).all()
