@@ -85,13 +85,32 @@ def export_document(registry: ConfigRegistry, entries: Mapping[str, Entry]) -> d
 
 
 def _finite(value: object) -> bool:
-    if isinstance(value, float):
-        return math.isfinite(value)
-    if isinstance(value, Mapping):
-        return all(_finite(item) for item in cast(Mapping[object, object], value).values())
-    if isinstance(value, (list, tuple)):
-        return all(_finite(item) for item in cast(list[object] | tuple[object, ...], value))
+    parents: set[int] = set()
+    stack: list[tuple[object, bool]] = [(value, False)]
+    while stack:
+        item, leaving = stack.pop()
+        if isinstance(item, float) and not math.isfinite(item):
+            return False
+        if not isinstance(item, (Mapping, list, tuple)):
+            continue
+        container = cast(Mapping[object, object] | list[object] | tuple[object, ...], item)
+        identity = id(container)
+        if leaving:
+            parents.remove(identity)
+            continue
+        if identity in parents:
+            return False
+        parents.add(identity)
+        stack.append((container, True))
+        children = container.values() if isinstance(container, Mapping) else container
+        stack.extend((child, False) for child in children)
     return True
+
+
+def validate_document_values(document: Mapping[str, object]) -> None:
+    """Refuse values that cannot be represented in durable settings."""
+    if not _finite(document):
+        raise ConfigError("settings must not contain a non-finite number or cycle")
 
 
 @domain_model
@@ -129,7 +148,7 @@ class HubSettingsFooting:
                 raise ConfigError(f"unknown hub setting {key!r}")
             if not entry.at_default:
                 if not _finite(entry.value):
-                    raise ConfigError(f"{key} must not contain a non-finite number")
+                    raise ConfigError(f"{key} must not contain a non-finite number or cycle")
                 _put(document, key, entry.value)
         try:
             resolved = HubConfig.resolve_document(

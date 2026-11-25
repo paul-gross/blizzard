@@ -68,6 +68,45 @@ def test_nonfinite_settings_are_rejected_without_changing_export(tmp_path: Path)
     assert client.get(path + "/export").json() == {"auth": {"login_throttle": {"refill_seconds": 1.5}}}
 
 
+def test_cyclic_yaml_apply_is_refused_before_any_write(tmp_path: Path) -> None:
+    client = _hub(tmp_path).client
+    path = "/api/admin/settings"
+    for body in (
+        "action_pass_seconds: &cycle [*cycle]\n",
+        "auth: &cycle {login_throttle: *cycle}\n",
+    ):
+        for suffix in ("", "?dry_run=true"):
+            response = client.post(path + "/apply" + suffix, headers={"Content-Type": "application/yaml"}, content=body)
+            assert response.status_code == 422, response.text
+            assert response.json()["code"] == "settings_invalid"
+    assert client.get(path).json()["revision"] == 0
+    assert client.get(path + "/export").json() == {}
+    assert client.get(path + "/changes").json()["changes"] == []
+
+
+def test_invalid_yaml_bytes_are_refused_before_any_write(tmp_path: Path) -> None:
+    client = _hub(tmp_path).client
+    path = "/api/admin/settings"
+    for body in (b"action_pass_seconds: \xff\n", b"action_pass_seconds: \x00\n"):
+        response = client.post(path + "/apply", headers={"Content-Type": "application/yaml"}, content=body)
+        assert response.status_code == 422, response.text
+        assert response.json()["code"] == "settings_invalid"
+    assert client.get(path).json()["revision"] == 0
+    assert client.get(path + "/export").json() == {}
+    assert client.get(path + "/changes").json()["changes"] == []
+
+
+def test_nonfinite_unknown_and_nested_document_values_are_invalid(tmp_path: Path) -> None:
+    client = _hub(tmp_path).client
+    path = "/api/admin/settings"
+    for body in ('{"unknown": NaN}', '{"unknown": {"nested": [Infinity]}}'):
+        response = client.post(path + "/apply", headers={"Content-Type": "application/json"}, content=body)
+        assert response.status_code == 422, response.text
+        assert response.json()["code"] == "settings_invalid"
+    assert client.get(path).json()["revision"] == 0
+    assert client.get(path + "/changes").json()["changes"] == []
+
+
 def test_read_write_history_apply_and_round_trip(tmp_path: Path) -> None:
     hub = _hub(tmp_path)
     client = hub.client

@@ -166,10 +166,10 @@ naming a routine nobody declared is applied, and the cadence's view shows it as 
 ([cadences.md](./cadences.md#attention)). A cadence entry is compared by its effective value, so a spacing stated as
 `240m` matches a stored `4h`, and an entry leaving `anchor`, `promote`, or `name` out matches their defaults.
 
-The CLI picks the format by extension: `.yaml` and `.yml` read as YAML, `.json` as JSON, and `.toml` as TOML. It decodes
-the file and sends JSON to the hub. Over HTTP, `POST /api/config/apply` selects the format by `Content-Type`:
-`application/yaml`, `application/json`, or `application/toml`; an unsupported type is refused with 415. Graph mint also
-accepts TOML input by extension.
+The CLI picks the format by extension: `.yaml` and `.yml` read as YAML, `.json` as JSON, and `.toml` as TOML. It sends
+the original file bytes using the selected format's media type. Over HTTP, `POST /api/config/apply` selects the format
+by `Content-Type`: `application/yaml`, `application/json`, or `application/toml`; an unsupported type is refused with
+415. Graph mint also accepts TOML input by extension.
 
 ## Version 3
 

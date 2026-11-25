@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Final, Literal
+from typing import Annotated, Final, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, TypeAdapter
 
 from blizzard.foundation.config_keys import Lifetime
 from blizzard.foundation.hub_setting_source import HubSettingSource
@@ -15,9 +15,32 @@ from blizzard.wire.config import FieldChangeView
 from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
+
+def _acyclic_document(value: object) -> object:
+    parents: set[int] = set()
+    stack: list[tuple[object, bool]] = [(value, False)]
+    while stack:
+        item, leaving = stack.pop()
+        if not isinstance(item, (dict, list)):
+            continue
+        container = cast(dict[object, object] | list[object], item)
+        identity = id(container)
+        if leaving:
+            parents.remove(identity)
+            continue
+        if identity in parents:
+            raise ValueError("settings document contains a cycle")
+        parents.add(identity)
+        stack.append((container, True))
+        children = list(container.values()) if isinstance(container, dict) else container
+        for child in children:
+            stack.append((child, False))
+    return value
+
+
 #: ``GET /api/admin/settings/export``: the hub's non-default pass-lifetime settings as a nested TOML-shaped document.
-SettingsExportDocument = dict[str, object]
-SETTINGS_EXPORT_ADAPTER = TypeAdapter(SettingsExportDocument)
+SettingsExportDocument = Annotated[dict[str, object], BeforeValidator(_acyclic_document)]
+SETTINGS_EXPORT_ADAPTER: TypeAdapter[SettingsExportDocument] = TypeAdapter(SettingsExportDocument)
 
 
 class HubSettingRow(WireModel):

@@ -178,6 +178,26 @@ def test_invalid_document_never_reaches_transport(tmp_path: Path, name: str, con
     assert calls == []
 
 
+@pytest.mark.parametrize("content", [b"a: \xff\n", b"a: \x00\n", b"a: !!int invalid\n"])
+def test_invalid_yaml_reader_and_constructor_failures_are_reported(tmp_path: Path, content: bytes) -> None:
+    calls: list[str] = []
+
+    def request(method: str, url: str, **kwargs: Any) -> httpx2.Response:
+        calls.append(url)
+        return httpx2.Response(200, json={})
+
+    file = tmp_path / "settings.yaml"
+    file.write_bytes(content)
+    result = bind_stubs(request=request).runner.invoke(
+        hub, ["admin", "settings", "apply", str(file), "--hub-url", "http://testserver"]
+    )
+
+    assert result.exit_code == 1
+    assert "Error:" in result.output
+    assert str(file) in result.output
+    assert calls == []
+
+
 def test_export_json_keeps_raw_and_unencodable_toml_is_refused() -> None:
     def request(method: str, url: str, **kwargs: Any) -> httpx2.Response:
         return httpx2.Response(200, json={"nested": {"value": None}})

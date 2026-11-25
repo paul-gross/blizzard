@@ -27,6 +27,18 @@ test('implicit operator sees conflicts and refusals without partial writes', asy
   expect(current.body.settings).toEqual(expect.arrayContaining([expect.objectContaining({ key: 'action_pass_seconds', value: 5, written_by: 'operator' })]));
 });
 
+test('invalid YAML settings documents are refused without writes', async ({ api }) => {
+  const before = (await api.get(path)).body;
+  const history = (await api.get(path + '/changes')).body;
+  for (const data of ['auth: &a\n  child: *a\n', 'action_pass_seconds: \x00']) {
+    const response = await api.post(path + '/apply', { headers: { 'Content-Type': 'application/yaml' }, data });
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('settings_invalid');
+  }
+  expect((await api.get(path)).body).toEqual(before);
+  expect((await api.get(path + '/changes')).body).toEqual(history);
+});
+
 test('apply previews atomically and CLI TOML export reapplies unchanged', async ({ api, cli }, testInfo) => {
   const initial = await api.get(path);
   const revision = initial.body.revision as number;

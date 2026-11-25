@@ -77,9 +77,12 @@ class YamlCodec:
     extensions = (".yaml", ".yml")
 
     def decode(self, data: bytes) -> dict[str, object]:
-        loader = _StrictLoader(data)
         try:
-            loaded = loader.get_single_data()
+            loader = _StrictLoader(data)
+            try:
+                loaded = loader.get_single_data()
+            finally:
+                loader.dispose()  # pyright: ignore[reportUnknownMemberType]  # PyYAML stub leaves dispose untyped
         except yaml.MarkedYAMLError as exc:
             mark = exc.problem_mark
             problem = exc.problem or "invalid YAML"
@@ -88,8 +91,8 @@ class YamlCodec:
             raise ConfigDecodeError(problem, line=mark.line + 1, column=mark.column + 1) from exc
         except yaml.YAMLError as exc:
             raise ConfigDecodeError(str(exc)) from exc
-        finally:
-            loader.dispose()  # pyright: ignore[reportUnknownMemberType]  # PyYAML stub leaves dispose untyped
+        except ValueError as exc:
+            raise ConfigDecodeError(str(exc)) from exc
         if not isinstance(loaded, dict):
             raise ConfigDecodeError("document root must be a mapping")
         return cast("dict[str, object]", loaded)

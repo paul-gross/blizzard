@@ -54,6 +54,21 @@ def test_malformed_syntax_carries_the_parser_position() -> None:
     assert raised.value.line is not None
 
 
+@pytest.mark.parametrize(
+    ("document", "problem"),
+    [
+        (b"a: \xff\n", "invalid start byte"),
+        (b"a: \x00\n", "unacceptable character"),
+        (b"a: !!int invalid\n", "invalid literal"),
+    ],
+)
+def test_yaml_reader_and_constructor_failures_are_decode_errors(document: bytes, problem: str) -> None:
+    with pytest.raises(ConfigDecodeError, match=problem) as raised:
+        YAML_CODEC.decode(document)
+
+    assert raised.value.__cause__ is not None
+
+
 @pytest.mark.parametrize("document", [b"", b"- a\n- b\n", b"just a scalar\n"])
 def test_a_root_that_is_not_a_mapping_is_refused(document: bytes) -> None:
     with pytest.raises(ConfigDecodeError, match="mapping"):

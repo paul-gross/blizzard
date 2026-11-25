@@ -3814,7 +3814,7 @@
     "config": {
       "commands": {
         "apply": {
-          "help": "Apply the declarative document FILE (.yaml, .yml, .json or .toml) in one transaction.\n\nCreates what is absent, edits only the fields the document states, enables what is retired, and never\ntouches a record it leaves out. Any refusal leaves everything unchanged; --dry-run prints the same outcome. The\nhub applies a version-2 or a version-3 document; version 3 declares credentials, and names the one each work\nsource and repository acts with.",
+          "help": "Apply the declarative document FILE (.yaml, .yml, .json or .toml) in one transaction.\n\nCreates, edits or enables declared records; omitted records stay unchanged. A refusal writes nothing.\n--dry-run prints the outcome without writing. See docs/deployment/config-documents.md.",
           "params": [
             {
               "hidden": false,

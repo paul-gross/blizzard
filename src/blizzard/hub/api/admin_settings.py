@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from functools import partial
 from typing import Annotated, Any, NoReturn, Protocol, cast
 
@@ -23,6 +22,7 @@ from blizzard.hub.api.door import RequestDoor
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problems_admin import setting_not_live_problem, setting_unknown_problem, settings_invalid_problem
 from blizzard.hub.auth.models import ResolvedIdentity
+from blizzard.hub.config import ConfigError
 from blizzard.hub.documents import ConfigDecodeError, codec_for_media_type
 from blizzard.hub.settings.footing import (
     HubSettingsFooting,
@@ -30,6 +30,7 @@ from blizzard.hub.settings.footing import (
     SettingUnknown,
     require_settable,
     settable_declarations,
+    validate_document_values,
 )
 from blizzard.hub.settings.footing import (
     export_document as export_settable_document,
@@ -178,6 +179,10 @@ def changes(
 
 
 def _document(footing: HubSettingsFooting, document: dict[str, object]) -> dict[str, object]:
+    try:
+        validate_document_values(document)
+    except ConfigError as exc:
+        _refuse(settings_invalid_problem, str(exc))
     registry = footing.key_registry
     result: dict[str, object] = {}
 
@@ -230,16 +235,6 @@ def _apply_services(authoring: Authoring, footing: Footing) -> tuple[HubSettings
     return authoring, footing
 
 
-def _finite(value: object) -> bool:
-    if isinstance(value, float):
-        return math.isfinite(value)
-    if isinstance(value, dict):
-        return all(_finite(item) for item in cast(dict[str, object], value).values())
-    if isinstance(value, list):
-        return all(_finite(item) for item in cast(list[object], value))
-    return True
-
-
 _APPLY_BODY = {
     "required": True,
     "content": {
@@ -266,8 +261,6 @@ async def apply_document(
         document = SETTINGS_EXPORT_ADAPTER.validate_python(codec.decode(await request.body()))
     except (ConfigDecodeError, ValidationError) as exc:
         _refuse(settings_invalid_problem, str(exc))
-    if not _finite(document):
-        _refuse(settings_invalid_problem, "non-finite numbers are not setting values")
     return await run_in_threadpool(_apply_document, document, identity, *services, dry_run)
 
 

@@ -826,14 +826,10 @@ export const getWorkItemsApiChunksChunkIdWorkItemsGet = <ThrowOnError extends bo
 /**
  * Apply Config
  *
- * Reconcile a version-2 or version-3 document (YAML, JSON or TOML, by `Content-Type`; told apart by `version`)
- * in one transaction: create what is absent, edit only the fields an entry states, enable what is retired, and leave
- * unnamed records alone. Forges are declared, and every work source and repository names its forge by id or slug; a
- * version-3 document declares credentials too, and each work source and repository names the one it acts with by id
- * or slug, as `credential`. `dry_run` rolls the same transaction back, with the same `outcomes` and no `apply_id`.
- * 422 invalid — `config_version_retired` for any `version` but 2 or 3, a missing one included — 409 conflict, 415
- * unknown `Content-Type`; a refusal leaves the store unchanged. 403 when a cadence write would leave it promoting its
- * runs and the caller may not promote chunks.
+ * Reconcile a version-2 or version-3 YAML, JSON or TOML document in one transaction.
+ *
+ * A dry run rolls the transaction back; a refusal leaves the store unchanged.
+ * See `docs/deployment/config-documents.md` for document and refusal details.
  */
 export const applyConfigApiConfigApplyPost = <ThrowOnError extends boolean = false>(options: Options<ApplyConfigApiConfigApplyPostData, ThrowOnError>): RequestResult<ApplyConfigApiConfigApplyPostResponses, ApplyConfigApiConfigApplyPostErrors, ThrowOnError> => (options.client ?? client).post<ApplyConfigApiConfigApplyPostResponses, ApplyConfigApiConfigApplyPostErrors, ThrowOnError>({
     url: '/api/config/apply',
