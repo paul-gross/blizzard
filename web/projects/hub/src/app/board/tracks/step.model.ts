@@ -1,10 +1,8 @@
-import { compactRef, formatCost, formatHeldFor, type hubApi } from 'fleet';
+import { compactRef, formatCost, formatHeldFor } from 'fleet';
+import type { EnvTimelineSegment, PlacedStep } from './timeline.domain';
 
 /** One node step on an environment's track. */
-export type EnvTimelineSegment = hubApi.EnvTimelineSegmentView;
-
-/** A step placed where it ran — its host, workspace and environment. */
-export type PlacedStep = hubApi.EnvTimelinePlacedStepView;
+export type { EnvTimelineSegment, PlacedStep } from './timeline.domain';
 
 /** Which node step: the chunk and the instant the step began, as the wire gives it. */
 export interface StepKey {

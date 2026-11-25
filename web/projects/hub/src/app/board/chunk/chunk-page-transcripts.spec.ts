@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ChunkPage, ViewportService, type hubApi } from 'fleet';
+import { ChunkPage, ViewportService } from 'fleet';
 import {
   assetArtifactView,
   chunkDetail,
@@ -28,7 +28,7 @@ import { HUB_CHUNK_PAGE_PROVIDERS } from './hub-chunk-actions';
 /** The chunk page's Transcripts tab, mounted as in `chunk-page.spec.ts`. */
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 
-const DETAIL: hubApi.ChunkDetail = chunkDetail({
+const DETAIL = chunkDetail({
   chunk_id: CHUNK_ID,
   graph_id: 'gr_1',
   graph_name: 'default',

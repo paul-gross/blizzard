@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ChunkPage, ChunkPageRoute, formatWhen, ViewportService, type hubApi } from 'fleet';
+import { ChunkPage, ChunkPageRoute, formatWhen, ViewportService } from 'fleet';
 import { APP_SCOPE, type InAppLink } from 'fleet/shell';
 import {
   assetArtifactView,
@@ -95,7 +95,7 @@ const DETAIL = chunkDetail({
 type HubRoutes = Parameters<typeof stubHubClient>[0];
 
 /** The routes every chunk-page mount reads — the operator, the chunk, its work items — plus any the test adds. */
-function chunkRoutes(detail: hubApi.ChunkDetail = DETAIL, extra: HubRoutes = {}, items: hubApi.WorkItemEntry[] = []): HubRoutes {
+function chunkRoutes(detail: ReturnType<typeof chunkDetail> = DETAIL, extra: HubRoutes = {}, items: ReturnType<typeof workItemEntry>[] = []): HubRoutes {
   return {
     'GET /api/me': () => OPERATOR_ME_RESPONSE,
     'GET /api/chunks/{chunk_id}': () => detail,

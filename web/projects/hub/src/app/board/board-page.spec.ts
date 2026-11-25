@@ -7,7 +7,7 @@ import { Router, provideRouter, withRouterConfig } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { BoardShell } from './board-shell/board-shell';
-import { type ChunkStatus, type ChunkSummary, compactRef, type MeResponse, type QueuePeekResponse } from 'fleet';
+import { compactRef } from 'fleet';
 import { injectDeleteChunkMutation } from './chunks/delete.mutations';
 import {
   backlogPeekEntry,
@@ -55,7 +55,7 @@ function deferred<T>(): { readonly promise: Promise<T>; readonly resolve: (value
   return { promise: new Promise<T>((done) => (resolve = done)), resolve: (value) => resolve(value) };
 }
 
-const CHUNK = (chunkId: string, status: ChunkStatus): ChunkSummary =>
+const CHUNK = (chunkId: string, status: Parameters<typeof chunkSummary>[0]['status']) =>
   chunkSummary({
     chunk_id: chunkId,
     graph_id: 'gr_1',
@@ -112,7 +112,7 @@ type HubRoutes = Parameters<typeof stubHubClient>[0];
  * baked in, so a spec asserting the withheld-`queue:reorder` case can answer
  * `/api/me` with a narrower identity without duplicating every other route.
  */
-function hubRoutes(me: MeResponse = OPERATOR_ME_RESPONSE): HubRoutes {
+function hubRoutes(me: typeof OPERATOR_ME_RESPONSE = OPERATOR_ME_RESPONSE): HubRoutes {
   return {
     'GET /api/me': () => me,
     'GET /api/queue': () => ({
@@ -320,7 +320,7 @@ describe('BoardPage', () => {
       harness.fixture.debugElement.query(By.css('app-board-shell')).componentInstance as BoardShell;
 
     it('demotes a READY card with the drop anchor and shows it in BACKLOG while pending', async () => {
-      const pendingPost = deferred<ChunkSummary>();
+      const pendingPost = deferred<ReturnType<typeof chunkSummary>>();
       stub.restore();
       stub = stubHubClient({
         ...hubRoutes(),
@@ -477,7 +477,7 @@ describe('BoardPage', () => {
       [...el.querySelectorAll(`[data-col="${column}"] [data-testid="chunk-id"]`)].map((n) => n.textContent?.trim());
 
     it('renders the requested position before the POST returns', async () => {
-      const pendingPost = deferred<QueuePeekResponse>();
+      const pendingPost = deferred<{ entries: ReturnType<typeof queuePeekEntry>[] }>();
       stub.restore();
       stub = stubHubClient({ ...hubRoutes(), 'POST /api/queue/position': () => pendingPost.promise });
       const { el, harness } = await open();

@@ -1,17 +1,16 @@
-import { type LaneStatus, hubApi, domainStatusLane, type Tone, toneColor, toneDimColor } from 'fleet';
+import { type LaneStatus, domainStatusLane, type Tone, toneColor, toneDimColor } from 'fleet';
+import type { GraphProgressNode, GraphProgressState } from '../../core/chunks.domain';
 
 /** One drawn block: a node of the chunk's graph and how the chunk's visits left it — the hub's
  * `ChunkSummary.graph_progress` entry. */
-export type NodeBlock = hubApi.GraphProgressNodeView;
+export type NodeBlock = GraphProgressNode;
 
-/** What a block draws as: a known {@link hubApi.GraphProgressState}, or `unknown` for a wire state this build does not know. */
-export type BlockState = hubApi.GraphProgressState | 'unknown';
+/** What a block draws as. */
+export type BlockState = GraphProgressState['kind'];
 
-const KNOWN_STATES: ReadonlySet<string> = new Set(Object.values(hubApi.GraphProgressState));
-
-/** A wire state folded for drawing: a known state passes through, anything else is `unknown`, so it never reads as `unvisited`. */
-export function blockState(state: string): BlockState {
-  return KNOWN_STATES.has(state) ? (state as hubApi.GraphProgressState) : 'unknown';
+/** The state displayed in the tooltip, including an unknown server value. */
+export function blockStateLabel(state: GraphProgressState): string {
+  return state.kind === 'unknown' ? state.raw : state.kind;
 }
 
 /** The tone each block state draws in; `unvisited` has none and keeps the strip's dark resting block. The

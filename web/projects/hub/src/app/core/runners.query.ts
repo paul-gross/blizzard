@@ -1,4 +1,4 @@
-import { toHubRunner, toProjectRunner } from './runners.translate';
+import { toGlanceRunner, toHubRunner, toProjectRunner } from './runners.translate';
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import {
@@ -31,6 +31,13 @@ function HubRunnersQueryOptions(includeRetired: () => boolean = () => false) {
     },
     refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
   };
+}
+
+export function injectGlanceRunnersQuery() {
+  return injectQuery(() => ({
+    ...HubRunnersQueryOptions(),
+    select: (rows: RunnerRegistryView[]) => rows.map(toGlanceRunner),
+  }));
 }
 
 export function injectHubRunnersQuery(

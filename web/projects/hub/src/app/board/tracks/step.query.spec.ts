@@ -8,6 +8,7 @@ import { type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/
 import { type StepRef } from './step.model';
 import { injectHubEnvTimelineStepQuery, stepQueryOptions, stepRunning } from './step.query';
 import { hubEnvTimelineLiveKey } from '../../core/query-keys';
+import { fromTimelineStep } from './timeline.translate';
 
 function stepView(chunkId: string, startedAt: string, endedAt: string | null = null): hubApi.EnvTimelineStepView {
   return {
@@ -236,8 +237,8 @@ describe('step queries', () => {
 
 describe('stepRunning', () => {
   it('is true only for a read step still running', () => {
-    expect(stepRunning(stepView('chk_1', '2026-01-15T10:00:00Z'))).toBe(true);
-    expect(stepRunning(stepView('chk_1', '2026-01-15T10:00:00Z', '2026-01-15T10:30:00Z'))).toBe(false);
+    expect(stepRunning(fromTimelineStep(stepView('chk_1', '2026-01-15T10:00:00Z')))).toBe(true);
+    expect(stepRunning(fromTimelineStep(stepView('chk_1', '2026-01-15T10:00:00Z', '2026-01-15T10:30:00Z')))).toBe(false);
     expect(stepRunning(null)).toBe(false);
     expect(stepRunning(undefined)).toBe(false);
   });

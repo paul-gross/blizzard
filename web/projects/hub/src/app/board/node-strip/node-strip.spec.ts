@@ -6,8 +6,8 @@ import { NodeStrip } from './node-strip';
 import type { NodeBlock } from './node-strip.model';
 
 /** `n` nodes, each in the state `states` names at its index, else unvisited. */
-const progress = (n: number, states: readonly NodeBlock['state'][] = []): NodeBlock[] =>
-  Array.from({ length: n }, (_, i) => ({ node_id: `nd_n${i}`, name: `n${i}`, state: states[i] ?? 'unvisited' }));
+const progress = (n: number, states: readonly NodeBlock['state']['kind'][] = []): NodeBlock[] =>
+  Array.from({ length: n }, (_, i) => ({ nodeId: `nd_n${i}`, name: `n${i}`, state: states[i] === 'unknown' ? { kind: 'unknown', raw: 'unknown' } : { kind: states[i] ?? 'unvisited' } }));
 
 describe('NodeStrip', () => {
   beforeEach(() => TestBed.configureTestingModule({ imports: [NodeStrip], providers: [provideZonelessChangeDetection()] }));
@@ -30,7 +30,7 @@ describe('NodeStrip', () => {
   });
 
   it('draws a state this build does not know as unknown, never unvisited, keeping the raw state in the title', async () => {
-    const el = await render([{ node_id: 'nd_x', name: 'x', state: 'newer' as NodeBlock['state'] }]);
+    const el = await render([{ nodeId: 'nd_x', name: 'x', state: { kind: 'unknown', raw: 'newer' } }]);
 
     expect(blocks(el)[0].getAttribute('data-state')).toBe('unknown');
     expect(blocks(el)[0].title).toBe('x · newer');

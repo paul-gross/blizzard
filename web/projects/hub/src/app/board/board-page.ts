@@ -1,4 +1,3 @@
-import { fromUrgencyRef } from '../core/urgency.translate';
 import { withPendingUrgencies } from './chunks/urgency.model';
 import { injectHubChunkControl } from './chunks/hub-chunk-control';
 import type { ChunkUrgencyVars } from './chunks/urgency.mutations';
@@ -21,21 +20,21 @@ import { StepDrawer } from './tracks/step-drawer';
 import { ActivityPanel } from './activity/activity-panel';
 import { QuestionsPanel } from './questions/questions-panel';
 import { GatesPanel } from './gates/gates-panel';
-import { injectHubDecisionsQuery } from './gates/gates.query';
+import { injectBoardDecisionsQuery } from './gates/gates.query';
 import { RunnerPanel } from '../runners/runner-panel';
 import { FleetSpendPanel } from './fleet-spend/fleet-spend-panel';
 import { chunkDeleteMutationKey, demoteChunkMutationKey, promoteChunkMutationKey, repositionBacklogMutationKey, repositionQueueMutationKey } from '../core/mutation-keys';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { type DeleteVars } from './chunks/delete.mutations';
 import { injectHubBacklogQuery, injectHubQueueQuery } from './queue/queue.query';
-import { injectHubBoardChunksQuery } from '../core/chunks.query';
+import { injectDomainBoardChunksQuery } from '../core/chunks.query';
 import { injectHubChunkCountsQuery } from './chunks/chunk-counts.query';
 import { injectDemoteChunkMutation, type DemoteVars } from './chunks/demote.mutations';
 import { injectPromoteChunkMutation, type PromoteVars } from './chunks/promote.mutations';
 import { injectRepositionBacklogMutation, injectRepositionQueueMutation, type RepositionVars } from './queue/queue.mutations';
 import { foldRepositions, gatedChunkIds, orderedChunkIds, placedMoves, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
 import { laneSkeletonCounts, listSkeletonCount } from './board-shell/board-skeletons.model';
-import { injectProjectsQuery } from '../core/projects.query';
+import { injectProjectDomainsQuery } from '../core/projects.query';
 import { injectBoardWorkItemsQuery } from '../core/work-items/board-work-items.query';
 import { injectScrollSelectionIntoView } from '../core/scroll-selection-into-view';
 import { injectShowProjectColors, projectColorMap } from '../core/project-lens-colors';
@@ -87,10 +86,10 @@ export class BoardPage {
 
   protected readonly urgenciesQuery = injectDomainUrgenciesQuery();
   private readonly pendingUrgencies = injectPendingMutationVariables<ChunkUrgencyVars>(chunkUrgencyMutationKey);
-  private readonly chunksQuery = injectHubBoardChunksQuery();
+  private readonly chunksQuery = injectDomainBoardChunksQuery();
   private readonly countsQuery = injectHubChunkCountsQuery();
   private readonly queueQuery = injectHubQueueQuery();
-  private readonly decisionsQuery = injectHubDecisionsQuery();
+  private readonly decisionsQuery = injectBoardDecisionsQuery();
   private readonly repositionQueue = injectRepositionQueueMutation((error) =>
     this.actionError.set(errorMessage(error, 'Reorder failed.')),
   );
@@ -249,7 +248,7 @@ export class BoardPage {
   }
 
   /** The tenant's projects, shared with the shell's own read of them; the cards take their tint from it. */
-  private readonly projectsQuery = injectProjectsQuery();
+  private readonly projectsQuery = injectProjectDomainsQuery();
   private readonly showProjectColors = injectShowProjectColors();
 
   /** The cards' project colours — none unless they tell projects apart ({@link injectShowProjectColors}). */
@@ -261,7 +260,7 @@ export class BoardPage {
   protected readonly runnerHosts = injectRunnerHostNames();
 
   /** The image marks the board's banners show, read once per digest. */
-  protected readonly urgencyIconUrls = injectUrgencyIconUrls(() => bannerUrgencyIcons(this.boardChunks().map((chunk) => ({ terminal: chunk.terminal, urgency: chunk.urgency ? fromUrgencyRef(chunk.urgency) : null })), this.urgenciesQuery.data()));
+  protected readonly urgencyIconUrls = injectUrgencyIconUrls(() => bannerUrgencyIcons(this.boardChunks(), this.urgenciesQuery.data()));
 
   /** Every chunk's work items, read once the chunk list has answered. */
   protected readonly workItems = injectBoardWorkItemsQuery(() => orderedChunkIds(this.boardChunks()));

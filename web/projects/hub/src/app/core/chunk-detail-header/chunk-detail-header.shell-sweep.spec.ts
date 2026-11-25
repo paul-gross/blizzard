@@ -4,8 +4,8 @@ import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 import { vi } from 'vitest';
 
-import { type ChunkDetail, runnerDisplayName } from 'fleet';
-import { chunkControlStub, chunkDetail } from 'fleet/testing';
+import { type ChunkDetailAggregate as ChunkDetail, runnerDisplayName } from 'fleet';
+import { chunkControlStub, domainChunkDetail as chunkDetail } from 'fleet/testing';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
 /**
@@ -26,7 +26,7 @@ const DETAIL: ChunkDetail = chunkDetail({
   current_node_name: null,
   chunk_id: 'ch_01dockwidth0000000000000000',
   graph_id: 'gr_1',
-  status: 'ready',
+  status: { kind: 'ready' },
   urgency: { urgency_id: 'normal', slug: 'normal' },
   pausable: true,
   completable: true,
@@ -80,7 +80,7 @@ async function renderHeader(
   }).compileComponents();
   const fixture = TestBed.createComponent(ChunkDetailHeader);
   fixture.componentRef.setInput('detail', detail);
-  fixture.componentRef.setInput('renderedStatus', detail.status);
+  fixture.componentRef.setInput('renderedStatus', detail.status.kind);
   fixture.componentRef.setInput('control', {
     ...chunkControlStub(),
     urgency: { values: signal([

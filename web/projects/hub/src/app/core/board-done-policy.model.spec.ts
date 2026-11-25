@@ -1,8 +1,8 @@
-import type { hubApi } from 'fleet';
+import type { BoardDoneWindow, BoardPageMetadata } from './chunks.domain';
 import { boardDonePolicy } from './board-done-policy.model';
 
-function page(policy: hubApi.ChunksPageView['board_done_policy']): hubApi.ChunksPageView {
-  return { chunks: [], next_cursor: null, board_done_policy: policy };
+function page(policy: BoardDoneWindow | null): BoardPageMetadata {
+  return { next_cursor: null, board_done_policy: policy };
 }
 const policy = { window_seconds: 172800, floor: 10, done_since: '2026-11-01T00:00:00Z' };
 
@@ -26,7 +26,7 @@ describe('boardDonePolicy', () => {
     });
   });
   it('falls back for absent, mixed, malformed or conflicting policy', () => {
-    const missing = { chunks: [], next_cursor: null } as unknown as hubApi.ChunksPageView;
+    const missing = { next_cursor: null, board_done_policy: undefined };
     for (const pages of [[], [missing], [page(null), page(policy)],
       [page({ ...policy, done_since: 'invalid' })], [page({ ...policy, done_since: '0' })], [page({ ...policy, window_seconds: -1 })],
       [page({ ...policy, floor: 1.5 })], [page(policy), page({ ...policy, floor: 11 })]]) {

@@ -1,27 +1,5 @@
-import type { hubApi } from 'fleet';
-
-import type { EnvTimelineSegment } from './step.model';
-
-/*
- * The env timeline as the tracks hold it. The wire names each block's chunk, runner and node once, in the view's
- * tables; {@link expandTimeline} lays those names back onto every block, so a block reads whole.
- */
-
-export interface EnvTimelineEnvironment extends Omit<hubApi.EnvTimelineEnvironmentView, 'blocks'> {
-  readonly segments: readonly EnvTimelineSegment[];
-}
-
-export interface EnvTimelineWorkspace extends Omit<hubApi.EnvTimelineWorkspaceView, 'environments'> {
-  readonly environments: readonly EnvTimelineEnvironment[];
-}
-
-export interface EnvTimelineHost extends Omit<hubApi.EnvTimelineHostView, 'workspaces'> {
-  readonly workspaces: readonly EnvTimelineWorkspace[];
-}
-
-export interface EnvTimelineView extends Pick<hubApi.EnvTimelineView, 'since' | 'until' | 'generated_at'> {
-  readonly hosts: readonly EnvTimelineHost[];
-}
+import type { EnvTimelineEnvironment, EnvTimelineHost, EnvTimelineView } from './timeline.domain';
+export type { EnvTimelineEnvironment, EnvTimelineHost, EnvTimelineView, EnvTimelineWorkspace } from './timeline.domain';
 
 /** The view before any answer has landed. */
 export const NO_TIMELINE: EnvTimelineView = { since: '', until: '', generated_at: '', hosts: [] };
@@ -30,39 +8,6 @@ export const NO_TIMELINE: EnvTimelineView = { since: '', until: '', generated_at
  * before any answer. */
 export function hubNow(view: EnvTimelineView | undefined, fallback: number): number {
   return view?.generated_at ? Date.parse(view.generated_at) : fallback;
-}
-
-/** The wire's compact block, with its chunk, runner and node named back onto it. */
-export function expandTimeline(view: hubApi.EnvTimelineView): EnvTimelineView {
-  return {
-    since: view.since,
-    until: view.until,
-    generated_at: view.generated_at,
-    hosts: view.hosts.map((host) => ({
-      host_id: host.host_id,
-      host_name: host.host_name,
-      runner_names: host.runner_names,
-      workspaces: host.workspaces.map((ws) => ({
-        workspace_id: ws.workspace_id,
-        environments: ws.environments.map((env) => ({
-          environment_id: env.environment_id,
-          segments: env.blocks.map((block): EnvTimelineSegment => {
-            const chunk = view.chunks[block.chunk_id];
-            const node = view.nodes[block.node_id];
-            return {
-              ...block,
-              title: chunk?.title ?? null,
-              project_id: chunk?.project_id ?? null,
-              runner_name: view.runners[block.runner_id] ?? block.runner_id,
-              graph_id: null,
-              graph_name: node?.graph_name ?? null,
-              node_name: node?.node_name ?? block.node_id,
-            };
-          }),
-        })),
-      })),
-    })),
-  };
 }
 
 type EnvMap = Map<string, { host: EnvTimelineHost; workspaces: Map<string, Map<string, EnvTimelineEnvironment>> }>;

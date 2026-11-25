@@ -1,4 +1,4 @@
-import type { ChunkSummary, ProjectView } from 'fleet';
+import type { Project } from '../../core/project.domain';
 import { describe, expect, it } from 'vitest';
 
 import type { EnvTimelineHost, EnvTimelineView } from './env-timeline.model';
@@ -28,7 +28,7 @@ const seg = (start: string, end: string | null, overrides: Partial<EnvTimelineSe
   epoch: 1,
   escalation: null,
   escalation_open: false,
-  executor: 'runner',
+  executor: { kind: 'runner' },
   exit_choice: null,
   failed: false,
   graph_id: null,
@@ -320,8 +320,8 @@ describe('tracksState', () => {
 
 describe('progressByChunk', () => {
   it('maps each chunk to its graph progress', () => {
-    const progress = [{ node_id: 'nd_1', name: 'plan', state: 'done' }];
-    const chunks = [{ chunk_id: 'ch_1', graph_progress: progress }] as unknown as ChunkSummary[];
+    const progress = [{ nodeId: 'nd_1', name: 'plan', state: { kind: 'passed' as const } }];
+    const chunks = [{ chunk_id: 'ch_1', graphProgress: progress }];
     expect(progressByChunk(chunks).get('ch_1')).toBe(progress);
   });
 
@@ -331,7 +331,7 @@ describe('progressByChunk', () => {
 });
 
 describe('projectHuesOf', () => {
-  const project = (project_id: string, color: string): ProjectView => ({ project_id, color }) as ProjectView;
+  const project = (project_id: string, color: string): Pick<Project, 'project_id' | 'color'> => ({ project_id, color });
 
   it('is null while blocks wear their runners colour', () => {
     expect(projectHuesOf(false, [project('proj_1', 'blue')])).toBeNull();

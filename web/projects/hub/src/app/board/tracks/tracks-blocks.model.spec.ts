@@ -18,7 +18,7 @@ const seg = (startSec: number, endSec: number | null, overrides: Partial<EnvTime
   epoch: 1,
   escalation: null,
   escalation_open: false,
-  executor: 'runner',
+  executor: { kind: 'runner' },
   exit_choice: null,
   failed: false,
   graph_id: null,

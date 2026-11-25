@@ -15,6 +15,8 @@ import { hostConnection, openLookup } from 'fleet/shell';
 import type {
   DeclaredLeverKind,
   HubRunner,
+  GlanceConnection,
+  GlanceRunner,
   ProjectRunner,
   RunnerCapabilityFact,
   RunnerDeclining,
@@ -42,6 +44,7 @@ const gateReasons = openLookup<hubApi.UnenforceableGateReason, UnenforceableGate
   { 'hub-executed': 'hub-executed', 'unknown-node': 'unknown-node' },
   unknown,
 );
+
 
 export function toProjectRunner(runner: RunnerRegistryView): ProjectRunner {
   return {
@@ -130,4 +133,20 @@ export function toHubRunner(wire: RunnerRegistryView): HubRunner {
     version_standing: wire.version_standing == null ? null : standings(wire.version_standing),
     version_refusal: wire.version_refusal == null ? null : refusals(wire.version_refusal),
   };
+}
+
+export function fromGlanceConnection(value: string): GlanceConnection {
+  switch (value) {
+    case 'never_connected':
+    case 'online':
+    case 'offline':
+      return { kind: value };
+    default:
+      return { kind: 'unknown', raw: value };
+  }
+}
+
+export function toGlanceRunner(runner: RunnerRegistryView): GlanceRunner {
+  return { runner_id: runner.runner_id, online: runner.online, retired: runner.retired, connection: fromGlanceConnection(runner.connection) };
+
 }

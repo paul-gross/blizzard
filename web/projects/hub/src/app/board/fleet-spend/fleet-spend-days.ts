@@ -2,7 +2,7 @@ import { computed } from '@angular/core';
 import { injectNowSignal } from 'fleet';
 
 import { startOfLocalDayIso, startOfPreviousLocalDayIso } from '../../core/local-day';
-import { injectHubFleetSpendQuery } from './fleet-spend.query';
+import { injectHubFleetSpendDomainQuery } from './fleet-spend.query';
 
 /**
  * The fleet's spend today (`[local midnight, now)`) and yesterday (`[previous local midnight, local midnight)`), cut
@@ -13,8 +13,8 @@ export function injectFleetSpendDays() {
   const dayStart = computed(() => startOfLocalDayIso(now()));
   const previousDayStart = computed(() => startOfPreviousLocalDayIso(now()));
   return {
-    today: injectHubFleetSpendQuery(() => dayStart()),
-    yesterday: injectHubFleetSpendQuery(
+    today: injectHubFleetSpendDomainQuery(() => dayStart()),
+    yesterday: injectHubFleetSpendDomainQuery(
       () => previousDayStart(),
       () => dayStart(),
     ),

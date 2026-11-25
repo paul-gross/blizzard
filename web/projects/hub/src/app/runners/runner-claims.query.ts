@@ -1,8 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
-import type { BoardChunksRead } from '../core/chunks.model';
-import { boardChunksQueryOptions } from '../core/chunks.query';
+import { boardChunksQueryOptions, type BoardChunksRead } from '../core/chunks.query';
 import type { RunnerClaimChunk } from './runner-claims.domain';
 import { toRunnerClaimChunk } from './runner-claims.translate';
 

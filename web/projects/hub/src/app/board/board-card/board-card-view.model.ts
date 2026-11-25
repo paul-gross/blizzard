@@ -3,14 +3,11 @@ import {
   cardShowsStatus,
   type UrgencyReference,
   type ChunkCardView,
-  type ChunkStatus,
+  type ChunkDetailAggregate,
   type LaneStatus,
   finishedWord,
   formatCost,
-  type hubApi,
   hasCostFigure,
-  type LandedRepoView,
-  type PrView,
   runnerBoardParts,
   runnerTitle,
   domainStatusLane,
@@ -20,13 +17,14 @@ import {
   runnerBoardLabel,
 } from 'fleet';
 import type { FlowPlaceLine } from '../../core/flow-place.model';
+import type { GraphProgressNode } from '../../core/chunks.domain';
 import { graphStepLabel, STEP_RUNNER_SEP } from '../../core/step-label';
 
 /** One rendered board card — the derived-status view of a chunk. */
 export interface BoardCard {
   readonly chunkId: string;
   readonly shortId: string;
-  readonly status: ChunkStatus;
+  readonly status: string;
   readonly laneStatus: LaneStatus;
   /** The hub's `ChunkSummary.terminal` — the card sits in the DONE lane exactly when set. */
   readonly terminal: boolean;
@@ -40,7 +38,7 @@ export interface BoardCard {
   /** The chunk's graph's name, from `ChunkSummary.graph_name` — null when unresolvable. */
   readonly graphName: string | null;
   /** The chunk's progress through its graph, from `ChunkSummary.graph_progress` — the strip it carries. */
-  readonly graphProgress: readonly hubApi.GraphProgressNodeView[];
+  readonly graphProgress: readonly GraphProgressNode[];
   /** The chunk's work items as label-and-title pairs, in pointer order (`workLines`). */
   readonly workLines: readonly WorkLine[];
   /** Whether the chunk's work items have been read — until then each title holds a skeleton. */
@@ -66,9 +64,9 @@ export interface BoardCard {
   readonly blockedCount: number;
   /** The blocking chunk's own derived status, when exactly one known chunk blocks this
    * one — null otherwise. */
-  readonly blockedOnStatus: ChunkStatus | null;
-  readonly openPrs?: readonly PrView[];
-  readonly landedRepos?: readonly LandedRepoView[];
+  readonly blockedOnStatus: string | null;
+  readonly openPrs?: readonly ChunkDetailAggregate['open_prs'][number][];
+  readonly landedRepos?: readonly ChunkDetailAggregate['landed_repos'][number][];
   readonly awaitingExternalMerge?: boolean;
   /** The chunk's place on each flow its open submission holds, from `ChunkSummary.flow_places` — one line per flow,
    * `landing on blizzard/master` or `3rd on blizzard/master`. */

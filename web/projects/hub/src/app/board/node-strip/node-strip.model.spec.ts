@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { BLOCK_TONE, blockEdge, blockFill, blockState, groupBlocks, isDenseStrip, type NodeBlock, showsNodeStrip } from './node-strip.model';
+import { BLOCK_TONE, blockEdge, blockFill, blockStateLabel, groupBlocks, isDenseStrip, type NodeBlock, showsNodeStrip } from './node-strip.model';
 
 describe('groupBlocks', () => {
-  const blocks = (n: number): NodeBlock[] => Array.from({ length: n }, (_, i) => ({ node_id: `nd_${i}`, name: `n${i}`, state: 'unvisited' }));
+  const blocks = (n: number): NodeBlock[] => Array.from({ length: n }, (_, i) => ({ nodeId: `nd_${i}`, name: `n${i}`, state: { kind: 'unvisited' } }));
 
   it('breaks the strip into groups of ten, the last holding the rest', () => {
     expect(groupBlocks(blocks(25)).map((g) => g.length)).toEqual([10, 10, 5]);
@@ -35,10 +35,10 @@ describe('showsNodeStrip', () => {
   });
 });
 
-describe('blockState', () => {
-  it('passes known states through and folds anything else to unknown', () => {
-    expect(['current', 'passed', 'failed', 'unvisited'].map(blockState)).toEqual(['current', 'passed', 'failed', 'unvisited']);
-    expect(blockState('newer-state')).toBe('unknown');
+describe('blockStateLabel', () => {
+  it('displays known states and the raw value of an unknown', () => {
+    expect(blockStateLabel({ kind: 'current' })).toBe('current');
+    expect(blockStateLabel({ kind: 'unknown', raw: 'newer-state' })).toBe('newer-state');
   });
 });
 

@@ -1,8 +1,3 @@
-import type { ChunkSummary, LaneStatus, hubApi } from 'fleet';
+import type { BoardSummary } from './chunks.domain';
 
-export type BoardChunk = ChunkSummary & { readonly laneStatus: LaneStatus };
-
-export interface BoardChunksRead {
-  readonly chunks: ChunkSummary[];
-  readonly pages: readonly hubApi.ChunksPageView[];
-}
+export type BoardChunk = BoardSummary;

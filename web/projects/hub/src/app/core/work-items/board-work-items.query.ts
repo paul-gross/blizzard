@@ -6,6 +6,8 @@ import {
 } from '@tanstack/angular-query-experimental';
 import { injectQueries } from '@tanstack/angular-query-experimental/inject-queries-experimental';
 
+import type { BoardWorkItems } from './board-work-items.domain';
+import { fromBoardWorkItems } from './board-work-items.translate';
 import { FLEET_CLOCK, fromWorkItemsView, type WorkItem, getBulkWorkItemsApiWorkItemsGet, type ChunkWorkItemsView, type WorkItemsView } from 'fleet';
 import {
   mergeWorkItemBatches,
@@ -128,12 +130,12 @@ function mergeBatchResults(results: unknown): ReadonlyMap<string, WorkItemsView>
  */
 export function injectBoardWorkItemsQuery(
   chunkIds: () => readonly string[],
-): Signal<ReadonlyMap<string, WorkItemsView>> {
+): Signal<ReadonlyMap<string, BoardWorkItems>> {
   const queryClient = inject(QueryClient);
   const clock = inject(FLEET_CLOCK);
   return injectQueries(() => ({
     queries: workItemBatchQueries(chunkIds(), queryClient, clock),
-    combine: mergeBatchResults,
+    combine: (results) => new Map([...mergeBatchResults(results)].map(([id, view]) => [id, fromBoardWorkItems(view)])),
   }));
 }
 

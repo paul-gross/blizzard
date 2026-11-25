@@ -111,7 +111,7 @@ describe('BoardShell DONE window', () => {
   it('uses the supplied server policy for the heading and explanation', async () => {
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('state', 'ready');
-    fixture.componentRef.setInput('donePolicy', boardDonePolicy([{ chunks: [], next_cursor: null, board_done_policy: { window_seconds: 7200, floor: 3, done_since: '2026-11-01T10:00:00Z' } }]));
+    fixture.componentRef.setInput('donePolicy', boardDonePolicy([{ next_cursor: null, board_done_policy: { window_seconds: 7200, floor: 3, done_since: '2026-11-01T10:00:00Z' } }]));
     await fixture.whenStable();
     const heading = head(fixture.nativeElement as HTMLElement, 'done');
     expect(heading?.querySelector('.col-lbl')?.textContent?.trim()).toBe('Done');

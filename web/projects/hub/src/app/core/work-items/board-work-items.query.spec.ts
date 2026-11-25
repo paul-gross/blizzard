@@ -176,7 +176,10 @@ describe('injectBoardWorkItemsQuery', () => {
     });
 
     expect(stub.requests.flatMap((r) => idsOf(r.search))).toEqual(['ch_new']);
-    expect(found.get('ch_held')).toEqual(titled('ch_held'));
+    expect(found.get('ch_held')).toEqual({
+      items: [{ source: 'hub', ref: 'ch_held', title: 'ch_held', label: null, web_url: null }],
+    });
+    expect(queryClient.getQueryData(hubChunkWorkItemsKey('ch_held'))).toEqual(titled('ch_held'));
   });
 
   it("reuses a chunk the board's own earlier read holds", async () => {

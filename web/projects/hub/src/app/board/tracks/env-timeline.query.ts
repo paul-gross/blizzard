@@ -9,10 +9,10 @@ import {
   FULL_READ_EVERY_MS,
   type LiveTimeline,
   catchUp,
-  expandTimeline,
   mergeLatest,
   mergeWindow,
 } from './env-timeline.model';
+import { expandTimeline } from './timeline.translate';
 import { LOOKBACK_MS, type TimelineRange } from './tracks-window.model';
 import { hubEnvTimelineKey, hubEnvTimelineLiveKey, lensedKey } from '../../core/query-keys';
 import { injectProjectFilter } from '../../core/project-filter';

@@ -1,12 +1,14 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { envTimelineStepApiEnvTimelineStepGet, type hubApi } from 'fleet';
+import { envTimelineStepApiEnvTimelineStepGet } from 'fleet';
 import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 
 import type { StepRef } from './step.model';
 import { hubEnvTimelineLiveKey } from '../../core/query-keys';
+import type { EnvTimelineStep } from './timeline.domain';
+import { fromTimelineStep } from './timeline.translate';
 
-export type EnvTimelineStepView = hubApi.EnvTimelineStepView;
+export type EnvTimelineStepView = EnvTimelineStep;
 
 /**
  * A step read's answer: the step and its chunk's path, or `null` for a chunk with no node step yet — one still queued,
@@ -36,7 +38,7 @@ export function stepQueryOptions(step: StepRef | null) {
       });
       if (response?.status === 404) return null;
       if (error) throw error;
-      return data;
+      return fromTimelineStep(data);
     },
     staleTime: STEP_FRESH_MS,
   };

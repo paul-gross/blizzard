@@ -1,18 +1,22 @@
-import { fromUrgencyRef } from '../../core/urgency.translate';
-import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, blockedLabel, domainChunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type ChunkStatus, type LaneStatus, type UrgencyReference, type ChunkSummary, type DecisionView, type hubApi, type QuestionView, type RunnerRegistryView, type WorkItemsView, workLines } from 'fleet';
+import { DONE_LANE, UNKNOWN_LANE, blockedLabel, domainChunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type LaneStatus, type UrgencyReference, workLines } from 'fleet';
 import type { BoardChunk } from '../../core/chunks.model';
+import type { GraphProgressNode } from '../../core/chunks.domain';
+import type { BoardQuestion } from '../questions/questions.domain';
+import type { BoardDecision } from '../gates/gates.domain';
+import type { BoardWorkItems } from '../../core/work-items/board-work-items.domain';
+import type { GlanceRunner } from '../../core/runners.domain';
 
 import type { RowWork, Vitals } from './glance-view';
 
 /** The runners that count toward runners-up: a retired runner has left the fleet, and a never-connected
  * one (added but never started) has not joined it yet — neither reads as down. */
-export function liveRunners(runners: readonly RunnerRegistryView[]): readonly RunnerRegistryView[] {
-  return runners.filter((runner) => !runner.retired && runner.connection !== RunnerConnection.NEVER_CONNECTED);
+export function liveRunners(runners: readonly GlanceRunner[]): readonly GlanceRunner[] {
+  return runners.filter((runner) => !runner.retired && runner.connection.kind !== 'never_connected');
 }
 
 /** A chunk's work items as its row names them — the board card's own `workLines`, so a glance row and a
  * card agree on what a chunk is. */
-function rowWork(chunk: ChunkSummary | undefined, workItems: ReadonlyMap<string, WorkItemsView>): RowWork {
+function rowWork(chunk: BoardChunk | undefined, workItems: ReadonlyMap<string, BoardWorkItems>): RowWork {
   if (chunk === undefined) return { lines: [], itemsRead: true };
   const view = workItems.get(chunk.chunk_id);
   return { lines: workLines(chunk.work_refs ?? [], view), itemsRead: view !== undefined };
@@ -20,7 +24,7 @@ function rowWork(chunk: ChunkSummary | undefined, workItems: ReadonlyMap<string,
 
 /** The vitals strip, counted off the mobile list: what needs a person, what is moving, what is queued, what
  * completed, and the registry's online fraction. */
-export function glanceVitals(runners: readonly RunnerRegistryView[], list: GlanceListGroups): Vitals {
+export function glanceVitals(runners: readonly GlanceRunner[], list: GlanceListGroups): Vitals {
   const online = runners.filter((runner) => runner.online).length;
   return {
     needsYou: filterGlanceRows(list, 'needs').length,
@@ -37,7 +41,7 @@ export interface GlanceRow extends RowWork {
   readonly shortId: string;
   /** The board lane it sits in — the card's icon. */
   readonly lane: string;
-  readonly status: ChunkStatus;
+  readonly status: string;
   readonly laneStatus: LaneStatus;
   /** `paused` or `stopped`, which the icon alone cannot tell from its lane on a touch screen; else `null`. */
   readonly statusWord: string | null;
@@ -49,7 +53,7 @@ export interface GlanceRow extends RowWork {
   /** The chunk's graph's name, `null` when unresolvable. */
   readonly graphName: string | null;
   /** The chunk's progress through its graph — the strip its card carries. */
-  readonly graphProgress: readonly hubApi.GraphProgressNodeView[];
+  readonly graphProgress: readonly GraphProgressNode[];
   /** The holding runner's host and name, or `null` when none holds it. */
   readonly runner: RunnerBoardParts | null;
   readonly gated: boolean;
@@ -84,13 +88,13 @@ function byRank<T extends { readonly chunkId: string }>(rows: T[], order: readon
  * hub's queue, BACKLOG by its backlog. */
 export function glanceListGroups(
   chunks: readonly BoardChunk[],
-  questions: readonly QuestionView[],
-  decisions: readonly DecisionView[],
+  questions: readonly BoardQuestion[],
+  decisions: readonly BoardDecision[],
   readyOrder: readonly { readonly chunk_id: string }[],
   backlogOrder: readonly { readonly chunk_id: string }[],
   runnerHosts: ReadonlyMap<string, string>,
   projectColors: ReadonlyMap<string, string> | null,
-  workItems: ReadonlyMap<string, WorkItemsView>,
+  workItems: ReadonlyMap<string, BoardWorkItems>,
 ): GlanceListGroups {
   const asks = new Map(questions.map((question) => [question.chunk_id, question.question]));
   const gated = new Set(decisions.map((decision) => decision.chunk_id));
@@ -108,9 +112,9 @@ export function glanceListGroups(
       node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
       nodeId: chunk.current_node_id ?? '',
       terminal: chunk.terminal ?? false,
-      urgency: chunk.urgency ? fromUrgencyRef(chunk.urgency) : null,
+      urgency: chunk.urgency,
       graphName: chunk.graph_name,
-      graphProgress: chunk.graph_progress,
+      graphProgress: chunk.graphProgress,
       runner: chunk.runner_id ? runnerBoardParts(chunk.runner_id, chunk.runner_name, runnerHosts.get(chunk.runner_id) ?? null) : null,
       gated: gated.has(chunk.chunk_id),
       blocked: chunk.blocked ? {

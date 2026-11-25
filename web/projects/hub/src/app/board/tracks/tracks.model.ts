@@ -1,8 +1,6 @@
 import {
   type AsyncStateQuery,
-  type ChunkSummary,
   type KitAsyncStateValue,
-  type ProjectView,
   asyncState,
   compactRef,
   formatHeldFor,
@@ -10,6 +8,7 @@ import {
 } from 'fleet';
 
 import { projectColorMap } from '../../core/project-lens-colors';
+import type { Project } from '../../core/project.domain';
 import type { NodeBlock } from '../node-strip/node-strip.model';
 import type { EnvTimelineHost, EnvTimelineView } from './env-timeline.model';
 import { RUNNER_HUES, type TrackItem, envBlocks, stepTooltip } from './tracks-blocks.model';
@@ -296,14 +295,14 @@ export function tracksState(
 }
 
 /** Each chunk's progress through its graph, by chunk id. */
-export function progressByChunk(chunks: readonly ChunkSummary[] | undefined): ReadonlyMap<string, readonly NodeBlock[]> {
-  return new Map((chunks ?? []).map((c) => [c.chunk_id, c.graph_progress]));
+export function progressByChunk(chunks: readonly { readonly chunk_id: string; readonly graphProgress: readonly NodeBlock[] }[] | undefined): ReadonlyMap<string, readonly NodeBlock[]> {
+  return new Map((chunks ?? []).map((c) => [c.chunk_id, c.graphProgress]));
 }
 
 /** Each project's tint, by id, while blocks wear their project's colour — else `null`, and they wear their runner's. */
 export function projectHuesOf(
   showProjectColors: boolean,
-  projects: readonly ProjectView[] | undefined,
+  projects: readonly Pick<Project, 'project_id' | 'color'>[] | undefined,
 ): ReadonlyMap<string, string> | null {
   const colors = projectColorMap(showProjectColors, projects);
   if (colors === null) return null;

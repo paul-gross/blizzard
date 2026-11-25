@@ -1,6 +1,5 @@
 import {
-  type ChunkFlowPlaceView,
-  type hubApi,
+  type ChunkDetailAggregate,
   openLookup,
   type Tone,
 } from 'fleet';
@@ -12,7 +11,8 @@ interface PlaceStateLook {
   readonly tone: Tone;
 }
 
-const PLACE_STATES = openLookup<hubApi.FlowPlaceState, PlaceStateLook>(
+type KnownFlowState = Exclude<ChunkDetailAggregate['flow_places'][number]['state']['kind'], 'unknown'>;
+const PLACE_STATES = openLookup<KnownFlowState, PlaceStateLook>(
   {
     landing: { label: 'landing', tone: 'running' },
     next: { label: 'next', tone: 'spawning' },
@@ -71,19 +71,25 @@ export interface FlowPlaceLine {
 
 /** How a chunk's place on one flow reads: its position in line when the hub says it holds one, else its state's label
  * (raw when this build does not know the state). */
-export function placeText(place: ChunkFlowPlaceView): string {
+type BoardFlowPlace = ChunkDetailAggregate['flow_places'][number];
+
+function placeState(place: BoardFlowPlace): string {
+  return place.state.kind === 'unknown' ? place.state.raw : place.state.kind;
+}
+
+export function placeText(place: BoardFlowPlace): string {
   const path = flowPath(place);
   if (placeInLine(place)) return `${ordinal(place.position)} on ${path}`;
-  return `${placeStateLabel(place.state)} on ${path}`;
+  return `${placeStateLabel(placeState(place))} on ${path}`;
 }
 
 /** Every place a chunk holds, one line per flow, in the order the hub lists them. */
 export function placeLines(
-  places: readonly ChunkFlowPlaceView[] | undefined,
+  places: readonly BoardFlowPlace[] | undefined,
 ): readonly FlowPlaceLine[] {
   return (places ?? []).map((place) => ({
     flowId: place.flow_id,
     text: placeText(place),
-    tone: placeStateTone(place.state),
+    tone: placeStateTone(placeState(place)),
   }));
 }

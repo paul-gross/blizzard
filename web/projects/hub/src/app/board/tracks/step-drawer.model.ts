@@ -1,5 +1,7 @@
-import { type ChunkArtifact, type ChunkArtifactStore, type ProjectView, formatWhenParts, hubApi, unlisted } from 'fleet';
+import { type ChunkArtifact, type ChunkArtifactStore, formatWhenParts } from 'fleet';
 import { projectColorOf } from '../../core/project-lens-colors';
+import type { Project } from '../../core/project.domain';
+import type { EnvTimelineStep, StepExecutor } from './timeline.domain';
 
 import type { LeaseTranscriptRef } from './lease-transcript.query';
 import {
@@ -14,7 +16,7 @@ import {
   stepRefKey,
   stepRefOf,
 } from './step.model';
-import type { EnvTimelineStepView } from './step.query';
+type EnvTimelineStepView = EnvTimelineStep;
 
 /** The hub's now as the step read last answered it, or `fallback` before it has. */
 export function drawerNow(view: EnvTimelineStepView | undefined, fallback: number): number {
@@ -102,7 +104,7 @@ export function neighbours(view: EnvTimelineStepView | undefined, current: Place
 
 /** The harness and model the step's session ran on — its spawn's, else its first invocation's. */
 export function stepModel(view: EnvTimelineStepView | undefined): string | null {
-  const session = view?.invocations.find((u) => u.kind === 'spawn') ?? view?.invocations[0];
+  const session = view?.invocations.find((u) => u.kind.kind === 'spawn') ?? view?.invocations[0];
   if (session === undefined) return null;
   return [session.harness_id, session.model].filter(Boolean).join(' · ') || null;
 }
@@ -161,22 +163,15 @@ export function stepArtifactsOf(chunk: { chunk_id: string; artifacts: readonly C
 
 /** The transcript to read for a step — its session's, fenced by its epoch — or `null` for a step the hub ran itself. */
 export function transcriptRefOf(segment: EnvTimelineSegment | undefined): LeaseTranscriptRef | null {
-  return segment !== undefined && segment.executor !== hubApi.Executor.HUB && segment.epoch !== null
+  return segment !== undefined && segment.executor?.kind !== 'hub' && segment.epoch !== null
     ? { chunkId: segment.chunk_id, nodeId: segment.node_id, epoch: segment.epoch, live: segment.ended_at === null }
     : null;
 }
 
 /** The raw executor a step names that the client's `Executor` vocabulary does not list — a newer hub's — or `null` for a
  * listed one or none (`bzh:frontend-open-vocabulary`). */
-export function unlistedExecutor(executor: hubApi.Executor | null): string | null {
-  switch (executor) {
-    case hubApi.Executor.RUNNER:
-    case hubApi.Executor.HUB:
-    case null:
-      return null;
-    default:
-      return unlisted(executor);
-  }
+export function unlistedExecutor(executor: StepExecutor | null): string | null {
+  return executor?.kind === 'unknown' ? executor.raw : null;
 }
 
 /** How the drawer's header names a step: its session in full, else its node — with why it names no session. */
@@ -190,7 +185,7 @@ export interface StepIdentity {
 /** A runner step with no session id is either one whose session start the hub never heard — no fence either — or a
  * session that took the chunk over on a forced entry, fenced and with a transcript, but minted with no id. */
 export function stepIdentity(segment: EnvTimelineSegment): StepIdentity {
-  const hub = segment.executor === hubApi.Executor.HUB;
+  const hub = segment.executor?.kind === 'hub';
   if (segment.lease_id !== null) return { label: segment.lease_id, title: segment.lease_id, hub };
   return { label: segment.node_name, title: unnamedSessionTitle(segment, hub), hub };
 }
@@ -210,7 +205,7 @@ export interface StepProject {
 
 export function projectOf(
   shown: boolean,
-  projects: readonly ProjectView[] | undefined,
+  projects: readonly Pick<Project, 'project_id' | 'name' | 'color'>[] | undefined,
   projectId: string | null | undefined,
 ): StepProject | null {
   const p = projects?.find((x) => x.project_id === projectId);

@@ -10,7 +10,7 @@ import { boardDonePolicy } from '../../core/board-done-policy.model';
 import { glanceListGroups, glanceVitals } from './glance-board.model';
 import { GlanceView } from './glance-view';
 
-const confirmed = boardDonePolicy([{ chunks: [], next_cursor: null, board_done_policy: { window_seconds: 172800, floor: 10, done_since: '2026-10-30T00:00:00Z' } }]);
+const confirmed = boardDonePolicy([{ next_cursor: null, board_done_policy: { window_seconds: 172800, floor: 10, done_since: '2026-10-30T00:00:00Z' } }]);
 const generic = boardDonePolicy([]);
 const list = glanceListGroups([boardChunk({ chunk_id: 'ch_done', graph_id: 'gr_1', status: 'done', laneStatus: { kind: 'done' }, terminal: true, completed_at: '2026-10-01T00:00:00Z' })], [], [], [], [], new Map(), new Map(), new Map());
 const empty = { live: [], ready: [], backlog: [], done: [] };
@@ -53,5 +53,5 @@ export const EmptyBlocker: Story = { args: { list: emptyBlockerList, vitals: gla
 
 const urgencyProviders = applicationConfig({ providers: [provideTanStackQuery(new QueryClient()), { provide: TenantContext, useValue: { current: signal(null) } }] });
 const urgent = { id: 'u', slug: 'urgent', name: 'Urgent', color: 'red', emoji: '🔥', icon: null, default: false, retired: false, place: 1, revision: 1, openChunks: 0, createdAt: '2026-01-01T00:00:00Z', createdBy: 'u' } satisfies UrgencyRecord;
-const urgentList = glanceListGroups([boardChunk({ chunk_id: 'ch_urgent', graph_id: 'gr_1', status: 'ready', laneStatus: { kind: 'ready' }, urgency: { urgency_id: 'u', slug: 'urgent' } })], [], [], [], [], new Map(), new Map(), new Map());
+const urgentList = glanceListGroups([boardChunk({ chunk_id: 'ch_urgent', graph_id: 'gr_1', status: 'ready', laneStatus: { kind: 'ready' }, urgency: { id: 'u', slug: 'urgent' } })], [], [], [], [], new Map(), new Map(), new Map());
 export const Urgency: Story = { decorators: [urgencyProviders], args: { list: urgentList, vitals: glanceVitals([], urgentList), urgencies: [urgent] } };

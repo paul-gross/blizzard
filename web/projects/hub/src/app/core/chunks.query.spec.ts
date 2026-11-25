@@ -9,7 +9,7 @@ import {
   provideTanStackQuery,
 } from '@tanstack/angular-query-experimental';
 
-import type { ChunkSummary } from 'fleet';
+import type { ChunkSummary, hubApi } from 'fleet';
 import {
   chunkSummary,
   settle,
@@ -17,8 +17,7 @@ import {
   stubError,
   stubHubClient,
 } from 'fleet/testing';
-import { boardChunksQueryOptions, injectHubBoardChunksQuery } from './chunks.query';
-import type { BoardChunksRead } from './chunks.model';
+import { boardChunksQueryOptions, domainBoardChunksQueryOptions, injectHubBoardChunksQuery, runnerChunksQueryOptions, type BoardChunksRead } from './chunks.query';
 
 @Component({
   selector: 'app-test-chunks-query-host',
@@ -75,6 +74,72 @@ describe('injectHubBoardChunksQuery', () => {
     expect(cached?.chunks[0]).not.toHaveProperty('laneStatus');
   });
 
+  it('preserves unknown statuses and server judgments in the observer and raw cache', async () => {
+    const future = {
+      ...chunk('ch_future'),
+      status: 'future_status' as ChunkSummary['status'],
+      terminal: true,
+      promotable: false,
+      graph_progress: [{ node_id: 'nd_1', name: 'build', state: 'future' as hubApi.GraphProgressState }],
+    };
+    stub = stubHubClient({
+      'GET /api/chunks': () => ({ chunks: [future], next_cursor: null, board_done_policy: null }),
+    });
+    const fixture = mount();
+    await settle(fixture);
+
+    const observed = fixture.componentInstance.query.data()?.chunks[0];
+    expect(observed?.laneStatus).toEqual({ kind: 'unknown', raw: 'future_status' });
+    expect(observed?.terminal).toBe(true);
+    expect(observed?.promotable).toBe(false);
+    expect(observed?.graphProgress).toEqual([{
+      nodeId: 'nd_1',
+      name: 'build',
+      state: { kind: 'unknown', raw: 'future' },
+    }]);
+    const cached = TestBed.inject(QueryClient).getQueryData<BoardChunksRead>(boardChunksQueryOptions(null).queryKey);
+    expect(cached?.chunks[0]).toEqual(future);
+    expect(cached?.pages[0].chunks[0]).toEqual(future);
+  });
+
+  it('projects runner claims from the same tenant-wide raw cache', async () => {
+    const held = { ...chunk('ch_held'), runner_id: 'rn_1', workspace_id: 'ws_1', environment_count: 2 };
+    stub = stubHubClient({
+      'GET /api/chunks': () => ({ chunks: [held], next_cursor: null, board_done_policy: null }),
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const runner = runnerChunksQueryOptions();
+    const board = boardChunksQueryOptions(null);
+    const raw = await client.fetchQuery(board);
+    expect(runner.queryKey).toEqual(board.queryKey);
+    expect(runner.select(raw).chunks[0]).toEqual({
+      chunk_id: 'ch_held', runner_id: 'rn_1', workspace_id: 'ws_1', environment_count: 2,
+      current_node_id: null, current_node_name: null, project_id: null, project_slug: null,
+      laneStatus: { kind: 'ready' },
+    });
+    expect(client.getQueryData(board.queryKey)).toEqual(raw);
+    expect(stub.forRoute('/api/chunks', 'GET')).toHaveLength(1);
+  });
+
+  it('projects board summaries and metadata without changing the lensed raw cache', async () => {
+    const policy = { done_since: '2026-11-01T00:00:00Z', floor: 3, window_seconds: 7200 };
+    const row = { ...chunk('ch_1'), terminal: true, promotable: false };
+    stub = stubHubClient({
+      'GET /api/chunks': () => ({ chunks: [row], next_cursor: null, board_done_policy: policy }),
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const legacy = boardChunksQueryOptions('alpha');
+    const domain = domainBoardChunksQueryOptions('alpha');
+    const raw = await client.fetchQuery(legacy);
+    expect(domain.queryKey).toEqual(legacy.queryKey);
+    expect(domain.select(raw)).toMatchObject({
+      chunks: [{ chunk_id: 'ch_1', terminal: true, promotable: false, laneStatus: { kind: 'ready' } }],
+      pages: [{ next_cursor: null, board_done_policy: policy }],
+    });
+    expect(domain.select(raw).pages[0]).not.toHaveProperty('chunks');
+    expect(client.getQueryData(legacy.queryKey)).toEqual(raw);
+  });
+
   it('drains every page of a multi-page response and concatenates them in order', async () => {
     let calls = 0;
     stub = stubHubClient({
@@ -92,6 +157,9 @@ describe('injectHubBoardChunksQuery', () => {
       fixture.componentInstance.query.data()?.chunks.map((c) => c.chunk_id),
     ).toEqual(['ch_1', 'ch_2', 'ch_3']);
     expect(fixture.componentInstance.query.data()?.pages.map((p) => p.next_cursor)).toEqual(['cursor-1', null]);
+    expect(fixture.componentInstance.query.data()?.pages[0]).not.toHaveProperty('chunks');
+    const cached = TestBed.inject(QueryClient).getQueryData<BoardChunksRead>(boardChunksQueryOptions(null).queryKey);
+    expect(cached?.pages.map((page) => page.chunks.length)).toEqual([2, 1]);
     expect(stub.forRoute('/api/chunks', 'GET')).toHaveLength(2);
   });
 

@@ -2,19 +2,22 @@ import { boardChunk } from '../board.fixture';
 import type { BoardChunk } from '../../core/chunks.model';
 import type { LaneStatus } from 'fleet';
 type KnownLaneStatus = Exclude<LaneStatus['kind'], 'unknown'>;
-import { type ChunkSummary, type DecisionView, type QuestionView, type RunnerRegistryView, type WorkItemsView } from 'fleet';
+import type { GlanceRunner } from '../../core/runners.domain';
+import type { BoardWorkItems } from '../../core/work-items/board-work-items.domain';
+import type { BoardDecision } from '../gates/gates.domain';
+import type { BoardQuestion } from '../questions/questions.domain';
 import { describe, expect, it, vi } from 'vitest';
 
 import { filterGlanceRows, type GlanceFilter, glanceListGroups, glanceVitals, liveRunners } from './glance-board.model';
 
 /** No chunk's work items read yet. */
-const NO_ITEMS: ReadonlyMap<string, WorkItemsView> = new Map();
+const NO_ITEMS: ReadonlyMap<string, BoardWorkItems> = new Map();
 
 const NOW = Date.parse('2026-06-01T12:00:00Z');
 const HOUR = 60 * 60 * 1000;
 const ago = (ms: number): string => new Date(NOW - ms).toISOString();
 
-const chunk = (id: string, status: KnownLaneStatus, fields: Partial<ChunkSummary> = {}): BoardChunk => (boardChunk({
+const chunk = (id: string, status: KnownLaneStatus, fields: Partial<BoardChunk> = {}): BoardChunk => (boardChunk({
   chunk_id: id,
   graph_id: 'gr_1',
   status,
@@ -23,11 +26,13 @@ const chunk = (id: string, status: KnownLaneStatus, fields: Partial<ChunkSummary
   ...fields,
 }));
 
-const question = (chunkId: string, text: string): QuestionView => ({ chunk_id: chunkId, question: text }) as QuestionView;
+const question = (chunkId: string, text: string): BoardQuestion => ({ chunk_id: chunkId, question: text });
 
-const decision = (chunkId: string): DecisionView => ({ chunk_id: chunkId }) as DecisionView;
+const decision = (chunkId: string): BoardDecision => ({ chunk_id: chunkId });
 
-const runner = (id: string, fields: Partial<RunnerRegistryView>): RunnerRegistryView => ({ runner_id: id, ...fields }) as RunnerRegistryView;
+const runner = (id: string, fields: Partial<GlanceRunner>): GlanceRunner => ({
+  runner_id: id, online: false, retired: false, connection: { kind: 'offline' }, ...fields,
+});
 
 describe('liveRunners', () => {
   it('drops retired runners and keeps the rest in order', () => {
@@ -37,9 +42,9 @@ describe('liveRunners', () => {
 
   it('drops a never-connected runner: added but never started, it is not down', () => {
     const rows = liveRunners([
-      runner('r1', { connection: 'online' }),
-      runner('r2', { connection: 'never_connected' }),
-      runner('r3', { connection: 'offline' }),
+      runner('r1', { connection: { kind: 'online' } }),
+      runner('r2', { connection: { kind: 'never_connected' } }),
+      runner('r3', { connection: { kind: 'offline' } }),
     ]);
     expect(rows.map((r) => r.runner_id)).toEqual(['r1', 'r3']);
   });
@@ -49,13 +54,13 @@ describe('liveRunners', () => {
 const groups = (
   chunks: readonly BoardChunk[],
   fields: {
-    questions?: readonly QuestionView[];
-    decisions?: readonly DecisionView[];
+    questions?: readonly BoardQuestion[];
+    decisions?: readonly BoardDecision[];
     readyOrder?: readonly string[];
     backlogOrder?: readonly string[];
     hosts?: ReadonlyMap<string, string>;
     colors?: ReadonlyMap<string, string>;
-    workItems?: ReadonlyMap<string, WorkItemsView>;
+    workItems?: ReadonlyMap<string, BoardWorkItems>;
   } = {},
 ) =>
   glanceListGroups(
@@ -87,7 +92,7 @@ describe('glanceListGroups', () => {
   it('leads with needs, then waiting, then running, then an unknown status', () => {
     const list = groups([
       chunk('ch_run', 'running'),
-      boardChunk({ chunk_id: 'ch_odd', graph_id: 'gr_1', status: 'mystery' as ChunkSummary['status'], laneStatus: { kind: 'unknown', raw: 'mystery' }, current_node_id: 'nd_build' }),
+      boardChunk({ chunk_id: 'ch_odd', graph_id: 'gr_1', status: 'mystery' as BoardChunk['status'], laneStatus: { kind: 'unknown', raw: 'mystery' }, current_node_id: 'nd_build' }),
       chunk('ch_wait', 'waiting_on_human'),
       chunk('ch_needs', 'needs_human'),
       chunk('ch_deliver', 'delivering'),
@@ -161,8 +166,8 @@ describe('glanceListGroups', () => {
   });
 
   it("names a card's graph and carries its progress, node id and terminal flag", () => {
-    const graphProgress = [{ node_id: 'nd_build', name: 'build', state: 'current' as const }];
-    const [named] = groups([chunk('ch_1', 'running', { graph_name: 'adv-dwf', graph_progress: graphProgress })]).live;
+    const graphProgress = [{ nodeId: 'nd_build', name: 'build', state: { kind: 'current' as const } }];
+    const [named] = groups([chunk('ch_1', 'running', { graph_name: 'adv-dwf', graphProgress })]).live;
     expect(named).toMatchObject({ graphName: 'adv-dwf', graphProgress, nodeId: 'nd_build', terminal: false });
 
     const [unread] = groups([chunk('ch_1', 'running')]).live;
@@ -204,7 +209,7 @@ describe('glanceListGroups', () => {
           runner_id: 'rn_1',
           runner_name: 'r-claude',
           project_id: 'pj_1',
-          cost: { cost_usd: 1.5, cost_partial: true, estimated_cost_usd: 2 } as ChunkSummary['cost'],
+          cost: { cost_usd: 1.5, cost_partial: true, estimated_cost_usd: 2 } as BoardChunk['cost'],
         }),
       ],
       { hosts: new Map([['rn_1', 'atlas']]), colors: new Map([['pj_1', 'teal']]) },
@@ -220,17 +225,17 @@ describe('glanceListGroups', () => {
   });
 
   it('falls back to the node id, no runner, a zero cost, and no tint', () => {
-    const [row] = groups([chunk('ch_1', 'running', { cost: undefined as unknown as ChunkSummary['cost'] })]).live;
+    const [row] = groups([chunk('ch_1', 'running', { cost: undefined as unknown as BoardChunk['cost'] })]).live;
     expect(row).toMatchObject({ node: 'nd_build', runner: null, costUsd: 0, costPartial: false, estimatedCostUsd: null, projectColor: null });
   });
 
   it('leads each card with its work items\' labels and titles, as a board card does', () => {
     const refs = [
-      { source: 'wsrc_api', ref: '1', label: 'toy-api#1' },
-      { source: 'wsrc_web', ref: '3', label: 'toy-web#3' },
-    ] as ChunkSummary['work_refs'];
+      { source: 'wsrc_api', ref: '1', label: 'toy-api#1', web_url: null },
+      { source: 'wsrc_web', ref: '3', label: 'toy-web#3', web_url: null },
+    ];
     const read = new Map([
-      ['ch_1', { items: [{ source: 'wsrc_api', ref: '1', title: 'Rate-limit login' }, { source: 'wsrc_web', ref: '3', title: 'Drop moment.js' }] } as WorkItemsView],
+      ['ch_1', { items: [{ source: 'wsrc_api', ref: '1', title: 'Rate-limit login', label: null, web_url: null }, { source: 'wsrc_web', ref: '3', title: 'Drop moment.js', label: null, web_url: null }] }],
     ]);
     expect(groups([chunk('ch_1', 'running', { work_refs: refs })], { workItems: read }).live[0]).toMatchObject({
       itemsRead: true,
@@ -271,9 +276,9 @@ describe('glanceVitals', () => {
 
   it('counts neither up nor total a runner that has never connected', () => {
     const fleet = [
-      runner('r1', { online: true, connection: 'online' }),
-      runner('r2', { online: false, connection: 'offline' }),
-      runner('r3', { online: false, connection: 'never_connected' }),
+      runner('r1', { online: true, connection: { kind: 'online' } }),
+      runner('r2', { online: false, connection: { kind: 'offline' } }),
+      runner('r3', { online: false, connection: { kind: 'never_connected' } }),
     ];
     expect(glanceVitals(liveRunners(fleet), groups([])).runnersUpLabel).toBe('1/2');
   });

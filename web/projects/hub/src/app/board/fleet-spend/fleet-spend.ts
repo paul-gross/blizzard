@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { SessionEfficiency, type FleetSpendView } from 'fleet';
+import { SessionEfficiency } from 'fleet';
+import type { FleetSpend as FleetSpendData } from './fleet-spend.domain';
 
 /**
  * The fleet's spend as two rows, Today and Yesterday, each the session efficiency figure — the cost (`formatCost`, so
@@ -15,8 +16,8 @@ import { SessionEfficiency, type FleetSpendView } from 'fleet';
   styleUrl: './fleet-spend.css',
 })
 export class FleetSpend {
-  readonly today = input.required<FleetSpendView>();
-  readonly yesterday = input<FleetSpendView | null>(null);
+  readonly today = input.required<FleetSpendData>();
+  readonly yesterday = input<FleetSpendData | null>(null);
 
   /** `columns`: a fixed label column beside each figure; `stacked`: each label on its own line over its figure. */
   readonly layout = input<'columns' | 'stacked'>('columns');

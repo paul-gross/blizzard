@@ -2,30 +2,11 @@ import { type WritableSignal, provideZonelessChangeDetection, signal } from '@an
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { type ActivityView, type SseStatus } from 'fleet';
+import { type SseStatus } from 'fleet';
 import { settle, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { ActivityPanel } from './activity-panel';
 import { HubLiveUpdates, type LoggedEvent } from '../../core/live/hub-live-updates';
-
-const activityView = (overrides: Partial<ActivityView>): ActivityView => ({
-  type: 'chunk-changed',
-  key: 'k',
-  at: '2020-01-01T00:00:00Z',
-  by: null,
-  cause: null,
-  chunk_id: null,
-  graph_id: null,
-  kind: null,
-  node: null,
-  prev_node: null,
-  prev_status: null,
-  reason: null,
-  runner_id: null,
-  runner_name: null,
-  severity: null,
-  status: null,
-  ...overrides,
-});
+import { activityView } from './activity-fixtures.translate';
 
 describe('ActivityPanel', () => {
   let log: WritableSignal<readonly LoggedEvent[]>;
@@ -33,7 +14,7 @@ describe('ActivityPanel', () => {
   let authFailed: WritableSignal<boolean>;
   let stub: RequestClientStub;
 
-  const render = async (activity: readonly ActivityView[] = []) => {
+  const render = async (activity: readonly ReturnType<typeof activityView>[] = []) => {
     log = signal<readonly LoggedEvent[]>([]);
     status = signal<SseStatus>('open');
     authFailed = signal(false);

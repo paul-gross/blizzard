@@ -1,8 +1,8 @@
-import { fromUrgencyRef } from '../../core/urgency.translate';
 import { domainLaneCounts } from 'fleet';
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type Urgency, type LaneCounts, type WorkItemsView, workLines, compactRef, DONE_LANE, LANES, UNKNOWN_LANE, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabContent, KitTabGroup, KitTabPanel, KitTabs, type KitTabOption } from 'fleet';
+import { type Urgency, type LaneCounts, workLines, compactRef, DONE_LANE, LANES, UNKNOWN_LANE, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabContent, KitTabGroup, KitTabPanel, KitTabs, type KitTabOption } from 'fleet';
+import type { BoardWorkItems } from '../../core/work-items/board-work-items.domain';
 import { domainChunkLane, domainUnknownLane } from 'fleet';
 import type { BoardChunk } from '../../core/chunks.model';
 import type { ChunkControl } from 'fleet';
@@ -109,7 +109,7 @@ export class BoardShell {
 
   /** Every chunk's work items read so far, by chunk id — a card fills each work ref's title
    * once its chunk's arrive, and holds a skeleton in its place until then. */
-  readonly workItems = input<ReadonlyMap<string, WorkItemsView>>(new Map());
+  readonly workItems = input<ReadonlyMap<string, BoardWorkItems>>(new Map());
 
   /** How many card skeletons each lane draws while the chunk read loads (`laneSkeletonCounts`). */
   readonly laneSkeletons = input<ReadonlyMap<string, number>>(new Map());
@@ -172,12 +172,12 @@ export class BoardShell {
         status: chunk.status,
         laneStatus: chunk.laneStatus,
         terminal: chunk.terminal ?? false,
-        urgency: chunk.urgency ? fromUrgencyRef(chunk.urgency) : null,
+        urgency: chunk.urgency,
         promotable: chunk.promotable ?? false,
         node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
         nodeId: chunk.current_node_id ?? '',
         graphName: chunk.graph_name,
-        graphProgress: chunk.graph_progress,
+        graphProgress: chunk.graphProgress,
         costUsd: chunk.cost?.cost_usd ?? 0,
         costPartial: chunk.cost?.cost_partial ?? false,
         estimatedCostUsd: chunk.cost?.estimated_cost_usd ?? null,

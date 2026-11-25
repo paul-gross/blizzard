@@ -213,8 +213,8 @@ describe('TracksView', () => {
 
     it('hands the node strip the progress of its chunk, and none for an unknown one', async () => {
       const blocks: NodeBlock[] = [
-        { node_id: 'nd_plan', name: 'plan', state: 'passed' },
-        { node_id: 'nd_build', name: 'build', state: 'current' },
+        { nodeId: 'nd_plan', name: 'plan', state: { kind: 'passed' } },
+        { nodeId: 'nd_build', name: 'build', state: { kind: 'current' } },
       ];
       const present = [running(), running({ groupId: 'env_b', chunkId: 'ch_other' })];
       const { fixture, el } = await render({

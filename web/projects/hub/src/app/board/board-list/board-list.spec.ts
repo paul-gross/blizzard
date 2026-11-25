@@ -345,7 +345,7 @@ describe('BoardList', () => {
     });
 
     it('carries the strip on a mid-graph row only', async () => {
-      const graphProgress = [{ node_id: 'nd_build', name: 'build', state: 'current' as const }];
+      const graphProgress = [{ nodeId: 'nd_build', name: 'build', state: { kind: 'current' as const } }];
       const el = await render(groups({ live: [entry('running', card('r', { graphProgress }))], ready: [ready('q')] }));
       const strips = [...el.querySelectorAll('[data-testid="node-strip"]')];
       expect(strips).toHaveLength(1);

@@ -3,8 +3,7 @@ import type { BoardChunk } from '../../core/chunks.model';
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { WorkItemsView } from 'fleet';
-import { workItemEntry, workRefView } from 'fleet/testing';
+import type { BoardWorkItems } from '../../core/work-items/board-work-items.domain';
 import { BoardShell } from './board-shell';
 
 @Component({
@@ -25,12 +24,12 @@ describe('BoardShell layouts', () => {
     graph_id: 'gr_1',
     status: 'running', laneStatus: { kind: 'running' },
     current_node_id: 'nd_build',
-    work_refs: [workRefView({ source: 'hub', ref: suffix, label: `hub#${suffix}`, web_url: null })],
+    work_refs: [{ source: 'hub', ref: suffix, label: `hub#${suffix}`, web_url: null }],
   }));
 
   const render = async (
     layout: 'board' | 'list',
-    workItems: ReadonlyMap<string, WorkItemsView> = new Map(),
+    workItems: ReadonlyMap<string, BoardWorkItems> = new Map(),
     chunks: readonly BoardChunk[] = [RUNNING('a')],
   ) => {
     await TestBed.configureTestingModule({
@@ -90,7 +89,7 @@ describe('BoardShell layouts', () => {
 
     TestBed.resetTestingModule();
     const read = (
-      await render('board', new Map([['ch_01runninga', { items: [workItemEntry({ source: 'hub', ref: 'a', title: 'Fix the lease', fetched_at: 't', label: null, body: null, web_url: null })] }]]))
+      await render('board', new Map([['ch_01runninga', { items: [{ source: 'hub', ref: 'a', title: 'Fix the lease', label: null, web_url: null }] }]]))
     ).nativeElement as HTMLElement;
     expect(read.querySelector('[data-testid="chunk-title"]')?.textContent?.trim()).toBe('Fix the lease');
   });

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 
-import { type ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, injectRunnerHostNames, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, asyncState, type WorkItemsState } from 'fleet';
+import { type ChunkDetailAggregate, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, injectRunnerHostNames, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, asyncState, type WorkItemsState } from 'fleet';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectProjectsQuery } from '../../core/projects.query';
 import { type CompleteVars } from '../chunks/complete.mutations';
@@ -72,7 +72,7 @@ export class ChunkDetail {
   private readonly pendingChunkCompletes = injectPendingMutationVariables<CompleteVars>(chunkCompleteMutationKey);
 
   /** The pending Pause or Complete status override, or `null` — {@link pendingStatusOverride}. */
-  protected readonly overrideStatus = computed<ChunkStatus | null>(() =>
+  protected readonly overrideStatus = computed(() =>
     pendingStatusOverride(this.detail(), this.pendingChunkCompletes(), this.pendingChunkPauses()),
   );
 

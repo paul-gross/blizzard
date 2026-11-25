@@ -1,4 +1,4 @@
-import type { WorkItemsView } from 'fleet';
+import type { BoardWorkItems } from './board-work-items.domain';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -30,7 +30,7 @@ describe('workItemBatches', () => {
 
 describe('mergeWorkItemBatches', () => {
   it('merges answered batches by chunk id and skips one still reading', () => {
-    const view: WorkItemsView = { items: [] };
+    const view: BoardWorkItems = { items: [] };
     const merged = mergeWorkItemBatches([
       new Map([['ch_a', view]]),
       undefined,

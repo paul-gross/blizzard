@@ -381,8 +381,8 @@ describe('GlanceView', () => {
 
   it('carries the node strip on a card mid-graph, at its current node, and none on a finished card', async () => {
     const [running, done] = await cards({
-      live: [row({ chunkId: 'ch_run', nodeId: 'nd_build', graphProgress: [{ node_id: 'nd_build', name: 'build', state: 'current' }] })],
-      done: [row({ chunkId: 'ch_done', lane: 'done', status: 'done', terminal: true, graphProgress: [{ node_id: 'nd_build', name: 'build', state: 'passed' }] })],
+      live: [row({ chunkId: 'ch_run', nodeId: 'nd_build', graphProgress: [{ nodeId: 'nd_build', name: 'build', state: { kind: 'current' } }] })],
+      done: [row({ chunkId: 'ch_done', lane: 'done', status: 'done', terminal: true, graphProgress: [{ nodeId: 'nd_build', name: 'build', state: { kind: 'passed' } }] })],
     });
 
     expect(running.querySelector('[data-testid="node-strip"] .block')?.getAttribute('data-state')).toBe('current');

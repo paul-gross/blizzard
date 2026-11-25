@@ -8,10 +8,10 @@ import type { Urgency } from 'fleet';
 import { boardDonePolicy } from '../../core/board-done-policy.model';
 import { BoardShell } from './board-shell';
 
-const confirmed = boardDonePolicy([{ chunks: [], next_cursor: null, board_done_policy: { window_seconds: 172800, floor: 10, done_since: '2026-10-30T00:00:00Z' } }]);
+const confirmed = boardDonePolicy([{ next_cursor: null, board_done_policy: { window_seconds: 172800, floor: 10, done_since: '2026-10-30T00:00:00Z' } }]);
 const multiplePages = boardDonePolicy([
-  { chunks: [], next_cursor: 'next', board_done_policy: { window_seconds: 172800, floor: 10, done_since: '2026-10-30T00:00:00Z' } },
-  { chunks: [], next_cursor: null, board_done_policy: { window_seconds: 172800, floor: 10, done_since: '2026-10-30T00:00:01Z' } },
+  { next_cursor: 'next', board_done_policy: { window_seconds: 172800, floor: 10, done_since: '2026-10-30T00:00:00Z' } },
+  { next_cursor: null, board_done_policy: { window_seconds: 172800, floor: 10, done_since: '2026-10-30T00:00:01Z' } },
 ]);
 const generic = boardDonePolicy([]);
 const chunks = [boardChunk({ chunk_id: 'ch_done', graph_id: 'gr_1', status: 'done', laneStatus: { kind: 'done' }, terminal: true, completed_at: '2026-10-01T00:00:00Z' })];
@@ -29,6 +29,6 @@ export const Empty: Story = { args: { chunks: [], state: 'empty' } };
 
 const urgencyProviders = applicationConfig({ providers: [provideTanStackQuery(new QueryClient()), { provide: TenantContext, useValue: { current: signal(null) } }] });
 const urgent = { id: 'u', slug: 'urgent', name: 'Urgent', color: 'red', emoji: '🔥', icon: null, default: false, retired: false, place: 1 } as Urgency;
-const urgencyChunks = [boardChunk({ chunk_id: 'ch_urgent', graph_id: 'gr_1', status: 'ready', laneStatus: { kind: 'ready' }, urgency: { urgency_id: 'u', slug: 'urgent' } }), ...chunks];
+const urgencyChunks = [boardChunk({ chunk_id: 'ch_urgent', graph_id: 'gr_1', status: 'ready', laneStatus: { kind: 'ready' }, urgency: { id: 'u', slug: 'urgent' } }), ...chunks];
 export const UrgencyCards: Story = { decorators: [urgencyProviders], args: { chunks: urgencyChunks, urgencies: [urgent] } };
 export const UrgencyList: Story = { decorators: [urgencyProviders], args: { chunks: urgencyChunks, urgencies: [urgent], layout: 'list' } };

@@ -1,4 +1,4 @@
-import type { hubApi } from 'fleet';
+import type { BoardPageMetadata } from './chunks.domain';
 
 export interface BoardDonePolicy {
   readonly heading: string;
@@ -12,7 +12,7 @@ const SERVER_SELECTED: BoardDonePolicy = {
   cutoffs: [],
 };
 
-export function boardDonePolicy(pages: readonly hubApi.ChunksPageView[]): BoardDonePolicy {
+export function boardDonePolicy(pages: readonly BoardPageMetadata[]): BoardDonePolicy {
   if (pages.length === 0) return SERVER_SELECTED;
   const policies = pages.map((page) => page.board_done_policy);
   if (policies.every((policy) => policy === null)) {

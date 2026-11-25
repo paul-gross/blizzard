@@ -11,7 +11,7 @@ import {
 } from 'fleet';
 
 import { injectShowProjectColors } from '../../core/project-lens-colors';
-import { injectProjectsQuery } from '../../core/projects.query';
+import { injectProjectDomainsQuery } from '../../core/projects.query';
 import { injectHubClock } from './hub-clock';
 import { openWorkItems } from '../chunk-dock/chunk-detail.model';
 import { injectLeaseTranscriptQuery } from './lease-transcript.query';
@@ -65,7 +65,7 @@ export class StepDrawer {
   /** Whether the step's own detail — its spend, model and escalations — is still reading; the path shows meanwhile. */
   protected readonly stepPending = computed(() => this.query.isPlaceholderData());
 
-  private readonly projects = injectProjectsQuery();
+  private readonly projects = injectProjectDomainsQuery();
   private readonly showProjectColors = injectShowProjectColors();
   protected readonly project = computed(() => projectOf(this.showProjectColors(), this.projects.data(), this.placed()?.segment.project_id));
 
