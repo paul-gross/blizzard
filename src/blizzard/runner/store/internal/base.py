@@ -9,6 +9,7 @@ are confined to the bound runner as it is built: no runner-scoped statement is b
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -17,6 +18,7 @@ from sqlalchemy import ColumnElement, Connection, Row, Select, Table, and_, join
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.leases.lease_lock import ILeaseUnit, LeaseUnitMisuse
 from blizzard.runner.leases.model import Lease, WorkRefStamp
 from blizzard.runner.lifecycle.takeover import ITakeoverUnit, TakeoverUnitMisuse
@@ -268,18 +270,28 @@ _OUTBOX_LANES: dict[Table, str] = {
 }
 
 
-def insert_outbox_row(store: RunnerStoreConnections, conn: Connection, table: Table, **values: Any) -> int:
-    """Insert one row into an outbox table, ``outbound_buffer`` or ``transcript_outbound_buffer``, on ``conn`` — the
-    caller's transaction — under the next ``seq`` of the bound runner's lane; answer that ``seq``.
+def insert_outbox_rows(
+    store: RunnerStoreConnections, conn: Connection, table: Table, rows: Sequence[dict[str, Any]]
+) -> list[int]:
+    """The one door into ``outbound_buffer`` or ``transcript_outbound_buffer``: on ``conn``, the bound runner's lane
+    advances once, by ``len(rows)``, and the rows take that contiguous run of ``seq``s, answered in order, inserted in
+    :func:`id_batches` slices so no statement outgrows a backend's bind limit. A rollback returns the whole run; an
+    empty ``rows`` makes no statement. ``tests/guards/test_layering.py`` fails an insert that goes around it."""
+    if not rows:
+        return []
+    lane = _OUTBOX_LANES[table]
+    last = _advance_counter(store, conn, outbox_counters, outbox_counters.c.lane == lane, by=len(rows), lane=lane)
+    seqs = list(range(last - len(rows) + 1, last + 1))
+    stamped = [{**row, "seq": seq} for row, seq in zip(rows, seqs, strict=True)]
+    for batch in id_batches(stamped):
+        conn.execute(store.insert_rows(table, batch))
+    return seqs
 
-    The one door every outbox write passes through: the lane's counter in ``outbox_counters`` advances in the same
-    transaction as the row, so a rollback returns the seq, and a counter never moves backwards, so a pruned row's seq is
-    never issued again. ``tests/guards/test_layering.py`` fails an insert into either table that goes around it."""
-    seq = _advance_counter(
-        store, conn, outbox_counters, outbox_counters.c.lane == _OUTBOX_LANES[table], lane=_OUTBOX_LANES[table]
-    )
-    conn.execute(store.insert(table).values(seq=seq, **values))
-    return seq
+
+def insert_outbox_row(store: RunnerStoreConnections, conn: Connection, table: Table, **values: Any) -> int:
+    """Insert one row into an outbox table on ``conn`` under the next ``seq`` of the bound runner's lane; answer that
+    ``seq``. The one-row case of :func:`insert_outbox_rows`."""
+    return insert_outbox_rows(store, conn, table, [values])[0]
 
 
 def insert_fact_row(store: RunnerStoreConnections, conn: Connection, table: Table, **values: Any) -> int:
@@ -303,23 +315,25 @@ def _advance_counter(
     conn: Connection,
     counters: Table,
     where: ColumnElement[bool] | None = None,
+    by: int = 1,
     **key: Any,
 ) -> int:
     """Advance the bound runner's counter row in ``counters`` (the one ``where`` selects, created with ``key`` columns)
-    and answer its new value. The advance takes the counter's row lock, so concurrent writers queue behind it; the first
-    allocation creates the row, and a writer that loses that race advances the row the winner created."""
-    advance = store.update(counters).values(last_seq=counters.c.last_seq + 1)
+    by ``by`` and answer its new value. The advance takes the counter's row lock, so concurrent writers queue behind it;
+    the first allocation creates the row at ``by``, and a writer that loses that race advances the row the winner
+    created."""
+    advance = store.update(counters).values(last_seq=counters.c.last_seq + by)
     read = store.select(counters, counters.c.last_seq)
     if where is not None:
         advance, read = advance.where(where), read.where(where)
     if not conn.execute(advance).rowcount:
         try:
             with conn.begin_nested():
-                conn.execute(store.insert(counters).values(last_seq=1, **key))
+                conn.execute(store.insert(counters).values(last_seq=by, **key))
         except IntegrityError:
             conn.execute(advance)
         else:
-            return 1
+            return by
     return conn.execute(read).scalar_one()
 
 
@@ -371,6 +385,7 @@ def enqueue_transcript_final(store: RunnerStoreConnections, conn: Connection, se
     the ledger row (``bzh:dependency-inversion``). Ships unconditionally. Shared by the
     leases adapter (a spawn/closure boundary implicitly finalizes) and the transcripts
     adapter (an explicit finalize)."""
+    payload = json.dumps({"segment_id": str(segment.segment_id)})
     insert_outbox_row(
         store,
         conn,
@@ -378,6 +393,7 @@ def enqueue_transcript_final(store: RunnerStoreConnections, conn: Connection, se
         segment_id=str(segment.segment_id),
         chunk_id=str(segment.chunk_id),
         final=True,
-        payload=json.dumps({"segment_id": str(segment.segment_id)}),
+        payload=payload,
+        payload_bytes=len(payload.encode()),
         created_at=at,
     )

@@ -955,6 +955,9 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadLeaseLivenessRepository, "liveness_facts"): lambda w: w.read.liveness.liveness_facts([w.lease_2]),
     (IReadLeaseLivenessRepository, "lease_generations"): lambda w: w.read.liveness.lease_generations([w.lease_2]),
     (IReadLeaseLivenessRepository, "spawn_settings"): lambda w: w.read.liveness.spawn_settings(w.lease_2, 1),
+    (IReadLeaseLivenessRepository, "spawn_settings_for"): lambda w: w.read.liveness.spawn_settings_for(
+        [(w.lease_2, 1)]
+    ),
     (IReadLeaseLivenessRepository, "latest_spawn_settings"): lambda w: w.read.liveness.latest_spawn_settings(
         [w.lease_2]
     ),

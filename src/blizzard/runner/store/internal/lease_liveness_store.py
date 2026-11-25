@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 
-from sqlalchemy import ColumnElement, Connection, FromClause, and_, func, join
+from sqlalchemy import ColumnElement, Connection, FromClause, and_, func, join, or_
 
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
@@ -319,6 +319,39 @@ class LeaseLivenessStore:
         with self._store.connect() as conn:
             row = conn.execute(stmt).one_or_none()
         return SpawnSettings(*row) if row is not None else None
+
+    def spawn_settings_for(self, keys: Sequence[tuple[str, int]]) -> dict[tuple[str, int], SpawnSettings]:
+        result: dict[tuple[str, int], SpawnSettings] = {}
+        if not keys:
+            return result
+        with self._store.connect() as conn:
+            for batch in id_batches(sorted(set(keys))):
+                # A generation is its row's 1-based position in `id` order within its lease —
+                # the same ordinal `spawn_settings` reads with its offset.
+                ordered = self._store.select(
+                    lease_spawns,
+                    lease_spawns.c.lease_id,
+                    func.row_number()
+                    .over(partition_by=lease_spawns.c.lease_id, order_by=lease_spawns.c.id)
+                    .label("generation"),
+                    lease_spawns.c.host_settings_revision,
+                    lease_spawns.c.runner_settings_revision,
+                    lease_spawns.c.transcripts_root,
+                ).where(lease_spawns.c.lease_id.in_(sorted({lease_id for lease_id, _ in batch})))
+                numbered = ordered.subquery()
+                stmt = self._store.select(numbered).where(
+                    or_(
+                        *(
+                            and_(numbered.c.lease_id == lease_id, numbered.c.generation == generation)
+                            for lease_id, generation in batch
+                        )
+                    )
+                )
+                for row in conn.execute(stmt):
+                    result[(str(row.lease_id), int(row.generation))] = SpawnSettings(
+                        row.host_settings_revision, row.runner_settings_revision, row.transcripts_root
+                    )
+        return result
 
     def latest_spawn_settings(self, lease_ids: Sequence[str]) -> dict[str, SpawnSettings]:
         result: dict[str, SpawnSettings] = {}

@@ -280,9 +280,15 @@ class LoopContext:
     ) -> IHarnessTranscriptSource:
         """Resolve a live segment from its invocation, or the composed set after restart."""
         stamp = self.stores.liveness.spawn_settings(lease_id, generation)
-        return transcript_source_at_root(
-            self._owner_registry(lease_id, generation), session, stamp.transcripts_root if stamp else None
+        return self.invocation_transcript_source_at_root(
+            session, lease_id, generation, stamp.transcripts_root if stamp else None
         )
+
+    def invocation_transcript_source_at_root(
+        self, session: SessionReference, lease_id: str, generation: int, root: str | None
+    ) -> IHarnessTranscriptSource:
+        """:meth:`invocation_transcript_source` with the generation's recorded root already read."""
+        return transcript_source_at_root(self._owner_registry(lease_id, generation), session, root)
 
     def harnesses_for_lease(self, lease_id: str) -> IHarnessRegistry:
         return self._owner_registry(lease_id)

@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261120_1000_host_records",
+  "head_revision": "20261124_1000_transcript_payload_bytes",
   "store": "runner",
   "tables": {
     "asks": {
@@ -3721,6 +3721,12 @@
           "nullable": false,
           "server_default": false,
           "type": "Text"
+        },
+        "payload_bytes": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": true,
+          "type": "Integer"
         },
         "runner_id": {
           "deprecated": null,

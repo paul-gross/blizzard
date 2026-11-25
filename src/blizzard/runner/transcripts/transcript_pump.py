@@ -37,6 +37,7 @@ from blizzard.runner.harness.transcript import (
     TranscriptPosition,
 )
 from blizzard.runner.hub.outbound import OutboundContext, OutboundFacts, OutboundStores
+from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository, SpawnSettings
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
 from blizzard.runner.transcripts.ledger import (
     IWriteTranscriptLedgerRepository,
@@ -64,6 +65,8 @@ class TranscriptPumpStores(OutboundStores, Protocol):
     def environments(self) -> IReadEnvironmentRepository: ...
     @property
     def transcript_ledger(self) -> IWriteTranscriptLedgerRepository: ...
+    @property
+    def liveness(self) -> IReadLeaseLivenessRepository: ...
 
 
 class TranscriptPumpConfig(Protocol):
@@ -85,8 +88,8 @@ class TranscriptPumpContext(OutboundContext, Protocol):
     @property
     def workspaces(self) -> IWorkspaceSpawnRoots: ...
     def transcript_source_for(self, session: SessionReference) -> IHarnessTranscriptSource: ...
-    def invocation_transcript_source(
-        self, session: SessionReference, lease_id: str, generation: int
+    def invocation_transcript_source_at_root(
+        self, session: SessionReference, lease_id: str, generation: int, root: str | None
     ) -> IHarnessTranscriptSource: ...
 
 
@@ -167,6 +170,8 @@ class TranscriptPump:
         read."""
         if not self.ctx.config.transcripts_ship or not self.ctx.transcripts_wired:
             return
+        # Unpaged: the open segments are a live set, never history — an open lease's generations (closure finalizes
+        # them) and those a backfill or reship left open on a closed lease, which its rerun resumes and finalizes.
         segments = self.ctx.stores.transcript_ledger.open_transcript_segments()
         # One store read each for the whole run — each segment this run
         # ships advances `budget`/`shipped` locally, so a later segment sees the current
@@ -174,10 +179,13 @@ class TranscriptPump:
         budget = _OutstandingBudget(self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes())
         shipped = self._shipped_bytes_mirror(segments)
         bindings_by_chunk = self.bindings_for_chunks({segment.chunk_id for segment in segments})
+        settings = self.spawn_settings_for(segments)
         for segment in segments:
             if deadline is not None and self.ctx.clock.now() >= deadline:
                 break  # this run's bound reached — the rest catch up on a later tick
-            self._pump_one_safe(segment, budget=budget, shipped=shipped, bindings_by_chunk=bindings_by_chunk)
+            self._pump_one_safe(
+                segment, budget=budget, shipped=shipped, bindings_by_chunk=bindings_by_chunk, settings=settings
+            )
 
     def pump_lease(self, lease_id: str, *, deadline: datetime | None = None, mark_incomplete: bool = True) -> bool:
         """Drain a closing lease's own still-open segment(s) before finalization excludes
@@ -192,6 +200,7 @@ class TranscriptPump:
         budget = _OutstandingBudget(self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes())
         shipped = self._shipped_bytes_mirror(segments)
         bindings_by_chunk = self.bindings_for_chunks({segment.chunk_id for segment in segments})
+        settings = self.spawn_settings_for(segments)
         complete = True
         for i, segment in enumerate(segments):
             if deadline is not None and self.ctx.clock.now() >= deadline:
@@ -207,6 +216,7 @@ class TranscriptPump:
                 budget=budget,
                 shipped=shipped,
                 bindings_by_chunk=bindings_by_chunk,
+                settings=settings,
             )
             complete = drained and complete
         return complete
@@ -220,6 +230,7 @@ class TranscriptPump:
         budget: _OutstandingBudget | None = None,
         shipped: _ShippedBytesMirror | None = None,
         bindings_by_chunk: ResolvedBindings | None = None,
+        settings: Mapping[tuple[str, int], SpawnSettings] | None = None,
     ) -> bool:
         """Read one segment forward until it is caught up, ``deadline`` passes, or reading
         again would gain nothing — marking ``incomplete_reason`` in the latter two cases.
@@ -228,7 +239,7 @@ class TranscriptPump:
         segment takes no content: ``False`` without a read."""
         if budget is None:
             budget = _OutstandingBudget(self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes())
-        if shipped is None or bindings_by_chunk is None:
+        if shipped is None or bindings_by_chunk is None or settings is None:
             segment = self.ctx.stores.transcript_ledger.transcript_segment(segment_id)
             if segment is None:
                 return False  # nothing to seed against — the caller's next read finds the same
@@ -236,13 +247,17 @@ class TranscriptPump:
                 shipped = self._shipped_bytes_mirror([segment])
             if bindings_by_chunk is None:
                 bindings_by_chunk = self.bindings_for_chunks({segment.chunk_id})
+            if settings is None:
+                settings = self.spawn_settings_for([segment])
         for _ in range(_PUMP_LEASE_MAX_ITERATIONS):
             segment = self.ctx.stores.transcript_ledger.transcript_segment(segment_id)
             if segment is None:
                 return False  # the segment vanished from under us — nothing left to drain
             if not segment.accepts_content:
                 return False
-            outcome = self._pump_one_safe(segment, budget=budget, shipped=shipped, bindings_by_chunk=bindings_by_chunk)
+            outcome = self._pump_one_safe(
+                segment, budget=budget, shipped=shipped, bindings_by_chunk=bindings_by_chunk, settings=settings
+            )
             deadline_passed = outcome == "incomplete" and deadline is not None and self.ctx.clock.now() >= deadline
             match after_window(outcome, deadline_passed=deadline_passed):
                 case "read_to_end":
@@ -281,6 +296,23 @@ class TranscriptPump:
         newest = environments.newest_bindings_for([c for c in chunk_ids if all_newest or not held.get(c)])
         return ResolvedBindings(held, newest)
 
+    def spawn_settings_for(
+        self, segments: list[TranscriptSegmentState]
+    ) -> Mapping[tuple[str, int], SpawnSettings] | None:
+        """The recorded spawn settings of every invocation ``segments`` read, in one read for the whole call; skipped
+        with no segments. ``None`` when that read fails: each segment then reads its own inside its per-segment
+        isolation, so the failure is caught and marked per segment rather than escaping the entry point."""
+        keys = sorted({(segment.lease_id, segment.generation) for segment in segments})
+        if not keys:
+            return {}
+        try:
+            return self.ctx.stores.liveness.spawn_settings_for(keys)
+        except Exception:
+            _log.exception(
+                "transcript pump: spawn settings read failed — each segment reads its own", segments=len(keys)
+            )
+            return None
+
     def _pump_one_safe(
         self,
         segment: TranscriptSegmentState,
@@ -288,13 +320,16 @@ class TranscriptPump:
         budget: _OutstandingBudget,
         shipped: _ShippedBytesMirror,
         bindings_by_chunk: ResolvedBindings,
+        settings: Mapping[tuple[str, int], SpawnSettings] | None,
     ) -> PumpOutcome:
         """One segment's own failure must not abort the loop. Returns
         ``"not_attempted"`` on a caught exception — a raising segment must
         not spin ``pump_lease``'s drain loop, but at lease closure it must not read as
         caught-up either, or whatever the source held finalizes with no truncation trace."""
         try:
-            return self._pump_one(segment, budget=budget, shipped=shipped, bindings_by_chunk=bindings_by_chunk)
+            return self._pump_one(
+                segment, budget=budget, shipped=shipped, bindings_by_chunk=bindings_by_chunk, settings=settings
+            )
         except Exception:
             _log.exception(
                 "transcript pump: failed to pump segment — continuing with the rest",
@@ -310,6 +345,7 @@ class TranscriptPump:
         budget: _OutstandingBudget,
         shipped: _ShippedBytesMirror,
         bindings_by_chunk: ResolvedBindings,
+        settings: Mapping[tuple[str, int], SpawnSettings] | None,
     ) -> PumpOutcome:
         """Advance ``segment`` one read window forward and return its ``PumpOutcome``.
         :func:`~blizzard.runner.transcripts.shipping.pre_read` and ``plan_window`` decide; this carries it out."""
@@ -340,7 +376,14 @@ class TranscriptPump:
                 binding.workdir if binding else None,
             ).path
         try:
-            source = self.ctx.invocation_transcript_source(segment.session, segment.lease_id, segment.generation)
+            stamp = (
+                settings.get((segment.lease_id, segment.generation))
+                if settings is not None
+                else self.ctx.stores.liveness.spawn_settings(segment.lease_id, segment.generation)
+            )
+            source = self.ctx.invocation_transcript_source_at_root(
+                segment.session, segment.lease_id, segment.generation, stamp.transcripts_root if stamp else None
+            )
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             # The segment's recorded owner, not this pump's own bug — a read-only side lane
             # that skips this segment for this tick; the lease's own dispatch path escalates it.

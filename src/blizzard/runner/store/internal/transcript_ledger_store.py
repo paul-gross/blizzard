@@ -16,7 +16,7 @@ from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.store.internal.base import (
     NO_NORMALIZER_VERSION,
     enqueue_transcript_final,
-    insert_outbox_row,
+    insert_outbox_rows,
     lease_select,
 )
 from blizzard.runner.store.schema import leases, transcript_outbound_buffer, transcript_segments
@@ -102,10 +102,8 @@ class TranscriptLedgerStore:
         return result
 
     def outstanding_transcript_buffer_bytes(self) -> int:
-        # Payloads are `json.dumps(ensure_ascii=True)`, so SQL `length()` (chars) agrees
-        # with the encoded byte length here.
         stmt = self._store.select(
-            transcript_outbound_buffer, func.coalesce(func.sum(func.length(transcript_outbound_buffer.c.payload)), 0)
+            transcript_outbound_buffer, func.coalesce(func.sum(transcript_outbound_buffer.c.payload_bytes), 0)
         ).where(transcript_outbound_buffer.c.acked_at.is_(None))
         with self._store.connect() as conn:
             return int(conn.execute(stmt).scalar_one())
@@ -273,19 +271,22 @@ class TranscriptLedgerStore:
                     **self._merged_agent_tool_use_ids(conn, segment_id, agent_tool_use_ids),
                 )
             )
-            seqs: list[int] = []
-            for payload in payloads:
-                seq = insert_outbox_row(
-                    self._store,
-                    conn,
-                    transcript_outbound_buffer,
-                    segment_id=segment_id,
-                    chunk_id=chunk_id,
-                    final=False,
-                    payload=payload,
-                    created_at=created_at,
-                )
-                seqs.append(seq)
+            seqs = insert_outbox_rows(
+                self._store,
+                conn,
+                transcript_outbound_buffer,
+                [
+                    {
+                        "segment_id": segment_id,
+                        "chunk_id": chunk_id,
+                        "final": False,
+                        "payload": payload,
+                        "payload_bytes": len(payload.encode()),
+                        "created_at": created_at,
+                    }
+                    for payload in payloads
+                ],
+            )
         return seqs
 
     def open_transcript_segment(
