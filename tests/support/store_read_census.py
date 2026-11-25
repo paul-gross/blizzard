@@ -2915,6 +2915,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         ),
     ),
     (IReadChunkFactsRepository, "load_facts"): lambda w: w.read.facts.load_facts(w.chunk_ready_1),
+    (IReadChunkFactsRepository, "restarted_past"): lambda w: w.read.facts.restarted_past(w.chunk_ready_1, 0),
     (IReadChunkFactsRepository, "load_all_facts"): lambda w: w.read.facts.load_all_facts(),
     (IReadChunkFactsRepository, "load_facts_for"): lambda w: w.read.facts.load_facts_for(
         [w.chunk_ready_1, w.chunk_ready_2]

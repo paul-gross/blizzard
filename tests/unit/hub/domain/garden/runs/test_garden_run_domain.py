@@ -105,6 +105,9 @@ class _FakeChunkFacts:
     def load_facts(self, chunk_id: str, *, transaction: object = None) -> ChunkFacts | None:
         return self.facts.get(chunk_id)
 
+    def restarted_past(self, chunk_id: str, epoch: int) -> bool:
+        return ChunkFacts.or_default(self.facts.get(chunk_id)).restarted_past(epoch)
+
     def load_all_facts(self) -> dict[str, ChunkFacts]:
         return dict(self.facts)
 

@@ -13,7 +13,7 @@ from collections import Counter
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import Connection, Table, and_, func
+from sqlalchemy import Connection, Table, and_, func, select
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
@@ -61,6 +61,18 @@ class ChunkFactsStore:
         with connection as conn:
             result = load_chunk_facts(conn, [chunk_id])
         return result.get(chunk_id)
+
+    def restarted_past(self, chunk_id: str, epoch: int) -> bool:
+        """`src/blizzard/hub/domain/chunk/ports/facts.py`'s `IReadChunkFactsRepository.restarted_past`."""
+        restarts = s.chunk_restarts
+        probe = self._store.exists(
+            restarts,
+            restarts.c.chunk_id == chunk_id,
+            restarts.c.epoch > epoch,
+            restarts.c.chunk_id.not_in(ephemeral_ids_select(self._store)),
+        )
+        with self._store.read("restarted_past") as conn:
+            return bool(conn.execute(select(probe)).scalar_one())
 
     def load_all_facts(self) -> dict[str, ChunkFacts]:
         """`src/blizzard/hub/domain/chunk/ports/facts.py`'s `IReadChunkFactsRepository.load_all_facts`."""

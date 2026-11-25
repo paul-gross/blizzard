@@ -549,6 +549,9 @@ class _Facts:
     def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
         raise NotImplementedError
 
+    def restarted_past(self, chunk_id: str, epoch: int) -> bool:
+        raise NotImplementedError
+
     def load_all_facts(self) -> dict[str, ChunkFacts]:
         raise NotImplementedError
 

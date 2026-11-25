@@ -466,12 +466,11 @@ def get_question(question_id: str, services: Services) -> QuestionView:
     if row is None:
         raise ProblemHTTPException(partial(problems.question_not_found_problem, question_id))
     labels = ProjectLabels.read(services.projects, [row.project_id])
-    facts = ChunkFacts.or_default(services.chunks.facts.load_facts(row.chunk_id))
     return questions_api.question_view(
         row,
         services.registry.names_for([row.runner_id]),
         labels.fields(row.project_id),
-        superseded_by_restart=facts.restarted_past(row.epoch),
+        superseded_by_restart=services.chunks.facts.restarted_past(row.chunk_id, row.epoch),
     )
 
 
