@@ -10,6 +10,7 @@ import {
   provideTanStackQuery,
 } from '@tanstack/angular-query-experimental';
 
+import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 import {
   chunkCountsView,
   chunkSummary,
@@ -63,6 +64,14 @@ class TestBoardReads {
 })
 class TestBoardRails {
   readonly chunks = injectDomainBoardChunksQuery();
+}
+
+@Component({ selector: 'app-test-rail-observers', template: '' })
+class TestRailObservers {
+  readonly questions = injectBoardQuestionsQuery();
+  readonly moreQuestions = injectBoardQuestionsQuery();
+  readonly decisions = injectBoardDecisionsQuery();
+  readonly moreDecisions = injectBoardDecisionsQuery();
 }
 
 /**
@@ -131,7 +140,7 @@ describe('the board reads under the project lens', () => {
   beforeEach(async () => {
     stub = stubHubClient(ROUTES);
     await TestBed.configureTestingModule({
-      imports: [TestBoardReads, TestBoardRails],
+      imports: [TestBoardReads, TestBoardRails, TestRailObservers],
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(
@@ -157,6 +166,53 @@ describe('the board reads under the project lens', () => {
     await settle(fixture);
     return fixture;
   }
+
+  it('shares each lensed wire cache entry between domain observers and retains the polling backstop', async () => {
+    const question = questionView({ question_id: 'q_shared', question: 'Which?', options: ['yes'] });
+    const decision = decisionView({ decision_id: 'd_shared' });
+    stub.restore();
+    stub = stubHubClient({
+      'GET /api/questions': () => [question],
+      'GET /api/decisions': () => ({ decisions: [decision] }),
+    });
+    await TestBed.inject(Router).navigateByUrl('/p/alpha/board');
+    const fixture = TestBed.createComponent(TestRailObservers);
+    await settle(fixture);
+
+    const client = TestBed.inject(QueryClient);
+    const questionKey = ['hub', 'questions', { project: 'alpha' }];
+    const decisionKey = ['hub', 'decisions', { project: 'alpha' }];
+    expect(stub.forRoute('/api/questions', 'GET')).toHaveLength(1);
+    expect(stub.forRoute('/api/decisions', 'GET')).toHaveLength(1);
+    expect(client.getQueryData(questionKey)).toEqual([question]);
+    expect(client.getQueryData(decisionKey)).toEqual([decision]);
+    expect(client.getQueryCache().getAll()).toHaveLength(2);
+    for (const key of [questionKey, decisionKey]) {
+      const query = client.getQueryCache().find({ queryKey: key, exact: true })!;
+      expect(query.getObserversCount()).toBe(2);
+      for (const observer of query.observers) {
+        expect(observer.options.refetchInterval).toBe(LIVE_COVERED_POLL_BACKSTOP_MS);
+      }
+    }
+    expect(fixture.componentInstance.questions.data()).toEqual([{
+      chunk_id: question.chunk_id,
+      question: 'Which?',
+      question_id: 'q_shared',
+      runner_id: question.runner_id,
+      runner_name: question.runner_name,
+      options: ['yes'],
+    }]);
+    expect(fixture.componentInstance.moreQuestions.data()).toEqual(fixture.componentInstance.questions.data());
+    expect(fixture.componentInstance.decisions.data()).toEqual([{
+      chunk_id: decision.chunk_id,
+      decision_id: 'd_shared',
+      node_name: decision.node_name,
+      imposed_by_runner_id: decision.imposed_by_runner_id,
+      imposed_by_runner_name: decision.imposed_by_runner_name,
+      choices: ['approve', 'rework'],
+    }]);
+    expect(fixture.componentInstance.moreDecisions.data()).toEqual(fixture.componentInstance.decisions.data());
+  });
 
   it('sends the lensed project on every chunk, count, queue, backlog, question, decision, activity and spend read', async () => {
     await mountAt('/p/alpha/board');
