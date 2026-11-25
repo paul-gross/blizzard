@@ -39,7 +39,7 @@ export const NothingToTakeOver: Story = { args: { detail: { escalation: null } }
 export const ExhaustedMergeMethods: Story = {
   args: {
     detail: {
-      escalation: chunkEscalationView({
+      escalation: chunkEscalation({
         cause: 'merge-method-refused',
         detail: 'repo#42: allowed methods: merge, rebase, squash. ' +
           'merge: the forge rejected the merge commit because the pull request cannot be merged with this method; ' +
