@@ -6,8 +6,8 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
-import time
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -636,42 +636,83 @@ def _fake_mutmut(run: object) -> SimpleNamespace:
     return SimpleNamespace(get_mutant_runner=lambda max_children=1: _FakeRunner(), _run=run)
 
 
-def _mutation_loop(fake: SimpleNamespace) -> None:
-    """Start the workers, then spin until SIGINT arrives — as mutmut's loop catches it."""
-    fake.get_mutant_runner(4).startup()
-    try:
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline:
-            time.sleep(0.01)
-    except KeyboardInterrupt:
-        return
-    raise AssertionError("the budget never interrupted the mutation loop")
+class _ControlledTimer:
+    def __init__(self, interval: float, function: Callable[[], None]) -> None:
+        self.interval = interval
+        self.function = function
+        self.daemon = False
+        self.started = False
+        self.cancelled = False
+
+    def start(self) -> None:
+        self.started = True
+
+    def cancel(self) -> None:
+        self.cancelled = True
+
+    def expire(self) -> None:
+        assert self.started
+        self.function()
 
 
-def test_the_budget_does_not_count_the_phases_before_the_mutation_loop() -> None:
+def _controlled_budget(monkeypatch: pytest.MonkeyPatch) -> tuple[list[_ControlledTimer], list[tuple[int, int]]]:
+    timers: list[_ControlledTimer] = []
+    signals: list[tuple[int, int]] = []
+
+    def timer(interval: float, function: Callable[[], None]) -> _ControlledTimer:
+        result = _ControlledTimer(interval, function)
+        timers.append(result)
+        return result
+
+    def kill(pid: int, sig: int) -> None:
+        signals.append((pid, sig))
+
+    monkeypatch.setattr(m.threading, "Timer", timer)
+    monkeypatch.setattr(m.os, "kill", kill)
+    return timers, signals
+
+
+def test_the_budget_does_not_count_the_phases_before_the_mutation_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    timers, signals = _controlled_budget(monkeypatch)
+
     def run(_names: object, _max_children: object) -> None:
-        time.sleep(0.3)  # generation, mapping, clean tests: longer than the whole budget
+        assert not timers  # generation, mapping and clean tests have not started the budget
         fake.get_mutant_runner(4).startup()
+        assert len(timers) == 1 and timers[0].started
 
     fake = _fake_mutmut(run)
     assert m._run_with_budget(0.05, fake) is True
+    assert not signals
+    assert timers[0].cancelled
 
 
-def test_an_expired_budget_interrupts_the_mutation_loop() -> None:
+def test_an_expired_budget_interrupts_the_mutation_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    timers, signals = _controlled_budget(monkeypatch)
+
     def run(_names: object, _max_children: object) -> None:
-        _mutation_loop(fake)
+        assert not timers
+        fake.get_mutant_runner(4).startup()
+        assert timers[0].interval == 0.05
+        timers[0].expire()
 
     fake = _fake_mutmut(run)
     assert m._run_with_budget(0.05, fake) is False
+    assert signals == [(m.os.getpid(), m.signal.SIGINT)]
+    assert timers[0].cancelled
 
 
-def test_an_exit_after_the_budget_expires_is_the_budget_stop() -> None:
+def test_an_exit_after_the_budget_expires_is_the_budget_stop(monkeypatch: pytest.MonkeyPatch) -> None:
+    timers, signals = _controlled_budget(monkeypatch)
+
     def run(_names: object, _max_children: object) -> None:
-        _mutation_loop(fake)
+        fake.get_mutant_runner(4).startup()
+        timers[0].expire()
         raise SystemExit(1)  # a pytest run that swallowed the SIGINT, then mutmut's exit(1)
 
     fake = _fake_mutmut(run)
     assert m._run_with_budget(0.05, fake) is False
+    assert signals == [(m.os.getpid(), m.signal.SIGINT)]
+    assert timers[0].cancelled
 
 
 def test_an_exit_with_no_expired_budget_propagates() -> None:
