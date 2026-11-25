@@ -22,6 +22,11 @@ from tests.support.scaffolding import url_of
 pytestmark = pytest.mark.crash_sweep
 
 
+@pytest.fixture(autouse=True)
+def _socket_paths(short_subprocess_sockets: None) -> None:
+    pass
+
+
 @pytest.fixture(scope="session")
 def crash_env(tmp_path_factory: pytest.TempPathFactory) -> Iterator[CrashEnv]:
     """Mint the shared fixture world once and front it with one mock forge daemon."""

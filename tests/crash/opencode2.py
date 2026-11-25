@@ -133,11 +133,15 @@ class Service:
 
     @staticmethod
     def _env(home: Path) -> dict[str, str]:
-        return {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(home), ENV_HARNESS_FENCE: "1"}
+        return {
+            "PATH": f"{Path(sys.executable).parent}:{os.environ.get('PATH', '/usr/bin:/bin')}",
+            "HOME": str(home),
+            ENV_HARNESS_FENCE: "1",
+        }
 
     def daemon_env(self) -> dict[str, str]:
         """What the runner daemon runs under, so everything it starts names this service."""
-        return {"HOME": str(self.home)}
+        return {"HOME": str(self.home), "PATH": self._env(self.home)["PATH"]}
 
     def registration(self) -> ServiceRegistration | None:
         return read_registration(self.home / ".local" / "state" / "opencode" / "service.json")

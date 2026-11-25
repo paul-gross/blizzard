@@ -8,11 +8,14 @@ closed there: :meth:`GitHubLanding.close` is the cache's synchronous close, sche
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Any, ClassVar, NamedTuple, NoReturn
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx2
 
@@ -38,6 +41,7 @@ from blizzard.hub.forge.landing import (
     Check,
     CheckOutcome,
     CheckSource,
+    CommitEvidence,
     CommitPresence,
     CommitSummary,
     Comparison,
@@ -49,10 +53,12 @@ from blizzard.hub.forge.landing import (
     ForgeRateLimited,
     ForgeRejected,
     ForgeUnavailable,
+    LandingOptions,
     Mergeability,
     MergeMethod,
     Rerun,
     RerunOutcome,
+    TreeEntry,
     Update,
     UpdateMethod,
     UpdateOutcome,
@@ -123,6 +129,9 @@ _PROBE_ENDPOINT = f"GET {_ROUTE}"
 _BRANCH_TIP = _Call("branch_tip", f"GET {_ROUTE}/git/ref/heads/{{branch}}")
 _COMPARE = _Call("compare", f"GET {_ROUTE}/compare/{{basehead}}")
 _COMMIT_EXISTS = _Call("commit_exists", f"GET {_ROUTE}/commits/{{ref}}")
+_COMMIT_EVIDENCE = _Call("commit_evidence", f"GET {_ROUTE}/git/commits/{{sha}}")
+_TREE_EVIDENCE = _Call("tree_evidence", f"GET {_ROUTE}/git/trees/{{sha}}")
+_BLOB_EVIDENCE = _Call("blob_evidence", f"GET {_ROUTE}/git/blobs/{{sha}}")
 _ADVANCE_REF = _Call("advance_ref", f"PATCH {_ROUTE}/git/refs/heads/{{branch}}")
 _MERGE_INTO = _Call("merge_into", f"POST {_ROUTE}/merges")
 _CREATE_REF = _Call("create_ref", f"POST {_ROUTE}/git/refs")
@@ -132,6 +141,8 @@ _RECENTLY_CLOSED = _Call("recently_closed", f"GET {_ROUTE}/pulls")
 _OPEN_CHANGE = _Call("open_change", f"POST {_ROUTE}/pulls")
 _CHANGE = _Call("change", f"GET {_ROUTE}/pulls/{{pull_number}}")
 _UPDATE_FROM_BASE = _Call("update_from_base", f"PUT {_ROUTE}/pulls/{{pull_number}}/update-branch")
+_LANDING_OPTIONS = _Call("landing_options", f"GET {_ROUTE}")
+_REBASE_UPDATE = _Call("update_from_base", "POST /graphql")
 _MERGE = _Call("merge", f"PUT {_ROUTE}/pulls/{{pull_number}}/merge")
 _CHECKS = _Call("checks", f"GET {_ROUTE}/commits/{{ref}}/check-runs")
 _STATUSES = _Call("checks", f"GET {_ROUTE}/commits/{{ref}}/status")
@@ -254,6 +265,88 @@ class GitHubLanding:
         payload = await self._answered(response, ForgeObject.REVISION, _COMMIT_EXISTS)
         return CommitPresence(True, _authored_at(payload))
 
+    async def commit_evidence(self, revision: str) -> CommitEvidence:
+        if not is_object_id(revision):
+            raise ForgeUnavailable("commit evidence requires an immutable object id")
+        payload = await self._read(
+            "GET", f"{self._repo}/git/commits/{revision}", ForgeObject.REVISION, _COMMIT_EVIDENCE
+        )
+        try:
+            if payload["sha"] != revision:
+                raise ValueError("object id mismatch")
+            author = payload["author"]
+            result = CommitEvidence(
+                revision,
+                payload["tree"]["sha"],
+                tuple(parent["sha"] for parent in payload["parents"]),
+                author["name"],
+                author["email"],
+                author["date"],
+                payload["message"],
+            )
+            if not is_object_id(result.tree) or any(not is_object_id(parent) for parent in result.parents):
+                raise ValueError("invalid object id")
+            if any(
+                not _is_text(value)
+                for value in (result.author_name, result.author_email, result.author_date, result.message)
+            ):
+                raise ValueError("invalid commit identity")
+            return result
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
+            raise ForgeUnavailable(f"unreadable commit evidence: {exc}") from exc
+
+    async def tree_evidence(self, revision: str) -> tuple[TreeEntry, ...]:
+        if not is_object_id(revision):
+            raise ForgeUnavailable("tree evidence requires an immutable object id")
+        payload = await self._read(
+            "GET", f"{self._repo}/git/trees/{revision}?recursive=1", ForgeObject.REVISION, _TREE_EVIDENCE
+        )
+        try:
+            if payload["sha"] != revision or payload["truncated"] is not False or not isinstance(payload["tree"], list):
+                raise ValueError("incomplete tree")
+            all_entries = tuple(TreeEntry(e["path"], e["mode"], e["type"], e["sha"]) for e in payload["tree"])
+            if any(
+                not all(_is_text(v) and v for v in (e.path, e.mode, e.kind))
+                or not is_object_id(e.revision)
+                or (e.mode, e.kind)
+                not in {
+                    ("040000", "tree"),
+                    ("100644", "blob"),
+                    ("100755", "blob"),
+                    ("120000", "blob"),
+                    ("160000", "commit"),
+                }
+                or any(part in {"", ".", ".."} for part in e.path.split("/"))
+                for e in all_entries
+            ):
+                raise ValueError("invalid tree entry")
+            if len({entry.path for entry in all_entries}) != len(all_entries):
+                raise ValueError("duplicate tree entry")
+            entries = tuple(e for e in all_entries if e.kind != "tree")
+            # Leaf-only evidence cannot represent an empty subtree. Discarding one
+            # would hide a tree transition from the rewrite proof.
+            if any(
+                not any(leaf.path.startswith(e.path + "/") for leaf in entries) for e in all_entries if e.kind == "tree"
+            ):
+                raise ValueError("empty subtree is unsupported")
+            return entries
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
+            raise ForgeUnavailable(f"unreadable tree evidence: {exc}") from exc
+
+    async def blob_evidence(self, revision: str) -> bytes:
+        if not is_object_id(revision):
+            raise ForgeUnavailable("blob evidence requires an immutable object id")
+        payload = await self._read("GET", f"{self._repo}/git/blobs/{revision}", ForgeObject.REVISION, _BLOB_EVIDENCE)
+        try:
+            if payload["sha"] != revision or payload["encoding"] != "base64":
+                raise ValueError("invalid blob")
+            data = base64.b64decode("".join(payload["content"].split()), validate=True)
+            if len(data) != payload["size"]:
+                raise ValueError("incomplete blob")
+            return data
+        except (KeyError, TypeError, ValueError, AttributeError, binascii.Error) as exc:
+            raise ForgeUnavailable(f"unreadable blob evidence: {exc}") from exc
+
     async def advance_ref(self, branch: str, expected: str, revision: str) -> None:
         if await self.branch_tip(branch) != expected:
             raise ForgeRejected(ForgeRejected.STALE, f"{branch} is not at {expected}")
@@ -347,7 +440,24 @@ class GitHubLanding:
     async def change(self, number: int) -> Change:
         return _change(await self._read("GET", f"{self._repo}/pulls/{number}", ForgeObject.CHANGE, _CHANGE))
 
-    async def update_from_base(self, number: int, expected_head: str) -> Update:
+    async def landing_options(self) -> LandingOptions:
+        payload = await self._read("GET", self._repo, ForgeObject.REPOSITORY, _LANDING_OPTIONS)
+        table = as_table(payload)
+        keys = ("allow_merge_commit", "allow_rebase_merge", "allow_squash_merge")
+        if table is None or any(not isinstance(table.get(key), bool) for key in keys):
+            raise ForgeUnavailable("unreadable repository merge settings")
+        methods = tuple(
+            method
+            for key, method in zip(keys, (MergeMethod.MERGE, MergeMethod.REBASE, MergeMethod.SQUASH), strict=True)
+            if table[key]
+        )
+        return LandingOptions(methods, UpdateMethod.MERGE if table[keys[0]] else UpdateMethod.REBASE)
+
+    async def update_from_base(
+        self, number: int, expected_head: str, method: UpdateMethod = UpdateMethod.MERGE
+    ) -> Update:
+        if method == UpdateMethod.REBASE:
+            return await self._rebase_from_base(number, expected_head)
         response = await self._send(
             "PUT", f"{self._repo}/pulls/{number}/update-branch", {"expected_head_sha": expected_head}, write=True
         )
@@ -360,6 +470,63 @@ class GitHubLanding:
             return Update(UpdateOutcome.CONFLICT, UpdateMethod.MERGE)
         return Update(UpdateOutcome.REFUSED, UpdateMethod.MERGE)
 
+    async def _rebase_from_base(self, number: int, expected_head: str) -> Update:
+        pull = await self._read("GET", f"{self._repo}/pulls/{number}", ForgeObject.CHANGE, _CHANGE)
+        table = as_table(pull)
+        node_id = self._text(table.get("node_id") if table is not None else None, "pull request node id")
+        api = urlsplit(self._binding.api_url)
+        path = api.path.rstrip("/")
+        graphql_path = f"{path[:-2]}graphql" if path.endswith("/v3") else f"{path}/graphql"
+        if api.netloc == "api.github.com" and not path:
+            graphql_path = "/graphql"
+        endpoint = urlunsplit((api.scheme, api.netloc, graphql_path, "", ""))
+        body = {
+            "query": "mutation($input: UpdatePullRequestBranchInput!) { "
+            "updatePullRequestBranch(input: $input) { pullRequest { id } } }",
+            "variables": {
+                "input": {"pullRequestId": node_id, "expectedHeadOid": expected_head, "updateMethod": "REBASE"}
+            },
+        }
+        response = await self._send("POST", endpoint, body, write=True)
+        payload = await self._answered(response, ForgeObject.CHANGE, _REBASE_UPDATE)
+        result = as_table(payload)
+        if result is None:
+            raise ForgeUnavailable("unreadable rebase update response")
+        errors = as_list(result.get("errors"))
+        if "errors" in result and errors is None:
+            raise ForgeUnavailable("unreadable GraphQL errors")
+        if errors:
+            kinds = [entry.get("type") for error in errors if (entry := as_table(error)) is not None]
+            messages = [entry.get("message") for error in errors if (entry := as_table(error)) is not None]
+            message = sanitize_forge_text("; ".join(m for m in messages if isinstance(m, str)))
+            lowered = message.lower()
+            if "RATE_LIMITED" in kinds:
+                resume_at = self._binding.dialect.refusal(
+                    403, response.headers, f"rate limit: {message}", self._clock.now()
+                )
+                assert resume_at is not None
+                raise ForgeRateLimited(resume_at, message or "GraphQL rebase update rate limited")
+            if any(kind in {"INTERNAL_SERVER_ERROR", "SERVICE_UNAVAILABLE"} for kind in kinds):
+                raise ForgeUnavailable(message or "GraphQL rebase update unavailable")
+            if "conflict" in lowered:
+                return Update(UpdateOutcome.CONFLICT, UpdateMethod.REBASE)
+            if any(
+                phrase in lowered for phrase in ("expected head", "head oid", "head sha", "head branch was modified")
+            ):
+                raise ForgeRejected(ForgeRejected.STALE, message)
+            if any(word in lowered for word in ("permission", "not authorized", "resource not accessible")):
+                refused = httpx2.Response(
+                    403, json={"message": message}, headers=response.headers, request=response.request
+                )
+                await self._fail(refused, ForgeObject.CHANGE, _REBASE_UPDATE)
+            raise ForgeRejected(message or "GraphQL rebase update refused")
+        data = as_table(result.get("data"))
+        updated = as_table(data.get("updatePullRequestBranch")) if data is not None else None
+        updated_pull = as_table(updated.get("pullRequest")) if updated is not None else None
+        if updated_pull is None or updated_pull.get("id") != node_id:
+            raise ForgeUnavailable("unreadable rebase update response")
+        return Update(UpdateOutcome.ACCEPTED, UpdateMethod.REBASE)
+
     async def merge(self, number: int, expected_head: str, method: MergeMethod, message: str) -> str:
         body = {"commit_message": message, "sha": expected_head, "merge_method": str(method), "user": _HUB_USER}
         response = await self._send("PUT", f"{self._repo}/pulls/{number}/merge", body, write=True)
@@ -369,13 +536,12 @@ class GitHubLanding:
         merged = as_table(result)
         if merged is not None and merged.get("merged") and isinstance(sha := merged.get("sha"), str) and sha:
             return sha
-        landed = await self.change(number)
-        if landed.merged_revision is None:
-            raise ForgeRejected(
-                _message(response) or f"pull request {number} did not merge",
-                diagnostic=self._diagnostic(response, _MERGE),
-            )
-        return landed.merged_revision
+        # An ambiguous response must be reconciled by delivery, which checks that
+        # the merged PR's head is still the exact revision it admitted and checked.
+        raise ForgeRejected(
+            _message(response) or f"pull request {number} merge response did not name a landed revision",
+            diagnostic=self._diagnostic(response, _MERGE),
+        )
 
     # IForgeChecks
 
@@ -660,6 +826,10 @@ class GitHubLanding:
 
 def _has_prefix(message: str, prefixes: tuple[str, ...]) -> bool:
     return message.lower().startswith(prefixes)
+
+
+def _is_text(value: object) -> bool:
+    return isinstance(value, str)
 
 
 def _kept_response(kept: KeptAnswer, answered: httpx2.Response) -> httpx2.Response:

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Protocol
 
+from blizzard.foundation.crash import crashpoint
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.credentials import IReadCredentialRepository, resolve_credential
@@ -38,6 +39,7 @@ from blizzard.hub.forge.landing import (
     Change,
     ChangeListing,
     Check,
+    CommitEvidence,
     CommitPresence,
     Comparison,
     ForgeAuthRefused,
@@ -47,12 +49,18 @@ from blizzard.hub.forge.landing import (
     IForgeChanges,
     IForgeChecks,
     IForgeRefs,
+    LandingOptions,
     MergeMethod,
     RepositoryForge,
     Rerun,
+    TreeEntry,
     Update,
+    UpdateMethod,
+    UpdateOutcome,
 )
 from blizzard.hub.live_config import ConfigObjectCache
+
+_REBASE_UPDATED = crashpoint("rebase.after-update.before-record", "rebase update accepted before recovery poll")
 
 
 class IForgeAdapter(IForgeRefs, IForgeChanges, IForgeChecks, Protocol):
@@ -316,6 +324,18 @@ class RefsHandle:
         _admit(self.offered, "commit_exists", self.gate, self.cut_off)
         return await self.gate.spending(self.adapter.commit_exists(revision))
 
+    async def commit_evidence(self, revision: str) -> CommitEvidence:
+        _admit(self.offered, "commit_evidence", self.gate, self.cut_off)
+        return await self.gate.spending(self.adapter.commit_evidence(revision))
+
+    async def tree_evidence(self, revision: str) -> tuple[TreeEntry, ...]:
+        _admit(self.offered, "tree_evidence", self.gate, self.cut_off)
+        return await self.gate.spending(self.adapter.tree_evidence(revision))
+
+    async def blob_evidence(self, revision: str) -> bytes:
+        _admit(self.offered, "blob_evidence", self.gate, self.cut_off)
+        return await self.gate.spending(self.adapter.blob_evidence(revision))
+
     async def advance_ref(self, branch: str, expected: str, revision: str) -> None:
         _admit(self.offered, "advance_ref", self.gate, self.cut_off)
         await self.gate.spending(self.adapter.advance_ref(branch, expected, revision))
@@ -356,9 +376,20 @@ class _ChangesHandle:
         _admit(self.offered, "change", self.gate, self.cut_off)
         return await self.gate.spending(self.adapter.change(number))
 
-    async def update_from_base(self, number: int, expected_head: str) -> Update:
+    async def landing_options(self) -> LandingOptions:
+        _admit(self.offered, "landing_options", self.gate, self.cut_off)
+        return await self.gate.spending(self.adapter.landing_options())
+
+    async def update_from_base(
+        self, number: int, expected_head: str, method: UpdateMethod = UpdateMethod.MERGE
+    ) -> Update:
         _admit(self.offered, "update_from_base", self.gate, self.cut_off)
-        return await self.gate.spending(self.adapter.update_from_base(number, expected_head))
+        if method == UpdateMethod.MERGE:
+            return await self.gate.spending(self.adapter.update_from_base(number, expected_head))
+        result = await self.gate.spending(self.adapter.update_from_base(number, expected_head, method))
+        if method is UpdateMethod.REBASE and result.outcome is UpdateOutcome.ACCEPTED:
+            _REBASE_UPDATED.reached()
+        return result
 
     async def merge(self, number: int, expected_head: str, method: MergeMethod, message: str) -> str:
         _admit(self.offered, f"merge.{method}", self.gate, self.cut_off)

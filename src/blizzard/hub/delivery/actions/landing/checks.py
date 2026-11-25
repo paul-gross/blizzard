@@ -46,7 +46,7 @@ WAIT = "wait"  # pending / draft / required-checks-not-green / … — re-poll, 
 UPDATE = "update"  # behind — bring it up to its base, then re-poll
 BOUNCE = "bounce"  # conflicting — a real content conflict, kick back to build
 FAILED = "failed"  # a check completed with a failing outcome — never re-poll
-FOREIGN = "foreign-head"  # the change's head carries something beyond the submitted commit and base merges
+FOREIGN = "foreign-head"  # the change's head is not admitted as submitted work or a proven automatic update
 # A findings record's decision when every failing check is inherited — the answer's own name.
 INHERITED_FAILURE = "inherited-failure"
 
@@ -340,7 +340,7 @@ class _InheritedFailed(_Section):
 
 
 class _ForeignHead(_Section):
-    label = "The PR head carries more than the submitted commit (a foreign advance, not a CI failure):"
+    label = "The PR head could not be admitted as submitted work or a proven automatic update (not a CI failure):"
 
     def rows(self) -> Iterator[str]:
         yield f"  submitted commit: {self.record['submitted']}"

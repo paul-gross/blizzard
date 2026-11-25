@@ -38,7 +38,9 @@ def test_relative():
         result = pytest.main([str(module), "-q", "-c", "/dev/null", "-p", "no:cacheprovider"])
         assert result == pytest.ExitCode.TESTS_FAILED
     finally:
+        state.connection.invalidate()
         state.connection.close()
+    assert not any(p.exists() and p.resolve() == tmp_path / "relative.db" for p in Path("/proc/self/fd").iterdir())
 
 
 def test_reused_executor_attributes_each_job_to_submitting_test(

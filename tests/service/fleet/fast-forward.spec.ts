@@ -42,14 +42,20 @@ test('test_fast_forward_stands_when_second_forge_refuses_merge_method', async ({
   } });
   expect(applied.status, JSON.stringify(applied.body)).toBe(200);
   expect((await api.patch(`/api/repositories/${first.name}`, { data: { landing_policy: 'fast-forward' } })).status).toBe(200);
-  expect((await secondForge.call('POST', '/_levers/merge_commits_disallowed', { repo: fullName(second) })).status).toBe(200);
+  for (const lever of ['merge_commits_disallowed', 'rebase_merge_disallowed', 'squash_merge_disallowed']) {
+    expect((await secondForge.call('POST', `/_levers/${lever}`, { repo: fullName(second) })).status).toBe(200);
+  }
   const host = await runnerHosts.create({ runnerRepositories: { [first.name]: first.origin!, [name]: second.origin! } });
+  const firstBase = await host.originHead(first.name, 'main');
+  const secondBase = await host.originHead(second.name, 'main');
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph([first, second]) } })).status).toBe(201);
   const { chunk } = await issue('CROSS-FORGE.md', { repository: first });
   expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
   const done = await stepUntil(host, () => detail(api, chunk.chunk_id), (row) => row.status === 'needs_human', { stallPasses: 80, progress: chunkProgress });
   expect(done.escalation?.cause).toBe('merge-method-refused');
   expect(done.landed_repos.map((row) => row.repo)).toEqual([fullName(first)]);
+  expect(await host.originHead(first.name, 'main')).not.toBe(firstBase);
+  expect(await host.originHead(second.name, 'main')).toBe(secondBase);
   expect(await pulls(forge, first)).toEqual([]);
   expect(await pulls(secondForge, second, 'open')).toHaveLength(1);
 });

@@ -264,8 +264,7 @@ class Conflict:
 @domain_model
 @dataclass(frozen=True)
 class Failure:
-    """A check the repository's own work fails, or — ``foreign_head`` — a head carrying more than the submitted
-    commit and base merges."""
+    """A check the repository's own work fails, or — ``foreign_head`` — an unadmitted head."""
 
     findings: tuple[dict[str, Any], ...]
     foreign_head: bool = False

@@ -4,6 +4,7 @@ the tier-marker refusal, store-revision retirement, sharding, the statement guar
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import json
 import os
 import tempfile
@@ -78,18 +79,27 @@ def short_host_runtime() -> Iterator[Path]:
 @pytest.fixture
 def short_host_sockets(monkeypatch: pytest.MonkeyPatch, short_host_runtime: Path) -> None:
     """Keep each host's sockets short while its store and other files stay in the test directory."""
-    roots: dict[Path, Path] = {}
 
     def socket_for(layout: HostLayout, name: str) -> Path:
         root = layout.root.resolve()
-        if root not in roots:
-            directory = short_host_runtime / str(len(roots))
-            directory.mkdir()
-            roots[root] = directory
-        return roots[root] / name
+        key = hashlib.sha256(os.fsencode(root)).hexdigest()[:16]
+        directory = short_host_runtime / key
+        directory.mkdir(exist_ok=True)
+        return directory / name
 
     monkeypatch.setattr(HostLayout, "socket_path", property(lambda layout: socket_for(layout, "host.sock")))
     monkeypatch.setattr(HostLayout, "legacy_socket_path", property(lambda layout: socket_for(layout, "runner.sock")))
+
+
+@pytest.fixture
+def short_subprocess_sockets(
+    monkeypatch: pytest.MonkeyPatch, short_host_sockets: None, short_host_runtime: Path
+) -> None:
+    """Apply the same socket mapping to Python daemons spawned by a test."""
+    bootstrap = Path(__file__).parent / "socket_bootstrap"
+    inherited = os.environ.get("PYTHONPATH", "")
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(filter(None, (str(bootstrap), inherited))))
+    monkeypatch.setenv("BLIZZARD_TEST_SOCKET_DIR", str(short_host_runtime))
 
 
 #: The two trees the folder layout governs: each tests root and the package root its folders mirror.

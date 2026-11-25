@@ -191,6 +191,102 @@ test('test_pr_ci_self_heals_a_behind_branch_and_lands', async ({ repository, iss
   expect(head.parents).toContain(before);
 });
 
+for (const method of ['rebase', 'squash'] as const) {
+  test(`test_pr_ci_rechecks_the_rebased_head_before_${method}_landing`, async ({ repository, issue, api, forge, runnerHosts }) => {
+    test.slow();
+    const repo = await repository();
+    const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
+    await lever(forge, repo, 'merge_commits_disallowed');
+    if (method === 'rebase') await lever(forge, repo, 'squash_merge_disallowed');
+    else await lever(forge, repo, 'rebase_merge_disallowed');
+    await lever(forge, repo, 'checks_pending');
+    await createGraph(api, repo);
+    const { chunk } = await issue('pr-ci rebase', { repository: repo });
+    expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+    await drive(host, api, chunk.chunk_id, (s) => s.pending !== null);
+    const opened = (await pulls(forge, repo))[0]!;
+    const base = await host.originCommit(repo.name, 'main', 'BASE_MOVED.md', 'base moved\n', 'move base');
+    const checks = (ref: string, status: 'success' | 'pending') => forge.call('POST', '/_levers/ref_checks', {
+      repo: `${repo.owner}/${repo.name}`, ref, checks: [{ name: 'build', status }],
+    });
+    expect((await checks(opened.head.sha, 'success')).status).toBe(200);
+    await lever(forge, repo, 'stale_branch');
+    let rewritten = opened.head.sha;
+    await expect.poll(async () => {
+      rewritten = (await pulls(forge, repo))[0]!.head.sha;
+      return rewritten !== opened.head.sha;
+    }, { timeout: 60000 }).toBe(true);
+    const pending = (await api.get<Wire.ChunkDetail>(`/api/chunks/${chunk.chunk_id}`)).body;
+    expect(pending.status).toBe('delivering');
+    expect(pending.landed).toBe(false);
+    const stillPending = await nextPoll(api, chunk.chunk_id, pending.pending!.next_poll_at);
+    expect(stillPending.status).toBe('delivering');
+    expect(stillPending.landed).toBe(false);
+    expect((await pulls(forge, repo))[0]!.merged).toBe(false);
+    expect(await host.originHead(repo.name, 'main')).toBe(base);
+    expect((await host.originLog(repo.name, rewritten))![0]!.parents).toEqual([base]);
+    // The old head is green; only releasing the new head's check may admit landing.
+    await lever(forge, repo, 'checks_pending', 'DELETE');
+    const done = await drive(host, api, chunk.chunk_id, (s) => ['done', 'needs_human'].includes(s.status));
+    expect(done.status).toBe('done');
+    const landed = await host.originHead(repo.name, 'main');
+    expect(done.landed_repos[0]!.commit_hash).toBe(landed);
+    expect((await host.originLog(repo.name, 'main'))![0]!.parents).toEqual([base]);
+    expect((await pulls(forge, repo))[0]!.merged).toBe(true);
+  });
+}
+
+test('test_pr_ci_explains_each_exhausted_allowed_method', async ({ repository, issue, api, forge, runnerHosts }) => {
+  test.slow();
+  const repo = await repository();
+  const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
+  const before = await host.originHead(repo.name, 'main');
+  for (const method of ['merge', 'rebase', 'squash']) {
+    const result = await forge.call('POST', '/_levers/merge_method_refused', {
+      repo: `${repo.owner}/${repo.name}`, method, message: `${method} incompatible`,
+    });
+    expect(result.status, JSON.stringify(result.body)).toBe(200);
+  }
+  await createGraph(api, repo);
+  const { chunk } = await issue('pr-ci exhausted', { repository: repo });
+  expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+  const escalated = await drive(host, api, chunk.chunk_id, (s) => s.status === 'needs_human');
+  expect(escalated.escalation?.cause).toBe('merge-method-refused');
+  const detail = escalated.escalation?.detail || '';
+  expect(detail).toContain('allowed methods:');
+  for (const method of ['merge', 'rebase', 'squash']) {
+    expect(detail).toContain(`${method}:`);
+    expect(detail).toContain(`${method} incompatible`);
+  }
+  expect(escalated.landed).toBe(false);
+  expect((await pulls(forge, repo))[0]!.merged).toBe(false);
+  expect(await host.originHead(repo.name, 'main')).toBe(before);
+});
+
+test('test_pr_ci_falls_back_to_squash_after_method_specific_refusals', async ({ repository, issue, api, forge, runnerHosts }) => {
+  test.slow();
+  const repo = await repository();
+  const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
+  const before = await host.originHead(repo.name, 'main');
+  for (const method of ['merge', 'rebase']) {
+    const result = await forge.call('POST', '/_levers/merge_method_refused', {
+      repo: `${repo.owner}/${repo.name}`, method, message: `${method} incompatible`,
+    });
+    expect(result.status, JSON.stringify(result.body)).toBe(200);
+  }
+  await createGraph(api, repo);
+  const { chunk } = await issue('pr-ci fallback', { repository: repo });
+  expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+  const done = await drive(host, api, chunk.chunk_id, (s) => ['done', 'needs_human'].includes(s.status));
+  expect(done.status).toBe('done');
+  const opened = (await pulls(forge, repo))[0]!;
+  expect(opened.merged).toBe(true);
+  const landed = await host.originHead(repo.name, 'main');
+  expect(landed).not.toBe(opened.head.sha);
+  expect((await host.originLog(repo.name, 'main'))![0]!.parents).toEqual([before]);
+  expect(done.landed_repos[0]!.commit_hash).toBe(landed);
+});
+
 test('test_pr_ci_bounces_a_dirty_conflict_back_to_build', async ({ repository, issue, api, forge, runnerHosts }) => {
   test.slow();
   const repo = await repository();

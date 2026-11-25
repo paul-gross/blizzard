@@ -22,6 +22,7 @@ from blizzard.hub.forge.landing import (
     ChangeState,
     Check,
     CheckOutcome,
+    CommitEvidence,
     CommitPresence,
     CommitSummary,
     Comparison,
@@ -31,11 +32,13 @@ from blizzard.hub.forge.landing import (
     ForgeObject,
     ForgeRejected,
     ForgeUnavailable,
+    LandingOptions,
     Mergeability,
     MergeMethod,
     RepositoryForge,
     Rerun,
     RerunOutcome,
+    TreeEntry,
     Update,
     UpdateMethod,
     UpdateOutcome,
@@ -216,6 +219,10 @@ class GitHubDouble:
         return override
 
 
+def _missing_evidence() -> Any:
+    raise NotImplementedError("forge evidence not configured")
+
+
 class _Adapter:
     """One repository's adapter: every call lands on the shared double."""
 
@@ -257,6 +264,15 @@ class _Adapter:
 
     async def commit_exists(self, revision: str) -> CommitPresence:
         return self._double.answer("commit_exists", self._repo, lambda: CommitPresence(True), revision=revision)
+
+    async def commit_evidence(self, revision: str) -> CommitEvidence:
+        return self._double.answer("commit_evidence", self._repo, lambda: _missing_evidence(), revision=revision)
+
+    async def tree_evidence(self, revision: str) -> tuple[TreeEntry, ...]:
+        return self._double.answer("tree_evidence", self._repo, lambda: _missing_evidence(), revision=revision)
+
+    async def blob_evidence(self, revision: str) -> bytes:
+        return self._double.answer("blob_evidence", self._repo, lambda: _missing_evidence(), revision=revision)
 
     async def advance_ref(self, branch: str, expected: str, revision: str) -> None:
         def default() -> None:
@@ -319,7 +335,14 @@ class _Adapter:
 
         return self._double.answer("change", self._repo, default, number=number)
 
-    async def update_from_base(self, number: int, expected_head: str) -> Update:
+    async def landing_options(self) -> LandingOptions:
+        return self._double.answer(
+            "landing_options", self._repo, lambda: LandingOptions(tuple(MergeMethod), UpdateMethod.MERGE)
+        )
+
+    async def update_from_base(
+        self, number: int, expected_head: str, method: UpdateMethod = UpdateMethod.MERGE
+    ) -> Update:
         return self._double.answer(
             "update_from_base", self._repo, lambda: self._state.update, number=number, expected_head=expected_head
         )
