@@ -73,7 +73,7 @@ class Land:
             # A repair worker reads a failure's findings, so unwritten ones fail the visit; any other answer stands.
             if answer.choice in {FAILURE, INHERITED_FAILURE}:
                 answer = replace(answer, choice=FAILURE)
-        earlier = tuple(f"{repo} landed at {revision}" for repo, revision in run.earlier_landings().items())
+        earlier = tuple(f"{repo} landed at {revision}" for repo, revision in run.visit.visit_landings().items())
         return replace(answer, log=(*earlier, *run.log))
 
     @staticmethod

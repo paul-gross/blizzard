@@ -7,9 +7,8 @@ that*. The change has already passed verify, review, and pre-push — preserve t
 
 Start with `blizzard runner artifact get delivery-findings --node deliver --content` and the `hub-log.land` log: the
 findings carry each check's state as the landing visit ended, the log the conflict or error that ended it. Then read the
-bounce envelope and the PRs and their check results on the forge. Check the state as it is *now*, not as the bounce
-described it — a self-clearing state may have cleared, and an earlier attempt may already have repaired a repo. Then
-establish which case you are in:
+bounce envelope and the PRs and their checks on the forge. Check the state *now*, not as the bounce described it — it
+may have cleared, or an earlier attempt may have repaired a repo. Then establish which case applies:
 
 ### 1. Merge conflict
 

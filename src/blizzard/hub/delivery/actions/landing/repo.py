@@ -7,7 +7,7 @@ one answer a policy gives about it."""
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Iterable, Mapping
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -24,7 +24,6 @@ from blizzard.hub.domain.actions.effects import (
     Pass,
 )
 from blizzard.hub.domain.actions.visit import Visit
-from blizzard.hub.domain.chunk.model import is_landed_revision
 from blizzard.hub.domain.config.repositories import ResolvedRepository
 from blizzard.hub.forge.landing import (
     Comparison,
@@ -103,21 +102,13 @@ class LandingRun:
     def decided_by(self, repos: Iterable[str]) -> None:
         self.deciding = tuple(repos)
 
-    def earlier_landings(self) -> Mapping[str, str]:
-        """The revision of each repository an earlier pass of this visit landed, read from its marker."""
-        return {
-            row.name.removeprefix(_MARKER_PREFIX): row.data.strip()
-            for row in self.visit.markers
-            if row.epoch == self.visit.epoch and row.name.startswith(_MARKER_PREFIX) and is_landed_revision(row.data)
-        }
-
     def visit_records(self) -> tuple[dict[str, Any], ...]:
         """Every record the visit ends with: those that decided the answer first, then the rest, then the
         repositories an earlier pass of the visit landed."""
         ordered = {repo: self.records[repo] for repo in self.deciding if repo in self.records} | self.records
         earlier = (
             _landed_record(repo, revision, None)
-            for repo, revision in self.earlier_landings().items()
+            for repo, revision in self.visit.visit_landings().items()
             if repo not in ordered
         )
         return (*ordered.values(), *earlier)

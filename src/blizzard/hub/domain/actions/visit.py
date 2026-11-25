@@ -178,6 +178,10 @@ class Visit:
         """The repos landed anywhere in the chunk's delivery — a non-blank ``merged/<repo>`` at any node."""
         return LandedRepos.of(self.artifacts).names
 
+    def visit_landings(self) -> Mapping[str, str]:
+        """The revision of each repository landed at this node in this epoch, read from its marker."""
+        return MappingProxyType(LandedRepos.of(tuple(row for row in self.markers if row.epoch == self.epoch)).shas)
+
     def no_code_repos(self) -> frozenset[str]:
         """Current declarations resolved without a merge at this node."""
         return no_code_repos(self.markers, self.git_commits.payload(self.resolution.qualified, self.resolution))
