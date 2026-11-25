@@ -88,11 +88,25 @@
             />
           }
           @default {
-            <fleet-kit-text-input
-              [formField]="textField(field.key)"
-              [testid]="testidPrefix() + '-field-' + field.key"
-              (valueChange)="onChanged(field.key)"
-            />
+            @if (defaultChoiceFor(field); as choice) {
+              <fleet-kit-or-default
+                [formField]="flagField(choice.key)"
+                [defaultLabel]="choice.label"
+                [attr.data-testid]="testidPrefix() + '-field-' + choice.key"
+              >
+                <fleet-kit-text-input
+                  [formField]="textField(field.key)"
+                  [testid]="testidPrefix() + '-field-' + field.key"
+                  (valueChange)="onChanged(field.key)"
+                />
+              </fleet-kit-or-default>
+            } @else {
+              <fleet-kit-text-input
+                [formField]="textField(field.key)"
+                [testid]="testidPrefix() + '-field-' + field.key"
+                (valueChange)="onChanged(field.key)"
+              />
+            }
           }
         }
       </fleet-kit-field>

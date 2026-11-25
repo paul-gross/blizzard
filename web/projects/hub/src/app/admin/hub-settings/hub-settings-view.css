@@ -1,0 +1,4 @@
+/* Stacked history entries: the panel carries no outer margin of its own. */
+app-change-entry-panel {
+  margin-block: 12px;
+}

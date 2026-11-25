@@ -1,5 +1,18 @@
 <app-hub-settings-view [allowed]="allowed()" [identityPending]="me.isPending()" [state]="state()"
-  [rows]="settings.data()?.settings ?? []" [editing]="editing()" [value]="value()" [failure]="failure()" [busy]="busy()"
-  [revisions]="revisions()" [historyState]="historyState()" [changes]="changes()"
+  [rows]="settings.data()?.settings ?? []" [busy]="busy()"
+  [revisions]="revisions()" [historyState]="historyState()" [entries]="entries()"
   [hasNext]="history.hasNextPage()" [loadingNext]="history.isFetchingNextPage()"
-  (edit)="edit($event)" (valueChange)="value.set($event)" (save)="save($event)" (cancelled)="cancel()" (loadMore)="history.fetchNextPage()" />
+  (edit)="onEdit($event)" (loadMore)="history.fetchNextPage()" />
+@if (allowed() && baseline(); as before) {
+  <app-config-field-tree-dialog
+    [heading]="'Edit ' + before.id"
+    mode="edit"
+    [form]="editForm"
+    [baseline]="before.draft"
+    [fields]="fields"
+    submitLabel="Save"
+    testidPrefix="hub-setting-edit"
+    (closed)="onCancel()"
+    (save)="onSave()"
+  />
+}

@@ -203,3 +203,46 @@ export class TimeoutDialogHost {
     });
   }
 }
+
+/** An edit draft whose text field offers an explicit default. */
+export interface SettingDraft {
+  value: string;
+  useDefault: boolean;
+}
+
+export const SETTING_FIELDS: readonly ConfigFieldView<SettingDraft>[] = [
+  { key: 'value', label: 'Value', kind: 'text', orDefault: { key: 'useDefault', label: 'Default' } },
+];
+
+const settingRules = schema<SettingDraft>((p) => {
+  disabled(p.value, ({ valueOf }) => valueOf(p.useDefault));
+});
+
+/** A container for an edit whose value is the default or stated text; `useDefault` seeds the baseline's choice. */
+@Component({
+  selector: 'app-story-setting-dialog',
+  imports: [ConfigFieldTreeDialog],
+  templateUrl: './config-field-tree-dialog.setting.form-story.html',
+})
+export class SettingDialogHost {
+  readonly useDefault = input(true);
+  readonly fields = SETTING_FIELDS;
+  readonly baseline = signal<SettingDraft>({ value: '60', useDefault: true });
+  readonly f = form(signal<SettingDraft>({ ...this.baseline() }), settingRules);
+  saved: SettingDraft[] = [];
+
+  constructor() {
+    queueMicrotask(() => {
+      if (this.useDefault()) return;
+      this.baseline.set({ value: '75', useDefault: false });
+      this.f().reset({ ...this.baseline() });
+    });
+  }
+
+  async onSave(): Promise<void> {
+    await submitForm(this.f, async (draft) => {
+      this.saved.push(draft);
+      return { ok: true };
+    });
+  }
+}

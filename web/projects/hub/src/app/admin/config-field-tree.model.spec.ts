@@ -129,6 +129,11 @@ describe('a number field with a default choice', () => {
     expect(defaultChoiceOf(FIELDS[4])).toBeNull();
   });
 
+  it('offers the choice on a text field too', () => {
+    const field: ConfigFieldView<Timed> = { key: 'hours', label: 'Value', kind: 'text', orDefault: { key: 'useDefault', label: 'Default' } };
+    expect(defaultChoiceOf(field)).toEqual({ key: 'useDefault', label: 'Default' });
+  });
+
   it('reads the default kept as no change, whatever the text', () => {
     expect(fieldChanges(TIMED, { hours: '', useDefault: true }, { hours: '12', useDefault: true })).toEqual([]);
   });

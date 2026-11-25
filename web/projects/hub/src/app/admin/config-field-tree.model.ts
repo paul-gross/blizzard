@@ -15,7 +15,7 @@ export type StringKeys<D> = { [K in keyof D & string]-?: D[K] extends string ? K
 /** The keys of `D` whose value is a flag. */
 export type BooleanKeys<D> = { [K in keyof D & string]-?: D[K] extends boolean ? K : never }[keyof D & string];
 
-/** A `number` field's explicit default: the draft flag that holds the choice, and what the choice is called. While the
+/** A `number` or `text` field's explicit default: the draft flag that holds the choice, and what the choice is called. While the
  * flag holds, the field reads as the default, whatever its text. */
 export interface DefaultChoice<D> {
   readonly key: BooleanKeys<D>;
@@ -47,8 +47,8 @@ export type ConfigFieldView<D> = {
     ? FieldViewBase<D> & { readonly key: K; readonly kind: 'checkbox' }
     : D[K] extends string
       ?
-          | (FieldViewBase<D> & { readonly key: K; readonly kind: Exclude<StringFieldKind, 'number'> })
-          | (FieldViewBase<D> & { readonly key: K; readonly kind: 'number'; readonly orDefault?: DefaultChoice<D> })
+          | (FieldViewBase<D> & { readonly key: K; readonly kind: Exclude<StringFieldKind, 'number' | 'text'> })
+          | (FieldViewBase<D> & { readonly key: K; readonly kind: 'number' | 'text'; readonly orDefault?: DefaultChoice<D> })
       : never;
 }[keyof D & string];
 
@@ -58,7 +58,7 @@ function valueOf<D>(draft: D, key: string): unknown {
 
 /** A field's explicit default choice, or `null` when it offers none. */
 export function defaultChoiceOf<D>(field: ConfigFieldView<D>): DefaultChoice<D> | null {
-  return (field.kind === 'number' && field.orDefault) || null;
+  return ((field.kind === 'number' || field.kind === 'text') && field.orDefault) || null;
 }
 
 /** The fields a mode shows for `draft`: an edit leaves out the create-only ones, and a field whose `shownWhen` does
@@ -136,7 +136,7 @@ export function fieldChanges<D>(
   return diff;
 }
 
-/** A defaulted number field's change, when either side chose the default: none while both do, else the default named
+/** A defaulted field's change, when either side chose the default: none while both do, else the default named
  * by its label on its side and the stated text on the other. */
 function defaultChange<D>(
   field: ConfigFieldView<D>,

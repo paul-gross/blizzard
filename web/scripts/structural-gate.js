@@ -1005,6 +1005,9 @@ const DOMAIN_BOUNDARY_SUBKEYED = 'hub/src/app/admin';
  * (`<concept>.*`), so a concept can be pinned inside a unit whose other concepts are still exempt. */
 const DOMAIN_BOUNDARY_STRICT_SCOPES = [
   'hub/src/app/admin/projects',
+  'hub/src/app/admin/hub-settings/hub-settings.domain',
+  'hub/src/app/admin/hub-settings/hub-settings.form',
+  'hub/src/app/admin/hub-settings/hub-settings.service',
   'hub/src/app/admin/config-history',
   'hub/src/app/admin/config-field-diff',
   'hub/src/app/admin/config-revisions',

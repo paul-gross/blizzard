@@ -1,5 +1,24 @@
 import { type HubSettingRow, type HubSettingsChange, settingValueText } from 'fleet';
+import type { ChangeEntryVm } from '../changes/changes.model';
+import type { ConfigFieldView } from '../config-field-tree.model';
 import type { ConfigRecordVm } from '../config-record-panel';
+import type { HubSettingDraft } from './hub-settings.domain';
+
+/** The edit dialog's one field: the value, or the key's default. */
+export const HUB_SETTING_FIELD_VIEWS: readonly ConfigFieldView<HubSettingDraft>[] = [
+  { key: 'value', kind: 'text', label: 'Value', orDefault: { key: 'useDefault', label: 'Default' } },
+];
+
+/** One change-entry panel per settings revision, each holding its single change. */
+export function changeEntriesOf(changes: readonly HubSettingsChange[]): readonly ChangeEntryVm[] {
+  return changes.map((c) => ({
+    title: `Revision ${c.revision} · ${c.op}`,
+    actor: c.actor,
+    door: c.door,
+    at: c.recorded_at,
+    rows: [{ id: c.id, title: 'hub settings', route: null, diff: c.diff, revisionStep: null }],
+  }));
+}
 
 export function changesOf(pages: readonly { changes: HubSettingsChange[] }[] | undefined): HubSettingsChange[] {
   return pages?.flatMap((page) => page.changes) ?? [];

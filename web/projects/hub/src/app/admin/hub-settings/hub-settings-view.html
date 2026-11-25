@@ -8,23 +8,10 @@
       </article>
     }
   </fleet-kit-async-state>
-  @if (editing(); as current) {
-    <section>
-      <h2>Edit {{ current.row.key }}</h2>
-      <span>Value</span><fleet-kit-text-input ariaLabel="Value" [value]="value()" (valueChange)="valueChange.emit($event)" />
-      @if (failure(); as error) { <fleet-kit-error-line [message]="error" /> }
-      <fleet-kit-button [disabled]="busy()" (click)="save.emit(false)">Save</fleet-kit-button>
-      <fleet-kit-button [disabled]="busy()" (click)="save.emit(true)">Reset to default</fleet-kit-button>
-      <fleet-kit-button [disabled]="busy()" (click)="cancelled.emit()">Cancel</fleet-kit-button>
-    </section>
-  }
   <fleet-kit-section-head label="History" />
   <app-config-revisions [rows]="revisions()" [state]="historyState()" testidPrefix="hub-settings" />
-  @for (change of changes(); track change.id) {
-    <article><h3>Revision {{ change.revision }} · {{ change.op }}</h3>
-      <p><fleet-when [iso]="change.recorded_at" /> · {{ change.actor }} via {{ change.door }}</p>
-      <app-config-field-diff [diff]="change.diff" />
-    </article>
+  @for (entry of entries(); track entry.rows[0].id) {
+    <app-change-entry-panel [vm]="entry" state="ready" emptyText="" />
   }
   @if (hasNext()) { <fleet-kit-button [disabled]="loadingNext()" (click)="loadMore.emit()">Load more</fleet-kit-button> }
 } @else if (!identityPending()) { <p>Hub settings are not available.</p> }
