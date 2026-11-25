@@ -5,7 +5,7 @@ import { vi } from 'vitest';
 
 import { stubHubClient, type RequestClientStub } from 'fleet/testing';
 import { injectCreateHubItemMutation } from './new-hub-item.mutations';
-import { CREATED_ITEM } from './new-hub-item.test-data';
+import { CREATED_ITEM } from './new-hub-item.test-data.translate';
 
 @Component({ selector: 'app-test-create-hub-item-host', template: '', changeDetection: ChangeDetectionStrategy.OnPush })
 class CreateHubItemHost {

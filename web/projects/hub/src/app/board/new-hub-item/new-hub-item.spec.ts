@@ -5,7 +5,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { OPERATOR_ME_RESPONSE, settle, stubError, stubHubClient, type RequestClientStub } from 'fleet/testing';
 import { ProjectLens } from '../../core/project-lens';
 import { NewHubItem } from './new-hub-item';
-import { CREATED_ITEM } from './new-hub-item.test-data';
+import { CREATED_ITEM } from './new-hub-item.test-data.translate';
 
 const PROJECT = { color: 'blue', created_at: '2026-01-01T00:00:00Z', description: '', name: 'Alpha', project_id: 'pr_alpha', revision: 1, slug: 'alpha' };
 const URGENCY = { urgency_id: 'u_standard', name: 'Standard', slug: 'standard', default: true, retired: false, color: 'gray', emoji: null, icon: null, created_at: '2026-01-01T00:00:00Z', created_by: 'operator', open_chunks: 0, place: 1, revision: 1 };
