@@ -10,6 +10,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 
 from blizzard.runner.api.hub_proxy import RELAYED_REFUSALS, HubProxy
+from blizzard.runner.api.work_ref_links import hub_work_ref_url
 from blizzard.wire.chunk import WorkItemsView
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -18,8 +19,12 @@ router = APIRouter(prefix="/api", tags=["runner"])
 @router.get("/chunks/{chunk_id}/work-items", response_model=WorkItemsView, responses=RELAYED_REFUSALS)
 def get_work_items(chunk_id: str, request: Request) -> WorkItemsView:
     """Forward a chunk's work-items read to the hub — the layered pass-through."""
-    upstream = HubProxy.of(request, "work-items").get(f"/api/fleet/chunks/{chunk_id}/work-items", chunk_id=chunk_id)
-    return WorkItemsView.model_validate(upstream.json())
+    proxy = HubProxy.of(request, "work-items")
+    upstream = proxy.get(f"/api/fleet/chunks/{chunk_id}/work-items", chunk_id=chunk_id)
+    view = WorkItemsView.model_validate(upstream.json())
+    for item in view.items:
+        item.web_url = hub_work_ref_url(item.source, item.web_url, proxy.config.hub_url)
+    return view
 
 
 # The runner's half of the issue-#55 alias, so both daemons present the same path

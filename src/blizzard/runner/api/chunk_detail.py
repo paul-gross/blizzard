@@ -8,6 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, status
 
 from blizzard.runner.api.hub_proxy import RELAYED_REFUSALS, HubProxy
+from blizzard.runner.api.work_ref_links import hub_work_ref_url
 from blizzard.wire.chunk import ChunkDetail, ChunkSummary
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -17,8 +18,12 @@ router = APIRouter(prefix="/api", tags=["runner"])
 def get_chunk(chunk_id: str, request: Request) -> ChunkDetail:
     """Forward a chunk's detail read to the hub — the whole aggregate, including
     transition history, artifacts, and the open escalation."""
-    upstream = HubProxy.of(request, "chunk-detail").get(f"/api/fleet/chunks/{chunk_id}")
-    return ChunkDetail.model_validate(upstream.json())
+    proxy = HubProxy.of(request, "chunk-detail")
+    upstream = proxy.get(f"/api/fleet/chunks/{chunk_id}")
+    detail = ChunkDetail.model_validate(upstream.json())
+    for ref in detail.work_refs:
+        ref.web_url = hub_work_ref_url(ref.source, ref.web_url, proxy.config.hub_url)
+    return detail
 
 
 @router.post(

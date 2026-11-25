@@ -66,6 +66,22 @@ def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path) -> None:
     assert seen == [f"{_HUB_URL}/api/fleet/chunks/{CHUNK}/work-items"]
 
 
+def test_proxy_anchors_hub_work_items_without_changing_forge_links(tmp_path: Path) -> None:
+    items = [
+        {"source": "hub", "ref": "1", "hub_source": True, "web_url": "/board/chunk/ch_holder", "fetched_at": "now"},
+        {"source": "forge", "ref": "2", "web_url": "https://forge.example/2", "fetched_at": "now"},
+        {"source": "forge", "ref": "3", "web_url": "/board/chunk/ch_other", "fetched_at": "now"},
+    ]
+    client = httpx2.Client(transport=httpx2.MockTransport(lambda _: httpx2.Response(200, json={"items": items})))
+    response = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{CHUNK}/work-items")
+    assert response.status_code == 200
+    assert [item["web_url"] for item in response.json()["items"]] == [
+        f"{_HUB_URL}/board/chunk/ch_holder",
+        "https://forge.example/2",
+        "/board/chunk/ch_other",
+    ]
+
+
 def test_the_deprecated_pm_items_alias_serves_the_same_view(tmp_path: Path) -> None:
     """The runner-side alias — one handler, two routes. It answers identically to
     the canonical path *and* forwards to the hub's canonical `/work-items`: this runner is

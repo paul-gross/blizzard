@@ -102,6 +102,11 @@ export class ChunkIssueList {
     return item.hub_source === true;
   }
 
+  /** Only a relative hub address belongs to this app's router and project scope. */
+  protected isInAppRef(item: WorkItemEntry): boolean {
+    return this.isHubEntry(item) && (item.web_url === null || !/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(item.web_url));
+  }
+
   /** A stated priority's badge tone, or `null` when the item states none. */
   protected priorityTone(item: WorkItemEntry): Tone | null {
     return item.stated_priority ? PRIORITY_TONE(item.stated_priority.kind) : null;

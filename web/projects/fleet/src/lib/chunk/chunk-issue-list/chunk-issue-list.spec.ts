@@ -1,7 +1,8 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 
+import { APP_SCOPE, type InAppLink } from '../../core/app-scope';
 import type { WorkItemAuthor as WorkItemAuthorView, WorkItem as WorkItemEntry } from '../chunk-detail/work-item.model';
 import { workItem } from '../../testing/builders/chunk';
 import { ChunkIssueList } from './chunk-issue-list';
@@ -210,6 +211,45 @@ describe('ChunkIssueList', () => {
     const ref = el.querySelector<HTMLAnchorElement>('[data-testid="issue-ref"]');
     expect(ref?.getAttribute('target')).toBeNull();
     expect(ref?.getAttribute('rel')).toBeNull();
+  });
+
+  it('opens an absolute hub URL as an external link without routing it through the runner', async () => {
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigateByUrl');
+    const { el } = await render([hubItem({
+      ref: '1', author: USER_AUTHOR, web_url: 'http://127.0.0.1:4642/board/chunk/ch_holder',
+    })]);
+    const ref = el.querySelector<HTMLAnchorElement>('[data-testid="issue-ref"]')!;
+    expect(ref.href).toBe('http://127.0.0.1:4642/board/chunk/ch_holder');
+    expect(ref.target).toBe('_blank');
+    expect(ref.rel).toBe('noreferrer');
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    ref.addEventListener('click', (e) => e.preventDefault());
+    ref.dispatchEvent(event);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('does not treat a protocol-relative hub URL as an in-app route', async () => {
+    const { el } = await render([hubItem({ ref: '1', author: USER_AUTHOR, web_url: '//hub.example/board/chunk/ch_1' })]);
+    const ref = el.querySelector<HTMLAnchorElement>('[data-testid="issue-ref"]')!;
+    expect(new URL(ref.href).host).toBe('hub.example');
+    expect(ref.target).toBe('_blank');
+  });
+
+  it('keeps a relative hub URL in the scoped router and navigates on click', async () => {
+    TestBed.overrideProvider(APP_SCOPE, {
+      useValue: { path: (link: InAppLink) => `/p/widgets${link}`, query: () => ({}) },
+    });
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    const { fixture, el } = await render([hubItem({ ref: '1', author: USER_AUTHOR })]);
+    const ref = el.querySelector<HTMLAnchorElement>('[data-testid="issue-ref"]')!;
+    expect(ref.getAttribute('href')).toBe('/p/widgets/board/chunk/ch_1');
+    expect(new URL(ref.href).pathname).toBe('/p/widgets/board/chunk/ch_1');
+    ref.click();
+    await fixture.whenStable();
+    expect(navigate).toHaveBeenCalledOnce();
+    expect(router.serializeUrl(navigate.mock.calls[0][0] as ReturnType<Router['parseUrl']>)).toBe('/p/widgets/board/chunk/ch_1');
   });
 
   it('a fleet-authored entry names the runner, chunk, and node, the chunk a routerLink through linkBase()', async () => {

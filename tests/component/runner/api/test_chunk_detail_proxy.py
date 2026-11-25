@@ -89,6 +89,28 @@ def test_get_chunk_forwards_to_the_fleet_route(tmp_path: Path) -> None:
     assert seen == [("GET", f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}")]
 
 
+def test_get_chunk_anchors_only_the_hub_board_pointer(tmp_path: Path) -> None:
+    refs = [
+        {"source": "hub", "ref": "1", "web_url": "/board/chunk/ch_holder"},
+        {"source": "forge", "ref": "2", "web_url": "https://forge.example/issues/2"},
+        {"source": "forge", "ref": "3", "web_url": "/board/chunk/ch_other"},
+        {"source": "hub", "ref": "4", "web_url": "https://hub.example/board/chunk/ch_4"},
+        {"source": "hub", "ref": "5", "web_url": "//evil.example/board/chunk/ch_5"},
+    ]
+    client = httpx2.Client(
+        transport=httpx2.MockTransport(lambda _: httpx2.Response(200, json={**_DETAIL, "work_refs": refs}))
+    )
+    response = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{_CHUNK}")
+    assert response.status_code == 200
+    assert [ref["web_url"] for ref in response.json()["work_refs"]] == [
+        f"{_HUB_URL}/board/chunk/ch_holder",
+        "https://forge.example/issues/2",
+        "/board/chunk/ch_other",
+        "https://hub.example/board/chunk/ch_4",
+        "//evil.example/board/chunk/ch_5",
+    ]
+
+
 def test_get_chunk_passes_through_a_hub_404(tmp_path: Path) -> None:
     def handler(request: httpx2.Request) -> httpx2.Response:
         return httpx2.Response(404, json={"detail": "unknown chunk ch_pass"})
