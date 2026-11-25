@@ -23,6 +23,7 @@ from tests.support.container_guards import (
     role_key_violations,
     wiring_boundary_violations,
 )
+from tests.support.legacy_inventory import BAG_CONSUMERS, bag_consumer_violations
 from tests.support.repo_files import repo_root
 
 _SRC = repo_root() / "src" / "blizzard"
@@ -301,4 +302,23 @@ def test_the_narrowing_gate_fails_a_planted_hub_bag(tmp_path: Path) -> None:
         "hub/api/planted.py:1: names hub_services",
         "hub/api/planted.py:3: names Hub",
         "hub/api/planted.py:3: names HubServices",
+    ]
+
+
+def test_only_the_inventoried_modules_name_the_hub_legacy_bag() -> None:
+    assert bag_consumer_violations(_SRC) == []
+
+
+def test_the_bag_consumer_gate_fails_an_unlisted_consumer_and_a_listed_module_that_no_longer_names_the_bag(
+    tmp_path: Path,
+) -> None:
+    planted = tmp_path / "hub" / "api" / "planted.py"
+    planted.parent.mkdir(parents=True)
+    planted.write_text("from blizzard.hub.composition import HubServices\n")
+    cleared = tmp_path / "hub" / "api" / "deps.py"
+    cleared.write_text("def tenant_services() -> None: ...\n")
+    listed = {Path("hub/api/deps.py"): BAG_CONSUMERS[Path("hub/api/deps.py")]}
+    assert bag_consumer_violations(tmp_path, listed) == [
+        "hub/api/planted.py names the hub's legacy bag but is unlisted",
+        "hub/api/deps.py (hub legacy retirement: the request bridge) is listed but no longer names the hub's legacy bag",
     ]
