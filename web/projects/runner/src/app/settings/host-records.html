@@ -1,0 +1,18 @@
+<app-host-records-view
+  [kind]="kind()"
+  [title]="title()"
+  [state]="state()"
+  [records]="rows()"
+  [openKey]="openKey()"
+  [canCreate]="superuser()"
+  [createDisabled]="createPending()"
+  (create)="onCreate()"
+  (openToggled)="onToggle($event)"
+>
+  @if (openRecord(); as record) {
+    <app-host-record-detail [record]="record" [superuser]="superuser()" />
+  }
+</app-host-records-view>
+@if (createForm(); as f) {
+  <app-host-record-form-dialog [form]="f" [heading]="'Create ' + kind()" [fields]="fields()" (save)="onSave()" (closed)="onClose()" />
+}

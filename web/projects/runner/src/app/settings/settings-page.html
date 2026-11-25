@@ -2,6 +2,8 @@
   @for (ref of records(); track ref.id) {
     <app-settings-record [ref]="ref" [superuser]="superuser()" />
   }
+  <app-host-records kind="workspace" [superuser]="superuser()" />
+  <app-host-records kind="subscription" [superuser]="superuser()" />
   <fleet-kit-section-head label="History" />
   @for (ref of records(); track ref.id) {
     <app-settings-history [ref]="ref" />

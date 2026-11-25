@@ -1,4 +1,4 @@
-import type { ChangeView, ChangesPage, HostChangeView, HostChangesPage, SettingRow, SettingsView } from '../../api/runner';
+import type { ChangeView, ChangesPage, HostChangeView, HostChangesPage, HostWorkspaceView, SettingRow, SettingsView } from '../../api/runner';
 import { fixtureInstant } from './clock';
 
 /** `throttle.budget.usd` at its default, a `pass` key. */
@@ -66,4 +66,16 @@ export function hostSettingsChangeView(overrides: Partial<HostChangeView> = {}):
 /** One page of the host's change log, the oldest. */
 export function hostSettingsChangesPage(overrides: Partial<HostChangesPage> = {}): HostChangesPage {
   return { changes: [hostSettingsChangeView()], next_before: null, ...overrides };
+}
+
+/** Workspace `web` at revision 2, active, rooted at `/srv/web` with two environments. */
+export function hostWorkspaceView(overrides: Partial<HostWorkspaceView> = {}): HostWorkspaceView {
+  return {
+    workspace_id: 'web',
+    max_environments: 2,
+    revision: 2,
+    state: 'active',
+    settings: { root: '/srv/web', max_environments: 2 },
+    ...overrides,
+  };
 }

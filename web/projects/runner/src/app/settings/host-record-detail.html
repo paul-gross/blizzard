@@ -1,0 +1,29 @@
+<app-host-record-detail-view
+  [prefix]="prefix()"
+  [record]="vm()"
+  [editDisabled]="editPending()"
+  [retireDisabled]="retirePending()"
+  [enableDisabled]="enablePending()"
+  [verbError]="verbError()"
+  (edit)="onEdit()"
+  (retire)="onRetire()"
+  (enable)="onEnable()"
+>
+  <app-settings-history [ref]="history()" />
+</app-host-record-detail-view>
+@if (editForm(); as f) {
+  <app-host-record-form-dialog [form]="f" [heading]="'Edit ' + record().kind + ' ' + record().key" [fields]="fields()" (save)="onSave()" (closed)="onClose()" />
+}
+@if (confirming()) {
+  @let c = prompt();
+  <fleet-kit-confirm-dialog
+    [open]="true"
+    [heading]="c.heading"
+    [message]="c.message"
+    [confirmLabel]="c.confirmLabel"
+    [variant]="c.variant"
+    [testid]="prefix() + '-retiring'"
+    (confirmed)="onRetireConfirmed()"
+    (cancelled)="confirming.set(false)"
+  />
+}

@@ -4,7 +4,6 @@ import type { HostRunner } from '../core/host-runner.domain';
 import {
   canEditSetting,
   type FailedRebuild,
-  type RecordKind,
   type SettingLifetime,
   type SettingRow,
   type SettingsChange,
@@ -158,20 +157,12 @@ export interface SettingsChangeVm {
   readonly door: string;
   readonly actor: string;
   readonly at: string;
-  /** The host record the change moved — `workspace ws-a` — or `null` for the record the log is of. */
-  readonly record: string | null;
   readonly diff: readonly KeyChangeVm[];
 }
 
 function entryText(entry: { value: unknown; atDefault: boolean } | null): string {
   if (entry === null) return '—';
   return entry.atDefault ? `${settingValueText(entry.value)} (default)` : settingValueText(entry.value);
-}
-
-function recordLabel(record: { kind: RecordKind; key: string | null } | null): string | null {
-  if (record === null || record.kind === 'host') return null;
-  const kind = rawOr<RecordKind & string>(record.kind);
-  return record.key === null ? kind : `${kind} ${record.key}`;
 }
 
 function changeVm(change: SettingsChange): SettingsChangeVm {
@@ -182,7 +173,6 @@ function changeVm(change: SettingsChange): SettingsChangeVm {
     door: rawOr(change.door),
     actor: change.actor,
     at: change.recordedAt,
-    record: recordLabel(change.record),
     diff: change.diff.map((d) => ({ key: d.key, old: entryText(d.old), new: entryText(d.new) })),
   };
 }

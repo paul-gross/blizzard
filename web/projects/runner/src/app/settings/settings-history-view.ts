@@ -3,8 +3,8 @@ import { FleetWhen, KitAsyncState, type KitAsyncStateValue, KitButton, KitPanel 
 
 import type { SettingsChangeVm } from './settings.model';
 
-/** One record's change log, newest first: each change's revision, op, door, actor, and time, the record it moved
- * when the log spans several, and each moved key's old and new value; Load more reads the next older page. */
+/** One record's change log, newest first: each change's revision, op, door, actor, and time, and each moved key's
+ * old and new value; Load more reads the next older page. */
 @Component({
   selector: 'app-settings-history-view',
   changeDetection: ChangeDetectionStrategy.OnPush,

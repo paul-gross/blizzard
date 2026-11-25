@@ -13,9 +13,16 @@ describe('settings query', () => {
     expect(interval(runnerSettingsView({ revision: 4 }))).toBe(SETTINGS_PENDING_POLL_MS);
   });
 
-  it('keys the host`s record and log under the host, a runner`s under its id', () => {
+  it('keys the host`s record and each host record`s log under the host, a runner`s under its id', () => {
     expect(settingsKeyOf({ kind: 'host' })).toEqual(['host', 'settings']);
-    expect(settingsChangesKeyOf({ kind: 'host' })).toEqual(['host', 'settings', 'changes']);
+    expect(settingsChangesKeyOf({ kind: 'host' })).toEqual(['host', 'settings', 'changes', 'host', null]);
+    expect(settingsChangesKeyOf({ kind: 'record', recordKind: 'workspace', key: 'web' })).toEqual([
+      'host',
+      'settings',
+      'changes',
+      'workspace',
+      'web',
+    ]);
     expect(settingsKeyOf({ kind: 'runner', runnerId: 'rn_1' })).toEqual(['rn_1', 'settings']);
     expect(settingsChangesKeyOf({ kind: 'runner', runnerId: 'rn_1' })).toEqual(['rn_1', 'settings', 'changes']);
   });

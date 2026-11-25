@@ -104,3 +104,8 @@ export function canEditSetting(superuser: boolean, row: SettingRow, recordRetire
 export function revisionPending(record: SettingsRecord): boolean {
   return record.inForce.revision !== null && record.inForce.revision < record.revision;
 }
+
+/** Whose change log History reads: a settings record's, or one workspace's or subscription's rows of the host's log. */
+export type HistoryTarget =
+  | SettingsTarget
+  | { readonly kind: 'record'; readonly recordKind: 'workspace' | 'subscription'; readonly key: string };

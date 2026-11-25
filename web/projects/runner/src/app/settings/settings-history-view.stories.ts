@@ -12,7 +12,6 @@ const changes: readonly SettingsChangeVm[] = [
     door: 'page',
     actor: 'paul',
     at: '2026-11-20T22:13:00Z',
-    record: null,
     diff: [{ key: 'throttle.budget.usd', old: '10', new: '25' }],
   },
   {
@@ -22,13 +21,13 @@ const changes: readonly SettingsChangeVm[] = [
     door: 'cli',
     actor: 'paul',
     at: '2026-11-19T09:02:00Z',
-    record: 'workspace ws-blizzard',
+
     diff: [
       { key: 'root', old: '—', new: '/home/paul/projects/blizzard-workspace' },
       { key: 'max_environments', old: '—', new: '8 (default)' },
     ],
   },
-  { id: 1, revision: 1, op: 'seed', door: 'seed', actor: 'seed', at: '2026-11-01T00:00:00Z', record: null, diff: [] },
+  { id: 1, revision: 1, op: 'seed', door: 'seed', actor: 'seed', at: '2026-11-01T00:00:00Z', diff: [] },
 ];
 
 const meta: Meta<SettingsHistoryView> = {

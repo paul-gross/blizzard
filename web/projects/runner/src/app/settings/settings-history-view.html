@@ -14,9 +14,6 @@
           <div class="head">
             <span class="rev">revision {{ change.revision }}</span>
             <span>{{ change.op }}</span>
-            @if (change.record; as record) {
-              <span class="rec">{{ record }}</span>
-            }
             <span class="by">{{ change.actor }} via {{ change.door }} · <fleet-when [iso]="change.at" /></span>
           </div>
           <ul class="diff">

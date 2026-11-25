@@ -78,7 +78,7 @@ describe('settings model', () => {
     expect(settingRowOf(record, null)).toBeNull();
   });
 
-  it('flattens change pages, naming a host row`s record unless it is the host`s own', () => {
+  it('flattens change pages, newest first', () => {
     const base = { recordedAt: 't', revision: 1, op: 'edit', door: 'api', actor: 'a', record: null } as const;
     const rows = settingsChanges([
       {
@@ -91,10 +91,10 @@ describe('settings model', () => {
       { changes: [{ ...base, id: 0, record: { kind: 'host', key: null }, diff: [{ key: 'k', old: { value: 1, atDefault: true }, new: { value: 'x', atDefault: false } }] }], nextBefore: null },
     ]);
 
-    expect(rows.map((r) => [r.id, r.op, r.record, r.diff])).toEqual([
-      [2, 'edit', null, [{ key: 'k', old: '—', new: '3' }]],
-      [1, 'mint', 'workspace ws-a', []],
-      [0, 'edit', null, [{ key: 'k', old: '1 (default)', new: 'x' }]],
+    expect(rows.map((r) => [r.id, r.op, r.diff])).toEqual([
+      [2, 'edit', [{ key: 'k', old: '—', new: '3' }]],
+      [1, 'mint', []],
+      [0, 'edit', [{ key: 'k', old: '1 (default)', new: 'x' }]],
     ]);
     expect(settingsChanges(undefined)).toEqual([]);
   });

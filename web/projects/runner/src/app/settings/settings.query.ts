@@ -1,8 +1,8 @@
 import { injectInfiniteQuery, injectQuery } from '@tanstack/angular-query-experimental';
 import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet';
 
-import { hostSettingsChangesKey, hostSettingsKey, runnerSettingsChangesKey, runnerSettingsKey } from '../core/query-keys';
-import { revisionPending, type SettingsChangesPage, type SettingsTarget } from './settings.domain';
+import { hostRecordChangesKey, hostSettingsKey, runnerSettingsChangesKey, runnerSettingsKey } from '../core/query-keys';
+import { type HistoryTarget, revisionPending, type SettingsChangesPage, type SettingsTarget } from './settings.domain';
 import { fromChangesPage, fromHostChangesPage, fromSettingsView } from './settings.translate';
 
 /** How often a record holding a revision its daemon has not taken up is re-read. No live frame announces a write or
@@ -18,8 +18,9 @@ export function settingsKeyOf(target: SettingsTarget): readonly unknown[] {
 }
 
 /** The cache key `target`'s change log reads under. */
-export function settingsChangesKeyOf(target: SettingsTarget): readonly unknown[] {
-  return target.kind === 'host' ? hostSettingsChangesKey : runnerSettingsChangesKey(target.runnerId);
+export function settingsChangesKeyOf(target: HistoryTarget): readonly unknown[] {
+  if (target.kind === 'runner') return runnerSettingsChangesKey(target.runnerId);
+  return target.kind === 'host' ? hostRecordChangesKey('host', null) : hostRecordChangesKey(target.recordKind, target.key);
 }
 
 async function fetchSettings(target: SettingsTarget): Promise<runnerApi.SettingsView> {
@@ -53,10 +54,15 @@ export function injectSettingsQuery(target: () => SettingsTarget) {
   return injectQuery(() => settingsQueryOptions(target()));
 }
 
-async function fetchChanges(target: SettingsTarget, before: number | undefined): Promise<SettingsChangesPage> {
+async function fetchChanges(target: HistoryTarget, before: number | undefined): Promise<SettingsChangesPage> {
   const query = { limit: SETTINGS_CHANGES_PAGE, before };
-  if (target.kind === 'host') {
-    const { data, error } = await runnerApi.hostSettingsChangesApiHostSettingsChangesGet({ query, throwOnError: false });
+  if (target.kind !== 'runner') {
+    const filter =
+      target.kind === 'host' ? { record_kind: 'host' } : { record_kind: target.recordKind, record_key: target.key };
+    const { data, error } = await runnerApi.hostSettingsChangesApiHostSettingsChangesGet({
+      query: { ...query, ...filter },
+      throwOnError: false,
+    });
     if (error) throw error;
     return fromHostChangesPage(data!);
   }
@@ -70,8 +76,10 @@ async function fetchChanges(target: SettingsTarget, before: number | undefined):
 }
 
 /** `GET /api/host/settings/changes` or `GET /runners/{runner_id}/api/settings/changes` — `target`'s change log,
- * newest first, a page of {@link SETTINGS_CHANGES_PAGE} at a time. */
-export function injectSettingsChangesQuery(target: () => SettingsTarget) {
+ * newest first, a page of {@link SETTINGS_CHANGES_PAGE} at a time. The host's log is filtered to the record it is
+ * of: the host record's own rows by `record_kind`, a workspace's or a subscription's by `record_kind` and
+ * `record_key`. */
+export function injectSettingsChangesQuery(target: () => HistoryTarget) {
   return injectInfiniteQuery(() => ({
     queryKey: settingsChangesKeyOf(target()),
     initialPageParam: undefined as number | undefined,
