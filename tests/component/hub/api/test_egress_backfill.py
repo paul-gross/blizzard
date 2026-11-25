@@ -313,8 +313,8 @@ def test_the_cli_reports_counts_and_renders_refusals(tmp_path: Path) -> None:
 
     dry = bound.runner.invoke(
         hub_group,
-        ["egress", "backfill", "--since", "2026-07-12T00:00:00", "--until", "2026-07-12T00:30:00", "--dry-run"],
-        env={**_ENV, "TZ": "UTC"},
+        ["egress", "backfill", "--since", "2026-07-12T00:00:00Z", "--until", "2026-07-12T00:30:00Z", "--dry-run"],
+        env=_ENV,
     )
     assert dry.exit_code == 0, dry.output
     assert "would write" in dry.output
