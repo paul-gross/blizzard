@@ -193,7 +193,7 @@ def test_the_neighborhoods_facts_reads_are_bounded_by_its_own_edges_not_fleet_si
 
 def test_query_count_is_independent_of_the_subjects_own_neighbor_count(tmp_path: Path) -> None:
     """The subject's own edge count — not just fleet size — must not move the query
-    count: a bulk `load_facts_for` resolves every neighbor's status in one read
+    count: one bulk facts read resolves every neighbor's status
     regardless of how many neighbors there are."""
     (tmp_path / "few").mkdir()
     (tmp_path / "many").mkdir()

@@ -461,7 +461,7 @@ def _dependency_views_for_chunk(
     neighbor_ids = {
         edge.prerequisite_chunk_id if edge.dependent_chunk_id == chunk_id else edge.dependent_chunk_id for edge in edges
     }
-    neighbor_facts_by_id = chunk_facts.load_facts_for(list(neighbor_ids))
+    neighbor_facts_by_id = chunk_facts.status_facts_for(list(neighbor_ids))
     statuses.update((neighbor_id, nf.status()) for neighbor_id, nf in neighbor_facts_by_id.items())
     dependent_edges = [e for e in edges if e.dependent_chunk_id == chunk_id]
     blocked = blocked_view(derive_blocked_prerequisites(dependent_edges, statuses).get(chunk_id))

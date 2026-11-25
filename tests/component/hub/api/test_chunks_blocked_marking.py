@@ -210,6 +210,7 @@ class _CountingFactsStore(ChunkFactsStore):
         self.load_all_facts_calls = 0
         self.load_facts_calls = 0
         self.load_facts_for_calls = 0
+        self.status_facts_for_ids: list[set[str]] = []
 
     def load_all_facts(self) -> dict[str, ChunkFacts]:
         self.load_all_facts_calls += 1
@@ -225,13 +226,19 @@ class _CountingFactsStore(ChunkFactsStore):
         self.load_facts_for_calls += 1
         return super().load_facts_for(chunk_ids, transaction=transaction)
 
+    def status_facts_for(
+        self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None
+    ) -> dict[str, ChunkFacts]:
+        self.status_facts_for_ids.append(set(chunk_ids))
+        return super().status_facts_for(chunk_ids, transaction=transaction)
+
 
 def test_detail_routes_blocked_derivation_never_reaches_load_all_facts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """``GET /api/chunks/{id}``'s blocked-marking and
     neighborhood share one standing-edges read and one resulting statuses map,
-    so its one prerequisite's facts are read through the same bulk `load_facts_for` call
+    so its one prerequisite's facts are read through the same bulk `status_facts_for` call
     the neighborhood derivation makes — never a second per-chunk `load_facts`, and never
     the bulk `load_all_facts` seam."""
     hub = build_hub(tmp_path)
@@ -249,10 +256,38 @@ def test_detail_routes_blocked_derivation_never_reaches_load_all_facts(
     assert resp.status_code == 200, resp.text
     assert resp.json()["blocked"] == {"prerequisite_chunk_id": prerequisite_id, "unmet_count": 1}
     assert counting.load_all_facts_calls == 0
-    # the dependent's own facts (`load_facts`) plus one bulk `load_facts_for` covering
+    # the dependent's own facts (`load_facts`) plus one narrowed bulk read covering
     # every neighbor, including the shared prerequisite.
     assert counting.load_facts_calls == 1
-    assert counting.load_facts_for_calls == 1
+    assert counting.load_facts_for_calls == 0
+    assert counting.status_facts_for_ids == [{prerequisite_id}]
+
+
+@pytest.mark.parametrize("prefix", ["/api/chunks", "/api/fleet/chunks"])
+def test_detail_reads_resolve_neighbor_statuses_through_the_narrowed_plural(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prefix: str
+) -> None:
+    """Operator and runner detail reads alike, with prerequisites and dependents both."""
+    hub = build_hub(tmp_path)
+    subject_id = ingest(hub, [{"source": "default", "ref": "subject"}], promote=False)
+    prerequisite_id = ingest(hub, [_PREREQUISITE], promote=False)
+    dependent_id = ingest(hub, [_DEPENDENT], promote=False)
+    _declare(hub, subject_id, prerequisite_id)
+    _declare(hub, dependent_id, subject_id)
+
+    counting = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
+    assert hub.app is not None
+    views = hub.default_adapter(ChunkViewReads)
+    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewReads: replace(views, facts=counting)})
+
+    resp = hub.client.get(f"{prefix}/{subject_id}")
+
+    assert resp.status_code == 200, resp.text
+    neighborhood = resp.json()["neighborhood"]
+    assert [n["chunk_id"] for n in neighborhood["prerequisites"]] == [prerequisite_id]
+    assert [n["chunk_id"] for n in neighborhood["dependents"]] == [dependent_id]
+    assert counting.load_facts_for_calls == 0
+    assert counting.status_facts_for_ids == [{prerequisite_id, dependent_id}]
 
 
 def test_detail_routes_facts_reads_are_bounded_by_its_own_edges_not_fleet_size(tmp_path: Path) -> None:

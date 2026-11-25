@@ -396,7 +396,8 @@ def counts_by_file(
 ) -> AnalyticsCountsResponse:
     """Occurrence counts by file path among ``file_read`` events, honoring every other
     filter. ``kind`` is not offered: this count fixes it to ``file_read``. ``limit`` opts
-    into the top N by count; omitted, every path returns."""
+    into the top N by count. Omitted, every path returns, since the complete distribution is the default answer:
+    one aggregated row per distinct path in the filtered set, so its size tracks paths read, not events."""
     criteria = replace(scope.criteria, tool=tool, subject_prefix=subject_prefix, node_id=node_id)
     return counts_response(queries.counts_by_file(criteria, limit=limit))
 
