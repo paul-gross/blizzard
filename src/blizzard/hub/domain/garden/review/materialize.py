@@ -19,6 +19,7 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.findings.model import FindingFactInsert, FindingInsert, IWriteFindingRepository
+from blizzard.hub.domain.garden.formats import DeliveredReviewFinding, IGardenFormats
 from blizzard.hub.domain.garden.review.validation import ValidatedReviewFindings
 from blizzard.hub.domain.garden.scopes import IWriteScopeRepository, Scope, ScopeMint, ScopeSlug
 from blizzard.hub.domain.graph.model import Node
@@ -97,6 +98,15 @@ class ReviewFindingsPlan:
             seen.setdefault(finding.scope_slug, None)
         return list(seen)
 
+    @property
+    def delivered_findings(self) -> list[DeliveredReviewFinding]:
+        """Each finding this plan mints, in order, by its delta entry's ``ref`` — what the marker records."""
+        refs = {fact.finding_id: fact.ref for fact in self.facts}
+        return [
+            DeliveredReviewFinding(ref=refs[f.finding_id], finding_id=f.finding_id, scope_slug=f.scope_slug)
+            for f in self.new_findings
+        ]
+
 
 @domain_model
 @dataclass(frozen=True)
@@ -130,8 +140,8 @@ class IWriteReviewFindingsRepository(IReadReviewFindingsRepository, Protocol):
         exists, ``FENCED`` when the fence refuses, else the reviewed chunk's project."""
         ...
 
-    def record_marker(self, plan: ReviewFindingsPlan, *, transaction: LockedTransaction) -> None:
-        """Write the chunk's marker in ``transaction``, which locks ``plan.chunk_id``."""
+    def record_marker(self, plan: ReviewFindingsPlan, *, content: str, transaction: LockedTransaction) -> None:
+        """Write the chunk's marker holding ``content`` in ``transaction``, which locks ``plan.chunk_id``."""
         ...
 
 
@@ -189,13 +199,14 @@ def write_review_plan(
     delivery: IWriteReviewFindingsRepository,
     findings: IWriteFindingRepository,
     scopes: IWriteScopeRepository,
+    formats: IGardenFormats,
     admission: EpochAdmission,
     terminal: bool,
     transaction: LockedTransaction,
 ) -> ReviewFindingsOutcome:
     """Materialize ``plan`` in ``transaction``, a unit that locks ``plan.chunk_id``: every scope it names that the
     reviewed chunk's project lacks, minted first-write-wins by :meth:`ReviewFindingsPlan.scope_mint`, then its
-    ``findings``, then their ``finding_facts``, the marker last."""
+    ``findings``, then their ``finding_facts``, the marker last, naming what was minted."""
     admitted = delivery.admit(plan, admission=admission, terminal=terminal, transaction=transaction)
     if isinstance(admitted, ReviewFindingsOutcome):
         return admitted
@@ -232,7 +243,7 @@ def write_review_plan(
         ],
         transaction=transaction,
     )
-    delivery.record_marker(plan, transaction=transaction)
+    delivery.record_marker(plan, content=formats.review_delivered(plan.delivered_findings), transaction=transaction)
     return ReviewFindingsOutcome.RECORDED
 
 
@@ -247,6 +258,7 @@ class ReviewFindingsMaterialize:
         delivery: IWriteReviewFindingsRepository,
         findings: IWriteFindingRepository,
         scopes: IWriteScopeRepository,
+        formats: IGardenFormats,
         facts: IReadChunkFactsRepository,
         transactions: IHubTransactions,
         clock: IClock,
@@ -254,6 +266,7 @@ class ReviewFindingsMaterialize:
         self._delivery = delivery
         self._findings = findings
         self._scopes = scopes
+        self._formats = formats
         self._facts = facts
         self._transactions = transactions
         self._clock = clock
@@ -280,6 +293,7 @@ class ReviewFindingsMaterialize:
                 delivery=self._delivery,
                 findings=self._findings,
                 scopes=self._scopes,
+                formats=self._formats,
                 admission=EpochAdmission.AT_OR_ABOVE,
                 terminal=terminal_under_lock(self._facts, plan.chunk_id, transaction=locked),
                 transaction=locked,

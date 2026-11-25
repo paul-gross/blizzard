@@ -3,6 +3,7 @@ garden or review delivery's writes directly in a unit it opened itself."""
 
 from __future__ import annotations
 
+from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome, DeliveryPlan, write_delivery_plan
 from blizzard.hub.domain.garden.review.materialize import (
@@ -53,6 +54,7 @@ class ReviewFindingsWrites:
         self.delivery = ReviewFindingsStore(connections)
         self._findings = FindingStore(connections)
         self._scopes = ScopeStore(connections)
+        self._formats = GardenFormats()
 
     def already_delivered(self, *, chunk_id: str) -> bool:
         return self.delivery.already_delivered(chunk_id=chunk_id)
@@ -65,6 +67,7 @@ class ReviewFindingsWrites:
             delivery=self.delivery,
             findings=self._findings,
             scopes=self._scopes,
+            formats=self._formats,
             admission=admission,
             terminal=terminal,
             transaction=transaction,

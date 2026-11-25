@@ -146,6 +146,40 @@ class ReviewFindingDelta(BaseModel):
     entries: list[ReviewFindingEntry]
 
 
+class MintedReviewFinding(BaseModel):
+    """One hub finding a review delivery minted: the delta entry's ``ref``, the ``finding_id`` and its scope."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ref: str
+    finding_id: str
+    scope_slug: str
+
+
+class MintedReviewFindingsDelivered(BaseModel):
+    """A minting delivery's `review-findings-delivered` content (`review/findings-delivered-format`)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: Literal["minted"] = "minted"
+    findings: list[MintedReviewFinding] = Field(min_length=1)
+
+
+class NoneDeferredReviewFindingsDelivered(BaseModel):
+    """The `review-findings-delivered` content of a delivery whose delta deferred nothing, so minted nothing."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: Literal["none-deferred"] = "none-deferred"
+    findings: list[MintedReviewFinding] = Field(default_factory=list[MintedReviewFinding], max_length=0)
+
+
+ReviewFindingsDelivered = Annotated[
+    MintedReviewFindingsDelivered | NoneDeferredReviewFindingsDelivered,
+    Field(discriminator="outcome"),
+]
+
+
 class FindingView(WireModel):
     """A finding. `state` folds the newest fact's kind to `"live"` for
     `add`/`observed`/`reopened`; `note` is that fact's own note. `source`

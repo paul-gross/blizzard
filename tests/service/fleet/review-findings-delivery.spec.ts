@@ -97,7 +97,7 @@ test('test_review_finding_delta_mints_exactly_its_deferred_entry_at_landing', as
   );
 
   const findings = await api.get<{ findings: {
-    source: string; severity: string; routine_name: string | null; raised_by_chunk_id: string;
+    finding_id: string; source: string; severity: string; routine_name: string | null; raised_by_chunk_id: string;
     class: string; locus: string;
   }[] }>('/api/findings', { params: { scope: SCOPE, source: 'review' } });
   expect(findings.status).toBe(200);
@@ -105,6 +105,12 @@ test('test_review_finding_delta_mints_exactly_its_deferred_entry_at_landing', as
     source: 'review', severity: 'should-fix', routine_name: null, raised_by_chunk_id: id,
     class: 'simplification', locus: `${target.name}/BUILD.md:1`,
   })]);
+  const marker = (detail.artifacts as { name: string; content: string }[])
+    .filter((artifact) => artifact.name === 'review-findings-delivered');
+  expect(marker.map((artifact) => JSON.parse(artifact.content) as unknown)).toEqual([{
+    outcome: 'minted',
+    findings: [{ ref: 'F1', finding_id: findings.body.findings[0]!.finding_id, scope_slug: SCOPE }],
+  }]);
   const after = await main();
   expect(after).not.toBe(before);
   const comparison = await forge.call('GET', `/repos/${fullName}/compare/${before}...${after}`);

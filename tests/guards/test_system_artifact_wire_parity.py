@@ -39,6 +39,7 @@ _MODELS: dict[str, type[BaseModel]] = {
     "GardenProposalCandidate": garden_proposal.GardenProposalCandidate,
     **_union_members(finding.ReviewFindingEntry),
     "ReviewFindingDelta": finding.ReviewFindingDelta,
+    **_union_members(finding.ReviewFindingsDelivered),
 }
 
 # `### ModelName`, then a fenced ```json block — or a longer fence, which an example whose

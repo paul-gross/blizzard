@@ -68,7 +68,7 @@ class ReviewFindingsStore:
             return ReviewFindingsOutcome.FENCED
         return ReviewAdmission(project_id=self._project_of(conn, plan.chunk_id))
 
-    def record_marker(self, plan: ReviewFindingsPlan, *, transaction: LockedTransaction) -> None:
+    def record_marker(self, plan: ReviewFindingsPlan, *, content: str, transaction: LockedTransaction) -> None:
         conn = connection_for(self._store, transaction, chunk=plan.chunk_id)
         conn.execute(
             self._store.insert(artifacts).values(
@@ -79,7 +79,7 @@ class ReviewFindingsStore:
                 epoch=plan.epoch,
                 name=_DELIVERED_MARKER_NAME,
                 kind=ArtifactKind.ASSET.value,
-                data="",
+                data=content,
                 repo=None,
                 forge=None,
                 produced_at=plan.at,

@@ -22,6 +22,7 @@ from tests.support.review_recorder_world import (
     seed_chunk,
 )
 from tests.support.scaffolding import (
+    HubHarness,
     build_hub,
     hub_scoped,
     seed_lease,
@@ -46,6 +47,17 @@ def _fixed(ref: str = "F1") -> dict[str, object]:
 
 def _refuted(ref: str = "F1") -> dict[str, object]:
     return {"ref": ref, "disposition": "refuted"}
+
+
+def _marker(hub: HubHarness, chunk_id: str) -> str:
+    with hub.engine.begin() as conn:
+        return conn.execute(
+            hub_scoped(
+                select(s.artifacts.c.data).where(
+                    (s.artifacts.c.chunk_id == chunk_id) & (s.artifacts.c.name == "review-findings-delivered")
+                )
+            )
+        ).scalar_one()
 
 
 def _delta(entries: list[dict[str, object]]) -> str:
@@ -103,6 +115,47 @@ def test_an_unnamed_scope_is_minted_on_delivery(tmp_path: Path) -> None:
     assert delivered.outcome == "recorded"
     with hub.engine.begin() as conn:
         assert conn.execute(hub_scoped(select(s.scopes).where(s.scopes.c.slug == "brand-new"))).one()
+
+
+# --- the marker ----------------------------------------------------------
+
+
+def test_the_marker_names_the_finding_each_deferred_entry_minted(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, content=_delta([_fixed(ref="F1"), _deferred(ref="F2", scope="brand-new")]))
+
+    deliver(hub, chunk_id)
+
+    with hub.engine.begin() as conn:
+        finding_id = conn.execute(hub_scoped(select(s.findings.c.finding_id))).scalar_one()
+    assert json.loads(_marker(hub, chunk_id)) == {
+        "outcome": "minted",
+        "findings": [{"ref": "F2", "finding_id": finding_id, "scope_slug": "brand-new"}],
+    }
+
+
+def test_the_marker_says_none_were_deferred_when_the_delta_deferred_nothing(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, content=_delta([_fixed(ref="F1"), _refuted(ref="F2")]))
+
+    deliver(hub, chunk_id)
+
+    assert json.loads(_marker(hub, chunk_id)) == {"outcome": "none-deferred", "findings": []}
+
+
+def test_a_replay_over_a_newer_delta_leaves_the_marker_unchanged(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, content=_delta([_deferred()]))
+    deliver(hub, chunk_id)
+    written = _marker(hub, chunk_id)
+    record_artifact(hub, chunk_id, content=_delta([_deferred(ref="F9")]), epoch=EPOCH + 1)
+
+    deliver(hub, chunk_id, epoch=EPOCH + 1)
+
+    assert _marker(hub, chunk_id) == written
 
 
 # --- invalid -----------------------------------------------------------------
