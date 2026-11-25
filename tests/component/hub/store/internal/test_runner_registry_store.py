@@ -9,12 +9,19 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
+from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerRegistration, ServedEntry
+from blizzard.hub.domain.runners.registration import RecordedPause, RunnerAddition, RunnerRegistration, ServedEntry
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from tests.support.scaffolding import count_queries, default_tenant, hub_store_connections, migrated_hub_at
+from tests.support.scaffolding import (
+    count_queries,
+    default_tenant,
+    hub_store_connections,
+    migrated_hub_at,
+    most_bound_per_statement,
+)
 
 _T0 = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)
 _LATER = _T0 + timedelta(minutes=5)
@@ -168,3 +175,36 @@ def test_a_runner_row_holding_no_declaration_serves_nothing(tmp_path: Path) -> N
         )
 
     assert _get(store, "rn_1").served == ()
+
+
+def test_a_narrowed_pause_read_batches_its_runners_and_keeps_the_newest_across_batches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The newest facts of each table win the ``limit`` whichever batch holds them, newest first."""
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 2)
+    engine = _engine(tmp_path)
+    store = RunnerRegistryStore(hub_store_connections(engine))
+    runners = [f"rn_{i}" for i in range(5)]
+    # Newest fact in the first batch, the next newest in the last, so neither batch order nor one batch answers.
+    for runner_id, minute in zip(runners, (5, 1, 2, 3, 4), strict=True):
+        _add(store, runner_id, runner_id)
+        at = _T0 + timedelta(minutes=minute)
+        store.record_pause(runner_id, paused=True, at=at, by="alice")
+        store.record_local_pause(runner_id, paused=True, at=at, by="operator", reason=None)
+    _add(store, "rn_other", "other")
+    store.record_pause("rn_other", paused=True, at=_T0 + timedelta(minutes=9), by="alice")
+    rows: list[RecordedPause] = []
+
+    bound = most_bound_per_statement(
+        engine, lambda: rows.extend(store.list_pause_facts_since(_T0, limit=3, runners=set(runners))), runners
+    )
+
+    assert bound == 2
+    assert [(r.local, r.runner_id) for r in rows] == [
+        (False, "rn_0"),
+        (False, "rn_4"),
+        (False, "rn_3"),
+        (True, "rn_0"),
+        (True, "rn_4"),
+        (True, "rn_3"),
+    ]

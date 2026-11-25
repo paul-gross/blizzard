@@ -23,6 +23,7 @@ from tests.support.scaffolding import (
     chunk_stores,
     hub_store_connections,
     migrate_to,
+    most_bound_per_statement,
     seed_chunk_record,
     seed_graph,
     seed_promote,
@@ -120,6 +121,27 @@ def test_live_holders_matches_find_live_holder_across_a_batch_boundary(
     result = store.work_refs.live_holders(pointers)
 
     assert result == {pointer: f"ch_{i}" for i, pointer in enumerate(pointers)}
+
+
+def test_live_holders_batches_the_ephemeral_check_over_its_holders(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The holder ids are batched too: a grouped holder past the first batch still drops."""
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 2)
+    store, engine = _store(tmp_path)
+    pointers = [WorkRef(source="default", ref=str(i)) for i in range(5)]
+    chunk_ids = [f"ch_{i}" for i in range(5)]
+    for chunk_id, pointer in zip(chunk_ids, pointers, strict=True):
+        _mint(store, chunk_id, work_refs=[pointer])
+        seed_promote(store, engine, chunk_id, at=_T0)
+    with hub_store_connections(engine).write("seed") as conn:
+        record_grouped_row_conn(conn, "ch_4", grouped_into="ch_0", at=_T0)
+    result: dict[WorkRef, str] = {}
+
+    bound = most_bound_per_statement(engine, lambda: result.update(store.work_refs.live_holders(pointers)), chunk_ids)
+
+    assert bound == 2
+    assert result == dict(zip(pointers[:4], chunk_ids[:4], strict=True))
 
 
 def test_live_holders_groups_pointers_by_source_before_batching_refs(tmp_path: Path) -> None:

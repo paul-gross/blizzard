@@ -14,6 +14,7 @@ from sqlalchemy.engine import Connection
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryOutcome,
@@ -82,9 +83,10 @@ class GardenDeliveryStore:
         if plan.deltas:
             already_materialized = {
                 row.artifact_id: row.finding_set_id
+                for batch in id_batches([d.finding_set.artifact_id for d in plan.deltas])
                 for row in conn.execute(
                     self._store.select(finding_sets, finding_sets.c.artifact_id, finding_sets.c.finding_set_id).where(
-                        finding_sets.c.artifact_id.in_([d.finding_set.artifact_id for d in plan.deltas])
+                        finding_sets.c.artifact_id.in_(batch)
                     )
                 )
             }
@@ -107,6 +109,7 @@ class GardenDeliveryStore:
             if dropped_refs:
                 already_recorded_by_ref = {
                     (row.finding_set_id, row.ref): row.finding_id
+                    for batch in id_batches(sorted({fsid for fsid, _ in dropped_refs}))
                     for row in conn.execute(
                         self._store.select(
                             finding_facts,
@@ -114,7 +117,7 @@ class GardenDeliveryStore:
                             finding_facts.c.ref,
                             finding_facts.c.finding_id,
                         ).where(
-                            finding_facts.c.finding_set_id.in_({fsid for fsid, _ in dropped_refs})
+                            finding_facts.c.finding_set_id.in_(batch)
                             & (finding_facts.c.kind == "add")
                             & finding_facts.c.ref.isnot(None)
                         )
@@ -134,10 +137,11 @@ class GardenDeliveryStore:
         if plan.proposals:
             already_delivered = {
                 (row.source_artifact_id, row.ref)
+                for batch in id_batches(sorted({p.source_artifact_id for p in plan.proposals}))
                 for row in conn.execute(
                     self._store.select(
                         garden_proposals, garden_proposals.c.source_artifact_id, garden_proposals.c.ref
-                    ).where(garden_proposals.c.source_artifact_id.in_({p.source_artifact_id for p in plan.proposals}))
+                    ).where(garden_proposals.c.source_artifact_id.in_(batch))
                 )
             }
             surviving_proposals = [p for p in plan.proposals if (p.source_artifact_id, p.ref) not in already_delivered]
