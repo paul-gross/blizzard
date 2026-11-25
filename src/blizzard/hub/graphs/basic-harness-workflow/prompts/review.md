@@ -4,8 +4,9 @@ Review cold against the work item. Review observes; iterate repairs. Commit no f
 
 ## Open the pass
 
-Run `blizzard runner artifact list`. Confirm each repo's branch tip is its newest `git_commit` and leave HEAD on the
-branch: read a differing commit by sha, never check it out.
+Run `blizzard runner artifact list`. Confirm each worktree's branch tracks its newest `git_commit`'s branch at that sha;
+restore any that does not (upstream via the environment's connect step) before reading or running anything. Never detach
+HEAD.
 
 ## Judge the change
 
@@ -33,8 +34,7 @@ Earlier `review-findings` make this a re-visit; otherwise read the whole change.
 change if no tip was recorded or it cannot be fetched. Confirm every prior finding fixed or refuted and accepted,
 re-reporting any that is not.
 
-Reworded prose changes how the text around it reads: read each changed passage within its whole section and follow
-anything it renames or re-routes.
+Read each reworded passage within its whole section and follow anything it renames or re-routes.
 
 Across a rebase, scope by the change's own commits with `git range-diff`, not a tip-to-tip diff. Reread the whole change
 only when it moved rather than was repaired: a new repo, or commits that reshape it.
@@ -54,9 +54,8 @@ re-raised and the argument answered. An accepted refutation resolves its finding
 
 ## The `review-finding-delta` asset
 
-Submit `review-finding-delta` via `blizzard runner artifact create --name review-finding-delta`: JSON
-`{"entries": [...]}`. Dispositions: `fixed`, `refuted`, `deferred`. Example:
-`{"entries":[{"ref":"F1","disposition":"fixed"}]}`. Empty: `{"entries": []}`. Shape:
+Submit `review-finding-delta` via `blizzard runner artifact create --name review-finding-delta`. Dispositions: `fixed`,
+`refuted`, `deferred`. Example: `{"entries":[{"ref":"F1","disposition":"fixed"}]}`. Empty: `{"entries": []}`. Shape:
 `blizzard runner artifact get --scope system review/finding-format --content`.
 
 ## Submit findings

@@ -9,8 +9,8 @@ what each branch carries and whether it already sits on the current base.
 
 Whatever state a repo carrying the change arrives in — a detached HEAD, the base branch, no upstream — put it back on
 the declared branch (`blizzard runner artifact get branch --node triage --content`, else the branch build declared) at
-the repo's newest declared `git_commit` before rebasing, using the environment's connect step so its upstream is that
-branch on origin. The local branch may carry another name; the upstream is what must match.
+that environment's newest declared `git_commit` for the repo before rebasing, using the environment's connect step so
+its upstream is that branch on origin. The local branch may carry another name; the upstream is what must match.
 
 ## Rebase
 

@@ -12,10 +12,10 @@ every conflict resolution faithful to the intent recorded in the `reviewed-plan`
 In each repo, fetch first — the worktree's view of the base branch is as stale as the moment the environment was
 acquired — then check what the branch carries. Whatever state a repo carrying the change arrives in — a detached HEAD,
 the base branch, no upstream — put it back on the declared branch
-(`blizzard runner artifact get branch --node plan --content`) at the repo's newest declared `git_commit` before
-rebasing, using the environment's connect step so its upstream is that branch on origin. The local branch may carry
-another name; the upstream is what must match. A repo already rebased and pushed needs no second rebase, but it still
-needs its tip declared (below).
+(`blizzard runner artifact get branch --node plan --content`) at that environment's newest declared `git_commit` for the
+repo before rebasing, using the environment's connect step so its upstream is that branch on origin. The local branch
+may carry another name; the upstream is what must match. A repo already rebased and pushed needs no second rebase, but
+it still needs its tip declared (below).
 
 ## What must be true when you finish
 

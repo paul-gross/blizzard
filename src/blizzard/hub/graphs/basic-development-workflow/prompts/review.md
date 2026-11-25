@@ -5,15 +5,16 @@ change.
 
 ## Confirm the change
 
-Run `blizzard runner artifact list`. Confirm each repo's branch tip is its newest `git_commit` and leave HEAD on the
-branch: read a differing commit by sha, never check it out.
+Run `blizzard runner artifact list`. Confirm each worktree's branch tracks its newest `git_commit`'s branch at that sha;
+restore any that does not (upstream via the environment's connect step) before reading or running anything. Never detach
+HEAD.
 
 ## Review the work
 
 Judge each axis — correctness, architecture (conformance to the project's architecture guidance), and design quality
 (conformance to the project's code-quality standards) — against the project's review criteria: before judging, open them
-and, per axis, the documents they route this change's code to, until you reach the rules themselves. Judge from what you
-read, not memory, naming the criterion a finding violates when one applies.
+and, per axis, the documents they route this change's code to, down to the rules themselves. Judge from what you read,
+not memory, naming the criterion a finding violates when one applies.
 
 Use workspace review tooling; exercise end-to-end flows in the chunk's environment. Build repairs; commit no fix.
 
@@ -30,8 +31,8 @@ over the delta since the tip they recorded per repo. Where no tip was recorded o
 delta is the whole change. Confirm every prior finding fixed or refuted and accepted, re-reporting any that is not, and
 judge the delta sound, a repair's blast radius included; exercise only the end-to-end flows the delta reaches.
 
-A rebase makes a tip-to-tip diff mostly base-branch motion. Scope by the change's commits with `git range-diff`; return
-to a full review only for a new repo or commits reshaping the change rather than repairing findings.
+Across a rebase, scope by the change's commits with `git range-diff`; return to a full review only for a new repo or
+commits reshaping the change rather than repairing findings.
 
 ## Adjudicate refutations
 
@@ -51,9 +52,8 @@ its finding like a fix and does not block `pass`.
 
 ## The `review-finding-delta` asset
 
-Submit `review-finding-delta` via `blizzard runner artifact create --name review-finding-delta`: JSON
-`{"entries": [...]}`. Dispositions: `fixed`, `refuted`, `deferred`. Example:
-`{"entries":[{"ref":"F1","disposition":"fixed"}]}`. Empty: `{"entries": []}`. Shape:
+Submit `review-finding-delta` via `blizzard runner artifact create --name review-finding-delta`. Dispositions: `fixed`,
+`refuted`, `deferred`. Example: `{"entries":[{"ref":"F1","disposition":"fixed"}]}`. Empty: `{"entries": []}`. Shape:
 `blizzard runner artifact get --scope system review/finding-format --content`.
 
 ## Submit findings
