@@ -20,7 +20,7 @@ import { FleetFindingPanel, type FindingPanelVm } from './finding-panel';
  * Proven able to fail: nesting the `fleet-kit-markdown` inside the `.tx` element in
  * `kit-prose-block.html` fails the `white-space` check (the paragraph inherits
  * `pre-wrap`); restoring it passes again
- * (`blizzard-context:verification/blizzard/commands/web/shell-sweep.md`).
+ * (`blizzard-context:/verification/blizzard/commands/web/shell-sweep.md`).
  */
 const SUMMARY =
   '## Context\n\nThe docstring of `parse_window` still narrates the removed `reset_at` parameter.\n\n- drop the stale sentence\n- name the new clock';
