@@ -896,3 +896,24 @@ def test_a_forge_that_does_not_answer_while_its_roles_are_built_waits_pending_be
     facts = world.hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     assert [poll.kind for poll in facts.hub_node_polls] == ["pending"]
+
+
+# --- the visit's log --------------------------------------------------------------------------------------------
+
+
+def _hub_logs(world: _World, chunk_id: str) -> list[str]:
+    artifacts = world.detail(chunk_id)["artifacts"]
+    return [a["content"] for a in artifacts if a["name"] == "hub-log.test.hooked"]
+
+
+def test_only_the_pass_that_ends_the_visit_writes_its_hub_log(world: _World) -> None:
+    world.hooked.answer = Pass(choice="pending", log=("re-polling",))
+    chunk_id = world.at_step("test.hooked")
+    world.tick()
+    assert _hub_logs(world, chunk_id) == []
+
+    world.hooked.answer = Pass(choice="landed", log=(f"{_REPO} landed at m1",))
+    world.hub.clock.advance(timedelta(seconds=31))
+    world.tick()
+
+    assert _hub_logs(world, chunk_id) == [f"{_REPO} landed at m1\n"]

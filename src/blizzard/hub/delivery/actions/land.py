@@ -1,9 +1,16 @@
-"""Run each repository's landing policy in its project's landing order and combine their answers."""
+"""Run each repository's landing policy in its project's landing order and combine their answers.
+
+``delivery-findings`` is written once, by the pass that ends the visit: a hub artifact keeps its first write per
+epoch, so a waiting pass writes none."""
 
 from __future__ import annotations
 
+from dataclasses import replace
+
+from blizzard.hub.delivery.actions.landing.checks import INHERITED_FAILURE, Findings
 from blizzard.hub.delivery.actions.landing.combine import (
     FAILURE,
+    FINDINGS_NAME,
     combine,
     in_landing_order,
     refuses_before_checks,
@@ -35,6 +42,10 @@ class Land:
 
     async def take(self, visit: Visit, forges: VisitForges, effects: IEffectSink) -> Pass:
         run = LandingRun(visit, effects)
+        answer = await self._answer(run, forges)
+        return answer if answer.waits() else await self._end_visit(run, answer)
+
+    async def _answer(self, run: LandingRun, forges: VisitForges) -> Pass:
         try:
             return await self._land(run, forges)
         except NotRecorded as exc:
@@ -50,6 +61,19 @@ class Land:
             run.hold(exc)
             run.say(f"the forge did not answer: {exc}; re-polling")
             return run.answer(PENDING)
+
+    @staticmethod
+    async def _end_visit(run: LandingRun, answer: Pass) -> Pass:
+        """Write the visit's findings, and name in its log what earlier passes of the visit landed."""
+        try:
+            await run.post(FINDINGS_NAME, Findings(run.visit_records()).render())
+        except NotRecorded as exc:
+            run.say(f"delivery-findings write failed: {exc}")
+            # A repair worker reads a failure's findings, so unwritten ones fail the visit; any other answer stands.
+            if answer.choice in {FAILURE, INHERITED_FAILURE}:
+                answer = replace(answer, choice=FAILURE)
+        earlier = tuple(f"{repo} landed at {revision}" for repo, revision in run.earlier_landings().items())
+        return replace(answer, log=(*earlier, *run.log))
 
     @staticmethod
     def _repos(run: LandingRun, forges: VisitForges) -> list[RepoLanding]:
@@ -101,5 +125,6 @@ class Land:
         for repo, state in gated:
             if isinstance(state, Admitted):
                 state = Waiting("not stepped past its gate") if refused else await state.proceed()
+            run.note(repo.repo, state)
             stepped.append((repo, state))
         return await combine(run, stepped)

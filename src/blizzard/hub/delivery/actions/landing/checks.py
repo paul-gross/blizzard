@@ -1,5 +1,5 @@
 """How every landing policy reads checks: where one repository's change routes, how its checks classify, the
-inherited-failure rule and its one-time re-run, and the ``delivery-findings`` a resolve worker reads."""
+inherited-failure rule and its one-time re-run, and the ``delivery-findings`` a visit ends with."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from typing import Any, ClassVar
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.delivery.actions.landing.repo import (
+    LANDED_RECORD,
     Failure,
     Inherited,
     NeedsPerson,
@@ -78,11 +79,6 @@ class Verdict:
         return FAILED if self.failing else WAIT
 
     @property
-    def substantive(self) -> bool:
-        """Whether this read says anything: a zero-check read is not worth findings."""
-        return bool(self.checks)
-
-    @property
     def green(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         """The merge-eligibility bar: at least one check, and every one of them passed or neutral — a degraded
         or empty read is never green."""
@@ -109,8 +105,18 @@ class Verdict:
             for check in self.failing
         ]
 
-    def running_rows(self) -> list[dict[str, Any]]:
-        return [{"name": check.name, "status": check.detail} for check in self.checks or ()]
+    def rows(self) -> list[dict[str, Any]]:
+        """Every check on the ref, failing ones first; ``unfinished`` marks one that has not concluded."""
+        return [
+            {
+                "name": check.name,
+                "conclusion": check.detail,
+                "details_url": check.details_url,
+                "failed": check.outcome is CheckOutcome.FAILED,
+                "unfinished": check.outcome is CheckOutcome.PENDING,
+            }
+            for check in sorted(self.checks or (), key=lambda check: check.outcome is not CheckOutcome.FAILED)
+        ]
 
 
 @domain_model
@@ -234,12 +240,15 @@ async def failed_checks(
     """Route owned failures and rerun inherited failures once, independent of how the revision lands. An inherited
     failure waits for every check on the head to conclude before it is re-run or charged."""
     run = repo.run
+    others = [row for row in verdict.rows() if not row["failed"]]
+    owned = {**identity, "decision": FAILED, "checks": checks, "others": others}
+    judged = {**identity, "decision": WAIT, "checks": verdict.rows()}
     if not all(inherited(check["base_red"]) for check in checks):
         run.say(f"{repo.repo} has a terminal CI check failure — will not re-poll")
-        return Failure(({**identity, "decision": FAILED, "checks": checks},))
+        return Failure((owned,))
     if verdict.pending:
         run.say(f"{repo.repo}'s failing checks are inherited from the base — a check is still running; re-polling")
-        return Waiting(f"{repo.repo}'s inherited failures wait for the run to finish")
+        return Waiting(f"{repo.repo}'s inherited failures wait for the run to finish", judged)
     failing = verdict.failing
     unsigned = [
         check
@@ -252,12 +261,12 @@ async def failed_checks(
         outcomes = [await rerun_once(repo, check, head) for check in unsigned]
         if RerunOutcome.REFUSED in outcomes:
             run.say(f"{repo.repo}'s failing checks could not be re-run — will not re-poll")
-            return Failure(({**identity, "decision": FAILED, "checks": checks},))
+            return Failure((owned,))
         if RerunOutcome.RUN_IN_PROGRESS in outcomes:
             run.say(f"{repo.repo}'s run is still going — the re-run waits; re-polling")
-            return Waiting(f"{repo.repo}'s inherited failures wait for the run to finish")
+            return Waiting(f"{repo.repo}'s inherited failures wait for the run to finish", judged)
         run.say(f"{repo.repo}'s failing checks are inherited from the base — re-requested once; re-polling")
-        return Waiting(f"{repo.repo}'s inherited failures re-run")
+        return Waiting(f"{repo.repo}'s inherited failures re-run", judged)
     rows = [
         {
             "name": check.name,
@@ -273,18 +282,21 @@ async def failed_checks(
         for check in failing
     ]
     run.say(f"{repo.repo}'s failing checks are inherited from the base — repair the base")
-    return Inherited(({**identity, "decision": INHERITED_FAILURE, "base_branch": repo.base_branch, "checks": rows},))
+    record = {**identity, "decision": INHERITED_FAILURE, "base_branch": repo.base_branch, "checks": rows}
+    return Inherited(({**record, "others": others},))
 
 
 @domain_model
 @dataclass(frozen=True)
 class Findings:
     """The ``delivery-findings`` marker body — plain markdown a resolve worker reads, not JSON. Each record
-    carries ``repo``/``number``/``url``/``decision``, and what its decision names."""
+    carries ``repo``/``decision``, ``number``/``url`` when it has a change to name, and what its decision names."""
 
     records: tuple[dict[str, Any], ...]
 
     def render(self) -> str:
+        if not self.records:
+            return "No check state was read by the pass that ended this visit."
         return "\n\n".join(_Section.of(record).render() for record in self.records)
 
 
@@ -295,7 +307,7 @@ class _Section:
 
     record: dict[str, Any]
 
-    label: ClassVar[str] = ""
+    label: ClassVar[str] = "Checks:"
 
     @classmethod
     def of(cls, record: dict[str, Any]) -> _Section:
@@ -305,14 +317,46 @@ class _Section:
             return _InheritedFailed(record)
         if record["decision"] == FOREIGN:
             return _ForeignHead(record)
-        return _Running(record)
+        if record["decision"] == LANDED_RECORD:
+            return _Landed(record)
+        return _Checks(record)
 
     def rows(self) -> Iterator[str]:
         raise NotImplementedError
 
+    def heading(self) -> str:
+        return self.label
+
     def render(self) -> str:
-        header = f"## {self.record['repo']}#{self.record['number']} — {self.record['url']}"
-        return "\n".join([header, self.label, *self.rows()])
+        header = f"## {self.record['repo']}"
+        if "number" in self.record:
+            header += f"#{self.record['number']} — {self.record['url']}"
+        return "\n".join([header, self.heading(), *self.rows()])
+
+
+def _check_line(check: dict[str, Any]) -> str:
+    line = f"  - {check['name']}: {check['conclusion']}"
+    if check.get("details_url"):
+        line += f" — {check['details_url']}"
+    if check.get("unfinished"):
+        line += " — unfinished when the visit ended"
+    return line
+
+
+class _Checks(_Section):
+    def rows(self) -> Iterator[str]:
+        checks = self.record["checks"]
+        if checks is None:
+            yield "  checks not read"
+        elif not checks:
+            yield "  no checks reported"
+        else:
+            yield from (_check_line(check) for check in checks)
+
+
+class _Landed(_Checks):
+    def heading(self) -> str:
+        return f"Landed at {self.record['revision']}:"
 
 
 class _Failed(_Section):
@@ -326,6 +370,7 @@ class _Failed(_Section):
                 yield f"    base branch: also failing {check['name']} — not this change"
             elif base_red is False:
                 yield f"    base branch: {check['name']} is clean — this change broke CI"
+        yield from (_check_line(check) for check in self.record.get("others", ()))
 
 
 class _InheritedFailed(_Section):
@@ -336,6 +381,7 @@ class _InheritedFailed(_Section):
             yield f"  - {check['name']}: {check['conclusion']} — {check['details_url']}"
             if "signature" in check:
                 yield f"    re-run signature: {check['signature']}"
+        yield from (_check_line(check) for check in self.record.get("others", ()))
         yield f"  base branch: {self.record['base_branch']}"
 
 
@@ -347,11 +393,3 @@ class _ForeignHead(_Section):
         yield f"  live head: {self.record['head']}"
         for offender in self.record["offenders"]:
             yield f"  - {offender}"
-
-
-class _Running(_Section):
-    label = "Still running:"
-
-    def rows(self) -> Iterator[str]:
-        for check in self.record["checks"]:
-            yield f"  - {check['name']}: {check['status']}"

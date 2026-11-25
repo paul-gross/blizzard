@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -300,7 +300,10 @@ def test_findings_names_the_still_in_flight_checks_for_a_waiting_repo() -> None:
             "number": 7,
             "url": "https://forge/acme/widget/pull/7",
             "decision": WAIT,
-            "checks": [{"name": "lint", "status": "in_progress"}, {"name": "test", "status": "queued"}],
+            "checks": [
+                {"name": "lint", "conclusion": "in_progress", "unfinished": True},
+                {"name": "test", "conclusion": "queued", "unfinished": True},
+            ],
         }
     ]
 
@@ -312,8 +315,7 @@ def test_findings_names_the_still_in_flight_checks_for_a_waiting_repo() -> None:
     assert "in_progress" in text
     assert "test" in text
     assert "queued" in text
-    # a wait record carries no conclusion/details_url at all — only name + status.
-    assert "conclusion" not in text.lower()
+    assert text.count("unfinished when the visit ended") == 2
 
 
 def test_findings_joins_multiple_repos() -> None:
@@ -330,7 +332,7 @@ def test_findings_joins_multiple_repos() -> None:
             "number": 2,
             "url": "https://forge/acme/gadget/pull/2",
             "decision": WAIT,
-            "checks": [{"name": "test", "status": "queued"}],
+            "checks": [{"name": "test", "conclusion": "queued", "unfinished": True}],
         },
     ]
 
@@ -338,6 +340,21 @@ def test_findings_joins_multiple_repos() -> None:
 
     assert "acme/widget" in text
     assert "acme/gadget" in text
+
+
+def test_findings_renders_a_landed_repo_with_and_without_its_checks_read() -> None:
+    judged: dict[str, Any] = {"repo": _REPO, "number": 7, "url": "u", "decision": "landed", "revision": "m1"}
+    judged["checks"] = [{"name": "build", "conclusion": "success", "unfinished": False}]
+    unread: dict[str, Any] = {"repo": "acme/gadget", "decision": "landed", "revision": "m2", "checks": None}
+
+    text = Findings((judged, unread)).render()
+
+    assert f"## {_REPO}#7 — u\nLanded at m1:\n  - build: success" in text
+    assert "## acme/gadget\nLanded at m2:\n  checks not read" in text
+
+
+def test_findings_says_so_when_no_check_was_read() -> None:
+    assert "No check state was read" in Findings(()).render()
 
 
 # --- the head gate ------------------------------------------------------------------------------

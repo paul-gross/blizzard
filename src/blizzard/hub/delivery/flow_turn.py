@@ -740,7 +740,8 @@ class TurnRunner:
         chunk, graph, node, epoch = ready.at.chunk, ready.at.graph, ready.at.node, ready.at.epoch
         spec = ready.action.spec
         answer = self._answer(chunk, node, spec, run, epoch=epoch)
-        log_artifact = self._record_pass_log(chunk, node, spec.name, answer, epoch=epoch)
+        # A hub artifact keeps its first write per epoch, so the log is left for the pass that ends the visit.
+        log_artifact = None if answer.waits() else self._record_pass_log(chunk, node, spec.name, answer, epoch=epoch)
         if answer.escalation is not None:
             self._escalate_pass(chunk, node, ready, answer.escalation, epoch=epoch, ending=ending)
         elif answer.waits():

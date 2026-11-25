@@ -7,7 +7,7 @@ one answer a policy gives about it."""
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -24,6 +24,7 @@ from blizzard.hub.domain.actions.effects import (
     Pass,
 )
 from blizzard.hub.domain.actions.visit import Visit
+from blizzard.hub.domain.chunk.model import is_landed_revision
 from blizzard.hub.domain.config.repositories import ResolvedRepository
 from blizzard.hub.forge.landing import (
     Comparison,
@@ -41,6 +42,9 @@ from blizzard.hub.forge.landing import (
 PENDING = "pending"
 
 _MARKER_PREFIX = "merged/"
+
+#: A findings record's decision for a repository the base now holds.
+LANDED_RECORD = "landed"
 
 
 class NotRecorded(Exception):
@@ -64,15 +68,59 @@ class LandedRevisionUnknown(Exception):
     be written for it, since a guessed revision is worse than none."""
 
 
+def _landed_record(repo: str, revision: str, judged: dict[str, Any] | None) -> dict[str, Any]:
+    """``repo``'s record once landed, keeping what it was ``judged`` on; ``checks`` is ``None`` when none were read."""
+    base: dict[str, Any] = judged or {"repo": repo, "checks": None}
+    return {**base, "decision": LANDED_RECORD, "revision": revision}
+
+
 @dataclass
 class LandingRun:
-    """One pass's channels out: its sink, and the log lines its ``hub-log.land`` artifact carries."""
+    """One pass's channels out: its sink, the log lines its ``hub-log.land`` artifact carries, and the findings
+    record of each repository it has stepped."""
 
     visit: Visit
     effects: IEffectSink
     log: list[str] = field(default_factory=list[str])
     #: The latest moment a rate-limited forge said to come back, read by a ``pending`` answer.
     resume_at: datetime | None = None
+    #: The newest findings record of each repository this pass stepped, by ``owner/repo``.
+    records: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
+    #: The repositories whose records decided the pass's answer.
+    deciding: tuple[str, ...] = ()
+
+    def note(self, repo: str, state: RepoState) -> None:
+        """Keep the findings record ``state`` was judged on, when it carries one."""
+        match state:
+            case Waiting(findings=dict() as record) | Ready(findings=dict() as record):
+                self.records[repo] = record
+            case Failure(findings=records) | Inherited(findings=records):
+                for record in records:
+                    self.records[repo] = record
+            case _:
+                pass
+
+    def decided_by(self, repos: Iterable[str]) -> None:
+        self.deciding = tuple(repos)
+
+    def earlier_landings(self) -> Mapping[str, str]:
+        """The revision of each repository an earlier pass of this visit landed, read from its marker."""
+        return {
+            row.name.removeprefix(_MARKER_PREFIX): row.data.strip()
+            for row in self.visit.markers
+            if row.epoch == self.visit.epoch and row.name.startswith(_MARKER_PREFIX) and is_landed_revision(row.data)
+        }
+
+    def visit_records(self) -> tuple[dict[str, Any], ...]:
+        """Every record the visit ends with: those that decided the answer first, then the rest, then the
+        repositories an earlier pass of the visit landed."""
+        ordered = {repo: self.records[repo] for repo in self.deciding if repo in self.records} | self.records
+        earlier = (
+            _landed_record(repo, revision, None)
+            for repo, revision in self.earlier_landings().items()
+            if repo not in ordered
+        )
+        return (*ordered.values(), *earlier)
 
     def say(self, line: str) -> None:
         self.log.append(line)
@@ -110,6 +158,8 @@ class LandingRun:
     async def settle(self, repo: RepoLanding, landed: Landed) -> None:
         """Record ``landed``, then run its follow-up; only the landing itself can raise :class:`LandingFenced`."""
         await self.landed(repo, landed.revision)
+        self.records[repo.repo] = _landed_record(repo.repo, landed.revision, self.records.get(repo.repo))
+        self.say(f"{repo.repo} landed at {landed.revision}")
         if landed.after is None:
             return
         try:
@@ -225,7 +275,7 @@ class NoCode:
 @dataclass(frozen=True)
 class Waiting:
     """Something unsettled — checks running, a forge still deciding, an update in flight. ``findings`` is the
-    record a substantive wait hands on, ``None`` when the wait says nothing worth writing."""
+    record of the checks the wait was judged on, ``None`` when none were read."""
 
     reason: str
     findings: dict[str, Any] | None = None
@@ -234,9 +284,11 @@ class Waiting:
 @domain_model
 @dataclass(frozen=True)
 class Ready:
-    """Prepared for the ordered landing callback, which may land, wait, request a person, or find no code."""
+    """Prepared for the ordered landing callback, which may land, wait, request a person, or find no code.
+    ``findings`` is the record of the checks it was judged on, ``None`` when none were read."""
 
     land: Callable[[], Awaitable[Landed | Waiting | NeedsPerson | AwaitingMerge | NoCode]]
+    findings: dict[str, Any] | None = None
 
 
 @domain_model

@@ -4,7 +4,8 @@ Repositories sort by the landing position their visit took at its first turn —
 place the rule is written. The fold answers, in priority: a person's call; a foreign head's ``failure``; a
 ``conflict``; the repositories' own check ``failure``; ``inherited-failure``; ``pending`` while any repository is
 not yet prepared. Only once every one is prepared does it land them, one at a time in order, each landing handed
-over before the next is taken — so a refusal after a landing leaves the landed repository standing."""
+over before the next is taken — so a refusal after a landing leaves the landed repository standing. Each
+repository's findings record is handed to the run, with those that decided the answer named."""
 
 from __future__ import annotations
 
@@ -23,7 +24,6 @@ from blizzard.hub.delivery.actions.landing.repo import (
     LandingRun,
     NeedsPerson,
     NoCode,
-    NotRecorded,
     Ready,
     RepoLanding,
     RepoState,
@@ -35,9 +35,9 @@ from blizzard.hub.domain.graph.actions import CONFLICT, LANDED
 
 FAILURE = "failure"
 
-# The marker a terminal failure or a substantive wait writes its findings under.
-_FINDINGS_NAME = "delivery-findings"
-_FOREIGN_FINDINGS_NAME = f"{_FINDINGS_NAME}/foreign-head"
+#: The marker a visit's findings are written under, once, as the visit ends.
+FINDINGS_NAME = "delivery-findings"
+_FOREIGN_FINDINGS_NAME = f"{FINDINGS_NAME}/foreign-head"
 
 
 def in_landing_order[T: RepoLanding](repos: Iterable[T]) -> list[T]:
@@ -62,6 +62,7 @@ async def combine(run: LandingRun, stepped: Sequence[tuple[RepoLanding, RepoStat
     ordered = sorted(stepped, key=lambda pair: _landing_key(pair[0]))
     states = [state for _, state in ordered]
     for repo, state in ordered:
+        run.note(repo.repo, state)
         if isinstance(state, Landed):
             await run.settle(repo, state)
 
@@ -70,28 +71,21 @@ async def combine(run: LandingRun, stepped: Sequence[tuple[RepoLanding, RepoStat
         return run.escalate(person.escalation)
     if foreign := _findings(state for state in states if isinstance(state, Failure) and state.foreign_head):
         # Unguarded: unwritten findings leave the repair worker nothing to read.
-        rendered = Findings(foreign).render()
-        await run.post(_FINDINGS_NAME, rendered)
-        await run.post(_FOREIGN_FINDINGS_NAME, rendered)
+        run.decided_by(record["repo"] for record in foreign)
+        await run.post(_FOREIGN_FINDINGS_NAME, Findings(foreign).render())
         return run.answer(FAILURE)
     if conflict := next((state for state in states if isinstance(state, Conflict)), None):
         run.say(f"conflict: {conflict.detail}")
         return run.answer(CONFLICT)
     if failures := _findings(state for state in states if isinstance(state, Failure)):
-        # Nothing lands (chunk atomicity); unguarded, since unwritten findings leave `resolve` nothing.
-        await run.post(_FINDINGS_NAME, Findings(failures).render())
+        # Nothing lands (chunk atomicity).
+        run.decided_by(record["repo"] for record in failures)
         return run.answer(FAILURE)
     if inherited := _findings(state for state in states if isinstance(state, Inherited)):
-        # Nothing lands, and unguarded as above: the repair charge reads these findings.
-        await run.post(_FINDINGS_NAME, Findings(inherited).render())
+        run.decided_by(record["repo"] for record in inherited)
         return run.answer(INHERITED_FAILURE)
-    if waits := [state for state in states if isinstance(state, Waiting)]:
-        # Land nothing. Findings are re-written every poll, so a refused write here only waits.
-        if records := tuple(state.findings for state in waits if state.findings is not None):
-            try:
-                await run.post(_FINDINGS_NAME, Findings(records).render())
-            except NotRecorded as exc:
-                run.say(f"delivery-findings write failed (wait path, non-fatal): {exc}")
+    if any(isinstance(state, Waiting) for state in states):
+        run.decided_by(repo.repo for repo, state in ordered if isinstance(state, Waiting))
         return run.answer(PENDING)
 
     if any(isinstance(state, AwaitingMerge) for state in states):
@@ -103,6 +97,7 @@ async def combine(run: LandingRun, stepped: Sequence[tuple[RepoLanding, RepoStat
             continue
         outcome = await state.land()
         if isinstance(outcome, Waiting):
+            run.decided_by((repo.repo,))
             run.say(outcome.reason)
             return run.answer(PENDING)
         if isinstance(outcome, NeedsPerson):

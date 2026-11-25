@@ -497,7 +497,7 @@ def test_changed_head_lands_at_the_merged_revision_with_changed_head_evidence():
         answer, sink = _land(forge, replace(visit, markers=(marker(visit),)))
         assert answer.choice == "landed"
         assert [row.revision for row in sink.landings()] == ["merged"]
-        evidence = json.loads(sink.markers()["delivery-findings"])
+        evidence = json.loads(sink.markers()[f"delivery-findings/merged-head/{_WIDGET}"])
         assert evidence["merged_head"] == head and evidence["submitted"] == _SUBMITTED
         assert "person_added_commits" not in evidence
 
@@ -543,7 +543,7 @@ def test_a_merge_seen_past_the_fence_keeps_history_and_touches_no_later_reposito
     assert answer.choice == "failure"
     assert [row.repo for row in sink.landings()] == [_WIDGET]
     assert all(repo == _WIDGET for _, repo, _ in forge.calls)
-    assert "delivery-findings" not in sink.markers()
+    assert f"delivery-findings/merged-head/{_WIDGET}" not in sink.markers()
 
 
 def _contained(forge: GitHubDouble) -> GitHubDouble:

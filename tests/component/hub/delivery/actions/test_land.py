@@ -342,14 +342,84 @@ def test_an_update_refused_or_of_a_change_the_forge_lost_waits(refusal: object) 
 
 
 @pytest.mark.parametrize("state", [Mergeability.BLOCKED, Mergeability.MERGEABLE])
-def test_a_watched_head_with_checks_still_running_waits_and_names_them(state: Mergeability) -> None:
+def test_a_watched_head_with_checks_still_running_waits_and_records_no_findings(state: Mergeability) -> None:
     double = _forge(
         mergeability=state, checks={_SUBMITTED: (check(outcome=CheckOutcome.PENDING, detail="in_progress"),)}
     )
     answer, sink = _land(double)
     assert answer.choice == "pending"
     assert double.named("merge") == []
-    assert "Still running:\n  - build: in_progress" in sink.markers()["delivery-findings"]
+    assert "delivery-findings" not in sink.markers()
+
+
+def test_a_landed_visit_records_each_check_with_its_conclusion() -> None:
+    answer, sink = _land(_forge(checks={_SUBMITTED: (check("build"), check("docs", CheckOutcome.NEUTRAL, "skipped"))}))
+
+    assert answer.choice == "landed"
+    findings = sink.markers()["delivery-findings"]
+    revision = sink.landings()[0].revision
+    assert f"Landed at {revision}:" in findings
+    assert "build: success" in findings and "docs: skipped" in findings
+    assert "unfinished" not in findings
+    assert f"{_WIDGET} landed at {revision}" in answer.log
+
+
+def test_a_failure_lists_its_failing_check_first_and_marks_only_the_unconcluded_one() -> None:
+    double = _forge(checks={_SUBMITTED: (check("lint"), _pending(), _failing()), "main": GREEN})
+
+    answer, sink = _land(double)
+
+    assert answer.choice == "failure"
+    findings = sink.markers()["delivery-findings"]
+    assert findings.index("build: failure") < findings.index("lint: success")
+    assert "e2e: in_progress" in findings
+    assert findings.count("unfinished when the visit ended") == 1
+
+
+def test_a_repository_landed_by_an_earlier_pass_of_the_visit_is_named_from_its_marker() -> None:
+    answer, sink = _land(_forge(_WIDGET), _visit(markers=(f"merged/{_WIDGET}",)))
+
+    assert answer.choice == "landed"
+    assert f"## {_WIDGET}\nLanded at x:\n  checks not read" in sink.markers()["delivery-findings"]
+    assert f"{_WIDGET} landed at x" in answer.log
+
+
+def test_an_escalated_visit_records_findings_even_with_no_check_read() -> None:
+    double = _forge(replies={"branch_tip": [ForgeNotFound(ForgeObject.REPOSITORY)]})
+    double.repos[_WIDGET].changes[4] = change(
+        _WIDGET, 4, branch="feat/x", sha="old", base="main", state=ChangeState.MERGED, merged_revision="m4"
+    )
+
+    answer, sink = _land(double)
+
+    assert answer.escalation is not None
+    assert "delivery-findings" in sink.markers()
+
+
+def test_a_conflicted_visit_lists_the_checks_of_the_repository_beside_it() -> None:
+    double = _forge(_WIDGET, _GADGET)
+    double.repos[_GADGET].mergeability = Mergeability.CONFLICTING
+
+    answer, sink = _land(double, _visit((_WIDGET, _GADGET)))
+
+    assert answer.choice == "conflict"
+    assert "build: success" in sink.markers()["delivery-findings"]
+
+
+def test_a_refused_findings_write_leaves_a_landing_answering_landed() -> None:
+    answer, sink = _land(_forge(), sink=_Sink(refuse=("delivery-findings",)))
+
+    assert answer.choice == "landed"
+    assert sink.landings()
+    assert any("delivery-findings write failed" in line for line in answer.log)
+
+
+def test_a_refused_findings_write_fails_an_inherited_failure() -> None:
+    double = _forge(checks={_SUBMITTED: (_failing(),), "main": (_failing(),)})
+
+    answer, _ = _land(double, sink=_Sink(refuse=("delivery-findings",)), offered=_NO_RERUN)
+
+    assert answer.choice == "failure"
 
 
 def test_a_blocked_head_with_green_checks_merges() -> None:
@@ -467,6 +537,9 @@ def test_a_re_run_refused_because_the_run_is_going_waits_without_a_marker_and_as
     assert double.named("rerun_check") == [(_WIDGET, {"id": "1"})] * 2
 
 
+_NO_RERUN = frozenset(Capability) - {Capability.CHECKS_RERUN}
+
+
 def _pending(name: str = "e2e", check_id: str = "2") -> Check:
     return check(name, CheckOutcome.PENDING, "in_progress", id=check_id)
 
@@ -564,7 +637,7 @@ def test_two_repos_one_failing_names_only_the_failing_one_and_merges_neither() -
     answer, sink = _land(double, _visit((_WIDGET, _GADGET)))
     assert answer.choice == "failure"
     findings = sink.markers()["delivery-findings"]
-    assert _GADGET in findings and _WIDGET not in findings
+    assert findings.index(f"## {_GADGET}") < findings.index(f"## {_WIDGET}")
     assert double.named("merge") == []
 
 
@@ -1107,10 +1180,11 @@ def test_an_unrecorded_pr_marker_answers_failure_before_any_merge() -> None:
     assert double.named("merge") == []
 
 
-def test_an_unrecorded_wait_finding_still_waits() -> None:
+def test_a_waiting_pass_writes_no_findings_to_be_refused() -> None:
     double = _forge(checks={_SUBMITTED: (check(outcome=CheckOutcome.PENDING, detail="queued"),)})
-    answer, _ = _land(double, sink=_Sink(refuse=("delivery-findings",)))
+    answer, sink = _land(double, sink=_Sink(refuse=("delivery-findings",)))
     assert answer.choice == "pending"
+    assert "delivery-findings" not in sink.markers()
 
 
 # --- through the executor -----------------------------------------------------

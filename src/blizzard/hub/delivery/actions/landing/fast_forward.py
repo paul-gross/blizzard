@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from functools import partial
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.delivery.actions.landing.base_merge import contributes_only_base_change
-from blizzard.hub.delivery.actions.landing.checks import FOREIGN, eligibility, failed_checks, read_verdict
+from blizzard.hub.delivery.actions.landing.checks import FOREIGN, WAIT, eligibility, failed_checks, read_verdict
 from blizzard.hub.delivery.actions.landing.head_gate import gate_head
 from blizzard.hub.delivery.actions.landing.no_code_proof import proves_no_code, record_no_code
 from blizzard.hub.delivery.actions.landing.repo import (
@@ -179,6 +180,7 @@ class FastForward:
                 return Waiting(f"{repo.repo}: candidate merge could not be proven")
             candidate = tip
         verdict = await read_verdict(repo, candidate)
+        identity = {"repo": repo.repo, "number": "-", "url": repo.branch}
         if verdict.failing:
             base_verdict = await read_verdict(repo, base)
             return await failed_checks(
@@ -186,15 +188,16 @@ class FastForward:
                 candidate,
                 verdict,
                 verdict.failure_rows(base_verdict),
-                {"repo": repo.repo, "number": "-", "url": repo.branch},
+                identity,
             )
+        findings = None if verdict.checks is None else {**identity, "decision": WAIT, "checks": verdict.rows()}
         eligible = await eligibility(repo, candidate, verdict)
-        if eligible is not True:
-            return (
-                eligible
-                if isinstance(eligible, (Waiting, NeedsPerson))
-                else Waiting(f"{repo.repo}: candidate checks not green")
-            )
+        if isinstance(eligible, NeedsPerson):
+            return eligible
+        if isinstance(eligible, Waiting):
+            return replace(eligible, findings=findings)
+        if not eligible:
+            return Waiting(f"{repo.repo}: candidate checks not green", findings)
 
         async def advance() -> Landed | Waiting | NeedsPerson:
             await repo.run.post(_intent(repo, candidate), candidate)
@@ -212,4 +215,4 @@ class FastForward:
                 repo.run.hold(exc)
                 return Waiting(str(exc))
 
-        return Ready(advance)
+        return Ready(advance, findings)

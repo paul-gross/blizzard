@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
+from dataclasses import replace
 from typing import Any, cast
 
 import pytest
@@ -40,6 +41,9 @@ from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.repositories import ResolvedRepository
 from blizzard.hub.forge.landing import RepositoryForge
+from tests.support.land_action_doubles import (
+    _visit,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
+)
 
 
 class _Sink:
@@ -94,9 +98,14 @@ def _refused(reason: str) -> Ready:
     return Ready(land)
 
 
-def _fold(states: Sequence[tuple[str, RepoState]]) -> tuple[Pass, _Sink]:
+def _combine(states: Sequence[tuple[str, RepoState]]) -> tuple[Pass, _Sink, LandingRun]:
     run, sink = _run()
-    return asyncio.run(combine(run, [(_repo(run, slug), state) for slug, state in states])), sink
+    return asyncio.run(combine(run, [(_repo(run, slug), state) for slug, state in states])), sink, run
+
+
+def _fold(states: Sequence[tuple[str, RepoState]]) -> tuple[Pass, _Sink]:
+    answer, sink, _ = _combine(states)
+    return answer, sink
 
 
 _ESCALATION = ActionEscalation(EscalationCause.FORGE_AUTH, "acme/a: rejected")
@@ -125,18 +134,27 @@ def test_the_strongest_verdict_present_answers_the_pass_and_nothing_lands(strong
     assert sink.landed() == []
 
 
-def test_a_foreign_head_writes_both_findings_markers_and_outranks_a_conflict_elsewhere() -> None:
+def test_a_foreign_head_writes_its_own_marker_and_outranks_a_conflict_elsewhere() -> None:
     answer, sink = _fold([("a", Conflict("dirty")), ("b", _foreign("b"))])
 
     assert answer.choice == "failure"
-    assert set(sink.markers()) == {"delivery-findings", "delivery-findings/foreign-head"}
+    assert set(sink.markers()) == {"delivery-findings/foreign-head"}
 
 
-def test_owned_failures_across_repositories_are_gathered_into_one_findings_marker() -> None:
-    answer, sink = _fold([("a", Failure((_record("a", "failed"),))), ("b", Failure((_record("b", "failed"),)))])
+def test_the_records_that_decided_the_answer_are_handed_on_first_and_none_is_written_here() -> None:
+    judged = _record("a", "wait")
+    answer, sink, run = _combine(
+        [
+            ("a", Waiting("checks", judged)),
+            ("b", Failure((_record("b", "failed"),))),
+            ("c", Failure((_record("c", "failed"),))),
+        ]
+    )
 
     assert answer.choice == "failure"
-    assert "acme/a#1" in sink.markers()["delivery-findings"] and "acme/b#1" in sink.markers()["delivery-findings"]
+    run.visit = replace(_visit(), markers=())
+    assert [record["repo"] for record in run.visit_records()] == ["acme/b", "acme/c", "acme/a"]
+    assert sink.markers() == {}
 
 
 def test_pending_while_any_repository_is_unprepared_and_none_lands() -> None:
