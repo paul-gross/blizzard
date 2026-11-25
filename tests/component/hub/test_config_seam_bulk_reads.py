@@ -23,7 +23,7 @@ from blizzard.hub.domain.chunk.ingest import IngestService
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.work_refs import work_ref_lock
 from blizzard.hub.domain.config.changes import RecordKind
-from blizzard.hub.domain.config.repositories import RepositoryId
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId, WorkSourceSlug
 from blizzard.hub.domain.delivery.flows import Flow
 from blizzard.hub.domain.graph.model import GraphDoc
@@ -361,7 +361,7 @@ def test_the_flow_namer_names_flows_from_one_preload_and_falls_back_to_the_raw_i
     flows = [_flow(repository_id(links_hub, f"r{i}")) for i in range(N)]
     flows.append(_flow("rp_gone"))
 
-    namer = flow_namer(links_hub.services, flows)
+    namer = flow_namer(links_hub.default_adapter(IReadRepositoryRecordRepository), flows)
 
     assert [namer(f) for f in flows] == [*(f"r{i}/feat" for i in range(N)), "rp_gone/feat"]
 
@@ -370,11 +370,16 @@ def test_the_flow_namer_statements_are_flat_across_flow_counts(links_hub: HubHar
     flows = [_flow(repository_id(links_hub, f"r{i}")) for i in range(N)]
 
     def build(n: int) -> object:
-        namer = flow_namer(links_hub.services, flows[:n])
+        namer = flow_namer(links_hub.default_adapter(IReadRepositoryRecordRepository), flows[:n])
         return [namer(f) for f in flows[:n]]
 
     assert count_queries(links_hub.engine, lambda: build(1)) == count_queries(links_hub.engine, lambda: build(N))
-    assert count_queries(links_hub.engine, lambda: flow_namer(links_hub.services, [])) == 0
+    assert (
+        count_queries(
+            links_hub.engine, lambda: flow_namer(links_hub.default_adapter(IReadRepositoryRecordRepository), [])
+        )
+        == 0
+    )
 
 
 # --- Call sites ----------------------------------------------------------------------------

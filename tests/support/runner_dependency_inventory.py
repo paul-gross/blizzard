@@ -24,29 +24,24 @@ HOST = TENANT - {"blizzard.hub.api.deps.tenant_services", HUB} | {"blizzard.hub.
 # Keys are the hub's effective route paths, not client-side parameter names.
 GROUPS = [
     (
-        RUNNER,
-        """
-GET /api/fleet/chunks/{chunk_id}/envelope
-GET /api/fleet/questions/{question_id}
-POST /api/fleet/chunks/{chunk_id}/hub-advance
-""",
-    ),
-    (
         RUNNER - {"blizzard.hub.api.deps.tenant_services", HUB},
         """
 GET /api/fleet/chunk-statuses
 GET /api/fleet/chunks/{chunk_id}
+GET /api/fleet/chunks/{chunk_id}/envelope
 GET /api/fleet/chunks/{chunk_id}/findings
 GET /api/fleet/chunks/{chunk_id}/findings/{finding_id}
 GET /api/fleet/chunks/{chunk_id}/garden/findings
 GET /api/fleet/chunks/{chunk_id}/garden/proposals/page
 GET /api/fleet/chunks/{chunk_id}/transcript-segments
 GET /api/fleet/chunks/{chunk_id}/work-items
+GET /api/fleet/questions/{question_id}
 GET /api/fleet/scopes
 GET /api/fleet/summary
 GET /api/fleet/system-artifacts
 GET /api/fleet/system-artifacts/{name}
 POST /api/fleet/chunks/{chunk_id}/artifact-check
+POST /api/fleet/chunks/{chunk_id}/hub-advance
 POST /api/fleet/chunks/{chunk_id}/pause
 POST /api/fleet/chunks/{chunk_id}/resume
 POST /api/fleet/queue/peek
@@ -64,15 +59,10 @@ GET /api/fleet/chunks/{chunk_id}/analytics/spend/nodes
 """,
     ),
     (
-        FLEET_REQUEST,
-        """
-GET /api/fleet/runners/{runner_id}/decisions
-""",
-    ),
-    (
         FLEET_REQUEST - {"blizzard.hub.api.deps.tenant_services", HUB},
         """
 GET /api/fleet/runners/{runner_id}
+GET /api/fleet/runners/{runner_id}/decisions
 POST /api/fleet/transcripts
 POST /api/fleet/chunks/{chunk_id}/completions
 POST /api/fleet/chunks/{chunk_id}/decisions
