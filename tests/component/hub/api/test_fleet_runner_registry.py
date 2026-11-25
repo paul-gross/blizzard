@@ -11,7 +11,7 @@ from pathlib import Path
 
 import sqlalchemy as sa
 
-from blizzard.hub.domain.runners.registration import STALE_AFTER
+from blizzard.hub.domain.runners.registration import STALE_AFTER, IReadRunnerRegistry
 from tests.support.scaffolding import (
     HubHarness,
     assert_all_timestamps_utc,
@@ -402,12 +402,12 @@ def test_list_runners_query_count_does_not_grow_with_runner_count(tmp_path: Path
     for i in range(8):
         _seed_runner_with_every_fact_family(many, f"runner-{i}")
 
-    few_count = count_queries(few.engine, lambda: few.services.registry.list_runners())
-    many_count = count_queries(many.engine, lambda: many.services.registry.list_runners())
+    few_count = count_queries(few.engine, lambda: few.default_adapter(IReadRunnerRegistry).list_runners())
+    many_count = count_queries(many.engine, lambda: many.default_adapter(IReadRunnerRegistry).list_runners())
     assert few_count == many_count
 
-    few_runners = few.services.registry.list_runners()
-    many_runners = many.services.registry.list_runners()
+    few_runners = few.default_adapter(IReadRunnerRegistry).list_runners()
+    many_runners = many.default_adapter(IReadRunnerRegistry).list_runners()
     assert len(few_runners) == 2
     assert len(many_runners) == 8
     for runner in few_runners + many_runners:

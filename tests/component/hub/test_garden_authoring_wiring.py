@@ -38,6 +38,7 @@ from blizzard.hub.domain.garden.routines import (
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository, IWriteRunContextRepository
 from blizzard.hub.domain.garden.runs.baselines import RoutineBaselineService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, IWriteScopeRepository, ScopeLifecycle, ScopeRegistry
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store.internal.finding_store import FindingSetStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -121,7 +122,7 @@ def test_the_garden_authoring_keys_share_identity_within_a_tenant_and_differ_acr
     hub = build_hub(tmp_path)
     first = StoreScope(default_tenant(hub.engine))
     second = StoreScope(add_tenant(hub.engine, "second"))
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
 
     mine, theirs = _shared(hub, first), _shared(hub, second)
 

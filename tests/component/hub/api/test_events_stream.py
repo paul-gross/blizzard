@@ -25,6 +25,7 @@ from blizzard.hub.api.events import RESERVED_COMMENT, Cursor, Stream, StreamRead
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.tenancy import TenantId
 from tests.support.config_inputs import export_hub_app
 from tests.support.scaffolding import add_tenant, build_hub, default_tenant, parse_sse_frames, runner_token, seed_runner
@@ -181,8 +182,8 @@ def test_a_tenants_stream_carries_only_its_own_events(tmp_path: Path) -> None:
     Closing that tenant's broker ends the stream, which lets the buffering client read it."""
     hub = build_hub(tmp_path)
     other, tenant = default_tenant(hub.engine), add_tenant(hub.engine, "bravo")
-    hub.hub_services.tenants.open_tenants.refresh()
-    brokers = {named: hub.open_services(named).events for named in (other, tenant)}
+    hub.resolve_hub(OpenTenants).refresh()
+    brokers = {named: hub.resolve(named, EventBroker) for named in (other, tenant)}
     with ThreadPoolExecutor(max_workers=1) as pool:
         stream = pool.submit(hub.client.get, "/api/events/stream", headers={TENANT_HEADER: tenant})
         try:

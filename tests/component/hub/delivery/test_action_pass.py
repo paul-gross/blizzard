@@ -25,9 +25,16 @@ from blizzard.hub.delivery.actions.base import IHubAction
 from blizzard.hub.domain.actions.effects import ActionEscalation, IEffectSink, Marker, Pass
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.chunk.model import HubNodePollFact, WorkItemAuthor
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.delivery.ports.flows import IReadFlows
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.actions import ActionSpec
+from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.forge.landing import VisitForges
+from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from tests.support.forge_auth import retire_secrets
@@ -173,13 +180,16 @@ def _visit(hub: HubHarness, chunk_id: str) -> str | None:
 
 
 def _artifact(hub: HubHarness, chunk_id: str, name: str) -> str | None:
-    return next((a.data for a in hub.services.chunks.artifacts.load_artifacts(chunk_id) if a.name == name), None)
+    return next(
+        (a.data for a in hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(chunk_id) if a.name == name),
+        None,
+    )
 
 
 def _record_asset(hub: HubHarness, chunk_id: str, name: str, content: str) -> None:
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
-    graph = hub.services.graphs.get(chunk.graph_id)
+    graph = hub.default_adapter(IReadGraphRepository).get(chunk.graph_id)
     assert graph is not None
     node = graph.node_by_name("deliver")
     assert node is not None
@@ -189,7 +199,7 @@ def _record_asset(hub: HubHarness, chunk_id: str, name: str, content: str) -> No
 
 
 def _polls(hub: HubHarness, chunk_id: str) -> list[HubNodePollFact]:
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     return facts.hub_node_poll_history(node_id=_node_id(hub, chunk_id), epoch=_EPOCH)
 
@@ -200,7 +210,7 @@ def _findings(hub: HubHarness) -> int:
 
 
 def _events(hub: HubHarness, chunk_id: str, kind: str) -> list[object]:
-    return [e for e in hub.services.chunks.events.list_events(chunk_id=chunk_id) if e.kind == kind]
+    return [e for e in hub.default_adapter(IReadChunkEventsRepository).list_events(chunk_id=chunk_id) if e.kind == kind]
 
 
 # --- record-findings ---------------------------------------------------------
@@ -240,9 +250,9 @@ def test_record_findings_without_a_delta_answers_invalid_with_the_recorders_expl
 
 
 def _node_id(hub: HubHarness, chunk_id: str) -> str:
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
-    graph = hub.services.graphs.get(chunk.graph_id)
+    graph = hub.default_adapter(IReadGraphRepository).get(chunk.graph_id)
     assert graph is not None
     node = graph.node_by_name("deliver")
     assert node is not None
@@ -390,7 +400,7 @@ def test_a_pass_stuck_in_synchronous_work_is_cut_off_at_the_callers_deadline_rou
     assert waited < 5
     assert _polls(hub, chunk_id) == []
     assert len(_events(hub, chunk_id, "hub-action-overran")) == 1
-    assert hub.services.flows.open_turns() == []
+    assert hub.default_adapter(IReadFlows).open_turns() == []
 
 
 def test_cut_off_reports_the_bound_captured_before_an_in_flight_edit(tmp_path: Path) -> None:
@@ -443,7 +453,7 @@ def test_an_escalation_escalates_once_at_the_next_epoch_and_routes_nothing(tmp_p
     chunk_id = _at_deliver(hub, _graph("test.escalates", ("done",)))
 
     assert _visit(hub, chunk_id) == "escalated"
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     assert facts.transitions == []
     with hub.engine.begin() as conn:
@@ -519,7 +529,7 @@ def test_a_repository_secret_is_revealed_only_for_an_action_that_lands(
     )
     revealed: list[str] = []
 
-    retire_secrets(monkeypatch, hub.services.forges.authorizations, lambda _name: True, revealed)
+    retire_secrets(monkeypatch, hub.default_adapter(ForgeRegistry).authorizations, lambda _name: True, revealed)
     chunk_id = _at_deliver(hub, _graph("test.lands", ("done", "failure")))
     _record_commit(hub, chunk_id, "acme/widget")
     before = _event_log_kinds(hub, chunk_id)

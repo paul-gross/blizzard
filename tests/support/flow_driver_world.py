@@ -14,11 +14,12 @@ from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.domain.actions.effects import IEffectSink, Pass
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.delivery.flows import Submission
-from blizzard.hub.domain.delivery.ports.flows import IFlowChangePublisher
+from blizzard.hub.domain.delivery.ports.flows import IFlowChangePublisher, IReadFlows
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.landing import VisitForges
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.tenancy import TenantId
@@ -98,7 +99,7 @@ class World:
         self.driver = self.hub.flow_driver
         self.stores = FlowLineStores(
             corpus=self.hub.resolve_hub(HubScopedReads).corpus,
-            tenants=lambda: self.hub.hub_services.tenants.open_tenants.every().keys(),
+            tenants=lambda: self.hub.resolve_hub(OpenTenants).every().keys(),
             lines=self.lines,
             turns=lambda tenant: self.hub.resolve(tenant, TurnRunner),
             notices=lambda tenant: self.hub.resolve(tenant, BudgetNoticeDrain),
@@ -158,7 +159,7 @@ class World:
 
     def submissions(self, chunk_id: str) -> list[Submission]:
         """Every submission of the chunk, open or closed, in arrival order."""
-        flows = self.hub.services.flows
+        flows = self.hub.default_adapter(IReadFlows)
         with self.hub.engine.connect() as conn:
             rows = conn.execute(
                 hub_scoped(

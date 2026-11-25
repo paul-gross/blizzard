@@ -16,9 +16,32 @@ from typing import Any
 import pytest
 import sqlalchemy as sa
 
-from blizzard.hub.composition import TenantStores
+from blizzard.foundation.registry.scopes import Resolver
+from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.cadence_store import CadenceStore
+from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
+from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
+from blizzard.hub.store.internal.config_import_store import ConfigImportStore
+from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
+from blizzard.hub.store.internal.credential_referrers import CredentialReferrersStore
+from blizzard.hub.store.internal.finding_store import FindingStore
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
+from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
+from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
+from blizzard.hub.store.internal.invitation_store import InvitationStore
+from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
+from blizzard.hub.store.internal.project_store import ProjectStore
+from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
+from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
+from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.urgency_store import UrgencyOrderStore, UrgencyStore
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
+from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import StoreScope
 from tests.support.scaffolding import build_hub, hub_scoped, scoped_connections, second_core
 from tests.support.tenant_isolation_world import Two, seeded
@@ -67,21 +90,50 @@ def _reads_of(adapter: object) -> Iterator[tuple[str, object]]:
         yield name, method()
 
 
-def _adapters(stores: TenantStores) -> Iterator[tuple[str, object]]:
-    for field in dataclasses.fields(stores):
-        value = getattr(stores, field.name)
-        yield field.name, value
+#: Each adapter a tenant's stores are built from, by name.
+_ADAPTERS: tuple[tuple[str, type[Any]], ...] = (
+    ("connections", ScopedConnections),
+    ("transactions", HubTransactions),
+    ("registry", RunnerRegistryStore),
+    ("hosts", HostRegistryStore),
+    ("work_item_store", WorkItemStore),
+    ("chunk_stores", ChunkStores),
+    ("finding_store", FindingStore),
+    ("secrets", SecretStore),
+    ("work_source_records", WorkSourceRecordStore),
+    ("repository_records", RepositoryRecordStore),
+    ("forge_records", ForgeRecordStore),
+    ("credential_records", CredentialRecordStore),
+    ("secret_referrers", SecretReferrersStore),
+    ("forge_referrers", ForgeReferrersStore),
+    ("credential_referrers", CredentialReferrersStore),
+    ("config_changes", ConfigChangeStore),
+    ("projects", ProjectStore),
+    ("project_links", ProjectLinkStore),
+    ("config_apply", ConfigApplyStore),
+    ("config_import", ConfigImportStore),
+    ("invitations", InvitationStore),
+    ("urgencies", UrgencyStore),
+    ("urgency_order", UrgencyOrderStore),
+    ("work_item_edits", WorkItemEditService),
+)
+
+
+def _adapters(tenant: Resolver) -> Iterator[tuple[str, object]]:
+    for name, adapter_type in _ADAPTERS:
+        value = tenant.get(adapter_type)
+        yield name, value
         if dataclasses.is_dataclass(value) and not isinstance(value, type):
             for inner in dataclasses.fields(value):
-                yield f"{field.name}.{inner.name}", getattr(value, inner.name)
+                yield f"{name}.{inner.name}", getattr(value, inner.name)
 
 
 def test_each_tenants_adapters_read_back_none_of_the_others_records(two: Two) -> None:
-    core = second_core(two.hub)
+    process = second_core(two.hub)
     called: set[str] = set()
     for reader, other in ((two.first, two.second), (two.second, two.first)):
-        stores = core.open(StoreScope(reader.harness.tenant))
-        for adapter_name, adapter in _adapters(stores):
+        tenant = process.tenants.open(StoreScope(reader.harness.tenant)).resolver
+        for adapter_name, adapter in _adapters(tenant):
             for read, answer in _reads_of(adapter):
                 text = repr(answer)
                 called.add(f"{adapter_name}.{read}")

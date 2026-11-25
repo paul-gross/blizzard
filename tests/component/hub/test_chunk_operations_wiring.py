@@ -27,6 +27,7 @@ from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository, IWriteWorkItemRepository
 from blizzard.hub.events.broker import EventBroker
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.tenancy import StoreScope
@@ -36,21 +37,20 @@ from tests.support.scaffolding import HubHarness, add_tenant, build_hub, default
 def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
     """Every holder of each chunk operations instance in ``tenant``, by what the instance is."""
     scope = hub.process.tenants.open(tenant).resolver
-    services = hub.hub_services.tenants.open_services(tenant)
     chunks = scope.get(ChunkStores)
     # The services hold what they were built over privately; reading it is the only way to see it is shared.
     return {
         "chunk facts": [
             chunks.facts,
             scope.get(IReadChunkFactsRepository),
-            services.chunks.facts,
+            scope.get(IReadChunkFactsRepository),
             scope.get(PromoteService)._facts,  # pyright: ignore[reportPrivateUsage]
         ],
         "chunk record": [
             chunks.record,
             scope.get(IReadChunkRecordRepository),
             scope.get(IWriteChunkRecordRepository),
-            services.chunks.record,
+            scope.get(IReadChunkRecordRepository),
             scope.get(IngestService)._record,  # pyright: ignore[reportPrivateUsage]
         ],
         "chunk lifecycle": [
@@ -75,7 +75,7 @@ def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
         "flow submissions": [scope.get(FlowStore), scope.get(IReadChunkFlowSubmissions)],
         "event log": [
             scope.get(EventLogService),
-            services.event_log,
+            scope.get(EventLogService),
             scope.get(RestartService)._events,  # pyright: ignore[reportPrivateUsage]
             scope.get(CompleteService)._events,  # pyright: ignore[reportPrivateUsage]
         ],
@@ -102,7 +102,7 @@ def test_the_chunk_operations_keys_share_identity_within_a_tenant_and_differ_acr
     hub = build_hub(tmp_path)
     first = StoreScope(default_tenant(hub.engine))
     second = StoreScope(add_tenant(hub.engine, "second"))
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
 
     mine, theirs = _shared(hub, first), _shared(hub, second)
 

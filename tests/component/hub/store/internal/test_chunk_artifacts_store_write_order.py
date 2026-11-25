@@ -13,7 +13,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef, decide_close_enqueue
-from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from tests.support.scaffolding import build_hub, chunk_unit, hub_store_connections, ingest
 
@@ -27,7 +27,7 @@ def test_same_millisecond_marker_writes_read_back_in_write_order(
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     at = hub.clock.now()
-    writer = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
+    writer = cast(IWriteChunkArtifactsRepository, hub.default_adapter(IReadChunkArtifactsRepository))
     with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
         assert writer.record_hub_artifact(
             chunk_id,
@@ -64,13 +64,13 @@ def test_same_millisecond_marker_writes_read_back_in_write_order(
                 transaction=unit,
             ).wrote
 
-    sources = hub.services.chunks.artifacts.delivery_sources_for([chunk_id])[chunk_id]
+    sources = hub.default_adapter(IReadChunkArtifactsRepository).delivery_sources_for([chunk_id])[chunk_id]
 
     assert [m.name for m in sources.pr_markers] == ["delivery-pr/acme/one/3", "delivery-pr/acme/one/4"]
     view = DeliveryRead.of(ChunkFacts(minted=True), sources)
     assert [p.number for p in view.open_prs] == [4]
     assert [p.number for p in view.closed_prs] == [3]
-    loaded = hub.services.chunks.artifacts.load_artifacts(chunk_id)
+    loaded = hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(chunk_id)
     assert [m.name for m in loaded if m.name.startswith("delivery-pr/")] == [
         "delivery-pr/acme/one/2",
         "delivery-pr/acme/one/3",

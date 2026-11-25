@@ -17,7 +17,7 @@ from blizzard.auth_core import Role
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository, IWriteChunkMovementRepository
 from tests.support.analytics_durations_world import complete_node, mint_chunk, seeded_hub
 from tests.support.chunk_units import chunk_unit
 from tests.support.hub_request_auth import cookie, seed_enrolled
@@ -119,7 +119,7 @@ def _bearer(token: str) -> dict[str, str]:
 
 def _writable(hub: HubHarness) -> IWriteChunkMovementRepository:
     """A test-only cast: mirrors `tests/component/hub/api/test_analytics_outcomes.py`'s own helper."""
-    return cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
+    return cast(IWriteChunkMovementRepository, hub.default_adapter(IReadChunkMovementRepository))
 
 
 # --- auth triad: 401 / 403 / 200, plus the runner-principal refusal ---------------

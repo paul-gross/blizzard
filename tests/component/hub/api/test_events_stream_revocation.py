@@ -22,6 +22,7 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.api.events import RESERVED_COMMENT
 from blizzard.hub.auth.hashing import SessionId
 from blizzard.hub.auth.models import User
+from blizzard.hub.events.broker import EventBroker as HubEventBroker
 from tests.support.scaffolding import HubHarness, build_hub, default_tenant, parse_sse_frames, seed_session, seed_user
 
 
@@ -88,7 +89,7 @@ async def test_a_revoked_members_open_stream_ends_and_another_members_keeps_runn
     admin = seed_user(hub, username="ada", role=Role.ADMIN)
     revoked = seed_user(hub, username="grace", role=Role.GUEST)
     kept = seed_user(hub, username="linus", role=Role.GUEST)
-    broker = hub.open_services(default_tenant(hub.engine)).events
+    broker = hub.resolve(default_tenant(hub.engine), HubEventBroker)
     kept_stream = Stream(broker, _ConnectedRequest(), Cursor(0), RESERVED_COMMENT, owner=kept.user_id).frames()
     assert await anext(kept_stream) == RESERVED_COMMENT.encode()
     loop = asyncio.get_running_loop()
@@ -130,7 +131,7 @@ def test_a_role_change_leaves_the_members_stream_open(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
     admin = seed_user(hub, username="ada", role=Role.ADMIN)
     member = seed_user(hub, username="grace", role=Role.GUEST)
-    broker = hub.open_services(default_tenant(hub.engine)).events
+    broker = hub.resolve(default_tenant(hub.engine), HubEventBroker)
 
     with ThreadPoolExecutor(max_workers=1) as pool:
         stream = pool.submit(hub.client.get, "/api/events/stream", headers=_as(hub, member))
@@ -156,7 +157,7 @@ async def test_a_logged_out_sessions_stream_ends_and_the_users_other_session_kee
     user = seed_user(hub, username="grace", role=Role.GUEST)
     leaving, staying = seed_session(hub, user), seed_session(hub, user)
     headers = {"Cookie": f"bz_session={leaving}", TENANT_HEADER: default_tenant(hub.engine)}
-    broker = hub.open_services(default_tenant(hub.engine)).events
+    broker = hub.resolve(default_tenant(hub.engine), HubEventBroker)
     kept_stream = Stream(
         broker,
         _ConnectedRequest(),

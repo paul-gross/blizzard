@@ -14,6 +14,8 @@ from blizzard.foundation.platform_tracing.handle import IPlatformTracing
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.cli import runtime
 from blizzard.hub.config import HubConfig
+from blizzard.hub.egress.factory import egress_boot
+from blizzard.hub.process_root import open_store_backed
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.hub_settings_store import HubSettingsStore
@@ -272,7 +274,6 @@ def test_host_instruments_shared_settings_before_seed(tmp_path: Path, monkeypatc
 
     from blizzard.foundation.platform_tracing.handle import build_platform_tracing
     from blizzard.foundation.settings_record.vocabulary import Change
-    from blizzard.hub import composition
 
     init_hub(tmp_path)
     path = tmp_path / "blizzard-hub.toml"
@@ -321,10 +322,16 @@ def test_host_instruments_shared_settings_before_seed(tmp_path: Path, monkeypatc
         assert acquisitions == [(engine, connections)]
         with handle.tracer.root("startup seed complete"):
             pass
-        core = composition.build_hub_core(
-            connections, clock=clock, config=config, platform_tracing=handle, environ={}, actions=TEST_HUB_ACTIONS
+        process = open_store_backed(
+            connections,
+            clock=clock,
+            config=config,
+            platform_tracing=handle,
+            environ={},
+            actions=TEST_HUB_ACTIONS,
+            egress_boot=egress_boot(config.egress, None),
         )
-        assert core.store_connections is connections
+        assert process.resolver.get(HubStoreConnections) is connections
         snapshot = settings.reader.snapshot()
         settings.authoring.apply(
             Change("edit", sets={"action_pass_seconds": 45}), if_match=snapshot.revision, door="api", actor="test"

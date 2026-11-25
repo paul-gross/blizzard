@@ -5,13 +5,13 @@ from __future__ import annotations
 from typing import cast
 
 from blizzard.hub.documents import YAML_CODEC
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository, IWriteChunkMovementRepository
 from blizzard.hub.graphs import PACKAGED
 from tests.support.scaffolding import HubHarness, pointer_token
 
 
 def writable(hub: HubHarness) -> IWriteChunkMovementRepository:
-    return cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
+    return cast(IWriteChunkMovementRepository, hub.default_adapter(IReadChunkMovementRepository))
 
 
 def mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:

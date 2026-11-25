@@ -28,6 +28,7 @@ from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.domain.tenancy.teardown import TenantTeardown
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.scopes.tenants import TenantContainers
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.tenancy import StoreScope, TenantId
@@ -38,6 +39,7 @@ from tests.support.scaffolding import (
     default_tenant,
     seed_membership,
     seed_runner,
+    seed_runner_in,
     seed_session,
     seed_user,
 )
@@ -136,7 +138,7 @@ def _answer(client: TestClient, method: str, path: str, headers: dict[str, str])
 def _closed(hub: HubHarness) -> TenantId:
     closed = hub.add_tenant("gone")
     close_tenant(hub.engine, closed.tenant)
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
     return closed.tenant
 
 
@@ -145,7 +147,7 @@ def _refusal_headers(hub: HubHarness, refusal: str) -> dict[str, str]:
     if refusal == "missing identity":
         return {TENANT_HEADER: default}
     if refusal == "machine tenant mismatch":
-        token = seed_runner(hub.open_services(default), "rn-mismatch", register=False)
+        token = seed_runner_in(hub.process, default, "rn-mismatch", register=False)
         return {"Authorization": f"Bearer {token}", TENANT_HEADER: hub.add_tenant("other").tenant}
     if refusal == "missing membership":
         return {**_session(hub, "ada", Role.ADMIN), TENANT_HEADER: hub.add_tenant("other").tenant}
@@ -218,7 +220,7 @@ def test_a_tenant_deleted_before_a_lazy_finding_resolution_answers_a_runner_401(
     hub: HubHarness, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     created = hub.add_tenant("doomed")
-    token = seed_runner(created.services, "rn-doomed", register=False)
+    token = seed_runner(created, "rn-doomed", register=False)
     headers = {"Authorization": f"Bearer {token}"}
     assert _client(hub).get("/scratch/fleet/findings", headers=headers).status_code == 200
     _deleting_after_admission(hub, monkeypatch, created.tenant)

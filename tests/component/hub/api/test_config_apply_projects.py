@@ -10,9 +10,12 @@ import httpx2
 import pytest
 
 from blizzard.hub.domain.config.changes import ChangeContext, Door
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
+from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
-from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId, ProjectSlug
+from blizzard.hub.domain.projects.links import IReadProjectLinks
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectEdit, ProjectId, ProjectSlug
 from tests.support.scaffolding import HubHarness, build_hub, ensure_fixture_forge
 
 _SOURCE = {
@@ -71,7 +74,7 @@ def _changes(hub: HubHarness) -> list[dict[str, object]]:
 
 
 def _project_id(hub: HubHarness, slug: str) -> ProjectId:
-    project = hub.services.projects.get_by_slug(ProjectSlug(slug))
+    project = hub.default_adapter(IReadProjectRepository).get_by_slug(ProjectSlug(slug))
     assert project is not None
     return project.project_id
 
@@ -79,7 +82,7 @@ def _project_id(hub: HubHarness, slug: str) -> ProjectId:
 def _repository_slug(hub: HubHarness, repository_id: str) -> str:
     return next(
         r.slug
-        for r in hub.services.repository_records.list_all(include_retired=True)
+        for r in hub.default_adapter(IReadRepositoryRecordRepository).list_all(include_retired=True)
         if r.repository_id == repository_id
     )
 
@@ -87,14 +90,14 @@ def _repository_slug(hub: HubHarness, repository_id: str) -> str:
 def _source_slug(hub: HubHarness, work_source_id: str) -> str:
     return next(
         r.slug
-        for r in hub.services.work_source_records.list_all(include_retired=True)
+        for r in hub.default_adapter(IReadWorkSourceRepository).list_all(include_retired=True)
         if r.work_source_id == work_source_id
     )
 
 
 def _linked(hub: HubHarness, slug: str) -> tuple[list[str], list[str]]:
     project_id = _project_id(hub, slug)
-    links = hub.services.project_links
+    links = hub.default_adapter(IReadProjectLinks)
     return (
         sorted(_source_slug(hub, link.work_source_id) for link in links.sources_of(project_id)),
         sorted(_repository_slug(hub, link.repository_id) for link in links.repositories_of(project_id)),
@@ -159,7 +162,7 @@ def test_an_entry_naming_no_project_lands_in_the_only_one_and_is_refused_with_se
     assert detail["type"] == "project_required"
     assert [p["slug"] for p in detail["projects"]] == ["default", "web"]
     assert _changes(hub) == before
-    assert hub.services.projects.get_by_slug(ProjectSlug("web")) is None
+    assert hub.default_adapter(IReadProjectRepository).get_by_slug(ProjectSlug("web")) is None
 
 
 def test_a_project_unknown_to_the_store_and_the_document_is_refused_at_the_entry(hub: HubHarness) -> None:
@@ -208,7 +211,7 @@ def test_a_projects_entry_that_cannot_apply_is_refused_at_its_field(
 
 def test_a_former_slug_is_refused_naming_the_project_that_left_it(hub: HubHarness) -> None:
     _rows(_apply(hub, {"projects": [{"slug": "web", "name": "Web"}]}))
-    web = hub.services.projects.get_by_slug(ProjectSlug("web"))
+    web = hub.default_adapter(IReadProjectRepository).get_by_slug(ProjectSlug("web"))
     assert web is not None
     hub.default_adapter(ProjectAuthoring).edit(web, ProjectEdit(slug="site"), ChangeContext(actor="op", door=Door.API))
     before = _changes(hub)
@@ -233,7 +236,7 @@ def test_a_dry_run_plans_projects_and_links_without_writing_them(hub: HubHarness
     assert refused.status_code == 422 and refused.json()["detail"][0]["type"] == "project_required"
     document["scopes"] = [{"slug": "c", "project": "web"}]
     dry = _apply(hub, document, dry_run=True)
-    assert hub.services.projects.get_by_slug(ProjectSlug("web")) is None
+    assert hub.default_adapter(IReadProjectRepository).get_by_slug(ProjectSlug("web")) is None
     assert _rows(dry) == _rows(_apply(hub, document))
 
 
@@ -385,7 +388,7 @@ _LIB = {**_REPO, "slug": "lib", "repo": "lib"}
 def _branches(hub: HubHarness, slug: str) -> dict[str, str | None]:
     return {
         _repository_slug(hub, link.repository_id): link.base_branch
-        for link in hub.services.project_links.repositories_of(_project_id(hub, slug))
+        for link in hub.default_adapter(IReadProjectLinks).repositories_of(_project_id(hub, slug))
     }
 
 

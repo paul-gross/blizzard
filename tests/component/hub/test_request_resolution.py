@@ -24,11 +24,13 @@ from blizzard.hub.api.auth_session import (
 from blizzard.hub.api.resolution import request_resolver
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.domain.tenancy.teardown import TenantTeardown
+from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.scopes.tenants import TenantContainers
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from blizzard.wire.tenant import TENANT_NOT_FOUND
-from tests.support.scaffolding import HubHarness, build_hub, default_tenant, seed_runner
+from tests.support.scaffolding import HubHarness, build_hub, default_tenant, seed_runner_in
 
 
 def _scratch_router() -> APIRouter:
@@ -115,7 +117,7 @@ def test_a_failed_open_answers_404_to_a_person_and_to_a_runner(
     hub: HubHarness, monkeypatch: pytest.MonkeyPatch, refusal: type[Exception]
 ) -> None:
     tenant = default_tenant(hub.engine)
-    token = seed_runner(hub.open_services(tenant), "rn-open", register=False)
+    token = seed_runner_in(hub.process, tenant, "rn-open", register=False)
     _refusing_open(monkeypatch, refusal)
     client = _client(hub)
 
@@ -143,7 +145,9 @@ def test_a_deleted_tenant_leaves_no_scope_closes_its_clients_once_and_refuses_th
         original(self)
 
     monkeypatch.setattr(ConfigObjectCache, "close", counting)
-    hub.open_services(tenant)  # serve the tenant, building the configured clients its deletion closes
+    # Serve the tenant, building the configured clients its deletion closes.
+    hub.resolve(tenant, ForgeRegistry)
+    hub.resolve(tenant, IWorkSourceRegistry)
     deleted = id(before.resolver.get(ConfigObjectCache))
 
     hub.resolve_hub(TenantTeardown).delete(tenant, by="usr_deleter")

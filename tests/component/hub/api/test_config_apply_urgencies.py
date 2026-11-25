@@ -13,7 +13,8 @@ import pytest
 
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config_apply import service as config_apply_service
-from blizzard.hub.domain.urgency.services import UrgencyLifecycle
+from blizzard.hub.domain.urgency.services import UrgencyLifecycle, UrgencyReading
+from blizzard.hub.events.broker import EventBroker
 from tests.support.scaffolding import HubHarness, build_hub, default_tenant
 
 _PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
@@ -182,7 +183,7 @@ def test_a_retire_committing_between_the_plan_and_the_write_refuses_the_apply_as
 
     def plan_then_retire(*args: Any, **kwargs: Any) -> Any:
         plan = planned(*args, **kwargs)
-        later = hub.services.urgency_reading.resolve("later")
+        later = hub.default_adapter(UrgencyReading).resolve("later")
         assert later is not None
         hub.resolve(default_tenant(hub.engine), UrgencyLifecycle).retire(
             later, ChangeContext(actor="rival", door=Door.API), move_to=None, may_control=True, if_match=None
@@ -208,7 +209,7 @@ def test_an_apply_that_reorders_publishes_the_queue_change_and_one_that_does_not
 ) -> None:
     _create(hub, "later")
     published: list[None] = []
-    monkeypatch.setattr(hub.services.events, "publish_queue_changed", lambda: published.append(None))
+    monkeypatch.setattr(hub.default_adapter(EventBroker), "publish_queue_changed", lambda: published.append(None))
 
     assert _apply(hub, {"urgency_order": ["later", "standard"]}, dry_run=True).status_code == 200
     assert _apply(hub, {"urgency_order": ["standard", "later"]}).status_code == 200

@@ -17,6 +17,7 @@ from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine, RoutineAuthoring
 from blizzard.hub.domain.garden.runs.run import RunService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
@@ -30,7 +31,7 @@ _NOW = datetime(2026, 7, 1, tzinfo=UTC)
 
 
 def _default_graph(hub: HubHarness) -> Graph:
-    return hub.services.default_graph.ensure_default(
+    return hub.default_adapter(DefaultGraphService).ensure_default(
         PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
 

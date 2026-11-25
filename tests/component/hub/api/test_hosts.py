@@ -14,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from blizzard.hub.domain.execution.fleet import FleetService
+from blizzard.hub.domain.runners.host import IReadHostRegistry
 from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import STALE_AFTER
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
@@ -356,7 +357,7 @@ def test_another_tenants_runner_is_unknown_to_adopt_and_to_add_adopt(tmp_path: P
     mine = hub.add_tenant("mine")
     other = hub.add_tenant("other")
     added = _add_host(mine)
-    seed_runner(other.services, other.runner_id("r1"), register=False)
+    seed_runner(other, other.runner_id("r1"), register=False)
 
     adopt = mine.client.post(f"/api/hosts/{added['host_id']}/adoptions", json={"runner_ids": [other.runner_id("r1")]})
     add = mine.client.post("/api/hosts", json={"name": "second", "adopt": [other.runner_id("r1")]})
@@ -518,7 +519,7 @@ def test_a_rerun_over_a_retired_host_retires_the_runners_a_crash_left_unretired(
     host_id = added["host_id"]
     seed_runner(hub, "rn_a")
     hub.client.post(f"/api/hosts/{host_id}/adoptions", json={"runner_ids": ["rn_a"]})
-    host = hub.services.hosts.get_host(host_id)
+    host = hub.default_adapter(IReadHostRegistry).get_host(host_id)
     assert host is not None
     fact = host.retire({}, force=True, by="op", at=hub.clock.now())
     HostRegistryStore(hub_store_connections(hub.engine)).record_retirement(
@@ -569,7 +570,7 @@ def test_a_rerun_over_a_crash_left_runner_holding_a_chunk_is_a_409(tmp_path: Pat
     seed_runner(hub, "rn_a")
     hub.client.post(f"/api/hosts/{host_id}/adoptions", json={"runner_ids": ["rn_a"]})
     chunk_id = _held_chunk(hub, "rn_a")
-    host = hub.services.hosts.get_host(host_id)
+    host = hub.default_adapter(IReadHostRegistry).get_host(host_id)
     assert host is not None
     fact = host.retire({}, force=True, by="op", at=hub.clock.now())
     HostRegistryStore(hub_store_connections(hub.engine)).record_retirement(

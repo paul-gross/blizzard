@@ -32,7 +32,11 @@ from structlog import get_logger
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.hub.domain.chunk.model import ChunkFacts
+from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreErrorFactory
@@ -103,7 +107,7 @@ def _fence_refuses_as_terminal(hub: HubHarness, chunk_id: str, *, terminal: bool
 def test_every_terminal_form_agrees_with_the_derived_status(tmp_path: Path) -> None:
     hub = hub_with_graph(tmp_path)
     every_branch(hub)
-    facts = hub.services.chunks.facts.load_all_facts()
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_all_facts()
     # A terminal and a non-terminal transition at an identical instant and epoch derive by fact order
     # and no write path records it, so the predicate leaves it live — the one residue.
     residue = {chunk_id for chunk_id in facts if chunk_id.startswith("ch_mixed_tie_")}
@@ -114,8 +118,12 @@ def test_every_terminal_form_agrees_with_the_derived_status(tmp_path: Path) -> N
     assert {"ch_tie_old", "ch_done_transition_old", "ch_stopped_old"} <= terminal_ids
     _park_a_question_and_a_decision_on_every_chunk(hub, sorted(facts))
 
-    open_question_chunks = {q.chunk_id for q in hub.services.chunks.questions.list_open_questions()} - residue
-    open_decision_chunks = {d.chunk_id for d in hub.services.chunks.decisions.list_open_decisions()} - residue
+    open_question_chunks = {
+        q.chunk_id for q in hub.default_adapter(IReadChunkQuestionsRepository).list_open_questions()
+    } - residue
+    open_decision_chunks = {
+        d.chunk_id for d in hub.default_adapter(IReadChunkDecisionsRepository).list_open_decisions()
+    } - residue
     connections = hub_store_connections(hub.engine)
     with connections.read("maybe_live") as conn:
         kept = set(
@@ -135,11 +143,11 @@ def test_every_terminal_form_agrees_with_the_derived_status(tmp_path: Path) -> N
 def test_newest_done_ranks_by_the_derived_completion_instant(tmp_path: Path) -> None:
     hub = hub_with_graph(tmp_path)
     every_branch(hub)
-    visible = {c.chunk_id for c in hub.services.chunks.record.list_all()}
+    visible = {c.chunk_id for c in hub.default_adapter(IReadChunkRecordRepository).list_all()}
     ranked = sorted(
         (
             (f.completed_at(), chunk_id)
-            for chunk_id, f in hub.services.chunks.facts.load_all_facts().items()
+            for chunk_id, f in hub.default_adapter(IReadChunkFactsRepository).load_all_facts().items()
             if chunk_id in visible
             and not chunk_id.startswith("ch_mixed_tie_")  # the tie residue the SQL form leaves live
             and f.status() is ChunkStatus.DONE
@@ -150,7 +158,7 @@ def test_newest_done_ranks_by_the_derived_completion_instant(tmp_path: Path) -> 
     expected = [chunk_id for _, chunk_id in ranked]
     assert len(expected) > 2
     for limit in (1, 2, len(expected), len(expected) + 5):
-        assert hub.services.chunks.record.newest_done(limit=limit) == expected[:limit], limit
+        assert hub.default_adapter(IReadChunkRecordRepository).newest_done(limit=limit) == expected[:limit], limit
 
 
 # --- every nested statement is confined to the scope's tenant ------------------------------------

@@ -11,6 +11,7 @@ import pytest
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import RoutineAuthoring
 from blizzard.hub.domain.garden.scopes import ScopeSlug
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
 from tests.support.scaffolding import HubHarness, build_hub, count_queries, default_project, project_record
@@ -24,9 +25,11 @@ def hub(tmp_path: Path) -> HubHarness:
 
 
 def _graph(hub: HubHarness) -> str:
-    return hub.services.default_graph.ensure_default(
-        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
-    ).name
+    return (
+        hub.default_adapter(DefaultGraphService)
+        .ensure_default(PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml())
+        .name
+    )
 
 
 def _routine(hub: HubHarness, slug: str) -> str:

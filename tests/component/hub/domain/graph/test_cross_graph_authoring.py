@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from blizzard.hub.domain.graph.model import GraphDoc
+from blizzard.hub.domain.graph.authoring import GraphMintService
+from blizzard.hub.domain.graph.model import GraphDoc, IReadGraphRepository
 from tests.support.scaffolding import build_hub
 
 # Component — mint warning, store round-trip, interim fall-through
@@ -77,9 +78,9 @@ def test_cross_graph_edge_round_trips_through_the_store(tmp_path: Path) -> None:
             },
         }
     )
-    graph, _ = hub.services.graph_mint.mint(doc, definition_yaml="")
+    graph, _ = hub.default_adapter(GraphMintService).mint(doc, definition_yaml="")
 
-    loaded = hub.services.graphs.get(graph.graph_id)
+    loaded = hub.default_adapter(IReadGraphRepository).get(graph.graph_id)
     assert loaded is not None
     edge = next(e for e in loaded.edges if e.target_graph is not None)
     assert edge.target_graph == "triage"

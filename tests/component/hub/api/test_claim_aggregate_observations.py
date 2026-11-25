@@ -11,10 +11,12 @@ from pydantic import BaseModel
 
 from blizzard.hub.api.auth import RunnerAuth
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
-from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.domain.chunk.dependencies import DependencyService, PrerequisiteScope
-from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.graph.model import IReadGraphRepository
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, IWriteRunnerRegistry
 from blizzard.hub.domain.runners.version_window import VersionWindow
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
     AuthenticationRevokedProblem,
@@ -90,7 +92,7 @@ def test_claim_problem_variants_are_aggregated(tmp_path: Path, monkeypatch: pyte
     observe(claim("r1", terminal), 409, RouteClaimTerminalProblem)
     dependent = ingest(hub, [{"source": "default", "ref": "dependent"}])
     prerequisite = ingest(hub, [{"source": "default", "ref": "prerequisite"}])
-    record = hub.services.chunks.record.get(dependent)
+    record = hub.default_adapter(IReadChunkRecordRepository).get(dependent)
     assert record is not None
     hub.default_adapter(DependencyService).declare(record, PrerequisiteScope(prerequisite), by="user:alice")
     observe(claim("r1", dependent), 409, RouteClaimDependencyProblem)
@@ -98,7 +100,7 @@ def test_claim_problem_variants_are_aggregated(tmp_path: Path, monkeypatch: pyte
     observe(claim("missing", dependent), 403, ClaimRunnerUnregisteredProblem)
     assert hub.client.post("/api/runners/r1/pause", json={"by": "operator"}).status_code == 200
     observe(claim("r1", dependent), 403, RouteClaimPausedProblem)
-    cast(IWriteRunnerRegistry, hub.services.registry).record_lifecycle(
+    cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry)).record_lifecycle(
         "r2", retired=True, at=hub.clock.now(), by="operator", expected_lifecycle=0
     )
     observe(claim("r2", dependent), 403, ClaimRunnerRetiredProblem)
@@ -112,7 +114,7 @@ def test_claim_problem_variants_are_aggregated(tmp_path: Path, monkeypatch: pyte
         return None
 
     with monkeypatch.context() as patch:
-        patch.setattr(hub.services.graphs, "get", missing_graph)
+        patch.setattr(hub.default_adapter(IReadGraphRepository), "get", missing_graph)
         observe(claim("r3", graph_chunk), 500, PinnedGraphMissingProblem)
     assert hub.app is not None
     client = TestClient(hub.app)
@@ -131,10 +133,10 @@ def test_claim_problem_variants_are_aggregated(tmp_path: Path, monkeypatch: pyte
     with store_free(hub.app):
         observe(client.post(path, json={}, headers=bearer(live)), 503, HubStoreUnavailableProblem)
 
-    def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
+    def close_before_resolution(request: Request) -> AdmittedTenant:
         principal = RunnerAuth.of(request).demand()
         close_tenant(hub.engine, principal.tenant_id)
-        services.tenants.open_tenants.refresh()
+        hub.resolve_hub(OpenTenants).refresh()
         return resolve_tenant(request)
 
     hub.app.dependency_overrides[resolve_tenant] = close_before_resolution

@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from blizzard.auth_core import Role
 from blizzard.hub.domain.runners.host_enrollment import HostEnrollmentService
-from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerRegistration
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, IWriteRunnerRegistry, RunnerRegistration
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
     IdpDisabledProblem,
@@ -84,14 +84,14 @@ def test_identity_and_host_problem_variants_are_aggregated(tmp_path: Path, monke
         RunnerAlreadyHostedProblem,
     )
     seed_runner(hub, "retired")
-    cast(IWriteRunnerRegistry, hub.services.registry).record_lifecycle(
+    cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry)).record_lifecycle(
         "retired", retired=True, at=hub.clock.now(), by="operator", expected_lifecycle=0
     )
     observe(
         hub.client.post(hosts, json={"name": "other", "adopt": ["retired"]}), "post", hosts, 409, RunnerRetiredProblem
     )
     seed_runner(hub, "racing")
-    registry = cast(IWriteRunnerRegistry, hub.services.registry)
+    registry = cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry))
     runners_named = hub.default_adapter(HostEnrollmentService)._runners_named  # pyright: ignore[reportPrivateUsage]  # interleave the race
 
     def retire_after_read(runner_ids: Sequence[str]) -> list[RunnerRegistration]:

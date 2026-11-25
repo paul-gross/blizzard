@@ -12,6 +12,7 @@ from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.domain.delivery.ports.flows import IReadFlows, IWriteFlows
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support.flow_driver_world import World
@@ -68,7 +69,7 @@ def test_no_tenant_owned_flow_instance_is_shared_across_tenants(tmp_path: Path) 
     hub = build_hub(tmp_path)
     first = _held(hub, StoreScope(default_tenant(hub.engine)))
     second_tenant = StoreScope(add_tenant(hub.engine, "second"))
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
     second = _held(hub, second_tenant)
 
     assert [name for name, instance in first.items() if instance is second[name]] == []

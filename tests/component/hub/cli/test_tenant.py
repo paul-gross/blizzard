@@ -18,6 +18,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import AUTH_MODE_OAUTH
+from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
 from tests.support.scaffolding import HubHarness, build_hub, default_tenant, seed_hub_admin, seed_session, seed_user
@@ -86,7 +87,7 @@ def test_create_names_its_admin_and_rename_keeps_the_id(hub: HubHarness, cli: Cl
 def test_a_created_tenants_default_project_records_the_cli_as_its_door(hub: HubHarness, cli: Cli) -> None:
     tenant = TenantId(_created(cli("tenant", "create", "acme")))
 
-    [project] = hub.open_services(tenant).projects.list_all()
+    [project] = hub.resolve(tenant, IReadProjectRepository).list_all()
     c = schema.config_changes.c
     with hub.engine.connect() as conn:
         doors = conn.execute(

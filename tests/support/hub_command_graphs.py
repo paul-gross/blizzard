@@ -6,7 +6,8 @@ from collections.abc import Mapping
 
 import httpx2
 
-from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from tests.support.scaffolding import (
     HubHarness,
     pointer_token,
@@ -72,9 +73,9 @@ def to_merge_node(
     assert claim.status_code == 201, claim.text
     build_node_id = claim.json()["envelope"]["node"]["node_id"]
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
-    graph = hub.services.graphs.get(chunk.graph_id)
+    graph = hub.default_adapter(IReadGraphRepository).get(chunk.graph_id)
     assert graph is not None
     return chunk_id, build_node_id, graph
 

@@ -20,10 +20,13 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.hub_event_types import HubEventType
+from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import DecisionClosed
-from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
+from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository, IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.execution.decisions import DecisionService
+from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.operations.restart import RestartService
 from blizzard.hub.domain.operations.stop import StopService
@@ -46,21 +49,21 @@ from tests.support.scaffolding import (
 
 
 def _chunk_of(hub: HubHarness, decision_id: str) -> str:
-    decision = hub.services.chunks.decisions.get_decision(decision_id)
+    decision = hub.default_adapter(IReadChunkDecisionsRepository).get_decision(decision_id)
     assert decision is not None
     return decision.chunk_id
 
 
 def _stop(hub: HubHarness, chunk_id: str) -> None:
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     hub.default_adapter(StopService).stop(chunk, by="operator")
 
 
 def _restart_onto_gate(hub: HubHarness, chunk_id: str) -> None:
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
-    graph = hub.services.graphs.get(chunk.graph_id)
+    graph = hub.default_adapter(IReadGraphRepository).get(chunk.graph_id)
     assert graph is not None
     hub.default_adapter(RestartService).restart(chunk, graph, node_name="approve-gate", by="operator")
 
@@ -204,7 +207,7 @@ def test_a_resolution_reads_and_writes_on_the_token_its_chunk_lock_returned(tmp_
         retired=RetiredRunnerGuard(registry=cast(Any, None)),
         clock=hub.clock,
         closer_available=lambda _source: False,
-        events=hub.services.event_log,
+        events=hub.default_adapter(EventLogService),
     )
     decision = stores.decisions.get_decision(decision_id)
     assert decision is not None

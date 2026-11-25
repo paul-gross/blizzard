@@ -2,7 +2,7 @@
 
 from typing import NamedTuple, cast
 
-from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, IWriteRunnerRegistry
 from tests.support.scaffolding import HubHarness, seed_runner
 
 
@@ -18,7 +18,7 @@ def seed_credential_runners(hub: HubHarness, *, register_live: bool = True) -> C
     revoked = seed_runner(hub, "revoked")
     retired = seed_runner(hub, "retired")
     assert hub.client.post("/api/runners/revoked/token-revocations", json={"by": "operator"}).status_code == 201
-    cast(IWriteRunnerRegistry, hub.services.registry).record_lifecycle(
+    cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry)).record_lifecycle(
         "retired", retired=True, at=hub.clock.now(), by="operator", expected_lifecycle=0
     )
     return CredentialRunners(live, revoked, retired)

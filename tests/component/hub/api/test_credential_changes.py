@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.credentials import (
     CredentialDraft,
@@ -26,7 +27,7 @@ def hub(tmp_path: Path) -> HubHarness:
 
 
 def test_a_credentials_changes_read_labelled_by_its_current_slug_and_filter_by_it(hub: HubHarness) -> None:
-    authoring = hub.services.config_authoring
+    authoring = hub.default_adapter(ConfigAuthoring)
     forge = authoring.create_forge("ghe", "Acme GHE", "github", ForgeFields("https://ghe.acme/api/v3", None), _CLI)
     draft = CredentialDraft(
         slug="deploy",

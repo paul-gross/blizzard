@@ -21,11 +21,13 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine, RoutineAuthoring
 from blizzard.hub.domain.garden.runs.history import GardenRunService
 from blizzard.hub.domain.garden.runs.run import RunService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.operations.queue import GroupService
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
@@ -50,7 +52,7 @@ _UNTIL = datetime(2026, 8, 1, tzinfo=UTC)
 
 
 def _default_graph(hub: HubHarness) -> Graph:
-    return hub.services.default_graph.ensure_default(
+    return hub.default_adapter(DefaultGraphService).ensure_default(
         PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
 
@@ -378,7 +380,7 @@ def test_run_delta_reads_back_added_observed_and_gone(tmp_path: Path) -> None:
     _seed_add_fact(hub, "fin_new", finding_set_id="fins_1")
     _seed_finding_fact(hub, "fin_seen", kind="observed", finding_set_id="fins_1")
 
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     delta = hub.default_adapter(GardenRunService).run_delta(chunk)
 
@@ -410,7 +412,7 @@ def test_an_observed_op_naming_no_finding_row_still_renders_by_id(tmp_path: Path
     findings: list[dict[str, object]] = [{"op": "observed", "id": "fin_ghost"}]
     _seed_delivery(hub, chunk_id, "fins_1", artifact_id="art_1", findings=findings)
 
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     delta = hub.default_adapter(GardenRunService).run_delta(chunk)
 
@@ -434,7 +436,7 @@ def test_an_add_predating_the_finding_set_link_renders_with_no_matched_id(tmp_pa
     # The add's own fact predates the linkage: no `finding_set_id` recorded on it.
     _seed_add_fact(hub, "fin_old", finding_set_id=None)
 
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     delta = hub.default_adapter(GardenRunService).run_delta(chunk)
 
@@ -459,7 +461,7 @@ def test_run_delta_keeps_several_delivered_sets_separately_grouped(tmp_path: Pat
     _seed_delivery(hub, chunk_id, "fins_2", artifact_id="art_2", findings=second)
     _seed_add_fact(hub, "fin_2", finding_set_id="fins_2")
 
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     delta = hub.default_adapter(GardenRunService).run_delta(chunk)
 
@@ -490,8 +492,8 @@ def test_run_delta_query_count_does_not_grow_with_delivered_set_count(tmp_path: 
         _seed_delivery(hub, many_chunk_id, f"many_fins_{i}", artifact_id=f"many_art_{i}", findings=findings)
         _seed_add_fact(hub, f"many_fin_{i}", finding_set_id=f"many_fins_{i}")
 
-    few_chunk = hub.services.chunks.record.get(few_chunk_id)
-    many_chunk = hub.services.chunks.record.get(many_chunk_id)
+    few_chunk = hub.default_adapter(IReadChunkRecordRepository).get(few_chunk_id)
+    many_chunk = hub.default_adapter(IReadChunkRecordRepository).get(many_chunk_id)
     assert few_chunk is not None and many_chunk is not None
 
     few_count = count_queries(hub.engine, lambda: hub.default_adapter(GardenRunService).run_delta(few_chunk))
@@ -523,7 +525,7 @@ def test_a_chunk_that_absorbed_another_runs_work_ref_still_reads_its_own_identit
 
     hub.default_adapter(GroupService).group(survivor_id, [merged_id])
 
-    survivor_chunk = hub.services.chunks.record.get(survivor_id)
+    survivor_chunk = hub.default_adapter(IReadChunkRecordRepository).get(survivor_id)
     assert survivor_chunk is not None
     delta = hub.default_adapter(GardenRunService).run_delta(survivor_chunk)
     assert delta is not None
@@ -547,7 +549,7 @@ def test_run_delta_answers_every_sets_finding_ids_across_a_batch_boundary(
         _seed_delivery(hub, chunk_id, f"fins_{i}", artifact_id=f"art_{i}", findings=findings)
         _seed_add_fact(hub, f"fin_{i}", finding_set_id=f"fins_{i}")
 
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     delta = hub.default_adapter(GardenRunService).run_delta(chunk)
 

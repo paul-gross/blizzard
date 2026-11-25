@@ -27,12 +27,19 @@ from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryI
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceFields, WorkSourceId
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
+from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.forge.auth import ForgeScope, ScopedAuthorizations
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgets, ForgePriority, SweepingGate
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, WriteLocks
 from blizzard.hub.secrets import hub_key_provider
+from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
+from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
+from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.schema import repositories, work_sources
 from blizzard.hub.tenancy import StoreScope
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
@@ -87,7 +94,7 @@ class _World:
         keys = hub_key_provider({}, data_dir=tmp_path / "data")
         clock = FixedClock(_NOW)
         core = configured_core(self.engine, tmp_path, clock=clock)
-        self.stores = core.open(StoreScope(default_tenant(self.engine)))
+        self.tenant_scope = core.tenants.open(StoreScope(default_tenant(self.engine))).resolver
         self.authoring = config_authoring(self.engine, keys=keys, clock=clock)
         self.authoring.create_secret(SecretName.parse("gh"), "tok-1", OP)
         self.forge_id = seed_forge(self.engine, "http://forge.fixture")
@@ -101,15 +108,15 @@ class _World:
             ),
             OP,
         ).work_source_id
-        live = tenant_live(self.stores)
+        live = tenant_live(self.tenant_scope)
         self.requests: list[httpx2.Request] = []
         self.headers: dict[str, str] = {}
         self.bindings: dict[str, ForgeBinding] = {}
         self.budgets = _Budgets()
         self.registry = ForgeRegistry(
-            records=self.stores.repository_records,
-            forges=self.stores.forge_records,
-            credentials=self.stores.credential_records,
+            records=self.tenant_scope.get(RepositoryRecordStore),
+            forges=self.tenant_scope.get(ForgeRecordStore),
+            credentials=self.tenant_scope.get(CredentialRecordStore),
             objects=live.objects,
             authorizations=live.authorizations,
             build=self._build,
@@ -119,15 +126,15 @@ class _World:
             dialects=rate_dialect,
         )
         self.sources = WorkSourceEntry.registry(
-            records=self.stores.work_source_records,
-            forges=self.stores.forge_records,
-            credentials=self.stores.credential_records,
+            records=self.tenant_scope.get(WorkSourceRecordStore),
+            forges=self.tenant_scope.get(ForgeRecordStore),
+            credentials=self.tenant_scope.get(CredentialRecordStore),
             objects=live.objects,
             authorizations=ScopedAuthorizations(live.authorizations, ForgeScope.WORK_SOURCE),
-            users=core.process.resolver.get(IReadUserRepository),
-            work_item_store=self.stores.work_item_store,
-            edits=self.stores.work_item_edits,
-            resolution=self.stores.tenant.get(GardenProposalDeliveryResolution),
+            users=core.resolver.get(IReadUserRepository),
+            work_item_store=self.tenant_scope.get(WorkItemStore),
+            edits=self.tenant_scope.get(WorkItemEditService),
+            resolution=self.tenant_scope.get(GardenProposalDeliveryResolution),
             budgets=self.budgets,
         )
 
@@ -154,7 +161,7 @@ class _World:
         return source
 
     def replace(self, name: str, value: str) -> None:
-        secret = self.stores.secrets.get(name)
+        secret = self.tenant_scope.get(SecretStore).get(name)
         assert secret is not None
         self.authoring.replace_secret(secret, value, OP)
 

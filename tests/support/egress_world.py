@@ -33,7 +33,7 @@ from blizzard.hub.domain.observability.egress.ports import (
 from blizzard.hub.domain.observability.egress.sweep import EgressSweep
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
-from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
@@ -159,7 +159,7 @@ def project_of(row: dict[str, object]) -> tuple[object, object, object]:
 
 def home_project(hub: HubHarness) -> tuple[str, str, str]:
     """The default tenant's only project as ``(project_id, slug, name)``."""
-    project = hub.services.projects.get(ProjectId(default_project(hub.engine)))
+    project = hub.default_adapter(IReadProjectRepository).get(ProjectId(default_project(hub.engine)))
     assert project is not None
     return (project.project_id, project.slug, project.name)
 

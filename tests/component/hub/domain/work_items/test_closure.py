@@ -21,11 +21,14 @@ from blizzard.hub.domain.chunk.model import (
     WorkItemCloseOutcome,
     WorkRef,
 )
-from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
-from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
-from blizzard.hub.domain.chunk.ports.events import IWriteChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
+from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository, IWriteChunkDeliveryRepository
+from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository, IWriteChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository, IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.work_items.closure import (
     CloseDrainSweep,
@@ -56,7 +59,7 @@ def _event_log(hub: HubHarness) -> EventLogService:
     test that wires its own :class:`CloseIntentDrainer` rather than taking
     the container's :class:`CloseDrainSweep`."""
     return EventLogService(
-        events=cast(IWriteChunkEventsRepository, hub.services.chunks.events),
+        events=cast(IWriteChunkEventsRepository, hub.default_adapter(IReadChunkEventsRepository)),
         publisher=hub.events,
     )
 
@@ -70,10 +73,10 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
     the current landing truth :func:`~blizzard.hub.domain.chunk.model.has_landed_repos` reads
     independent of any real graph/node machinery. Enqueues a pending close
     intent as a side effect of the same write."""
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
-        cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
+        cast(IWriteChunkArtifactsRepository, hub.default_adapter(IReadChunkArtifactsRepository)).record_hub_artifact(
             chunk_id,
             node_id="nd_deliver",
             node_name="deliver",
@@ -93,7 +96,9 @@ def test_record_work_item_closure_retires_the_matching_pending_intent(tmp_path: 
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
 
-    wrote = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
+    wrote = cast(
+        IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository)
+    ).record_work_item_closure(
         chunk_id,
         pointer=WorkRef(source="default", ref="1"),
         outcome=WorkItemCloseOutcome.CLOSED,
@@ -102,7 +107,7 @@ def test_record_work_item_closure_retires_the_matching_pending_intent(tmp_path: 
     )
 
     assert wrote is True
-    assert hub.services.chunks.delivery.pending_close_intents() == []
+    assert hub.default_adapter(IReadChunkDeliveryRepository).pending_close_intents() == []
 
 
 def test_record_work_item_closure_replay_still_retires_an_interrupted_intent(tmp_path: Path) -> None:
@@ -113,22 +118,26 @@ def test_record_work_item_closure_replay_still_retires_an_interrupted_intent(tmp
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
     pointer = WorkRef(source="default", ref="1")
-    cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
+    cast(IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository)).record_work_item_closure(
         chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.CLOSED, reason=None, at=hub.clock.now()
     )
 
-    wrote = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
+    wrote = cast(
+        IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository)
+    ).record_work_item_closure(
         chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.CLOSED, reason=None, at=hub.clock.now()
     )
 
     assert wrote is False  # no fresh outcome row — this is a replay
-    assert hub.services.chunks.delivery.pending_close_intents() == []  # retirement still finished
+    assert hub.default_adapter(IReadChunkDeliveryRepository).pending_close_intents() == []  # retirement still finished
 
 
 def test_record_work_item_closure_against_a_never_enqueued_ref_writes_no_intent_row(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
 
-    wrote = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
+    wrote = cast(
+        IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository)
+    ).record_work_item_closure(
         "ch_nonexistent",
         pointer=WorkRef(source="default", ref="1"),
         outcome=WorkItemCloseOutcome.CLOSED,
@@ -137,7 +146,7 @@ def test_record_work_item_closure_against_a_never_enqueued_ref_writes_no_intent_
     )
 
     assert wrote is True  # the outcome fact itself is unconditional
-    assert hub.services.chunks.delivery.pending_close_intents() == []
+    assert hub.default_adapter(IReadChunkDeliveryRepository).pending_close_intents() == []
 
 
 def test_record_work_item_closure_failed_outcome_leaves_the_intent_pending(tmp_path: Path) -> None:
@@ -146,12 +155,12 @@ def test_record_work_item_closure_failed_outcome_leaves_the_intent_pending(tmp_p
     _land(hub, chunk_id)
     pointer = WorkRef(source="default", ref="1")
 
-    cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
+    cast(IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository)).record_work_item_closure(
         chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.FAILED, reason="boom", at=hub.clock.now()
     )
 
     # Not retired: still pending, carrying the one attempt it just ticked.
-    [intent] = hub.services.chunks.delivery.pending_close_intents()
+    [intent] = hub.default_adapter(IReadChunkDeliveryRepository).pending_close_intents()
     assert intent == PendingCloseIntent(chunk_id=chunk_id, ref=pointer)
     assert intent.attempt_count == 1
     assert intent.last_attempt_at == hub.clock.now()
@@ -161,7 +170,7 @@ def test_pending_close_intents_carries_each_intents_attempt_history(tmp_path: Pa
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
-    delivery = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery)
+    delivery = cast(IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository))
     [fresh] = delivery.pending_close_intents()
     assert (fresh.attempt_count, fresh.last_attempt_at) == (0, None)
 
@@ -184,7 +193,7 @@ def test_pending_close_intents_leaves_deferred_attempts_out_and_carries_the_newe
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
-    delivery = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery)
+    delivery = cast(IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository))
     [fresh] = delivery.pending_close_intents()
     failed_at = hub.clock.now()
     delivery.record_work_item_closure(
@@ -210,7 +219,7 @@ def test_pending_close_intents_of_an_intent_only_ever_deferred_reads_as_never_at
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
-    delivery = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery)
+    delivery = cast(IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository))
     [fresh] = delivery.pending_close_intents()
     resume_at = hub.clock.now() + timedelta(minutes=5)
     delivery.record_close_attempt_deferred(fresh.intent_id, at=hub.clock.now(), resume_at=resume_at)
@@ -225,7 +234,7 @@ def test_pending_close_intents_issues_a_flat_query_count_regardless_of_backlog_s
     """The due-check reads every intent's backoff history through one
     outer-joined, aggregated statement — never one query per intent."""
     hub = build_hub(tmp_path)
-    delivery = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery)
+    delivery = cast(IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository))
     for i in range(20):
         chunk_id = ingest(hub, [{"source": "default", "ref": str(i)}], promote=True)
         _land(hub, chunk_id)
@@ -253,17 +262,17 @@ def test_sweep_against_a_real_store_defers_a_turned_away_close_to_its_resume_at(
     _land(hub, chunk_id)
     resume_at = hub.clock.now() + timedelta(minutes=5)
     closer = FakeCloser(rate_refs={"1": resume_at})
-    delivery = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery)
+    delivery = cast(IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository))
     drainer = sweep_over(
         _corpus(hub),
         CloseIntentDrainer(
             delivery=delivery,
-            artifacts=hub.services.chunks.artifacts,
-            chunks=hub.services.chunks.record,
+            artifacts=hub.default_adapter(IReadChunkArtifactsRepository),
+            chunks=hub.default_adapter(IReadChunkRecordRepository),
             events=_event_log(hub),
             work_sources=WorkSourceRegistry({}, closers={"default": closer}),
             clock=hub.clock,
-            commit_links=hub.services.commit_links,
+            commit_links=hub.default_adapter(IReadLandedCommitLinks),
         ),
         hub.clock,
     )
@@ -300,13 +309,13 @@ def test_sweep_against_a_real_store_is_idempotent_on_a_second_pass(tmp_path: Pat
     drainer = sweep_over(
         _corpus(hub),
         CloseIntentDrainer(
-            delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
-            artifacts=hub.services.chunks.artifacts,
-            chunks=hub.services.chunks.record,
+            delivery=cast(IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository)),
+            artifacts=hub.default_adapter(IReadChunkArtifactsRepository),
+            chunks=hub.default_adapter(IReadChunkRecordRepository),
             events=_event_log(hub),
             work_sources=registry,
             clock=hub.clock,
-            commit_links=hub.services.commit_links,
+            commit_links=hub.default_adapter(IReadLandedCommitLinks),
         ),
         hub.clock,
     )
@@ -321,7 +330,7 @@ def test_sweep_against_a_real_store_is_idempotent_on_a_second_pass(tmp_path: Pat
     drainer.sweep()
 
     assert closer.closed == [WorkRef(source="default", ref="1")]  # only the first pass actually closed it
-    assert hub.services.chunks.delivery.pending_close_intents() == []
+    assert hub.default_adapter(IReadChunkDeliveryRepository).pending_close_intents() == []
     assert len(_event_logged_frames(hub)) == 1  # the redelivered pass published no second frame
 
 
@@ -335,13 +344,13 @@ def test_sweep_retries_a_failed_intent_on_the_next_pass_until_it_converges(tmp_p
     drainer = sweep_over(
         _corpus(hub),
         CloseIntentDrainer(
-            delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
-            artifacts=hub.services.chunks.artifacts,
-            chunks=hub.services.chunks.record,
+            delivery=cast(IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository)),
+            artifacts=hub.default_adapter(IReadChunkArtifactsRepository),
+            chunks=hub.default_adapter(IReadChunkRecordRepository),
             events=_event_log(hub),
             work_sources=registry,
             clock=hub.clock,
-            commit_links=hub.services.commit_links,
+            commit_links=hub.default_adapter(IReadLandedCommitLinks),
         ),
         hub.clock,
     )
@@ -354,7 +363,8 @@ def test_sweep_retries_a_failed_intent_on_the_next_pass_until_it_converges(tmp_p
     drainer.sweep()
 
     assert (
-        PendingCloseIntent(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.delivery.pending_close_intents()
+        PendingCloseIntent(chunk_id=chunk_id, ref=pointer)
+        not in hub.default_adapter(IReadChunkDeliveryRepository).pending_close_intents()
     )
     assert closer.closed == [pointer]
 
@@ -371,13 +381,13 @@ def test_sweep_over_a_repeated_failure_publishes_one_event_logged_frame(tmp_path
     drainer = sweep_over(
         _corpus(hub),
         CloseIntentDrainer(
-            delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
-            artifacts=hub.services.chunks.artifacts,
-            chunks=hub.services.chunks.record,
+            delivery=cast(IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository)),
+            artifacts=hub.default_adapter(IReadChunkArtifactsRepository),
+            chunks=hub.default_adapter(IReadChunkRecordRepository),
             events=_event_log(hub),
             work_sources=registry,
             clock=hub.clock,
-            commit_links=hub.services.commit_links,
+            commit_links=hub.default_adapter(IReadLandedCommitLinks),
         ),
         hub.clock,
     )
@@ -385,7 +395,7 @@ def test_sweep_over_a_repeated_failure_publishes_one_event_logged_frame(tmp_path
 
     drainer.sweep()
     # Not retired: still pending, carrying the attempt it just ticked.
-    [pending] = hub.services.chunks.delivery.pending_close_intents()
+    [pending] = hub.default_adapter(IReadChunkDeliveryRepository).pending_close_intents()
     assert (pending.ref, pending.attempt_count) == (pointer, 1)
 
     frames = _event_logged_frames(hub)
@@ -408,20 +418,20 @@ def test_sweep_over_an_intent_whose_source_has_no_closer_retires_it(tmp_path: Pa
     drainer = sweep_over(
         _corpus(hub),
         CloseIntentDrainer(
-            delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
-            artifacts=hub.services.chunks.artifacts,
-            chunks=hub.services.chunks.record,
+            delivery=cast(IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository)),
+            artifacts=hub.default_adapter(IReadChunkArtifactsRepository),
+            chunks=hub.default_adapter(IReadChunkRecordRepository),
             events=_event_log(hub),
             work_sources=registry,
             clock=hub.clock,
-            commit_links=hub.services.commit_links,
+            commit_links=hub.default_adapter(IReadLandedCommitLinks),
         ),
         hub.clock,
     )
 
     drainer.sweep()
 
-    assert hub.services.chunks.delivery.pending_close_intents() == []
+    assert hub.default_adapter(IReadChunkDeliveryRepository).pending_close_intents() == []
     frames = _event_logged_frames(hub)
     assert [frame["kind"] for frame in frames] == ["work-item-close-skipped"]
     drainer.sweep()
@@ -439,13 +449,13 @@ def test_mixed_legacy_intents_close_and_skip_once(tmp_path: Path) -> None:
     drainer = sweep_over(
         _corpus(hub),
         CloseIntentDrainer(
-            delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
-            artifacts=hub.services.chunks.artifacts,
-            chunks=hub.services.chunks.record,
+            delivery=cast(IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository)),
+            artifacts=hub.default_adapter(IReadChunkArtifactsRepository),
+            chunks=hub.default_adapter(IReadChunkRecordRepository),
             events=_event_log(hub),
             work_sources=WorkSourceRegistry({}, closers={"default": closer}),
             clock=hub.clock,
-            commit_links=hub.services.commit_links,
+            commit_links=hub.default_adapter(IReadLandedCommitLinks),
         ),
         hub.clock,
     )
@@ -454,7 +464,7 @@ def test_mixed_legacy_intents_close_and_skip_once(tmp_path: Path) -> None:
     drainer.sweep()
 
     assert closer.closed == [WorkRef("default", "1")]
-    assert hub.services.chunks.delivery.pending_close_intents() == []
+    assert hub.default_adapter(IReadChunkDeliveryRepository).pending_close_intents() == []
     assert sorted(frame["kind"] for frame in _event_logged_frames(hub)) == [
         "work-item-close-skipped",
         "work-item-closed",
@@ -476,7 +486,8 @@ def test_sweep_closes_a_landed_hub_born_chunks_item(tmp_path: Path) -> None:
     assert row is not None
     assert row.closure is WorkItemClosure.DELIVERED
     assert (
-        PendingCloseIntent(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.delivery.pending_close_intents()
+        PendingCloseIntent(chunk_id=chunk_id, ref=pointer)
+        not in hub.default_adapter(IReadChunkDeliveryRepository).pending_close_intents()
     )
 
 
@@ -493,7 +504,8 @@ def test_sweep_replayed_over_an_already_delivered_hub_item_is_a_clean_no_op(tmp_
 
     pointer = WorkRef(source="hub", ref=created["ref"])
     assert (
-        PendingCloseIntent(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.delivery.pending_close_intents()
+        PendingCloseIntent(chunk_id=chunk_id, ref=pointer)
+        not in hub.default_adapter(IReadChunkDeliveryRepository).pending_close_intents()
     )
 
 
@@ -504,16 +516,16 @@ def test_a_chunk_stopped_after_landing_still_closes_its_work_item(tmp_path: Path
     chunk_id = created["chunk_id"]
     _land(hub, chunk_id)
 
-    chunks = hub.services.chunks
+    delivery = hub.default_adapter(IReadChunkDeliveryRepository)
     assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "alice"}).status_code == 202
 
-    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in chunks.delivery.pending_close_intents()
+    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in delivery.pending_close_intents()
     hub.resolve_hub(CloseDrainSweep).sweep()
 
     row = WorkItemStore(hub_store_connections(hub.engine)).get("hub", created["ref"])
     assert row is not None
     assert row.closure is WorkItemClosure.DELIVERED
-    assert chunks.delivery.pending_close_intents() == []
+    assert delivery.pending_close_intents() == []
 
 
 def test_a_chunk_reaching_the_terminal_with_no_landing_enqueues_its_ref(tmp_path: Path) -> None:
@@ -521,7 +533,7 @@ def test_a_chunk_reaching_the_terminal_with_no_landing_enqueues_its_ref(tmp_path
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
 
     with chunk_unit(hub_store_connections(hub.engine), chunk_id) as tx:
-        cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
+        cast(IWriteChunkMovementRepository, hub.default_adapter(IReadChunkMovementRepository)).record_transition(
             transition_id="tr_seed_terminal",
             chunk_id=chunk_id,
             from_node_id=None,
@@ -537,9 +549,9 @@ def test_a_chunk_reaching_the_terminal_with_no_landing_enqueues_its_ref(tmp_path
             transaction=tx,
         )
 
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     assert facts.newest_transition_is_terminal()
-    assert hub.services.chunks.delivery.pending_close_intents() == [
+    assert hub.default_adapter(IReadChunkDeliveryRepository).pending_close_intents() == [
         PendingCloseIntent(chunk_id=chunk_id, ref=WorkRef(source="default", ref="1"))
     ]

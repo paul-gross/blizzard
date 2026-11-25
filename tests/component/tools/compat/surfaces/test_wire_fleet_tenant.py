@@ -18,7 +18,7 @@ from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from blizzard.tools.compat.surfaces.wire import classify_spec_diff
 from tests.support.config_inputs import export_hub_app
 from tests.support.repo_files import repo_root
-from tests.support.scaffolding import add_tenant, build_hub, seed_runner
+from tests.support.scaffolding import add_tenant, build_hub, seed_runner_in
 
 _COMMITTED_SPEC = repo_root() / "openapi" / "hub.openapi.json"
 _FLEET = "/api/fleet"
@@ -99,7 +99,7 @@ def test_no_fleet_path_request_parameter_or_enum_changes_and_responses_grow_only
 def test_a_runners_own_hub_client_registers_and_is_identified_in_another_tenant(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     bravo = add_tenant(hub.engine, "bravo")
-    token = seed_runner(hub.open_services(bravo), "rn-bravo-1", name="r-bravo", register=False)
+    token = seed_runner_in(hub.process, bravo, "rn-bravo-1", name="r-bravo", register=False)
     assert hub.app is not None
     client = TestClient(hub.app, headers={"Authorization": f"Bearer {token}"})
     runner = HttpHubClient(client)

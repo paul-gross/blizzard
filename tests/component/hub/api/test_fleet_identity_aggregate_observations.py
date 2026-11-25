@@ -11,8 +11,9 @@ from pydantic import BaseModel
 from blizzard.hub.api.auth import RunnerAuth, RunnerPrincipal, require_runner_principal
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
 from blizzard.hub.api.fleet import FleetRequest
-from blizzard.hub.api.hub_level import Hub
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.version_window import VersionWindow
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
     AuthenticationRevokedProblem,
@@ -129,7 +130,7 @@ def test_runner_registration_and_reads_problem_variants(
                 def missing_runner(_runner_id: str) -> None:
                     return None
 
-                patch.setattr(hub.services.registry, "get_runner", missing_runner)
+                patch.setattr(hub.default_adapter(IReadRunnerRegistry), "get_runner", missing_runner)
                 return fleet
 
             hub.app.dependency_overrides[FleetRequest.of] = vanish_after_auth
@@ -139,10 +140,10 @@ def test_runner_registration_and_reads_problem_variants(
     with store_free(hub.app):
         observe(request(bearer(live)), 503, HubStoreUnavailableProblem)
 
-    def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
+    def close_before_resolution(request: Request) -> AdmittedTenant:
         principal = RunnerAuth.of(request).demand()
         close_tenant(hub.engine, principal.tenant_id)
-        services.tenants.open_tenants.refresh()
+        hub.resolve_hub(OpenTenants).refresh()
         return resolve_tenant(request)
 
     hub.app.dependency_overrides[resolve_tenant] = close_before_resolution

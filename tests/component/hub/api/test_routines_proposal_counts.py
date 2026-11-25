@@ -19,6 +19,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, Door, RecordKind
 from blizzard.hub.domain.garden.routines import Routine
+from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -130,7 +131,7 @@ def test_proposal_counts_reports_bucketed_counts_per_routine_and_class(tmp_path:
     assert body["since"] == iso_utc(_SINCE)
     assert body["until"] == iso_utc(_UNTIL)
     assert body["routine"] is None
-    [project] = hub.services.projects.list_all()
+    [project] = hub.default_adapter(IReadProjectRepository).list_all()
     assert body["rows"] == [
         {
             "origin": "routine-run",

@@ -12,7 +12,7 @@ from click.testing import Result
 
 from blizzard.auth_core import Role
 from blizzard.hub.cli import hub as hub_group
-from blizzard.hub.domain.runners.registration import RunnerRegistration
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerRegistration
 from tests.support.hub_cli_runner import ENV, HUB_URL
 from tests.support.scaffolding import HubHarness, build_hub, seed_session, seed_user
 from tests.support.worker_http import Bound, bind_stubs
@@ -55,7 +55,7 @@ def test_add_is_refused_to_a_signed_in_contributor_and_adds_nothing(tmp_path: Pa
     assert result.exit_code != 0
     assert "missing permission" in result.output
     assert "runner:add" in result.output
-    assert hub.services.registry.list_runners() == []
+    assert hub.default_adapter(IReadRunnerRegistry).list_runners() == []
 
 
 #: Each by-id runner verb, and a verb both twins take first so a hit has something to change.
@@ -75,7 +75,7 @@ def _runner_verb(bound: Bound, verb: str, runner_id: str) -> Result:
 
 
 def _states(hub: HubHarness, runner_ids: list[str]) -> dict[str, RunnerRegistration | None]:
-    return {runner_id: hub.services.registry.get_runner(runner_id) for runner_id in runner_ids}
+    return {runner_id: hub.default_adapter(IReadRunnerRegistry).get_runner(runner_id) for runner_id in runner_ids}
 
 
 @pytest.mark.parametrize(("verb", "first"), _BY_ID_VERBS)

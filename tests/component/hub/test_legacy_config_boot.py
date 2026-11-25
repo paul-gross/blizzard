@@ -9,10 +9,13 @@ import pytest
 
 from blizzard.hub import app as hub_app
 from blizzard.hub.config import ConfigError, HubConfig
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
+from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.secrets import ENV_SECRET_KEY
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from tests.support.config_inputs import build_hosted_hub_app, init_hub, load_hub_config
-from tests.support.scaffolding import tenant_services_of
+from tests.support.scaffolding import tenant_adapter_of
 
 _TOKEN_ENV = "BZ_WORK_SOURCE_TOKEN"
 _LEGACY_BLOCK = f"""
@@ -85,7 +88,9 @@ def test_an_imported_hub_with_its_legacy_keys_removed_starts(hub: HubConfig, mon
 
     app = build_hosted_hub_app(load_hub_config(hub.root))
     try:
-        assert sorted(tenant_services_of(app).work_sources.names()) == sorted([RESERVED_HUB_SOURCE_NAME, "blizzard"])
+        assert sorted(tenant_adapter_of(app, IWorkSourceRegistry).names()) == sorted(
+            [RESERVED_HUB_SOURCE_NAME, "blizzard"]
+        )
     finally:
         app.state.engine.dispose()
 
@@ -93,9 +98,8 @@ def test_an_imported_hub_with_its_legacy_keys_removed_starts(hub: HubConfig, mon
 def test_a_fresh_hub_without_legacy_keys_starts_with_an_empty_store(hub: HubConfig) -> None:
     app = build_hosted_hub_app(load_hub_config(hub.root))
     try:
-        services = tenant_services_of(app)
-        assert services.work_sources.names() == [RESERVED_HUB_SOURCE_NAME]
-        assert services.work_source_records.list_all(include_retired=True) == []
-        assert services.repository_records.list_all(include_retired=True) == []
+        assert tenant_adapter_of(app, IWorkSourceRegistry).names() == [RESERVED_HUB_SOURCE_NAME]
+        assert tenant_adapter_of(app, IReadWorkSourceRepository).list_all(include_retired=True) == []
+        assert tenant_adapter_of(app, IReadRepositoryRecordRepository).list_all(include_retired=True) == []
     finally:
         app.state.engine.dispose()

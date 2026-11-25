@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from blizzard.hub.domain.graph.model import IReadGraphRepository
 from tests.support.scaffolding import build_hub
 
 _P1 = {"source": "default", "ref": "1"}
@@ -19,7 +20,7 @@ def test_an_empty_batch_is_a_422_and_mints_nothing(tmp_path: Path) -> None:
     assert resp.json()["detail"] == "at least one token required"
     assert hub.client.get("/api/chunks").json()["chunks"] == []
     # Refused before the default graph resolves, so none was minted for it.
-    assert hub.services.graphs.list_summaries() == []
+    assert hub.default_adapter(IReadGraphRepository).list_summaries() == []
 
 
 def test_two_tokens_naming_one_item_wrap_it_once_in_first_seen_order(tmp_path: Path) -> None:

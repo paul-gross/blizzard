@@ -34,6 +34,7 @@ from blizzard.hub.domain.observability.transcripts import (
     TranscriptIngestService,
 )
 from blizzard.hub.domain.tenancy.teardown import TenantTeardown
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.env_timeline_store import EnvTimelineStore
@@ -118,7 +119,7 @@ def test_no_tenant_owned_observability_instance_is_shared_across_tenants(tmp_pat
     hub = build_hub(tmp_path)
     first = _held(hub, StoreScope(default_tenant(hub.engine)))
     second_tenant = StoreScope(add_tenant(hub.engine, "second"))
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
     second = _held(hub, second_tenant)
 
     assert [key.__qualname__ for key, instance in first.items() if instance is second[key]] == []
@@ -132,7 +133,6 @@ def test_the_hub_event_log_and_invariant_check_are_each_one_process_instance_eve
     event_log = process.get(HubEventLogService)
     check = process.get(HubInvariantCheck)
     tenant = StoreScope(default_tenant(hub.engine))
-    assert hub.core is not None
 
     assert hub.process.tenants.resolve(tenant, HubEventLogService) is event_log
     assert hub.resolve_hub(HubEventLogService) is event_log

@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.order import LandingOrderConflict
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
 from tests.support.scaffolding import HubHarness, build_hub
@@ -177,7 +178,7 @@ def test_an_apply_planned_before_a_whole_order_put_is_refused_at_its_project_ent
     def put_b_c_a() -> None:
         _ok(hub.client.put(f"{_PROJECT}/landing-order", json={"repositories": ["b", "c", "a"]}))
 
-    _once_after(monkeypatch, hub.services.project_links, "repositories_of_projects", put_b_c_a)
+    _once_after(monkeypatch, hub.default_adapter(IReadProjectLinks), "repositories_of_projects", put_b_c_a)
     document = {"version": 2, "projects": [{"slug": "widgets", "landing_order": ["a", "c", "b"]}]}
 
     refused = hub.client.post("/api/config/apply", params={"dry_run": str(dry_run).lower()}, json=document)

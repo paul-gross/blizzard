@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import timedelta
 from pathlib import Path
 
+from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
 from blizzard.hub.domain.operations.queue import GroupService
 from tests.support.scaffolding import HubHarness, build_hub, capture_statements, pointer_token, write_chunk_pause_facts
 
@@ -297,7 +298,7 @@ def test_group_carries_a_folded_chunks_incoming_edge_onto_the_survivor(tmp_path:
     resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [target]})
     assert resp.status_code == 200, resp.text
 
-    deps = hub.services.chunks.dependencies
+    deps = hub.default_adapter(IReadChunkDependenciesRepository)
     assert deps.standing_edge(x, survivor) is not None
     assert deps.standing_edge(x, target) is None
 
@@ -313,7 +314,7 @@ def test_group_carries_a_folded_chunks_outgoing_edge_onto_the_survivor(tmp_path:
     resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [target]})
     assert resp.status_code == 200, resp.text
 
-    deps = hub.services.chunks.dependencies
+    deps = hub.default_adapter(IReadChunkDependenciesRepository)
     assert deps.standing_edge(survivor, y) is not None
     assert deps.standing_edge(target, y) is None
 
@@ -328,7 +329,7 @@ def test_group_of_a_fold_internal_edge_mints_no_self_edge(tmp_path: Path) -> Non
     resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [target]})
     assert resp.status_code == 200, resp.text
 
-    standing = hub.services.chunks.dependencies.list_standing_edges()
+    standing = hub.default_adapter(IReadChunkDependenciesRepository).list_standing_edges()
     assert not any(e.dependent_chunk_id == survivor and e.prerequisite_chunk_id == survivor for e in standing)
 
 
@@ -344,7 +345,7 @@ def test_group_carrying_a_duplicate_of_a_standing_survivor_edge_mints_nothing_ex
     resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [target]})
     assert resp.status_code == 200, resp.text
 
-    standing = hub.services.chunks.dependencies.list_standing_edges()
+    standing = hub.default_adapter(IReadChunkDependenciesRepository).list_standing_edges()
     matching = [e for e in standing if e.dependent_chunk_id == survivor and e.prerequisite_chunk_id == outside]
     assert len(matching) == 1
 
@@ -357,12 +358,12 @@ def test_group_refuses_a_fold_that_would_close_a_cycle_and_writes_nothing(tmp_pa
     survivor, target, mid = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2), _ingest_backlog(hub, 3)
     _declare(hub, survivor, mid)
     _declare(hub, mid, target)
-    before = hub.services.chunks.dependencies.list_standing_edges()
+    before = hub.default_adapter(IReadChunkDependenciesRepository).list_standing_edges()
 
     resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [target]})
 
     assert resp.status_code == 409, resp.text
-    assert hub.services.chunks.dependencies.list_standing_edges() == before
+    assert hub.default_adapter(IReadChunkDependenciesRepository).list_standing_edges() == before
     assert hub.client.get(f"/api/chunks/{target}").status_code == 200
     assert hub.client.get(f"/api/chunks/{survivor}").status_code == 200
 
@@ -382,7 +383,7 @@ def test_no_standing_edge_names_a_grouped_away_chunk_after_any_fold(tmp_path: Pa
     assert resp.status_code == 200, resp.text
 
     grouped_away = {target}
-    for edge in hub.services.chunks.dependencies.list_standing_edges():
+    for edge in hub.default_adapter(IReadChunkDependenciesRepository).list_standing_edges():
         assert edge.dependent_chunk_id not in grouped_away
         assert edge.prerequisite_chunk_id not in grouped_away
 

@@ -20,7 +20,10 @@ from blizzard.hub.domain.cadence.services import CadenceAttention, CadenceAuthor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository, RoutineAuthoring
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
+from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.domain.urgency.model import UrgencyId
+from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.hub.store import schema as s
@@ -70,7 +73,7 @@ def _retired(hub: HubHarness, slug: str) -> str:
 
 
 def _routine(hub: HubHarness, slug: str = "nightly", *, default_urgency: str | None = None) -> str:
-    graph = hub.services.default_graph.ensure_default(
+    graph = hub.default_adapter(DefaultGraphService).ensure_default(
         PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     routine = hub.default_adapter(RoutineAuthoring).create(
@@ -79,13 +82,17 @@ def _routine(hub: HubHarness, slug: str = "nightly", *, default_urgency: str | N
         slug=slug,
         graph_name=graph.name,
         default_scope_slug=ScopeSlug.parse(slug),
-        default_urgency=None if default_urgency is None else hub.services.urgency_reading.named("u", default_urgency),
+        default_urgency=None
+        if default_urgency is None
+        else hub.default_adapter(UrgencyReading).named("u", default_urgency),
     )
     return routine.routine_id
 
 
 def _proposal(hub: HubHarness) -> None:
-    hub.services.default_graph.ensure_default(PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml())
+    hub.default_adapter(DefaultGraphService).ensure_default(
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
+    )
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         "gprop_1",
         project_id=default_project(hub.engine),
@@ -113,7 +120,7 @@ def _cadence_mint(hub: HubHarness, *, chore_urgency: UrgencyId | None) -> Minted
         routines=hub.default_adapter(IReadRoutineRepository),
         routine_scopes=hub.default_adapter(IReadRoutineScopeRepository),
         scopes=hub.default_adapter(IReadScopeRepository),
-        graphs=hub.services.graphs,
+        graphs=hub.default_adapter(IReadGraphRepository),
     )
     facts = attention.facts([cadence])[cadence.project_id]
     (errand,) = errands(cadence, facts)
@@ -135,7 +142,9 @@ def test_a_hub_item_create_writes_the_default(hub: HubHarness) -> None:
 
 
 def test_a_garden_proposal_accept_writes_the_default(hub: HubHarness) -> None:
-    hub.services.default_graph.ensure_default(PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml())
+    hub.default_adapter(DefaultGraphService).ensure_default(
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
+    )
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         "gprop_1",
         project_id=default_project(hub.engine),
@@ -173,7 +182,7 @@ def test_a_cadence_mint_writes_the_default(hub: HubHarness) -> None:
         routines=hub.default_adapter(IReadRoutineRepository),
         routine_scopes=hub.default_adapter(IReadRoutineScopeRepository),
         scopes=hub.default_adapter(IReadScopeRepository),
-        graphs=hub.services.graphs,
+        graphs=hub.default_adapter(IReadGraphRepository),
     )
     facts = attention.facts([cadence])[cadence.project_id]
     (errand,) = errands(cadence, facts)

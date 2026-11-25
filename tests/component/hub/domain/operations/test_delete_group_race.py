@@ -20,7 +20,12 @@ from pathlib import Path
 from typing import cast
 
 from blizzard.hub.domain.chunk.dependencies import DependencyService, PrerequisiteScope
-from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.dependencies import (
+    FoldTarget,
+    IReadChunkDependenciesRepository,
+    IWriteChunkDependenciesRepository,
+)
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.operations.delete import DeleteService
 from blizzard.hub.domain.operations.queue import GroupService
@@ -28,7 +33,7 @@ from tests.support.scaffolding import HubHarness, build_hub, ingest
 
 
 def _writable_dependencies(hub: HubHarness) -> IWriteChunkDependenciesRepository:
-    return cast(IWriteChunkDependenciesRepository, hub.services.chunks.dependencies)
+    return cast(IWriteChunkDependenciesRepository, hub.default_adapter(IReadChunkDependenciesRepository))
 
 
 def test_a_delete_blocks_while_a_fold_holds_the_shared_lock_mid_rewrite(tmp_path: Path) -> None:
@@ -42,8 +47,8 @@ def test_a_delete_blocks_while_a_fold_holds_the_shared_lock_mid_rewrite(tmp_path
     prerequisite_id = ingest(hub, [{"source": "default", "ref": "prerequisite"}], promote=False)
     dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
 
-    dependent = hub.services.chunks.record.get(dependent_id)
-    prerequisite = hub.services.chunks.record.get(prerequisite_id)
+    dependent = hub.default_adapter(IReadChunkRecordRepository).get(dependent_id)
+    prerequisite = hub.default_adapter(IReadChunkRecordRepository).get(prerequisite_id)
     assert dependent is not None
     assert prerequisite is not None
     hub.default_adapter(DependencyService).declare(dependent, PrerequisiteScope(prerequisite.chunk_id), by="user:alice")
@@ -79,7 +84,7 @@ def test_a_delete_blocks_while_a_fold_holds_the_shared_lock_mid_rewrite(tmp_path
     delete_result: dict[str, object] = {}
 
     def _delete() -> None:
-        chunk = hub.services.chunks.record.get(dependent_id)
+        chunk = hub.default_adapter(IReadChunkRecordRepository).get(dependent_id)
         assert chunk is not None
         delete_result["id"] = hub.default_adapter(DeleteService).delete(chunk, by="operator")
 

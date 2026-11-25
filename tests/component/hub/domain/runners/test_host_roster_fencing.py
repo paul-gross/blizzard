@@ -15,8 +15,8 @@ import pytest
 from sqlalchemy import func
 
 from blizzard.hub.domain.execution.fleet import FleetService
-from blizzard.hub.domain.runners.host import IWriteHostRegistry
-from blizzard.hub.domain.runners.registration import RunnerRegistration
+from blizzard.hub.domain.runners.host import IReadHostRegistry, IWriteHostRegistry
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerRegistration
 from blizzard.hub.store import schema as s
 from tests.support.scaffolding import HubHarness, build_hub, emitted_events, hub_store_connections, seed_runner
 
@@ -47,7 +47,7 @@ def _retire_host(hub: HubHarness, host_id: str) -> Any:
 
 
 def _runner(hub: HubHarness, runner_id: str) -> RunnerRegistration:
-    runner = hub.services.registry.get_runner(runner_id)
+    runner = hub.default_adapter(IReadRunnerRegistry).get_runner(runner_id)
     assert runner is not None
     return runner
 
@@ -93,13 +93,13 @@ def hosted(hub: HubHarness) -> str:
 def test_a_release_after_a_crashed_retire_is_refused_until_the_rerun_finishes_it(
     hub: HubHarness, hosted: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    original = cast(IWriteHostRegistry, hub.services.hosts).record_retirement
+    original = cast(IWriteHostRegistry, hub.default_adapter(IReadHostRegistry)).record_retirement
 
     def crash_after_commit(*args: Any, **kwargs: Any) -> Any:
         original(*args, **kwargs)
         raise _Crash
 
-    monkeypatch.setattr(hub.services.hosts, "record_retirement", crash_after_commit)
+    monkeypatch.setattr(hub.default_adapter(IReadHostRegistry), "record_retirement", crash_after_commit)
     with pytest.raises(_Crash):
         _retire_host(hub, hosted)
     monkeypatch.undo()
@@ -120,7 +120,7 @@ def test_a_release_after_a_crashed_retire_is_refused_until_the_rerun_finishes_it
 def test_a_release_decided_before_the_host_retires_is_refused(
     hub: HubHarness, hosted: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _once_before(monkeypatch, hub.services.hosts, "release", lambda: _ok(_retire_host(hub, hosted)))
+    _once_before(monkeypatch, hub.default_adapter(IReadHostRegistry), "release", lambda: _ok(_retire_host(hub, hosted)))
 
     refused = _release(hub, hosted, "rn_a")
 
@@ -134,7 +134,7 @@ def test_an_adoption_decided_before_the_host_retires_is_refused(
 ) -> None:
     host_id = _add_host(hub)["host_id"]
     seed_runner(hub, "rn_a")
-    _once_before(monkeypatch, hub.services.hosts, "adopt", lambda: _ok(_retire_host(hub, host_id)))
+    _once_before(monkeypatch, hub.default_adapter(IReadHostRegistry), "adopt", lambda: _ok(_retire_host(hub, host_id)))
 
     refused = _adopt(hub, host_id, "rn_a")
 
@@ -149,14 +149,14 @@ def test_a_runner_added_by_a_host_that_retires_before_the_write_is_refused(
 ) -> None:
     added = _add_host(hub)
     host_id = added["host_id"]
-    _once_before(monkeypatch, hub.services.registry, "add", lambda: _ok(_retire_host(hub, host_id)))
+    _once_before(monkeypatch, hub.default_adapter(IReadRunnerRegistry), "add", lambda: _ok(_retire_host(hub, host_id)))
 
     refused = hub.client.post(
         "/api/fleet/host/runners", json={"name": "late"}, headers={"Authorization": f"Bearer {added['token']}"}
     )
 
     assert refused.status_code == 403, refused.text
-    assert hub.services.registry.list_runners(include_retired=True, host_id=host_id) == []
+    assert hub.default_adapter(IReadRunnerRegistry).list_runners(include_retired=True, host_id=host_id) == []
 
 
 @pytest.mark.parametrize("door", ["add", "adopt"])
@@ -165,7 +165,7 @@ def test_a_placement_of_a_runner_retired_before_the_write_is_refused(
 ) -> None:
     seed_runner(hub, "rn_a")
     retire_runner = lambda: _ok(hub.client.post("/api/runners/rn_a/retire", json={"by": "op"}))  # noqa: E731
-    _once_before(monkeypatch, hub.services.hosts, door, retire_runner)
+    _once_before(monkeypatch, hub.default_adapter(IReadHostRegistry), door, retire_runner)
 
     if door == "add":
         refused = hub.client.post("/api/hosts", json={"name": "box", "adopt": ["rn_a"]})
@@ -186,7 +186,7 @@ def test_a_retire_acts_on_the_roster_its_fact_left_not_the_one_it_first_read(
         _ok(_release(hub, hosted, "rn_a"))
         _ok(_adopt(hub, other, "rn_a"))
 
-    _once_before(monkeypatch, hub.services.hosts, "record_retirement", move_to_other)
+    _once_before(monkeypatch, hub.default_adapter(IReadHostRegistry), "record_retirement", move_to_other)
 
     retired = _retire_host(hub, hosted)
 
@@ -199,7 +199,9 @@ def test_a_retire_acts_on_the_roster_its_fact_left_not_the_one_it_first_read(
 def test_two_first_retires_of_one_host_write_one_fact(
     hub: HubHarness, hosted: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _once_before(monkeypatch, hub.services.hosts, "record_retirement", lambda: _ok(_retire_host(hub, hosted)))
+    _once_before(
+        monkeypatch, hub.default_adapter(IReadHostRegistry), "record_retirement", lambda: _ok(_retire_host(hub, hosted))
+    )
 
     second = _retire_host(hub, hosted)
 
@@ -248,7 +250,12 @@ def test_a_runner_adopted_before_the_retire_lands_is_retired_and_published(
     hub: HubHarness, hosted: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     seed_runner(hub, "rn_b")
-    _once_before(monkeypatch, hub.services.hosts, "record_retirement", lambda: _ok(_adopt(hub, hosted, "rn_b")))
+    _once_before(
+        monkeypatch,
+        hub.default_adapter(IReadHostRegistry),
+        "record_retirement",
+        lambda: _ok(_adopt(hub, hosted, "rn_b")),
+    )
     since = _last_event_id(hub)
 
     _ok(_retire_host(hub, hosted))
@@ -309,7 +316,7 @@ def test_a_release_naming_a_runner_moved_to_another_host_meanwhile_releases_none
         _ok(_release(hub, hosted, "rn_b"))
         _ok(_adopt(hub, other, "rn_b"))
 
-    _once_before(monkeypatch, hub.services.hosts, "release", move_b)
+    _once_before(monkeypatch, hub.default_adapter(IReadHostRegistry), "release", move_b)
 
     refused = hub.client.post(f"/api/hosts/{hosted}/releases", json={"runner_ids": ["rn_a", "rn_b"], "by": "op"})
 

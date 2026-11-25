@@ -34,13 +34,17 @@ from blizzard.hub.domain.actions.visit import Visit, resolve_visit
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository, IWriteChunkMovementRepository
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.delivery.flows import RECONCILE_FLOOR, Submission, Withdrawal
+from blizzard.hub.domain.delivery.ports.flows import IReadFlows
 from blizzard.hub.domain.delivery.reconcile import (
     FlowLineReconciler,
     _Standing,  # pyright: ignore[reportPrivateUsage]  # the patched submit seam is typed by this private record
 )
+from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.budget import BudgetKey, BudgetReading, ForgeBudgetLow, ForgeBudgets, ForgePriority
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
@@ -140,9 +144,9 @@ def test_a_worker_transition_onto_the_node_is_submitted_once_and_takes_its_turn(
 
     sub = _submitted_once(world, chunk_id)
 
-    record = world.hub.services.repository_records.list_all(include_retired=False)[0]
+    record = world.hub.default_adapter(IReadRepositoryRecordRepository).list_all(include_retired=False)[0]
     assert [flow.resource for flow in sub.flows] == [f"repo:{record.repository_id}/main"]
-    assert [(f.kind, f.outcome) for f in world.hub.services.flows.facts_of(sub.submission_id)] == [
+    assert [(f.kind, f.outcome) for f in world.hub.default_adapter(IReadFlows).facts_of(sub.submission_id)] == [
         ("submitted", None),
         ("turn-started", None),
         ("turn-ended", "pending"),
@@ -155,7 +159,6 @@ def test_controlled_step_reports_probe_failure_and_recovers(world: World, monkey
     driver = FlowDriver(world.stores, clock)
     app = create_hub_app(
         world.hub.wired_app.state.config,
-        services=world.hub.hub_services,
         process=world.hub.process,
         test_flow_router=flow_control_router(driver, clock, asyncio.Lock()),
     )
@@ -178,7 +181,6 @@ def test_controlled_step_completes_turn_and_move_does_not_run_or_publish(world: 
     lock = asyncio.Lock()
     app = create_hub_app(
         world.hub.wired_app.state.config,
-        services=world.hub.hub_services,
         process=world.hub.process,
         test_flow_router=flow_control_router(driver, clock, lock),
         controlled_clock_router=clock_router(clock, lock),
@@ -197,10 +199,10 @@ def test_controlled_step_completes_turn_and_move_does_not_run_or_publish(world: 
     # Consume the turn's wake, then a short move must not force another reconcile.
     assert client.post("/api/admin/test-flow/step").json()["reconciled"] == 1
     events = emitted_events(world.hub)
-    facts = world.hub.services.flows.facts_of(submissions[0].submission_id)
+    facts = world.hub.default_adapter(IReadFlows).facts_of(submissions[0].submission_id)
     assert client.post("/api/admin/clock", json={"advance_seconds": 1}).status_code == 200
     assert emitted_events(world.hub) == events
-    assert world.hub.services.flows.facts_of(submissions[0].submission_id) == facts
+    assert world.hub.default_adapter(IReadFlows).facts_of(submissions[0].submission_id) == facts
     assert world.action.passes == [chunk_id]
     assert client.post("/api/admin/test-flow/step").json()["skipped"] == 1
 
@@ -356,7 +358,7 @@ def test_a_chunk_that_lands_closes_with_its_verdict(world: World) -> None:
     assert world.detail(chunk_id)["status"] == "done"
     (sub,) = world.submissions(chunk_id)
     assert sub.closed == "landed"
-    facts = [(f.kind, f.outcome) for f in world.hub.services.flows.facts_of(sub.submission_id)]
+    facts = [(f.kind, f.outcome) for f in world.hub.default_adapter(IReadFlows).facts_of(sub.submission_id)]
     assert facts == [("submitted", None), ("turn-started", None), ("turn-ended", "landed"), ("withdrawn", "landed")]
 
 
@@ -429,7 +431,9 @@ def test_a_visit_that_cannot_name_its_resources_is_refused_at_submit_once(world:
     assert world.submissions(chunk_id) == []
     assert world.detail(chunk_id)["current_node_name"] == "build"
     hub_logs = [
-        a.name for a in world.hub.services.chunks.artifacts.load_artifacts(chunk_id) if a.name.startswith("hub-log")
+        a.name
+        for a in world.hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(chunk_id)
+        if a.name.startswith("hub-log")
     ]
     assert hub_logs == ["hub-log.repository-unresolved"]
     with world.hub.engine.connect() as conn:
@@ -470,7 +474,7 @@ class _Refusal:
 
 def _refusal(world: World, chunk_id: str, *, since: int) -> _Refusal:
     detail = world.detail(chunk_id)
-    artifacts = world.hub.services.chunks.artifacts.load_artifacts(chunk_id)
+    artifacts = world.hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(chunk_id)
     with world.hub.engine.connect() as conn:
         events = conn.execute(
             hub_scoped(select(s.event_log.c.kind).where(s.event_log.c.chunk_id == chunk_id).order_by(s.event_log.c.id))
@@ -570,7 +574,7 @@ def test_a_refusal_that_raises_part_way_commits_nothing_and_a_later_pass_records
 
     assert raised == [method if raises_at == "routing" else "record_event"]
     graph_id = at_merge[0]
-    landing = world.hub.services.graphs.get_enabled_by_name("landing")
+    landing = world.hub.default_adapter(IReadGraphRepository).get_enabled_by_name("landing")
     routed = {
         "node": (graph_id, "build", "running"),
         "cross-graph": (landing.graph_id if landing is not None else "", "merge", "delivering"),
@@ -708,12 +712,12 @@ def test_a_chunk_at_an_actionless_node_is_escalated_by_the_reconcile_one_epoch_u
                 .values(action=None, action_args=None, legacy_run="make land")
             )
         )
-    graph = world.hub.services.graphs.get(graph_id)
+    graph = world.hub.default_adapter(IReadGraphRepository).get(graph_id)
     assert graph is not None
     merge = graph.node_by_name("merge")
     assert merge is not None
     with chunk_unit(hub_store_connections(world.hub.engine), chunk_id) as tx:
-        cast(IWriteChunkMovementRepository, world.hub.services.chunks.movement).record_transition(
+        cast(IWriteChunkMovementRepository, world.hub.default_adapter(IReadChunkMovementRepository)).record_transition(
             transition_id="tr_parked",
             close_decision=decide_close_enqueue([WorkRef("default", "42")], lambda _: True),
             chunk_id=chunk_id,
@@ -827,7 +831,7 @@ def test_a_running_turn_is_never_swept(world: World) -> None:
     result = world.driver.tick(world.stores, world.hub.clock, running=frozenset({started.turn.turn_id}))
 
     assert result.interrupted == 0
-    assert [t.turn_id for t in world.hub.services.flows.open_turns()] == [started.turn.turn_id]
+    assert [t.turn_id for t in world.hub.default_adapter(IReadFlows).open_turns()] == [started.turn.turn_id]
 
 
 # --- boot -----------------------------------------------------------------------------------------------------------
@@ -848,7 +852,7 @@ def test_boot_ends_a_planted_open_turn_interrupted_once(world: World) -> None:
     assert FlowDriver(world.stores, world.hub.clock).recover_turns(world.tenant) == 0
 
     assert (world.count(s.event_log), world.count(s.flow_facts)) == (events, facts)
-    assert [(f.kind, f.outcome) for f in world.hub.services.flows.facts_of(sub.submission_id)][-1] == (
+    assert [(f.kind, f.outcome) for f in world.hub.default_adapter(IReadFlows).facts_of(sub.submission_id)][-1] == (
         "turn-ended",
         "interrupted",
     )
@@ -893,7 +897,7 @@ def _budget_events(world: World) -> list[tuple[str, str, dict[str, object]]]:
 
 
 def test_the_tick_drains_each_budget_notice_once_per_window_into_the_tenants_log(world: World) -> None:
-    budgets = world.hub.open_services(world.tenant).forge_budgets
+    budgets = world.hub.resolve(world.tenant, ForgeBudgets)
     key = BudgetKey("github", "secret/token")
     reset = world.hub.clock.now() + timedelta(minutes=2)
     headers = {
@@ -933,7 +937,7 @@ def test_the_tick_drains_each_budget_notice_once_per_window_into_the_tenants_log
 
 
 def test_a_new_window_drains_its_notice_again(world: World) -> None:
-    budgets = world.hub.open_services(world.tenant).forge_budgets
+    budgets = world.hub.resolve(world.tenant, ForgeBudgets)
     key = BudgetKey("github", None)
     for _ in range(2):
         reset = world.hub.clock.now() + timedelta(minutes=1)

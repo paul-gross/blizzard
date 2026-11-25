@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.models import User
-from blizzard.hub.domain.execution.fleet import FleetService
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
 from tests.support.scaffolding import (
@@ -21,7 +21,7 @@ from tests.support.scaffolding import (
     build_hub,
     default_tenant,
     runner_token,
-    seed_runner,
+    seed_runner_in,
     seed_session,
 )
 from tests.support.scaffolding import seed_user as _seed_user
@@ -32,7 +32,7 @@ _RUNNER = "rn_bravo"
 def _second_tenant(hub: HubHarness) -> TenantId:
     """A second tenant holding one runner, ``_RUNNER``, that the default tenant does not hold."""
     tenant = add_tenant(hub.engine, "bravo")
-    seed_runner(hub.open_services(tenant), _RUNNER, fleet=hub.resolve(tenant, FleetService))
+    seed_runner_in(hub.process, tenant, _RUNNER)
     return tenant
 
 
@@ -136,7 +136,7 @@ def test_a_runner_token_decides_its_tenant_and_a_disagreeing_header_answers_400(
 def test_under_auth_none_the_operator_acts_in_whichever_tenant_is_named(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     second = _second_tenant(hub)
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
 
     assert hub.client.get("/api/chunks").status_code == 409
     assert _runner_in(hub, second, {}) == 200

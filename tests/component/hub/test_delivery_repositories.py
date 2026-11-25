@@ -18,7 +18,10 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import decide_close_enqueue
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository, IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.credentials import IReadCredentialRepository
 from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
@@ -94,10 +97,10 @@ def _seed_at_deliver(
         )
         for repo, origin in repos
     ]
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
-        cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
+        cast(IWriteChunkMovementRepository, hub.default_adapter(IReadChunkMovementRepository)).record_transition(
             transition_id=f"tr_seed_{chunk_id}",
             close_decision=decide_close_enqueue(chunk.work_refs, lambda _: True),
             chunk_id=chunk_id,
@@ -264,7 +267,7 @@ def test_a_repository_retired_after_the_chunk_minted_still_resolves_but_a_chunk_
     hub.clock.advance(timedelta(hours=1))
     assert hub.client.post("/api/repositories/widget/retire").status_code == 200
     hub.clock.advance(timedelta(hours=1))
-    earlier_chunk = hub.services.chunks.record.get(earlier)
+    earlier_chunk = hub.default_adapter(IReadChunkRecordRepository).get(earlier)
     assert earlier_chunk is not None
     later = hub.client.post("/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": "2"})]}).json()[
         "chunk_id"
@@ -279,7 +282,7 @@ def test_a_repository_retired_after_the_chunk_minted_still_resolves_but_a_chunk_
 
     assert _visit(hub, earlier, earlier_nodes).outcome_choice == "landed"
     # The same tick refused the later chunk at submit: its repository resolves to nothing.
-    later_facts = hub.services.chunks.facts.load_facts(later)
+    later_facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(later)
     assert later_facts is not None and [t.choice_name for t in later_facts.transitions][-1] == "failure"
     assert len(forge.built) == 1
     assert "repository-unresolved" in _event_kinds(hub)
@@ -360,7 +363,9 @@ def test_an_unavailable_secret_of_any_record_refuses_the_visit_naming_the_reposi
             | {"secret_name": "other-forge-token"},
         ],
     )
-    retire_secrets(monkeypatch, hub.services.forges.authorizations, lambda name: name == "other-forge-token")
+    retire_secrets(
+        monkeypatch, hub.default_adapter(ForgeRegistry).authorizations, lambda name: name == "other-forge-token"
+    )
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver(hub, chunk_id, nodes, [("widget", None), ("gadget", None)])
     before = _event_kinds(hub)
@@ -406,7 +411,7 @@ def test_one_owner_and_name_on_two_forge_hosts_is_refused_before_land_naming_bot
     assert forge.built == []
     log = next(
         a.data
-        for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)
+        for a in hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(chunk_id)
         if a.name == "hub-log.repository-ambiguous"
     )
     ids = _ids(hub)

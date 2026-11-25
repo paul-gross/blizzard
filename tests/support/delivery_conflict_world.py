@@ -10,7 +10,7 @@ from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository, IWriteChunkMovementRepository
 from blizzard.hub.forge.landing import Check, Mergeability
 from blizzard.hub.graphs import PACKAGED
 from tests.support.github_double import GitHubDouble, forge_holding
@@ -35,7 +35,7 @@ def github_double(*repos: str, **state: Unpack[_RepoState]) -> GitHubDouble:
 
 
 def _writable_movement(hub: HubHarness) -> IWriteChunkMovementRepository:
-    return cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
+    return cast(IWriteChunkMovementRepository, hub.default_adapter(IReadChunkMovementRepository))
 
 
 def mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:

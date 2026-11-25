@@ -16,7 +16,7 @@ from blizzard.auth_core import Role
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository, IWriteChunkMovementRepository
 from blizzard.hub.forge.landing import Mergeability
 from tests.support.chunk_units import chunk_unit
 from tests.support.delivery_conflict_world import github_double, mint_and_claim, seed_at_deliver_with_an_unlanded_commit
@@ -93,7 +93,7 @@ def _writable_movement(hub: HubHarness) -> IWriteChunkMovementRepository:
     """A test-only cast: ``HubHarness.services.chunks`` is read-typed
     (``bzh:controller-read-only``), but the live object is always the write-capable
     seam adapter — mirrors ``tests/component/hub/test_delivery_conflict_routing.py``'s own helper."""
-    return cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
+    return cast(IWriteChunkMovementRepository, hub.default_adapter(IReadChunkMovementRepository))
 
 
 def _seeded_hub(tmp_path: Path, *, work_sources: dict[str, FakeWorkSource] | None = None):

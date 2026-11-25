@@ -6,6 +6,8 @@ from datetime import timedelta
 from pathlib import Path
 
 from blizzard.hub.domain.chunk.model import WorkRef, mint_chunk
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
+from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
@@ -39,7 +41,7 @@ def test_ingest_mints_a_chunk_pinned_to_the_default_graph(tmp_path: Path) -> Non
     assert detail["status"] == "not_ready"  # rests not-ready until promoted
     assert detail["work_refs"] == [{**_P1, "label": "default#1", "web_url": "http://forge.local/acme/widget/issues/1"}]
     # The default graph was minted on first ingest and the chunk pinned to it.
-    graphs = hub.services.graphs.list_summaries()
+    graphs = hub.default_adapter(IReadGraphRepository).list_summaries()
     assert [g.name for g in graphs] == ["default-delivery"]
     assert detail["graph_id"] == graphs[0].graph_id
 
@@ -60,7 +62,7 @@ def test_list_row_is_board_legible(tmp_path: Path) -> None:
     # configured source degrades to its raw `{source}#{ref}` label and a null web_url, minted straight through the domain.
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
-    graph = hub.services.default_graph.ensure_default(
+    graph = hub.default_adapter(DefaultGraphService).ensure_default(
         PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     unconfigured = WorkRef(source="retired", ref="9")

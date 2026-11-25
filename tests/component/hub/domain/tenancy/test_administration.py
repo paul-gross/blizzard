@@ -24,10 +24,11 @@ from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
 from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.graph.model import IWriteGraphRepository
+from blizzard.hub.domain.graph.model import IReadGraphRepository, IWriteGraphRepository
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
-from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectSlug
+from blizzard.hub.domain.projects.links import IReadProjectLinks
+from blizzard.hub.domain.projects.model import IReadProjectRepository, Project, ProjectEdit, ProjectSlug
 from blizzard.hub.domain.tenancy.administration import (
     TenantAdministration,
     TenantAdminUnknown,
@@ -36,6 +37,7 @@ from blizzard.hub.domain.tenancy.administration import (
 from blizzard.hub.domain.urgency.model import Urgency
 from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED, GraphFile
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
@@ -90,7 +92,7 @@ def _hub_sequence(hub: HubHarness, tenant: TenantId) -> list[tuple[str, int]]:
 
 
 def _graph_names(hub: HubHarness, tenant: TenantId) -> list[str]:
-    return sorted({g.name for g in hub.open_services(tenant).graphs.list_summaries()})
+    return sorted({g.name for g in hub.resolve(tenant, IReadGraphRepository).list_summaries()})
 
 
 @pytest.fixture
@@ -176,7 +178,7 @@ def test_a_created_tenants_default_project_is_stored_with_a_palette_color(hub: H
 
 
 def _default_project(hub: HubHarness, tenant: TenantId) -> Project:
-    project = hub.open_services(tenant).projects.get_by_slug(ProjectSlug.parse("default"))
+    project = hub.resolve(tenant, IReadProjectRepository).get_by_slug(ProjectSlug.parse("default"))
     assert project is not None
     return project
 
@@ -184,7 +186,7 @@ def _default_project(hub: HubHarness, tenant: TenantId) -> Project:
 def test_a_created_tenant_reads_its_default_project_the_moment_its_creation_commits(hub: HubHarness) -> None:
     created = hub.resolve_hub(TenantAdministration).create("acme", admin_user_id=None, by="usr_creator")
 
-    projects = hub.open_services(created.tenant_id).projects.list_all()
+    projects = hub.resolve(created.tenant_id, IReadProjectRepository).list_all()
 
     assert [(p.slug, p.name, p.description, p.revision, p.created_at) for p in projects] == [
         ("default", "Default", "", 1, created.created_at)
@@ -199,13 +201,13 @@ def test_two_tenants_each_hold_a_default_project_of_their_own(hub: HubHarness) -
 
     assert len(set(held.values())) == 2
     for tenant, project_id in held.items():
-        assert [p.project_id for p in hub.open_services(tenant).projects.list_all()] == [project_id]
+        assert [p.project_id for p in hub.resolve(tenant, IReadProjectRepository).list_all()] == [project_id]
 
 
 def test_the_default_project_draws_from_the_hub_source_with_no_stored_link(hub: HubHarness) -> None:
     created = hub.resolve_hub(TenantAdministration).create("acme", admin_user_id=None, by="usr_creator")
     project = _default_project(hub, created.tenant_id)
-    links = hub.open_services(created.tenant_id).project_links
+    links = hub.resolve(created.tenant_id, IReadProjectLinks)
 
     assert links.linked_at(project.project_id, RESERVED_HUB_SOURCE_NAME, hub.clock.now())
     assert links.sources_of(project.project_id) == []
@@ -220,7 +222,7 @@ def test_the_default_project_draws_from_the_hub_source_with_no_stored_link(hub: 
 
 def test_the_default_project_is_renamed_and_its_slug_moved_like_any_other(hub: HubHarness) -> None:
     created = hub.resolve_hub(TenantAdministration).create("acme", admin_user_id=None, by="usr_creator")
-    services = hub.open_services(created.tenant_id)
+    projects = hub.resolve(created.tenant_id, IReadProjectRepository)
     project = _default_project(hub, created.tenant_id)
 
     edited = hub.resolve(created.tenant_id, ProjectAuthoring).edit(
@@ -228,9 +230,9 @@ def test_the_default_project_is_renamed_and_its_slug_moved_like_any_other(hub: H
     )
 
     assert (edited.project_id, edited.slug, edited.name, edited.revision) == (project.project_id, "main", "Main", 2)
-    assert services.projects.get_by_slug(ProjectSlug.parse("default")) is None
-    assert services.projects.get_by_former_slug(ProjectSlug.parse("default")) == edited
-    assert services.projects.list_all() == [edited]
+    assert projects.get_by_slug(ProjectSlug.parse("default")) is None
+    assert projects.get_by_former_slug(ProjectSlug.parse("default")) == edited
+    assert projects.list_all() == [edited]
 
 
 def test_the_named_admin_is_granted_admin_and_the_creator_nothing(hub: HubHarness) -> None:
@@ -276,7 +278,7 @@ def test_a_creation_interrupted_after_its_mints_leaves_no_partial_tenant(hub: Hu
         ),
         units=lambda tenant: HubTransactions(hub_level_connections(hub.engine).scoped(StoreScope(tenant))),
         mint_packaged=mint_then_fail,
-        changed=hub.hub_services.tenants.open_tenants.refresh,
+        changed=hub.resolve_hub(OpenTenants).refresh,
         pick=first_color,
         clock=hub.clock,
     )
@@ -329,7 +331,7 @@ def test_a_rename_to_a_name_without_a_tenant_names_shape_is_refused_and_renames_
         admin.rename(created.tenant_id, name)
 
     assert {t.tenant_id: t.name for t in admin.list_tenants()}[created.tenant_id] == "acme"
-    assert hub.hub_services.tenants.open_tenants.name(created.tenant_id) == "acme"
+    assert hub.resolve_hub(OpenTenants).name(created.tenant_id) == "acme"
 
 
 @pytest.mark.parametrize("name", ["x" * 64, "acme corp", "a"], ids=["64-characters", "an-inner-space", "one-character"])
@@ -344,7 +346,7 @@ def test_a_name_of_up_to_64_characters_with_inner_whitespace_is_kept_as_given(hu
 
 
 def test_a_created_tenant_is_usable_and_known_in_memory_the_moment_its_creation_commits(hub: HubHarness) -> None:
-    open_tenants = hub.hub_services.tenants.open_tenants
+    open_tenants = hub.resolve_hub(OpenTenants)
     sole = default_tenant(hub.engine)
     me_before = hub.client.get("/api/me").json()
     assert open_tenants.only() == sole
@@ -369,7 +371,7 @@ def test_a_rename_reaches_the_in_memory_set_and_refuses_a_tenant_that_is_not_ope
     renamed = admin.rename(created.tenant_id, "acme-renamed")
 
     assert (renamed.tenant_id, renamed.name, renamed.state) == (created.tenant_id, "acme-renamed", TenantState.OPEN)
-    assert hub.hub_services.tenants.open_tenants.name(created.tenant_id) == "acme-renamed"
+    assert hub.resolve_hub(OpenTenants).name(created.tenant_id) == "acme-renamed"
     with pytest.raises(UnknownTenant):
         admin.rename(TenantId("ten_00000000000000000000000000"), "nobody")
 
@@ -389,4 +391,4 @@ def test_the_list_shows_a_tenant_whose_deletion_is_underway_as_deleting(hub: Hub
     assert listed[default_tenant(hub.engine)].state is TenantState.OPEN
     with pytest.raises(UnknownTenant):
         admin.rename(created.tenant_id, "acme-again")
-    assert hub.hub_services.tenants.open_services(StoreScope(default_tenant(hub.engine))) is not None
+    assert hub.process.tenants.open(StoreScope(default_tenant(hub.engine))) is not None

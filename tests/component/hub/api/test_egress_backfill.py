@@ -18,6 +18,7 @@ from blizzard.hub.domain.observability.egress.backfill import BackfillResult, Eg
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.domain.observability.egress.ports import EgressFailure, EgressFailureCause
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.wire.egress import EGRESS_BACKFILL_FAILED, EgressBackfillFailure
 from tests.support.egress_world import (
@@ -131,7 +132,7 @@ def test_the_backfill_writes_each_open_tenants_rows(tmp_path: Path) -> None:
     assert [r["chunk_id"] for r in egress_rows(written, "steps")] == [chunk_id, "ch_other"]
     assert [r["chunk_id"] for r in egress_rows(written, "invocations")] == [chunk_id, "ch_other"]
     assert [(c.dataset, c.rows) for c in result.datasets] == [("steps", 2), ("invocations", 2), ("events", 1)]
-    home = (default_tenant(hub.engine), hub.hub_services.tenants.open_tenants.name(default_tenant(hub.engine)))
+    home = (default_tenant(hub.engine), hub.resolve_hub(OpenTenants).name(default_tenant(hub.engine)))
     other = ("ten_other", "ten_other")
     tenants = {
         d: [(r["tenant_id"], r["tenant_name"]) for r in egress_rows(written, d)]

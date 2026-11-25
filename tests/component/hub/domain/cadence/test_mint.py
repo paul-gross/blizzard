@@ -23,6 +23,9 @@ from blizzard.hub.domain.cadence.mint import CadenceMint, ErrandPlanning, Minted
 from blizzard.hub.domain.cadence.model import AttentionFacts, Cadence, CadenceShape, ChoreShape
 from blizzard.hub.domain.cadence.services import CadenceAttention, CadenceAuthoring
 from blizzard.hub.domain.chunk.model import Chunk, ErrandMark, WorkItemAuthor, WorkItemAuthorKind
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.queue import IReadChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import (
     IReadRoutineRepository,
@@ -35,6 +38,8 @@ from blizzard.hub.domain.garden.routines import (
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
 from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, RunService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope, ScopeRegistry, ScopeSlug
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
+from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.domain.operations.delete import DeleteService
 from blizzard.hub.domain.operations.promote import PromoteService
 from blizzard.hub.domain.operations.queue import GroupService
@@ -61,7 +66,7 @@ def _routine(
     effort: str | None = None,
     harnesses: list[str] | None = None,
 ) -> Routine:
-    graph = hub.services.default_graph.ensure_default(
+    graph = hub.default_adapter(DefaultGraphService).ensure_default(
         PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     project = project_record(hub, default_project(hub.engine))
@@ -95,7 +100,7 @@ def _facts(hub: HubHarness, cadence: Cadence) -> AttentionFacts:
         routines=hub.default_adapter(IReadRoutineRepository),
         routine_scopes=hub.default_adapter(IReadRoutineScopeRepository),
         scopes=hub.default_adapter(IReadScopeRepository),
-        graphs=hub.services.graphs,
+        graphs=hub.default_adapter(IReadGraphRepository),
     )
     return attention.facts([cadence])[cadence.project_id]
 
@@ -120,13 +125,13 @@ def _last(hub: HubHarness, errand: Errand) -> ErrandRun | None:
 
 
 def _chunk(hub: HubHarness, chunk_id: str) -> Chunk:
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     return chunk
 
 
 def _status(hub: HubHarness, chunk_id: str) -> ChunkStatus:
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     return facts.status()
 
@@ -341,7 +346,9 @@ def test_a_promoting_mint_and_an_operator_promote_each_land_at_their_own_tail(hu
     hub.default_adapter(PromoteService).promote(_chunk(hub, hand.chunk_id))
     last = _mint(hub, cadence, found[("every", "runner")])
 
-    positions = hub.services.chunks.queue.queue_positions([first.chunk.chunk_id, hand.chunk_id, last.chunk.chunk_id])
+    positions = hub.default_adapter(IReadChunkQueueRepository).queue_positions(
+        [first.chunk.chunk_id, hand.chunk_id, last.chunk.chunk_id]
+    )
     assert positions[first.chunk.chunk_id] < positions[hand.chunk_id] < positions[last.chunk.chunk_id]
 
 

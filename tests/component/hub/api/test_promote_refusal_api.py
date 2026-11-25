@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.queue import IReadChunkQueueRepository
 from tests.support.scaffolding import build_hub, chunk_stores, ingest, ranking_unit
 
 _POINTER = {"source": "default", "ref": "41"}
@@ -25,9 +27,9 @@ def test_promote_refuses_a_never_promoted_terminal_chunk(tmp_path: Path, verb: s
     assert resp.status_code == 409
     expected = "stopped" if verb == "stop" else "done"
     assert resp.json()["detail"] == f"chunk {chunk_id} is {expected}, not promotable"
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None and facts.promoted is False
-    assert hub.services.chunks.queue.queue_positions([chunk_id]) == {}
+    assert hub.default_adapter(IReadChunkQueueRepository).queue_positions([chunk_id]) == {}
 
 
 def test_promote_replays_on_an_already_promoted_terminal_chunk(tmp_path: Path) -> None:

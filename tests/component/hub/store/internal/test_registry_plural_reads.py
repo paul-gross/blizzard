@@ -13,6 +13,8 @@ from fastapi.testclient import TestClient
 
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.api.runners import hosts_of
+from blizzard.hub.domain.runners.host import IReadHostRegistry
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from tests.support.scaffolding import HubHarness, build_hub, count_queries, seed_runner
 
@@ -28,7 +30,7 @@ def test_get_hosts_equals_get_host_across_a_batch_boundary(tmp_path: Path, monke
     hub = build_hub(tmp_path)
     ids = [_add_host(hub.client, f"box{i}") for i in range(7)]
     assert hub.client.post(f"/api/hosts/{ids[2]}/retire", json={}).status_code == 200
-    hosts = hub.services.hosts
+    hosts = hub.default_adapter(IReadHostRegistry)
 
     result = hosts.get_hosts([*ids, ids[0], "ho_missing"])
 
@@ -51,7 +53,7 @@ def test_get_runners_equals_get_runner_for_hosted_standalone_and_retired(
     host_id = _add_host(hub.client, "box")
     assert hub.client.post(f"/api/hosts/{host_id}/adoptions", json={"runner_ids": ids[:2]}).status_code == 200
     assert hub.client.post(f"/api/runners/{ids[3]}/retire", json={"by": "op"}).status_code == 200
-    registry = hub.services.registry
+    registry = hub.default_adapter(IReadRunnerRegistry)
 
     result = registry.get_runners([*reversed(ids), ids[0], "rn_missing"])
 
@@ -66,11 +68,11 @@ def test_plural_reads_are_tenant_scoped(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     mine = hub.add_tenant("mine")
     other = hub.add_tenant("other")
-    seed_runner(other.services, other.runner_id("r1"), register=False)
+    seed_runner(other, other.runner_id("r1"), register=False)
     other_host = _add_host(other.client, "theirs")
 
-    assert mine.services.registry.get_runners([other.runner_id("r1")]) == {}
-    assert mine.services.hosts.get_hosts([other_host]) == {}
+    assert mine.default_adapter(IReadRunnerRegistry).get_runners([other.runner_id("r1")]) == {}
+    assert mine.default_adapter(IReadHostRegistry).get_hosts([other_host]) == {}
 
 
 def test_adopt_refuses_the_first_missing_id_before_a_known_invalid_one(tmp_path: Path) -> None:
@@ -91,7 +93,7 @@ def test_adopt_refuses_the_first_missing_id_before_a_known_invalid_one(tmp_path:
 def test_get_hosts_statements_are_flat_in_the_ids_selected_and_blind_to_unrelated_hosts(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     ids = [_add_host(hub.client, f"box{i}") for i in range(12)]
-    hosts = hub.services.hosts
+    hosts = hub.default_adapter(IReadHostRegistry)
 
     few = count_queries(hub.engine, lambda: hosts.get_hosts(ids[:2]))
     many = count_queries(hub.engine, lambda: hosts.get_hosts(ids[:10]))
@@ -110,7 +112,7 @@ def test_get_runners_statements_are_flat_in_the_ids_selected_and_blind_to_unrela
     ids = [f"rn_{i}" for i in range(12)]
     for runner_id in ids:
         seed_runner(hub, runner_id)
-    registry = hub.services.registry
+    registry = hub.default_adapter(IReadRunnerRegistry)
 
     few = count_queries(hub.engine, lambda: registry.get_runners(ids[:2]))
     many = count_queries(hub.engine, lambda: registry.get_runners(ids[:10]))
@@ -128,7 +130,7 @@ def test_get_runners_matches_get_runner_for_reinstated_never_connected_and_stand
     for runner_id in ("rn_back", "rn_alone", "rn_hosted"):
         seed_runner(hub, runner_id)
     seed_runner(hub, "rn_new", register=False)
-    registry = hub.services.registry
+    registry = hub.default_adapter(IReadRunnerRegistry)
     assert isinstance(registry, RunnerRegistryStore)
     now = hub.clock.now()
     assert hub.client.post("/api/runners/rn_back/retire", json={"by": "op"}).status_code == 200
@@ -160,18 +162,20 @@ def test_hosts_of_reads_the_named_hosts_only_and_a_missing_host_falls_back(
     for runner_id, host_id in (("rn_1", first), ("rn_2", second)):
         seed_runner(hub, runner_id)
         assert hub.client.post(f"/api/hosts/{host_id}/adoptions", json={"runner_ids": [runner_id]}).status_code == 200
-    services = hub.services
+    hosts = hub.default_adapter(IReadHostRegistry)
 
     def _no_full_list(**_: object) -> NoReturn:
         pytest.fail("a full host list was read")
 
-    monkeypatch.setattr(services.hosts, "list_hosts", _no_full_list)
-    registrations = [r for r in (services.registry.get_runner(r) for r in ("rn_1", "rn_2")) if r is not None]
+    monkeypatch.setattr(hosts, "list_hosts", _no_full_list)
+    registrations = [
+        r for r in (hub.default_adapter(IReadRunnerRegistry).get_runner(r) for r in ("rn_1", "rn_2")) if r is not None
+    ]
     assert len(registrations) == 2
     ghost = dataclasses.replace(registrations[0], host_id="ho_gone")
 
-    found = hosts_of(services.hosts, registrations)
-    with_missing = hosts_of(services.hosts, [*registrations, ghost])
+    found = hosts_of(hosts, registrations)
+    with_missing = hosts_of(hosts, [*registrations, ghost])
 
     assert set(found) == {first, second}
     assert with_missing == found
@@ -227,7 +231,7 @@ def test_runners_under_equals_list_runners_per_host_across_a_batch_boundary(
             assert adopt.status_code == 200
     assert hub.client.post("/api/runners/rn_1_0/retire", json={"by": "op"}).status_code == 200
     seed_runner(hub, "rn_standalone")
-    registry = hub.services.registry
+    registry = hub.default_adapter(IReadRunnerRegistry)
 
     result = registry.runners_under([*hosts, hosts[0], "ho_missing"])
 
@@ -242,7 +246,7 @@ def test_runners_under_is_tenant_scoped(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     mine = hub.add_tenant("mine")
     other = hub.add_tenant("other")
-    seed_runner(other.services, other.runner_id("r1"), register=False)
+    seed_runner(other, other.runner_id("r1"), register=False)
     other_host = _add_host(other.client, "theirs")
     assert (
         other.client.post(
@@ -251,8 +255,8 @@ def test_runners_under_is_tenant_scoped(tmp_path: Path) -> None:
         == 200
     )
 
-    assert mine.services.registry.runners_under([other_host]) == {}
-    assert set(other.services.registry.runners_under([other_host])) == {other_host}
+    assert mine.default_adapter(IReadRunnerRegistry).runners_under([other_host]) == {}
+    assert set(other.default_adapter(IReadRunnerRegistry).runners_under([other_host])) == {other_host}
 
 
 def test_runners_under_statements_are_flat_in_the_hosts_and_blind_to_unlisted_runners(tmp_path: Path) -> None:
@@ -262,7 +266,7 @@ def test_runners_under_statements_are_flat_in_the_hosts_and_blind_to_unlisted_ru
         runner_id = f"rn_{index}"
         seed_runner(hub, runner_id)
         assert hub.client.post(f"/api/hosts/{host_id}/adoptions", json={"runner_ids": [runner_id]}).status_code == 200
-    registry = hub.services.registry
+    registry = hub.default_adapter(IReadRunnerRegistry)
 
     few = count_queries(hub.engine, lambda: registry.runners_under(hosts[:2]))
     many = count_queries(hub.engine, lambda: registry.runners_under(hosts))

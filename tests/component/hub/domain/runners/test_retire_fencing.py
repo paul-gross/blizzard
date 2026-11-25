@@ -16,7 +16,12 @@ import pytest
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.execution.fleet import FleetService
-from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerRegistration, TokenRotation
+from blizzard.hub.domain.runners.registration import (
+    IReadRunnerRegistry,
+    IWriteRunnerRegistry,
+    RunnerRegistration,
+    TokenRotation,
+)
 from tests.support.scaffolding import HubHarness, build_hub, emitted_events, pointer_token
 
 _RUNNER = "rn_a"
@@ -53,7 +58,7 @@ def _bearer(token: str) -> dict[str, str]:
 
 
 def _runner(hub: HubHarness) -> RunnerRegistration:
-    runner = hub.services.registry.get_runner(_RUNNER)
+    runner = hub.default_adapter(IReadRunnerRegistry).get_runner(_RUNNER)
     assert runner is not None
     return runner
 
@@ -305,7 +310,7 @@ def test_a_token_revocation_decided_before_a_retire_and_reinstate_is_refused(
         _ok(_reinstate(hub))
         tokens.append(_enroll(hub))
 
-    _once(monkeypatch, hub.services.registry, "revoke_token", retire_and_rescue)
+    _once(monkeypatch, hub.default_adapter(IReadRunnerRegistry), "revoke_token", retire_and_rescue)
 
     refused = hub.client.post(f"/api/runners/{_RUNNER}/token-revocations", json={"by": "op"})
 
@@ -323,7 +328,7 @@ def _raced_token(hub: HubHarness) -> str:
     _ok(_retire(hub))
     runner = _runner(hub)
     token = "raced-token"
-    cast(IWriteRunnerRegistry, hub.services.registry).rotate_token(
+    cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry)).rotate_token(
         TokenRotation(_RUNNER, TokenHash(token).hex, hub.clock.now(), "racer", runner.lifecycle_version)
     )
     return token
@@ -368,7 +373,7 @@ def test_a_delayed_enroll_is_refused_once_the_runner_was_retired_and_reinstated(
         _ok(_retire(hub))
         _ok(_reinstate(hub))
 
-    _once(monkeypatch, hub.services.registry, "rotate_token", retire_and_reinstate)
+    _once(monkeypatch, hub.default_adapter(IReadRunnerRegistry), "rotate_token", retire_and_reinstate)
 
     refused = hub.client.post(f"/api/runners/{_RUNNER}/enrollments")
 
@@ -387,7 +392,7 @@ def test_a_reinstate_unit_that_fails_rolls_back_fact_and_revocation_together(
     def fail(*args: Any, **kwargs: Any) -> Any:
         raise _Crash
 
-    monkeypatch.setattr(hub.services.registry, "revoke_token", fail)
+    monkeypatch.setattr(hub.default_adapter(IReadRunnerRegistry), "revoke_token", fail)
     with pytest.raises(_Crash):
         _reinstate(hub)
     monkeypatch.undo()

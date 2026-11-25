@@ -29,6 +29,7 @@ from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.observability.analytics.derivation import EventDerivationService, ReDeriveScope
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, DeleteService
 from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
@@ -281,7 +282,7 @@ def test_retire_reads_its_routes_records_once_across_route_counts(
     counts: list[int] = []
     for n in (1, _N):
         hub = _holding_hub(_dir(tmp_path, n), n)
-        registration = hub.services.registry.get_runner("runner-a")
+        registration = hub.default_adapter(IReadRunnerRegistry).get_runner("runner-a")
         assert registration is not None
 
         def release_held(self: DetachService, chunk: Chunk, *, runner: RunnerLifecycleVersion) -> None:

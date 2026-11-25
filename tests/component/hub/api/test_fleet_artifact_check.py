@@ -12,7 +12,9 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
-from blizzard.hub.domain.graph.model import Graph, Node
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, Node
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.wire.chunk import ChunkNotFoundProblem
@@ -112,13 +114,13 @@ def test_an_unknown_chunk_is_404(tmp_path: Path) -> None:
 def test_missing_graph_is_declared_and_does_not_mutate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hub = build_hub(tmp_path)
     chunk_id = _seed_deliver_chunk(hub.engine)
-    before = hub.services.chunks.record.get(chunk_id)
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    before = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
 
     def missing_graph(graph_id: str) -> None:
         return None
 
-    monkeypatch.setattr(hub.services.graphs, "get", missing_graph)
+    monkeypatch.setattr(hub.default_adapter(IReadGraphRepository), "get", missing_graph)
     url = f"/api/fleet/chunks/{chunk_id}/artifact-check"
     response = hub.client.post(url, json={"name": "delta", "content": "x"})
     assert response.status_code == 500
@@ -139,8 +141,8 @@ def test_missing_graph_is_declared_and_does_not_mutate(tmp_path: Path, monkeypat
         )
         == []
     )
-    assert hub.services.chunks.record.get(chunk_id) == before
-    assert hub.services.chunks.facts.load_facts(chunk_id) == facts
+    assert hub.default_adapter(IReadChunkRecordRepository).get(chunk_id) == before
+    assert hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id) == facts
 
 
 _VALID_DELTA = json.dumps({"entries": [{"ref": "F1", "disposition": "fixed"}]})

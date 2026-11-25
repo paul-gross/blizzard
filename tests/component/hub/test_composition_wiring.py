@@ -1,4 +1,4 @@
-"""``build_services`` wiring of the finding bucket reader: a real,
+"""The tenant scope's wiring of the finding bucket reader: a real,
 store-bound reader, not an absent or unbound one."""
 
 from __future__ import annotations
@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
+from blizzard.hub.domain.garden.findings.model import IReadFindingRepository
 from blizzard.hub.domain.observability.analytics.derivation import EventDerivationService
 from blizzard.hub.domain.observability.analytics.extraction import FileReadExtractor
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
@@ -18,10 +19,11 @@ from tests.support.scaffolding import HubHarness, build_hub
 
 
 def test_the_finding_bucket_is_a_reader_bound_to_the_finding_store(tmp_path: Path) -> None:
-    services = build_hub(tmp_path).services
+    hub = build_hub(tmp_path)
+    bucket = hub.default_adapter(FindingBucketReader)
 
-    assert isinstance(services.finding_bucket, FindingBucketReader)
-    assert services.finding_bucket.findings is services.findings
+    assert isinstance(bucket, FindingBucketReader)
+    assert bucket.findings is hub.default_adapter(IReadFindingRepository)
 
 
 def _graph_count(hub: HubHarness) -> int:

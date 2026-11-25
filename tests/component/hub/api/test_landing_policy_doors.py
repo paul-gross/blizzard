@@ -18,7 +18,8 @@ from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.forges import ConfiguredForge
 from blizzard.hub.domain.config.landing_policies import POLICY_CAPABILITIES
-from blizzard.hub.domain.config.repositories import RepositoryId
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryId
+from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.store.schema import project_repository_positions
 from tests.support.scaffolding import HubHarness, build_hub, default_tenant
 
@@ -102,7 +103,7 @@ def test_an_unknown_policy_is_refused_on_create_and_on_a_patch(hub: HubHarness) 
 
     assert _refusal(created)[0] == "landing_policy"
     assert _refusal(patched)[0] == "landing_policy"
-    assert hub.services.repository_records.resolve("acme-park") is None
+    assert hub.default_adapter(IReadRepositoryRecordRepository).resolve("acme-park") is None
 
 
 def test_a_null_patch_clears_the_timeout_and_null_on_any_other_field_is_refused(hub: HubHarness) -> None:
@@ -160,12 +161,12 @@ def test_the_forge_detail_says_which_policies_it_honours_and_what_it_lacks(
     everything = _ok(hub.client.get(f"/api/forges/{forge}"))["landing_policies"]
     assert everything == [{"policy": policy.value, "honoured": True, "missing": []} for policy in POLICY_CAPABILITIES]
 
-    offered = hub.services.forges.offered
+    offered = hub.default_adapter(ForgeRegistry).offered
 
     def without_checks(forge: ConfiguredForge, repository: RepositoryId | None = None) -> frozenset[Capability]:
         return offered(forge, repository) - {Capability.CHECKS_READ}
 
-    monkeypatch.setattr(hub.services.forges, "offered", without_checks)
+    monkeypatch.setattr(hub.default_adapter(ForgeRegistry), "offered", without_checks)
     lacking = {entry["policy"]: entry for entry in _ok(hub.client.get(f"/api/forges/{forge}"))["landing_policies"]}
     assert lacking["merge-on-checks"] == {"policy": "merge-on-checks", "honoured": False, "missing": ["checks.read"]}
     assert lacking["fast-forward"] == {"policy": "fast-forward", "honoured": False, "missing": ["checks.read"]}

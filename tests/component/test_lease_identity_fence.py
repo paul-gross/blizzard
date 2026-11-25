@@ -13,7 +13,6 @@ import httpx2
 from sqlalchemy import func, select
 
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
-from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
 from blizzard.hub.store import schema as s
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -125,8 +124,8 @@ class _RealRunner:
         self.recording = _RecordingClient(
             RunnerFleetClient(
                 hub.app,
-                services=hub.services,
-                fleet=hub.default_adapter(FleetService),
+                process=hub.process,
+                tenant=hub.tenant,
                 default_runner_id=runner_id,
             )
         )

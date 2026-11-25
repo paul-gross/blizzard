@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 from blizzard.auth_core import Role
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.hub.config import AUTH_MODE_OAUTH
+from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.tenancy import StoreScope
 from exemplar.hub.api import permits
 from exemplar.hub.api.permit_params import path_permit
@@ -49,12 +50,12 @@ def oauth_hub(tmp_path: Path) -> Iterator[HubHarness]:
 
 
 def _mounted(hub: HubHarness) -> Iterator[HubHarness]:
-    assert hub.app is not None and hub.core is not None and hub.config is not None
+    assert hub.app is not None and hub.config is not None
     with hub.engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
         _PERMITS.upgrade()
         _PERMIT_REVISION.upgrade()
     process = open_store_backed(
-        hub.core.store_connections,
+        hub.resolve_hub(HubStoreConnections),
         clock=hub.clock,
         actions=TEST_HUB_ACTIONS,
         config=hub.config,

@@ -15,6 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.store import schema as s
 from tests.support.scaffolding import HubHarness, build_hub, hub_scoped, seed_runner
 
@@ -128,8 +129,8 @@ def test_registration_records_the_tokens_runner_whatever_the_body_declares(tmp_p
 
     assert resp.status_code == 201
     assert resp.json()["runner_id"] == "runner-a"
-    assert hub.services.registry.get_runner("runner-b") is None
-    registered = hub.services.registry.get_runner("runner-a")
+    assert hub.default_adapter(IReadRunnerRegistry).get_runner("runner-b") is None
+    registered = hub.default_adapter(IReadRunnerRegistry).get_runner("runner-a")
     assert registered is not None and registered.workspace_id == "ws-b"
 
 

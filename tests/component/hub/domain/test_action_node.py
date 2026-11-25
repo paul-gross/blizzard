@@ -11,7 +11,9 @@ import sqlalchemy as sa
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.chunk.model import decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository, IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.store import schema as s
 from tests.support.chunk_units import chunk_unit
 from tests.support.scaffolding import (
@@ -66,16 +68,16 @@ def test_the_flow_driver_re_drives_a_chunk_waiting_at_an_action_node_once_its_hi
     )
     build_node_id = claim.json()["envelope"]["node"]["node_id"]
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
-    graph = hub.services.graphs.get(chunk.graph_id)
+    graph = hub.default_adapter(IReadGraphRepository).get(chunk.graph_id)
     assert graph is not None
     deliver = graph.node_by_name("deliver")
     assert deliver is not None
     assert deliver.action == "land"
     # Stand at `deliver`, waiting, as a pass that answered `pending` with a hint leaves it.
     with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
-        cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
+        cast(IWriteChunkMovementRepository, hub.default_adapter(IReadChunkMovementRepository)).record_transition(
             transition_id="tr_test_deliver",
             close_decision=decide_close_enqueue(chunk.work_refs, lambda _: True),
             chunk_id=chunk_id,
@@ -133,7 +135,7 @@ def test_a_nodes_action_and_its_arguments_round_trip_through_the_store_and_the_g
     hub = build_hub(tmp_path)
     minted = hub.client.post("/api/graphs", json={"definition_yaml": _GARDEN_GRAPH_YAML})
     assert minted.status_code == 201, minted.text
-    graph = hub.services.graphs.get(minted.json()["graph_id"])
+    graph = hub.default_adapter(IReadGraphRepository).get(minted.json()["graph_id"])
     assert graph is not None
     deliver = graph.node_by_name("deliver")
     assert deliver is not None

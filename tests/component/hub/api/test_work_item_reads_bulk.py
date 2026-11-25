@@ -8,6 +8,8 @@ from typing import Any
 import pytest
 
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkRef
+from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.hub.live_config import ConfigObjectCache
@@ -124,7 +126,7 @@ def test_hub_authored_refs_cost_a_bounded_number_of_statements(tmp_path: Path) -
 
     def seeded(root: Path, count: int) -> tuple[Any, list[str]]:
         hub = build_hub(root)
-        graph = hub.services.default_graph.ensure_default(
+        graph = hub.default_adapter(DefaultGraphService).ensure_default(
             PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
         )
         store = hub_store_connections(hub.engine)
@@ -171,7 +173,7 @@ def test_store_backed_labels_cost_the_same_at_two_and_eight_pointers(
         built_in = hub.work_sources.get("hub")
         assert isinstance(built_in, HubWorkSource)
         registry = StoreWorkSourceRegistry(
-            records=hub.services.work_source_records,
+            records=hub.default_adapter(IReadWorkSourceRepository),
             objects=ConfigObjectCache(ConfigRevisionsStore(hub_store_connections(hub.engine))),
             build=lambda record: BuiltWorkSource(record, FakeWorkSource(name=record.name, title="t"), lambda: None),
             built_in=built_in,

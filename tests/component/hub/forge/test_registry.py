@@ -41,7 +41,10 @@ from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, TurnCutOff, WriteLocks
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.secrets import hub_key_provider
+from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
+from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.tenancy import StoreScope
 from tests.support.scaffolding import (
     OP,
@@ -113,12 +116,14 @@ class _World:
         engine = create_engine_from_url(db_url)
         keys = hub_key_provider({}, data_dir=tmp_path / "data")
         clock = FixedClock(_NOW)
-        self.stores = configured_core(engine, tmp_path, clock=clock).open(StoreScope(default_tenant(engine)))
+        self.tenant_scope = (
+            configured_core(engine, tmp_path, clock=clock).tenants.open(StoreScope(default_tenant(engine))).resolver
+        )
         self.authoring = config_authoring(engine, keys=keys, clock=clock)
         self.authoring.create_secret(SecretName.parse("gh"), "tok", OP)
         self.forge_id = seed_forge(engine, "http://forge.fixture")
         self.repository = self.authoring.create_repository("widget", None, _DRAFT.on(self.forge_id), OP).repository_id
-        live = tenant_live(self.stores)
+        live = tenant_live(self.tenant_scope)
         self.transports: list[_Transport] = []
         self.bindings: list[ForgeBinding] = []
         self.hold_next = False
@@ -126,9 +131,9 @@ class _World:
         self.budgets = ForgeBudgets(clock=clock, dialects=rate_dialect)
         self.key = BudgetKey(self.forge_id, "secret/gh")
         self.registry = ForgeRegistry(
-            records=self.stores.repository_records,
-            forges=self.stores.forge_records,
-            credentials=self.stores.credential_records,
+            records=self.tenant_scope.get(RepositoryRecordStore),
+            forges=self.tenant_scope.get(ForgeRecordStore),
+            credentials=self.tenant_scope.get(CredentialRecordStore),
             objects=live.objects,
             authorizations=live.authorizations,
             build=self._build,
@@ -146,7 +151,7 @@ class _World:
         return GitHubLanding(binding, clock=FixedClock(_NOW), transport=transport)
 
     def record(self) -> ConfiguredRepository:
-        record = self.stores.repository_records.get(self.repository)
+        record = self.tenant_scope.get(RepositoryRecordStore).get(self.repository)
         assert record is not None
         return record
 
@@ -154,7 +159,7 @@ class _World:
         self.authoring.edit_repository(self.record(), RepositoryEdit(base_branch=base_branch), OP)
 
     def forge(self) -> ConfiguredForge:
-        forge = self.stores.forge_records.get(self.forge_id)
+        forge = self.tenant_scope.get(ForgeRecordStore).get(self.forge_id)
         assert forge is not None
         return forge
 
@@ -258,7 +263,7 @@ def test_a_hub_shut_down_closes_its_cached_adapters_before_the_action_loop_stops
     assert record is not None and hub.app is not None
 
     with TestClient(hub.app):
-        forge = hub.services.forges.changes(record.repository_id, priority=ForgePriority.LANDING)
+        forge = hub.default_adapter(ForgeRegistry).changes(record.repository_id, priority=ForgePriority.LANDING)
         assert hub.resolve_hub(ActionLoop).submit(forge.change(7)).result(5).number == 7
         assert transport.closed_on is None
 
@@ -310,7 +315,7 @@ def test_offered_answers_the_kinds_set_for_a_forge_alone_or_a_repository(tmp_pat
 
 def test_a_secret_that_no_longer_reveals_refuses_the_build(world: _World) -> None:
     world.authoring.retire_repository(world.record(), OP)
-    secret = world.stores.secrets.get("gh")
+    secret = world.tenant_scope.get(SecretStore).get("gh")
     assert secret is not None
     world.authoring.retire_secret(secret, OP)
 

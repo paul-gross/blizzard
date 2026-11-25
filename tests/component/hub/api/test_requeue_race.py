@@ -13,6 +13,7 @@ import threading
 from datetime import timedelta
 from pathlib import Path
 
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from tests.support.scaffolding import HubHarness, build_hub, ingest, report_escalation, report_lease
 
 
@@ -48,7 +49,7 @@ def test_two_concurrent_requeues_yield_one_success_and_one_refusal(tmp_path: Pat
         t.join()
 
     assert sorted(results.values()) == [202, 409], f"expected one success and one refusal, got {results}"
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     assert len(facts.requeues) == 1, "a second requeue past a stale guard must not mint a second fact"
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"

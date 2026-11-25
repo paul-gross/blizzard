@@ -10,7 +10,8 @@ from pydantic import BaseModel
 
 from blizzard.hub.api.auth import RunnerAuth
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
-from blizzard.hub.api.hub_level import Hub
+from blizzard.hub.domain.graph.model import IReadGraphRepository
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
     AuthenticationRevokedProblem,
@@ -60,7 +61,7 @@ def test_chunk_mutation_problem_variants_are_aggregated(
         return None
 
     with monkeypatch.context() as patch:
-        patch.setattr(hub.services.graphs, "get", missing_graph)
+        patch.setattr(hub.default_adapter(IReadGraphRepository), "get", missing_graph)
         observe(
             client.post(path.format(chunk_id=chunk), json=body, headers=bearer(live)), 500, PinnedGraphMissingProblem
         )
@@ -68,10 +69,10 @@ def test_chunk_mutation_problem_variants_are_aggregated(
     with store_free(hub.app):
         observe(client.post(url, json=body, headers=bearer(live)), 503, HubStoreUnavailableProblem)
 
-    def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
+    def close_before_resolution(request: Request) -> AdmittedTenant:
         principal = RunnerAuth.of(request).demand()
         close_tenant(hub.engine, principal.tenant_id)
-        services.tenants.open_tenants.refresh()
+        hub.resolve_hub(OpenTenants).refresh()
         return resolve_tenant(request)
 
     hub.app.dependency_overrides[resolve_tenant] = close_before_resolution

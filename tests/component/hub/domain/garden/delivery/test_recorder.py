@@ -11,7 +11,7 @@ from pathlib import Path
 from sqlalchemy import insert, select
 
 from blizzard.foundation.ids import Id, IdPrefix
-from blizzard.hub.domain.garden.findings.model import FindingExitService
+from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from tests.support.finding_units import seed_fact
@@ -326,7 +326,7 @@ def test_an_observed_op_revives_a_previously_gone_finding(tmp_path: Path) -> Non
     before = hub.clock.now() - timedelta(days=1)
     _seed_finding(hub, finding_id, at=before)
     seed_fact(hub_store_connections(hub.engine), finding_id, kind="gone", at=before, note="fixed")
-    assert [f.finding_id for f in hub.services.findings.list_for_routine(project, _ROUTINE)] == []
+    assert [f.finding_id for f in hub.default_adapter(IReadFindingRepository).list_for_routine(project, _ROUTINE)] == []
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[_observed_op(finding_id)]))
 
     delivered = deliver(hub, chunk_id, delta=["delta"])
@@ -334,7 +334,9 @@ def test_an_observed_op_revives_a_previously_gone_finding(tmp_path: Path) -> Non
     assert delivered == Delivered("recorded")
     # "Gone is reversible" is a liveness claim, not just a route outcome: the delivered
     # `observed` fact must actually restore the finding to the live set.
-    assert [f.finding_id for f in hub.services.findings.list_for_routine(project, _ROUTINE)] == [finding_id]
+    assert [f.finding_id for f in hub.default_adapter(IReadFindingRepository).list_for_routine(project, _ROUTINE)] == [
+        finding_id
+    ]
 
 
 def _deliver_review_finding(hub: HubHarness, finding_id: str) -> None:
@@ -359,13 +361,13 @@ def test_a_gone_op_settles_a_delivered_review_sourced_finding_to_resolved(tmp_pa
     chunk_id = seed_chunk(hub)
     finding_id = Id.mint(IdPrefix.FINDING, hub.clock).value
     _deliver_review_finding(hub, finding_id)
-    assert hub.services.findings.get(finding_id) is not None
+    assert hub.default_adapter(IReadFindingRepository).get(finding_id) is not None
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[_gone_op(finding_id)]))
 
     delivered = deliver(hub, chunk_id, delta=["delta"])
 
     assert delivered == Delivered("recorded")
-    settled = hub.services.findings.get(finding_id)
+    settled = hub.default_adapter(IReadFindingRepository).get(finding_id)
     assert settled is not None
     assert settled.state == "resolved"
     assert settled.actor == "u_closer"
@@ -382,7 +384,7 @@ def test_an_observed_op_revives_a_delivered_review_sourced_finding_to_live(tmp_p
     delivered = deliver(hub, chunk_id, delta=["delta"])
 
     assert delivered == Delivered("recorded")
-    revived = hub.services.findings.get(finding_id)
+    revived = hub.default_adapter(IReadFindingRepository).get(finding_id)
     assert revived is not None
     assert revived.state == "live"
 

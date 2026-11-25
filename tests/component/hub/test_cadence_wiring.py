@@ -16,6 +16,7 @@ from blizzard.hub.domain.cadence.services import (
     CadenceUrgencyClearing,
 )
 from blizzard.hub.domain.cadence.sweep import CadenceSweep, MintAnnouncement, TenantCadence
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store.internal.cadence_store import CadenceStore
 from blizzard.hub.store.internal.errand_runs_store import ErrandRunsStore
 from blizzard.hub.tenancy import StoreScope
@@ -60,7 +61,7 @@ def _hub_with_two_tenants(tmp_path: Path) -> tuple[HubHarness, StoreScope, Store
     hub = build_hub(tmp_path)
     first = StoreScope(default_tenant(hub.engine))
     second = StoreScope(add_tenant(hub.engine, "second"))
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
     return hub, first, second
 
 

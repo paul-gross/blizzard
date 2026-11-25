@@ -15,11 +15,21 @@ from fastapi.testclient import TestClient
 
 from blizzard.foundation.flags import FlagRegistry, resolve_flags
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
+from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.secrets import ENV_SECRET_KEY
 from blizzard.hub.store import schema as s
 from blizzard.hub.tenancy import TenantId
 from tests.support.config_inputs import build_hosted_hub_app, init_hub, load_hub_config
-from tests.support.scaffolding import HubHarness, add_tenant, build_hub, default_tenant, hub_scoped, seed_runner
+from tests.support.scaffolding import (
+    HubHarness,
+    add_tenant,
+    build_hub,
+    default_tenant,
+    hub_scoped,
+    seed_runner,
+    seed_runner_in,
+)
 
 
 def _plain(hub: HubHarness) -> TestClient:
@@ -133,7 +143,7 @@ def test_a_registered_runners_token_names_it_with_its_latest_name(tmp_path: Path
 def test_a_token_names_the_tenant_its_runner_was_added_in(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     bravo = add_tenant(hub.engine, "bravo")
-    token = seed_runner(hub.open_services(bravo), "rn-bravo-1", name="r-bravo", register=False)
+    token = seed_runner_in(hub.process, bravo, "rn-bravo-1", name="r-bravo", register=False)
     home = seed_runner(hub, "runner-a")
 
     assert _identity(hub, token) == (
@@ -197,17 +207,17 @@ def test_answering_registers_nothing_and_records_no_liveness(tmp_path: Path) -> 
     hub = build_hub(tmp_path)
     connected = seed_runner(hub, "runner-a")
     never_connected = seed_runner(hub, "runner-b", register=False)
-    before = hub.services.registry.get_runner("runner-a")
-    frames, events = hub.services.events.latest_id(), _event_rows(hub)
+    before = hub.default_adapter(IReadRunnerRegistry).get_runner("runner-a")
+    frames, events = hub.default_adapter(EventBroker).latest_id(), _event_rows(hub)
     hub.clock.advance(timedelta(seconds=60))
 
     for token in (connected, never_connected, "never-issued", None):
         _identity(hub, token)
 
-    assert hub.services.registry.get_runner("runner-a") == before
-    after_b = hub.services.registry.get_runner("runner-b")
+    assert hub.default_adapter(IReadRunnerRegistry).get_runner("runner-a") == before
+    after_b = hub.default_adapter(IReadRunnerRegistry).get_runner("runner-b")
     assert after_b is not None and after_b.never_connected()
-    assert hub.services.events.latest_id() == frames
+    assert hub.default_adapter(EventBroker).latest_id() == frames
     assert _event_rows(hub) == events
 
 

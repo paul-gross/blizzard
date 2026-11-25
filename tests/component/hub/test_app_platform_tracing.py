@@ -32,6 +32,7 @@ from blizzard.hub.auth.models import ResolvedIdentity, Session, User
 from blizzard.hub.auth.service import AuthService
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import AUTH_MODE_OAUTH, AuthConfig, HubConfig
+from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
@@ -45,10 +46,10 @@ from tests.support.scaffolding import (
     RunnerFleetClient,
     hub_scoped,
     hub_scoped_engine,
-    seed_runner,
+    only_tenant,
+    seed_runner_in,
     seed_user,
-    tenant_fleet_of,
-    tenant_services_of,
+    tenant_adapter_of,
 )
 from tests.support.worker_http import bind_transport
 
@@ -126,6 +127,7 @@ def test_sweep_spans_carry_no_tenant_and_a_tenant_routes_request_span_carries_it
     sweeps = list(hub_app.Sweep.all(app))
     with TestClient(app) as client:
         assert client.get("/api/chunks").status_code == 200
+        tenant = only_tenant(app)
 
     async def one_pass_each() -> None:
         tasks = [asyncio.create_task(sweep.run()) for sweep in sweeps]
@@ -137,7 +139,7 @@ def test_sweep_spans_carry_no_tenant_and_a_tenant_routes_request_span_carries_it
     spans = _spans(handle, exporter)
     (server,) = [s for s in spans if s.name == "GET /api/chunks"]
     assert server.attributes is not None
-    assert server.attributes[TENANT] == app.state.services.tenants.open_tenants.only()
+    assert server.attributes[TENANT] == tenant
     sweep_traces = {_context(s).trace_id for s in spans if s.name.startswith("sweep ")}
     assert {s.name for s in spans if s.parent is None and _context(s).trace_id in sweep_traces} == {
         f"sweep {sweep.name}" for sweep in sweeps
@@ -213,7 +215,7 @@ def _registered_runner_token(config: HubConfig, runner_id: str, *, name: str | N
     """Add and register ``runner_id`` through an untraced app over the same store, so the seeding
     leaves no spans behind."""
     app = build_hosted_hub_app(config)
-    return seed_runner(tenant_services_of(app), runner_id, name=name, workspace_id="ws-a", fleet=tenant_fleet_of(app))
+    return seed_runner_in(app.state.hub_process, only_tenant(app), runner_id, name=name, workspace_id="ws-a")
 
 
 def _server_span(spans: list[ReadableSpan], prefix: str) -> ReadableSpan:
@@ -376,7 +378,7 @@ def test_a_hub_action_pass_parents_on_its_turns_hub_exec_span_which_the_trace_co
     config = _config(tmp_path)
     handle = _handle(config, exporter)
     app = build_hosted_hub_app(config, platform_tracing=handle)
-    with RunnerFleetClient(app, services=tenant_services_of(app), fleet=tenant_fleet_of(app)) as client:
+    with RunnerFleetClient(app, process=app.state.hub_process, tenant=only_tenant(app)) as client:
         assert client.post("/api/graphs", json={"definition_yaml": _PASS_GRAPH_YAML}).status_code == 201
         chunk_id = client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["chunk_id"]
         assert client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
@@ -426,7 +428,7 @@ def test_a_hub_action_pass_parents_on_its_turns_hub_exec_span_which_the_trace_co
         with hub_scoped_engine(app.state.engine).connect() as conn:
             _, facts, _ = step_facts_for(conn, [chunk_id])[chunk_id]
         assert facts.pin_graph_id is not None
-        pinned = tenant_services_of(app).graphs.get(facts.pin_graph_id)
+        pinned = tenant_adapter_of(app, IReadGraphRepository).get(facts.pin_graph_id)
         assert pinned is not None
         facts = replace(facts, graphs={facts.pin_graph_id: pinned})
     (turn,) = ended

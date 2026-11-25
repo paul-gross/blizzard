@@ -7,7 +7,7 @@ import pytest
 from httpx2 import Response
 from pydantic import BaseModel
 
-from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, IWriteRunnerRegistry
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.wire.route import ClaimRunnerRetiredProblem, ClaimRunnerVersionRefusedProblem
 from tests.support.refusal_observation import RefusalObservation, refusal_mismatches
@@ -42,7 +42,7 @@ def test_retired_runner_claim_matches_openapi(tmp_path: Path) -> None:
     seed_runner(hub, "r1")
     chunk = ingest(hub, [{"source": "default", "ref": "retired"}])
     # A retirement racing token revocation can still reach claim admission.
-    writer = cast(IWriteRunnerRegistry, hub.services.registry)
+    writer = cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry))
     writer.record_lifecycle("r1", retired=True, at=hub.clock.now(), by="operator", expected_lifecycle=0)
 
     response = _claim(hub, chunk)

@@ -45,6 +45,7 @@ from blizzard.hub.domain.observability.tracing.repository import ClosingCandidat
 from blizzard.hub.egress.factory import EgressUnavailable
 from blizzard.hub.egress.internal.ndjson import NdjsonEgressWriter
 from blizzard.hub.egress.writer import EgressWriterSettings
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal import corpus_rows
 from blizzard.hub.store.internal.egress_store import EgressStore
@@ -97,7 +98,7 @@ def _app(hub: HubHarness) -> FastAPI:
 
 
 def _tenant_name(hub: HubHarness) -> str | None:
-    return hub.hub_services.tenants.open_tenants.name(default_tenant(hub.engine))
+    return hub.resolve_hub(OpenTenants).name(default_tenant(hub.engine))
 
 
 def _tenant_of(row: dict[str, object]) -> tuple[object, object]:
@@ -435,7 +436,7 @@ def test_rows_name_their_tenant_as_named_when_written_and_a_later_copy_follows_a
 
     with hub.engine.begin() as conn:
         conn.execute(sa.update(schema.tenants).where(schema.tenants.c.tenant_id == tenant).values(name="renamed"))
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
     hub.clock.advance(timedelta(hours=3))
     _push_usage(hub, chunk_id, graph_node_id(graph))
     egress_sweep(hub, writer).sweep()

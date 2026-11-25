@@ -1,18 +1,18 @@
-"""The legacy bags' retained fields are the container's instances, and every port of an adapter is one object.
+"""Every port of an adapter is one object, and every process value a tenant scope resolves is the process's.
 
-While an area migrates, a bag field the legacy builder still fills must be the very instance the tenant's container
-scope holds, never a second copy; and each port an adapter is registered under resolves to that adapter's instance."""
+Each port an adapter is registered under resolves, in a tenant's container scope, to that adapter's instance; each
+process port resolves to the process scope's adapter; and a tenant scope shares the process scope's values rather than
+holding a second copy."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
 
-from blizzard.hub.composition import HubCore, TenantServices, TenantStores
+from blizzard.foundation.registry.scopes import Resolver
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.cadence.ports import IReadCadenceRepository, IReadErrandRunsRepository, IWriteCadenceRepository
-from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ingest import IWorkItemProjectRead
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository, IWriteChunkDecisionsRepository
@@ -43,11 +43,9 @@ from blizzard.hub.domain.garden.delivery.materialize import (
     IReadGardenDeliveryRepository,
     IWriteGardenDeliveryRepository,
 )
-from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository, IWriteFindingRepository
 from blizzard.hub.domain.garden.review.materialize import IReadReviewFindingsRepository, IWriteReviewFindingsRepository
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
-from blizzard.hub.domain.graph.authoring import DefaultGraphService, GraphMintService
 from blizzard.hub.domain.graph.model import (
     IReadGraphBodies,
     IReadGraphRepository,
@@ -78,7 +76,7 @@ from blizzard.hub.domain.projects.bulk_resolve import IBulkProjectLookup
 from blizzard.hub.domain.projects.links import IReadProjectLinks, IWriteProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, IWriteProjectRepository
 from blizzard.hub.domain.projects.order import IReadProjectPositions, IWriteProjectPositions
-from blizzard.hub.domain.projects.targets import ChunkTargets, IReadChunkTargets, IWriteChunkTargets
+from blizzard.hub.domain.projects.targets import IReadChunkTargets, IWriteChunkTargets
 from blizzard.hub.domain.runners.host import IReadHostRegistry, IWriteHostRegistry
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, IWriteRunnerRegistry
 from blizzard.hub.domain.urgency.ports import (
@@ -91,10 +89,7 @@ from blizzard.hub.domain.urgency.ports import (
     IWriteUrgencyOrder,
     IWriteUrgencyRepository,
 )
-from blizzard.hub.domain.urgency.services import UrgencyReading
-from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository, IWriteWorkItemRepository
-from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
@@ -120,7 +115,6 @@ from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStor
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
 from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
-from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.store.internal.invariants import HubInvariants
 from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
@@ -212,59 +206,9 @@ CHUNK_PORTS: Mapping[str, tuple[type[Any], ...]] = {
 }
 
 
-def transition_identity_violations(stores: TenantStores, services: TenantServices) -> list[str]:
-    """Each retained bag field that is not its container instance, and each port that is not its adapter's."""
-    tenant = stores.tenant
-    retained: tuple[tuple[str, object, type[Any]], ...] = (
-        ("TenantStores.connections", stores.connections, ScopedConnections),
-        ("TenantStores.transactions", stores.transactions, HubTransactions),
-        ("TenantStores.projects", stores.projects, ProjectStore),
-        ("TenantStores.finding_store", stores.finding_store, FindingStore),
-        ("TenantStores.registry", stores.registry, RunnerRegistryStore),
-        ("TenantStores.hosts", stores.hosts, HostRegistryStore),
-        ("TenantStores.work_item_store", stores.work_item_store, WorkItemStore),
-        ("TenantStores.chunk_stores", stores.chunk_stores, ChunkStores),
-        ("TenantStores.secrets", stores.secrets, SecretStore),
-        ("TenantStores.work_source_records", stores.work_source_records, WorkSourceRecordStore),
-        ("TenantStores.repository_records", stores.repository_records, RepositoryRecordStore),
-        ("TenantStores.forge_records", stores.forge_records, ForgeRecordStore),
-        ("TenantStores.credential_records", stores.credential_records, CredentialRecordStore),
-        ("TenantStores.secret_referrers", stores.secret_referrers, SecretReferrersStore),
-        ("TenantStores.forge_referrers", stores.forge_referrers, ForgeReferrersStore),
-        ("TenantStores.credential_referrers", stores.credential_referrers, CredentialReferrersStore),
-        ("TenantStores.config_changes", stores.config_changes, ConfigChangeStore),
-        ("TenantStores.project_links", stores.project_links, ProjectLinkStore),
-        ("TenantStores.config_apply", stores.config_apply, ConfigApplyStore),
-        ("TenantStores.config_import", stores.config_import, ConfigImportStore),
-        ("TenantStores.invitations", stores.invitations, InvitationStore),
-        ("TenantStores.urgencies", stores.urgencies, UrgencyStore),
-        ("TenantStores.urgency_order", stores.urgency_order, UrgencyOrderStore),
-        ("TenantServices.graphs", services.graphs, GraphStore),
-        ("TenantServices.graph_bodies", services.graph_bodies, GraphStore),
-        ("TenantServices.node_executors", services.node_executors, GraphStore),
-        ("TenantServices.work_source_records", services.work_source_records, WorkSourceRecordStore),
-        ("TenantServices.repository_records", services.repository_records, RepositoryRecordStore),
-        ("TenantServices.forge_records", services.forge_records, ForgeRecordStore),
-        ("TenantServices.credential_records", services.credential_records, CredentialRecordStore),
-        ("TenantServices.projects", services.projects, IReadProjectRepository),
-        ("TenantServices.project_links", services.project_links, IReadProjectLinks),
-        ("TenantServices.chunk_targets", services.chunk_targets, ChunkTargets),
-        ("TenantServices.findings", services.findings, IReadFindingRepository),
-        ("TenantServices.finding_bucket", services.finding_bucket, FindingBucketReader),
-        ("TenantServices.graph_yaml", services.graph_yaml, IConfigCodec),
-        ("TenantServices.graph_mint", services.graph_mint, GraphMintService),
-        ("TenantServices.default_graph", services.default_graph, DefaultGraphService),
-        ("TenantServices.urgency_reading", services.urgency_reading, UrgencyReading),
-        ("TenantServices.events", services.events, EventBroker),
-        ("TenantServices.registry", services.registry, IReadRunnerRegistry),
-        ("TenantServices.hosts", services.hosts, IReadHostRegistry),
-        ("TenantStores.work_item_edits", stores.work_item_edits, WorkItemEditService),
-        ("TenantServices.event_log", services.event_log, EventLogService),
-        ("TenantServices.flows", services.flows, FlowStore),
-    )
-    problems = [
-        f"{name} is not its container instance" for name, field, key in retained if field is not tenant.get(key)
-    ]
+def port_identity_violations(tenant: Resolver) -> list[str]:
+    """Each port, in the tenant scope ``tenant`` resolves through, that is not its adapter's instance."""
+    problems: list[str] = []
     for adapter, ports in ADAPTER_PORTS.items():
         owned = tenant.get(adapter)
         problems.extend(
@@ -282,11 +226,9 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
     return problems
 
 
-def process_identity_violations(core: HubCore) -> list[str]:
-    """Each retained hub-level field, and each process port, that is not the process container's instance."""
-    process = core.process.resolver
+def process_identity_violations(process: Resolver) -> list[str]:
+    """Each process port that is not the process container's instance of its adapter."""
     retained: tuple[tuple[str, object, Any], ...] = (
-        ("HubCore.hub_scoped_reads", core.hub_scoped_reads, HubScopedReads),
         ("IReadHubEventLog", process.get(IReadHubEventLog), HubEventLogStore),
         ("IWriteHubEventLog", process.get(IWriteHubEventLog), HubEventLogStore),
         ("IHubInvariantChecker", process.get(IHubInvariantChecker), HubInvariants),
@@ -310,11 +252,10 @@ PROCESS_SHARED: tuple[type[Any], ...] = (
 )
 
 
-def process_sharing_violations(core: HubCore, stores: TenantStores) -> list[str]:
+def process_sharing_violations(process: Resolver, tenant: Resolver) -> list[str]:
     """Each process value the tenant scope resolves to an instance other than the process scope's."""
-    process = core.process.resolver
     return [
         f"{key.__qualname__} is not the process instance"
         for key in PROCESS_SHARED
-        if stores.tenant.get(key) is not process.get(key)
+        if tenant.get(key) is not process.get(key)
     ]

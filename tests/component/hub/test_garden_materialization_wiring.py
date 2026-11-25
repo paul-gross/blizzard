@@ -22,6 +22,7 @@ from blizzard.hub.domain.garden.review.service import ReviewFindingsRecorder
 from blizzard.hub.domain.garden.scopes import IWriteScopeRepository
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.forge.commit_check import SeamCommitResolver
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from blizzard.hub.tenancy import StoreScope
@@ -86,7 +87,7 @@ def test_the_materialization_instances_differ_across_tenants_but_the_formats(tmp
     hub = build_hub(tmp_path)
     first = _shared(hub, StoreScope(default_tenant(hub.engine)))
     second_tenant = StoreScope(add_tenant(hub.engine, "second"))
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
     second = _shared(hub, second_tenant)
 
     shared_by_the_process = {name for name, held in first.items() if held[0] is second[name][0]}

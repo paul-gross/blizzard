@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from blizzard.hub.domain.config.credentials import CredentialSlug
+from blizzard.hub.domain.config.credentials import CredentialSlug, IReadCredentialRepository
 from tests.support.scaffolding import HubHarness, build_hub
 
 _FORGE = {"slug": "enterprise", "kind": "github", "api_base": "https://api.enterprise.test"}
@@ -151,7 +151,7 @@ def test_a_dry_run_writes_nothing_and_answers_the_real_apply_s_outcomes(hub: Hub
     assert dry.status_code == 200, dry.text
     assert hub.client.get("/api/config/changes").json()["total"] == before
     assert _credentials(hub) == []
-    assert hub.services.credential_records.get_by_slug(CredentialSlug.parse("gh")) is None
+    assert hub.default_adapter(IReadCredentialRepository).get_by_slug(CredentialSlug.parse("gh")) is None
     real = _apply(hub, document)
     assert real.status_code == 200, real.text
 

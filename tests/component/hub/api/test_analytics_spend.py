@@ -17,7 +17,7 @@ from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.api.analytics import chunk_spend_ndjson_lines
 from blizzard.hub.domain.chunk.model import UsageFact, UsageTotal, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository, IWriteChunkMovementRepository
 from blizzard.hub.domain.kernel.pagination import encode_cursor
 from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics, OperationalCriteria
 from tests.support.analytics_spend_world import (
@@ -159,7 +159,7 @@ def test_spend_by_graph_attributes_usage_from_before_a_migration_to_the_current_
     push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
 
     with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
-        cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_migration(
+        cast(IWriteChunkMovementRepository, hub.default_adapter(IReadChunkMovementRepository)).record_migration(
             chunk_id,
             from_node_id=nodes["build"],
             from_graph_id=graph_id,

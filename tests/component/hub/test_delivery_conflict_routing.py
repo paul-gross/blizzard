@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Any, cast
 
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
-from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.graph.model import DEFAULT_BOUNCE_CAP
 from blizzard.hub.forge.landing import Mergeability
@@ -61,7 +62,9 @@ def test_a_dirty_conflict_routes_to_resolve_and_records_a_bounce(tmp_path: Path)
     unroutable_artifacts = [a for a in detail["artifacts"] if a["name"] == "hub-unroutable-outcome"]
     assert unroutable_artifacts == []
     unroutable_events = [
-        e for e in hub.services.chunks.events.list_events(chunk_id=chunk_id) if e.kind == "hub-node-unroutable-outcome"
+        e
+        for e in hub.default_adapter(IReadChunkEventsRepository).list_events(chunk_id=chunk_id)
+        if e.kind == "hub-node-unroutable-outcome"
     ]
     assert unroutable_events == []
 
@@ -181,7 +184,7 @@ def test_a_blank_landing_marker_leaves_its_repo_unlanded_in_the_envelope(tmp_pat
 
 def _record(hub: HubHarness, chunk_id: str, nodes: dict[str, str], name: str, content: str) -> None:
     with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
-        cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
+        cast(IWriteChunkArtifactsRepository, hub.default_adapter(IReadChunkArtifactsRepository)).record_hub_artifact(
             chunk_id,
             node_id=nodes["deliver"],
             node_name="deliver",

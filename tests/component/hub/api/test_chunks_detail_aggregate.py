@@ -15,9 +15,11 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.chunk.model import ChunkVerb, WorkRef, decide_close_enqueue, verb_legal_from
-from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId, IReadForgeRepository
 from tests.support.scaffolding import (
     FakeWorkSource,
     HubHarness,
@@ -167,7 +169,7 @@ def test_detail_artifact_production_time_is_the_stored_marker_clock(tmp_path: Pa
     hub = build_hub(tmp_path)
     chunk_id, nodes = _pass_build(hub, [_BUILD_ARTIFACT])
     produced_at = hub.clock.now() - timedelta(hours=2)
-    writer = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
+    writer = cast(IWriteChunkArtifactsRepository, hub.default_adapter(IReadChunkArtifactsRepository))
     with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
         assert writer.record_hub_artifact(
             chunk_id,
@@ -189,7 +191,7 @@ def test_detail_artifact_production_time_is_the_stored_marker_clock(tmp_path: Pa
     marker = artifacts["delivery-pr/acme/widget/1"]
     assert datetime.fromisoformat(marker["produced_at"]) == produced_at.astimezone(UTC)
     assert datetime.fromisoformat(marker["recorded_at"]) - produced_at > timedelta(hours=1)
-    stored = {item.name: item for item in hub.services.chunks.artifacts.load_artifacts(chunk_id)}
+    stored = {item.name: item for item in hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(chunk_id)}
     commit = artifacts["acme/widget"]
     assert datetime.fromisoformat(commit["produced_at"]) == stored["acme/widget"].produced_at
 
@@ -223,7 +225,7 @@ def test_a_repository_on_an_unhandled_forge_has_no_github_shaped_branch_link(
     hub = build_hub(tmp_path)
     chunk_id, _ = _pass_build(hub, [_BUILD_ARTIFACT])
     assert _branch_urls(hub, chunk_id) == {"acme/widget": "http://forge.fixture/acme/widget/tree/feature/widget"}
-    forges = hub.services.forge_records
+    forges = hub.default_adapter(IReadForgeRepository)
     get_many = forges.get_many
 
     def other_kind(ids: list[ForgeId]) -> dict[ForgeId, ConfiguredForge]:
@@ -268,9 +270,11 @@ def test_the_commit_link_binding_resolves_a_landed_name_through_the_chunks_linke
         project=None,
     )
     chunk_id, _ = _pass_build(hub, [_BUILD_ARTIFACT])
-    chunk = hub.services.chunks.record.get_many([chunk_id])[chunk_id]
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get_many([chunk_id])[chunk_id]
 
-    links = hub.services.commit_links.for_chunks([chunk, replace(chunk, chunk_id="ch_orphan", project_id=None)])
+    links = hub.default_adapter(IReadLandedCommitLinks).for_chunks(
+        [chunk, replace(chunk, chunk_id="ch_orphan", project_id=None)]
+    )
 
     link = links[chunk_id]
     assert link("acme/widget", "abc") == "http://forge.fixture/acme/widget/commit/abc"
@@ -283,10 +287,10 @@ def test_forked_branch_and_landed_commit_link_to_the_same_repository(tmp_path: P
     hub = build_hub(tmp_path)
     forked = {**_BUILD_ARTIFACT, "repo": "fork/widget", "forge": "http://forge.fixture/acme/widget.git"}
     chunk_id, _ = _pass_build(hub, [forked])
-    chunk = hub.services.chunks.record.get_many([chunk_id])[chunk_id]
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get_many([chunk_id])[chunk_id]
 
     branch = _branch_urls(hub, chunk_id)["acme/widget"]
-    commit = hub.services.commit_links.for_chunks([chunk])[chunk_id]("acme/widget", "abc")
+    commit = hub.default_adapter(IReadLandedCommitLinks).for_chunks([chunk])[chunk_id]("acme/widget", "abc")
     assert branch == "http://forge.fixture/acme/widget/tree/feature/widget"
     assert commit == "http://forge.fixture/acme/widget/commit/abc"
 
@@ -532,7 +536,7 @@ def test_detail_lists_every_epoch_of_a_series_that_spans_node_ids(tmp_path: Path
     node name — and the superseded entries are history, not dropped: the detail lists every one, in epoch order."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    writer = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
+    writer = cast(IWriteChunkArtifactsRepository, hub.default_adapter(IReadChunkArtifactsRepository))
     for node_id, epoch in (("nd_build_a", 1), ("nd_build_c", 3), ("nd_build_b", 2)):
         with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
             writer.record_hub_artifact(

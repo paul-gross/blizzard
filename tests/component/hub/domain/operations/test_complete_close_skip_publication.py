@@ -14,6 +14,7 @@ import pytest
 from sqlalchemy import Connection, select
 
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkRef
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.operations.complete import CompleteService
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import chunk_lifecycle_store
@@ -48,7 +49,7 @@ def test_completion_publishes_one_skip_frame_keyed_to_its_committed_row(
 ) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     visible_at_publish: list[list[int]] = []
     publish = hub.events.publish_event_logged
@@ -82,7 +83,7 @@ def test_a_completion_unit_that_fails_after_the_enqueue_leaves_no_row_and_no_fra
 ) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     enqueue = chunk_lifecycle_store.enqueue_close_intents
 

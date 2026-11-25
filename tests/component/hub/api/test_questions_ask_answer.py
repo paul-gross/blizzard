@@ -17,6 +17,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.hub_event_types import HubEventType
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.operations.complete import CompleteService
 from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.store import schema as s
@@ -446,7 +447,7 @@ def test_an_answer_on_an_ended_chunk_is_refused_and_the_question_stays_unanswere
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
     _ask(hub, chunk_id)
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     if end == "stop":
         hub.default_adapter(StopService).stop(chunk, by="operator")

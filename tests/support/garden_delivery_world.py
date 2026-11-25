@@ -13,11 +13,12 @@ from sqlalchemy import insert, select
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome
 from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
 from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository, RunContext
-from blizzard.hub.domain.graph.model import Graph, Node
+from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, Node
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
@@ -128,9 +129,9 @@ def deliver(
     epoch: int = _EPOCH,
 ) -> Delivered:
     """Deliver ``delta`` and ``proposals`` for the chunk's delivery node at ``epoch``, under its run context."""
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None, chunk_id
-    graph = hub.services.graphs.get(chunk.graph_id)
+    graph = hub.default_adapter(IReadGraphRepository).get(chunk.graph_id)
     node = graph.node_by_id(_NODE_ID) if graph is not None else None
     assert node is not None
     run = hub.default_adapter(IReadRunContextRepository).for_chunk(chunk)

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import cast
 
 from blizzard.hub.domain.chunk.model import WorkRef
-from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, IWriteChunkWorkRefsRepository
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.operations.queue import GroupService
 from tests.support.scaffolding import build_hub, ingest
@@ -32,7 +32,7 @@ def test_a_claim_blocks_while_a_group_holds_the_row_lock_mid_fold(tmp_path: Path
 
     entered_write = threading.Event()
     release_write = threading.Event()
-    work_refs = cast(IWriteChunkWorkRefsRepository, hub.services.chunks.work_refs)
+    work_refs = cast(IWriteChunkWorkRefsRepository, hub.default_adapter(IReadChunkWorkRefsRepository))
     real_add_work_refs = work_refs.add_work_refs
 
     def _blocking_add_work_refs(

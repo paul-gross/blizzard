@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from blizzard.hub.delivery import hub_node
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from tests.support.hub_command_graphs import (
     ALWAYS_PENDING_GRAPH_YAML,
     HUB_CMD_GRAPH_YAML,
@@ -247,7 +248,7 @@ def _detail(hub: HubHarness, chunk_id: str) -> dict[str, Any]:
 
 
 def _migrations(hub: HubHarness, chunk_id: str) -> list[object]:
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     return list(facts.migrations)
 
@@ -264,7 +265,7 @@ def test_a_hub_exit_on_a_follow_latest_pin_migrates_onto_the_newer_mint_instead_
     assert detail["graph_id"] == v2
     assert detail["current_node_name"] == "after"
     assert detail["status"] == "ready"
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     assert [m.source.value if m.source else None for m in facts.migrations] == ["follow-latest"]
     assert not any(t.from_node_id == facts.migrations[0].from_node_id for t in facts.transitions)

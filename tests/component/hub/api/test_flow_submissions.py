@@ -11,6 +11,7 @@ from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.domain.delivery.flows import FlowResource, LandingTerms, Submission, Turn, TurnEvent
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support.hub_request_auth import bearer, cookie, enrolled_runner_token, ingest_chunk
@@ -125,7 +126,7 @@ def test_another_tenants_chunk_is_404_as_if_never_minted(tmp_path: Path) -> None
     chunk_id = ingest_chunk(hub)
     _submit(hub, chunk_id)
     other = add_tenant(hub.engine, "bravo")
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
 
     resp = hub.client.get(f"/api/chunks/{chunk_id}/flow-submissions", headers={TENANT_HEADER: other})
 
@@ -258,5 +259,5 @@ def test_captured_terms_and_paged_turns_include_zero_flow_submissions(tmp_path: 
     assert hub.client.get(url, params={"limit": 201}).status_code == 422
     assert hub.client.get(f"/api/chunks/ch_wrong/flow-submissions/{submission.submission_id}/turns").status_code == 404
     other = add_tenant(hub.engine, "bravo")
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
     assert hub.client.get(url, headers={TENANT_HEADER: other}).status_code == 404

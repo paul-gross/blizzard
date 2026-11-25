@@ -17,6 +17,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.config import AUTH_MODE_OAUTH
+from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.domain.tenancy import teardown
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.domain.tenancy.teardown import TenantTeardown
@@ -30,7 +31,7 @@ from tests.support.scaffolding import (
     build_hub,
     default_tenant,
     seed_hub_admin,
-    seed_runner,
+    seed_runner_in,
     seed_session,
     seed_user,
 )
@@ -98,7 +99,7 @@ def test_a_tenant_created_through_the_route_holds_its_default_project_created_by
 
     tenant = TenantId(str(_create(hub, seed_session(hub, administrator), "acme")["tenant_id"]))
 
-    [project] = hub.open_services(tenant).projects.list_all()
+    [project] = hub.resolve(tenant, IReadProjectRepository).list_all()
     assert (project.slug, project.name) == ("default", "Default")
     c = schema.config_changes.c
     with hub.engine.connect() as conn:
@@ -116,7 +117,7 @@ def test_the_default_projects_create_change_records_the_door_the_tenant_was_crea
     assert resp.status_code == 201, resp.text
     tenant = TenantId(str(resp.json()["tenant_id"]))
 
-    [project] = hub.open_services(tenant).projects.list_all()
+    [project] = hub.resolve(tenant, IReadProjectRepository).list_all()
     c = schema.config_changes.c
     with hub.engine.connect() as conn:
         doors = conn.execute(
@@ -249,7 +250,7 @@ def test_a_rename_reaches_the_next_registration_of_the_tenants_runner(hub: HubHa
     session = _hub_admin(hub)
     created = _create(hub, session, "acme")
     tenant = TenantId(str(created["tenant_id"]))
-    token = seed_runner(hub.open_services(tenant), "rn-acme-1", register=False)
+    token = seed_runner_in(hub.process, tenant, "rn-acme-1", register=False)
     assert hub.app is not None
 
     renamed = hub.client.patch(f"/api/admin/tenants/{tenant}", json={"name": "acme-two"}, headers=_bearer(session))

@@ -14,7 +14,7 @@ from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.hub.api import runners as runners_api
 from blizzard.hub.domain.execution.fleet import FleetService
-from blizzard.hub.domain.runners.registration import RunnerDeclining
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerDeclining
 from blizzard.wire.runner import RunnerRegistrationRequest
 from tests.support.scaffolding import HubHarness, build_hub, seed_runner
 
@@ -44,13 +44,13 @@ class _PreFieldRegistration(BaseModel):
 
 
 def _register(hub: HubHarness, declining: tuple[RunnerDeclining, ...] | None) -> None:
-    held = hub.services.registry.get_runner(_RUNNER)
+    held = hub.default_adapter(IReadRunnerRegistry).get_runner(_RUNNER)
     assert held is not None
     hub.default_adapter(FleetService).register(held, "w1", declining=declining)
 
 
 def _held(hub: HubHarness) -> tuple[RunnerDeclining, ...]:
-    held = hub.services.registry.get_runner(_RUNNER)
+    held = hub.default_adapter(IReadRunnerRegistry).get_runner(_RUNNER)
     assert held is not None
     return held.declining
 
@@ -114,7 +114,7 @@ def test_a_later_registration_supersedes_the_earlier_report_whole(tmp_path: Path
 def test_both_views_serve_the_reasons(tmp_path: Path) -> None:
     hub = _hub(tmp_path)
     _register(hub, (_FLOOR, _PACE))
-    held = hub.services.registry.get_runner(_RUNNER)
+    held = hub.default_adapter(IReadRunnerRegistry).get_runner(_RUNNER)
     assert held is not None
 
     view = runners_api.declining_views(held)
@@ -137,7 +137,7 @@ def test_a_hub_that_predates_the_field_parses_a_registration_carrying_it() -> No
 def test_both_views_serve_the_lever_kind_beside_the_unchanged_lever(tmp_path: Path) -> None:
     hub = _hub(tmp_path)
     _register(hub, (_FLOOR, _PACE))
-    held = hub.services.registry.get_runner(_RUNNER)
+    held = hub.default_adapter(IReadRunnerRegistry).get_runner(_RUNNER)
     assert held is not None
 
     view = runners_api.declining_views(held)
@@ -151,7 +151,7 @@ def test_both_views_serve_the_lever_kind_beside_the_unchanged_lever(tmp_path: Pa
 def test_a_lever_outside_the_vocabulary_is_accepted_and_served_as_its_raw_value(tmp_path: Path) -> None:
     hub = _hub(tmp_path)
     _register(hub, (RunnerDeclining("from-a-newer-runner", "d"),))
-    held = hub.services.registry.get_runner(_RUNNER)
+    held = hub.default_adapter(IReadRunnerRegistry).get_runner(_RUNNER)
     assert held is not None
 
     (view,) = runners_api.declining_views(held)

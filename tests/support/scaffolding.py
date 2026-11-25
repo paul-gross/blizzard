@@ -68,18 +68,7 @@ from blizzard.hub.auth.oauth.provider import IOAuthProvider
 from blizzard.hub.auth.oauth.registry import OAuthProviderRegistry
 from blizzard.hub.auth.service import AuthService
 from blizzard.hub.auth.users import IReadUserRepository
-from blizzard.hub.composition import (
-    HubCore,
-    HubServices,
-    TenantServices,
-    TenantStores,
-    build_flow_driver,
-    build_hub_core,
-    build_hub_settings,
-    build_services,
-    connections_for_engine,
-    hub_core_over,
-)
+from blizzard.hub.composition import build_flow_driver, build_hub_settings, connections_for_engine
 from blizzard.hub.config import AUTH_MODE_NONE, AuthConfig, HubConfig, LoginThrottleConfig, TranscriptCapsConfig
 from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
 from blizzard.hub.config_keys import HUB_REGISTRY
@@ -94,7 +83,9 @@ from blizzard.hub.domain.chunk.model import (
     WorkItemAuthor,
     WorkRef,
 )
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.queue import READY_RANKING_LOCK
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.chunk.ports.work_refs import work_ref_lock
 from blizzard.hub.domain.chunk.ports.work_sources import (
@@ -108,6 +99,7 @@ from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.capabilities import IForgeOffers
 from blizzard.hub.domain.config.changes import ChangeContext, Door
+from blizzard.hub.domain.config.credentials import IReadCredentialRepository
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.forges import (
     GITHUB_API_BASE,
@@ -158,8 +150,13 @@ from blizzard.hub.domain.observability.transcripts import (
 from blizzard.hub.domain.operations.promote import PromoteService
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
-from blizzard.hub.domain.projects.model import Project, ProjectId
-from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerCapability, RunnerRegistration
+from blizzard.hub.domain.projects.model import IReadProjectRepository, Project, ProjectId
+from blizzard.hub.domain.runners.registration import (
+    IReadRunnerRegistry,
+    RunnerAddition,
+    RunnerCapability,
+    RunnerRegistration,
+)
 from blizzard.hub.domain.runners.served import resolve_served
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
@@ -175,7 +172,15 @@ from blizzard.hub.forge.auth import IForgeAuthorizations
 from blizzard.hub.forge.readiness import ICredentialProbe
 from blizzard.hub.layout import DATA_DIRNAME
 from blizzard.hub.live_config import ConfigObjectCache
-from blizzard.hub.process_root import HUB_OWNER, HubProcess, registered, store_backed_process, store_backed_values
+from blizzard.hub.open_tenants import OpenTenants
+from blizzard.hub.process_root import (
+    HUB_OWNER,
+    HubProcess,
+    open_store_backed,
+    registered,
+    store_backed_process,
+    store_backed_values,
+)
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.settings.footing import HubSettingsFooting
@@ -533,7 +538,7 @@ def default_urgency(engine: Engine, tenant: TenantId | None = None) -> UrgencyId
 
 def project_record(hub: HubHarness, project_id: str) -> Project:
     """The stored ``Project`` ``project_id`` names — the loaded object a domain write takes in place of the id."""
-    project = hub.services.projects.get(ProjectId(project_id))
+    project = hub.default_adapter(IReadProjectRepository).get(ProjectId(project_id))
     assert project is not None, f"project_record needs {project_id} stored"
     return project
 
@@ -562,18 +567,18 @@ def seed_project(engine: Engine, slug: str, *, tenant: TenantId | None = None) -
     return authoring.create(slug, slug, _SEEDER).project_id
 
 
-def retire_credential(services: TenantServices | HubServices | TestClient, slug: str) -> None:
+def retire_credential(target: HubHarness | TenantHarness | TestClient, slug: str) -> None:
     """Retire the credential ``slug`` names — the one a door's old secret field resolved to — so the secret it reads
-    may retire too. Hub services, or a client of a hosted hub, name their one open tenant."""
-    if isinstance(services, TestClient):
-        services = cast(HubServices, cast(FastAPI, services.app).state.services)
-    if isinstance(services, HubServices):
-        tenant = services.tenants.open_tenants.only()
-        assert tenant is not None
-        services = services.tenants.open_services(StoreScope(tenant))
-    credential = services.credential_records.resolve(slug)
+    may retire too. A client of a hosted hub names its one open tenant."""
+    if isinstance(target, TestClient):
+        app = cast(FastAPI, target.app)
+        process: HubProcess = app.state.hub_process
+        scope = StoreScope(only_tenant(app))
+    else:
+        process, scope = target.process, StoreScope(target.tenant)
+    credential = process.tenants.resolve(scope, IReadCredentialRepository).resolve(slug)
     assert credential is not None, slug
-    services.config_authoring.retire_credential(credential, OP)
+    process.tenants.resolve(scope, ConfigAuthoring).retire_credential(credential, OP)
 
 
 def link_project(
@@ -646,17 +651,19 @@ OP = ChangeContext(actor="op", door=Door.API)
 MIGRATION_CLOCK = FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
 
 
-def configured_core(engine: Engine, root: Path, *, clock: IClock) -> HubCore:
-    """A hub core over ``engine`` whose boot config is rooted at ``root``, so its secret keys are the ones
-    ``hub_key_provider({}, data_dir=root / "data")`` holds — the core a test reads its tenants' configured adapters
-    through."""
-    return build_hub_core(
+def configured_core(engine: Engine, root: Path, *, clock: IClock) -> HubProcess:
+    """A store-backed hub process over ``engine`` whose boot config is rooted at ``root``, so its secret keys are the
+    ones ``hub_key_provider({}, data_dir=root / "data")`` holds — the process a test resolves its tenants' configured
+    adapters through. The caller closes it."""
+    config = HubConfig(root=root, db_url=str(engine.url))
+    return open_store_backed(
         connections_for_engine(engine),
         clock=clock,
         actions=TEST_HUB_ACTIONS,
-        config=HubConfig(root=root, db_url=str(engine.url)),
+        config=config,
         platform_tracing=DisabledPlatformTracing(),
         environ={},
+        egress_boot=egress_boot(config.egress, None),
     )
 
 
@@ -674,8 +681,8 @@ def overridden_core(
     tracing: TracingSettings | None = None,
     egress: EgressBoot | None = None,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
-) -> HubCore:
-    """A store-backed hub core whose registered graph carries the test root's ``overrides``, over an empty
+) -> HubProcess:
+    """A store-backed hub process whose registered graph carries the test root's ``overrides``, over an empty
     environment; its trace export runs over a lent ``trace_exporter``, and its fact export as ``egress`` booted."""
     registry = registered(
         store_backed=True,
@@ -700,19 +707,20 @@ def overridden_core(
         system_artifacts=system_artifacts,
     )
     owner = build_container(registry, HUB_LIFETIMES, owner=HUB_OWNER, values=values, overrides=overrides(registry))
-    return hub_core_over(store_backed_process(owner), connections, clock=clock)
+    return store_backed_process(owner)
 
 
-def second_core(hub: HubHarness) -> HubCore:
-    """A second hub core over ``hub``'s store and boot config, beside the one its services were built over."""
+def second_core(hub: HubHarness) -> HubProcess:
+    """A second store-backed hub process over ``hub``'s store and boot config, beside the one its app serves."""
     assert hub.config is not None
-    return build_hub_core(
+    return open_store_backed(
         connections_for_engine(hub.engine),
         clock=hub.clock,
         config=hub.config,
         platform_tracing=DisabledPlatformTracing(),
         environ={},
         actions=TEST_HUB_ACTIONS,
+        egress_boot=egress_boot(hub.config.egress, None),
     )
 
 
@@ -724,9 +732,9 @@ class TenantLive:
     authorizations: IForgeAuthorizations
 
 
-def tenant_live(stores: TenantStores) -> TenantLive:
-    """The cache and authorization boundary of the tenant ``stores`` serve."""
-    return TenantLive(stores.tenant.get(ConfigObjectCache), stores.tenant.get(IForgeAuthorizations))
+def tenant_live(tenant: Resolver) -> TenantLive:
+    """The cache and authorization boundary of the tenant whose container scope ``tenant`` resolves through."""
+    return TenantLive(tenant.get(ConfigObjectCache), tenant.get(IForgeAuthorizations))
 
 
 def config_authoring(
@@ -1399,7 +1407,7 @@ SEEDED_CAPABILITIES = (RunnerCapability("claude", default=True),)
 
 
 def seed_runner(
-    target: HubHarness | TenantHarness | TenantServices,
+    target: HubHarness | TenantHarness,
     runner_id: str,
     *,
     name: str | None = None,
@@ -1408,42 +1416,62 @@ def seed_runner(
     capabilities: tuple[RunnerCapability, ...] = SEEDED_CAPABILITIES,
     register: bool = True,
     projects: tuple[str, ...] | None = None,
-    fleet: FleetService | None = None,
 ) -> str:
     """Add ``runner_id`` at the hub as ``hub runner add`` does, but under a chosen id and holding
     ``token`` (default :func:`runner_token`), and — with ``register`` — record its first registration
     so it is connected; returns the plaintext token. ``register=False`` leaves it added but never
     connected. A runner the hub already holds is left as is, except that ``register`` connects one
     that never has. It serves ``projects``, each an id or slug, and the tenant's ``default`` project
-    when ``None``, whatever other projects the tenant holds. A bare ``TenantServices`` target registers through the
-    tenant's ``fleet``, which a harness target resolves itself."""
-    services = target if isinstance(target, TenantServices) else target.services
-    if isinstance(target, HubHarness):
-        fleet = target.default_adapter(FleetService)
-    elif isinstance(target, TenantHarness):
-        fleet = target.fleet
-    registry = services.registry
+    when ``None``, whatever other projects the tenant holds."""
+    return seed_runner_in(
+        target.process,
+        target.tenant,
+        runner_id,
+        name=name,
+        workspace_id=workspace_id,
+        token=token,
+        capabilities=capabilities,
+        register=register,
+        projects=projects,
+    )
+
+
+def seed_runner_in(
+    process: HubProcess,
+    tenant: TenantId,
+    runner_id: str,
+    *,
+    name: str | None = None,
+    workspace_id: str = "w1",
+    token: str | None = None,
+    capabilities: tuple[RunnerCapability, ...] = SEEDED_CAPABILITIES,
+    register: bool = True,
+    projects: tuple[str, ...] | None = None,
+) -> str:
+    """:func:`seed_runner` in ``tenant`` of ``process`` — a tenant no harness drives, or a hub app's only one."""
+    scope = StoreScope(tenant)
+    registry = process.tenants.resolve(scope, IReadRunnerRegistry)
     assert isinstance(registry, RunnerRegistryStore), "seeding writes through the hub's own registry store"
     plaintext = token or runner_token(runner_id)
     token_hash = TokenHash(plaintext).hex
     present = registry.get_runner(runner_id)
     if present is None:
         declared = (DEFAULT_PROJECT_SLUG,) if projects is None else projects
-        served = resolve_served(declared, BulkProjectResolver(services.projects))
-        registry.add(
-            RunnerAddition(runner_id, name or runner_id, token_hash, at=services.clock.now(), by="test", served=served)
-        )
+        served = resolve_served(declared, BulkProjectResolver(process.tenants.resolve(scope, IReadProjectRepository)))
+        at = process.tenants.resolve(scope, IClock).now()
+        registry.add(RunnerAddition(runner_id, name or runner_id, token_hash, at=at, by="test", served=served))
     if register and (present is None or present.never_connected()):
-        assert fleet is not None, "registering a runner of a bare TenantServices needs the tenant's fleet"
-        fleet.register(added_runner(services, runner_id), workspace_id, capabilities=capabilities)
+        registration = registry.get_runner(runner_id)
+        assert registration is not None
+        fleet = process.tenants.resolve(scope, FleetService)
+        fleet.register(registration, workspace_id, capabilities=capabilities)
     return plaintext
 
 
-def added_runner(target: HubHarness | TenantServices, runner_id: str) -> RunnerRegistration:
+def added_runner(target: HubHarness | TenantHarness, runner_id: str) -> RunnerRegistration:
     """The registration the hub holds for ``runner_id`` — what an edge resolves before handing a
     runner to the fleet service; fails the test when the hub never added it."""
-    services = target.services if isinstance(target, HubHarness) else target
-    registration = services.registry.get_runner(runner_id)
+    registration = target.default_adapter(IReadRunnerRegistry).get_runner(runner_id)
     assert registration is not None, f"runner {runner_id} has not been added"
     return registration
 
@@ -1466,8 +1494,8 @@ class RunnerFleetClient(TestClient):
         self,
         app: FastAPI,
         *,
-        services: TenantServices,
-        fleet: FleetService,
+        process: HubProcess,
+        tenant: TenantId,
         default_runner_id: str = "r1",
         register_claimants: bool = True,
         runner_prefix: str = "",
@@ -1475,8 +1503,8 @@ class RunnerFleetClient(TestClient):
         super().__init__(app)
         self.default_runner_id = f"{runner_prefix}{default_runner_id}"
         self._runner_prefix = runner_prefix
-        self._services = services
-        self._fleet = fleet
+        self._process = process
+        self._tenant = tenant
         self._register_claimants = register_claimants
         self._seeding = threading.Lock()
         # Ids this client has seen present (or connected): neither condition is ever undone, so a
@@ -1513,8 +1541,8 @@ class RunnerFleetClient(TestClient):
         )
         with self._seeding:
             workspace_id = body.get("workspace_id") if _string_keyed(body) else None
-            seed_runner(
-                self._services, runner_id, workspace_id=str(workspace_id or "w1"), register=connect, fleet=self._fleet
+            seed_runner_in(
+                self._process, self._tenant, runner_id, workspace_id=str(workspace_id or "w1"), register=connect
             )
             self._present.add(runner_id)
             if connect:
@@ -1526,10 +1554,8 @@ class HubHarness:
     """A wired hub app plus the collaborators a test drives and asserts against."""
 
     client: TestClient
-    #: The default tenant's services — the tenant every one-tenant test is served in.
-    services: TenantServices
-    #: The request bridge's tenant opener; every hub-level owner is resolved from :attr:`process`.
-    hub_services: HubServices
+    #: The hub's open process container and its tenant scopes — what a request resolves through.
+    process: HubProcess
     work_sources: WorkSourceRegistry
     clock: FixedClock
     engine: Engine
@@ -1537,17 +1563,14 @@ class HubHarness:
     #: The wired app, so a test can build a second ``TestClient`` with a different peer
     #: address — the forwarded-header trust tests need a concrete IP peer.
     app: FastAPI | None = None
-    #: The hub core the services were built over — its per-tenant stores, and the process container beneath them.
-    core: HubCore | None = None
     #: The boot config the hub was built over — what a test root opening its own process supplies.
     config: HubConfig | None = None
     _driver: FlowDriver | None = field(default=None, repr=False)
 
     @property
-    def process(self) -> HubProcess:
-        """The hub's open process container and its tenant scopes — what a request resolves through."""
-        assert self.core is not None
-        return self.core.process
+    def tenant(self) -> TenantId:
+        """The default tenant — the tenant every one-tenant test is served in."""
+        return default_tenant(self.engine)
 
     @property
     def flow_driver(self) -> FlowDriver:
@@ -1584,7 +1607,7 @@ class HubHarness:
             ).scalar_one()
 
     def _hub_transitions(self, chunk_id: str) -> list[str | None]:
-        facts = self.services.chunks.facts.load_facts(chunk_id)
+        facts = self.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
         return [t.choice_name for t in facts.transitions] if facts is not None else []
 
     def settle_turns(self, *, limit: int = 20) -> list[TickResult]:
@@ -1604,15 +1627,6 @@ class HubHarness:
         assert self.app is not None
         return self.app
 
-    def open_services(self, tenant: TenantId) -> TenantServices:
-        """``tenant``'s services, opened as a request in that tenant would open them."""
-        return self.hub_services.tenants.open_services(StoreScope(tenant))
-
-    def open_stores(self, tenant: TenantId) -> TenantStores:
-        """``tenant``'s stores, opened through the core the services were built over."""
-        assert self.core is not None
-        return self.core.open(StoreScope(tenant))
-
     def resolve[T](self, tenant: TenantId, dependency_type: type[T]) -> T:
         """``tenant``'s one ``dependency_type``, resolved through its container scope as a background pass would."""
         return self.process.tenants.resolve(StoreScope(tenant), dependency_type)
@@ -1627,20 +1641,19 @@ class HubHarness:
 
     def add_tenant(self, name: str) -> TenantHarness:
         """Add a tenant named ``name`` beside the default one and hand back what a test drives it with: its
-        services, and a client that names it in ``X-Blizzard-Tenant`` on every call and seeds runners as
+        container scope, and a client that names it in ``X-Blizzard-Tenant`` on every call and seeds runners as
         ``<name>-<id>``. The default tenant stays named; the hub's open-tenant set is refreshed, as tenant
         administration refreshes it."""
         assert self.app is not None
         default_tenant(self.engine)
         tenant = add_tenant(self.engine, name)
-        self.hub_services.tenants.open_tenants.refresh()
-        services = self.open_services(tenant)
+        self.resolve_hub(OpenTenants).refresh()
         fleet = self.resolve(tenant, FleetService)
         prefix = f"{name}-"
-        client = RunnerFleetClient(self.app, services=services, fleet=fleet, runner_prefix=prefix)
+        client = RunnerFleetClient(self.app, process=self.process, tenant=tenant, runner_prefix=prefix)
         client.headers[TENANT_HEADER] = tenant
         return TenantHarness(
-            tenant=tenant, name=name, services=services, fleet=fleet, client=client, runner_prefix=prefix
+            tenant=tenant, name=name, process=self.process, fleet=fleet, client=client, runner_prefix=prefix
         )
 
     def promote(self, chunk_id: str) -> None:
@@ -1650,11 +1663,13 @@ class HubHarness:
 
 @dataclass(frozen=True)
 class TenantHarness:
-    """A tenant :meth:`HubHarness.add_tenant` added: its id and name, its services, and a client acting in it."""
+    """A tenant :meth:`HubHarness.add_tenant` added: its id and name, the process its scope opens in, and a client
+    acting in it."""
 
     tenant: TenantId
     name: str
-    services: TenantServices
+    #: The hub's process container, whose tenant scope this tenant's reads resolve through.
+    process: HubProcess
     #: The tenant's one fleet service, which registers its runners.
     fleet: FleetService
     #: Names the tenant on every call; a fleet call's runner is seeded in this tenant under :attr:`runner_prefix`.
@@ -1665,35 +1680,30 @@ class TenantHarness:
         """The hub-unique id this tenant's runner ``local`` is seeded under."""
         return f"{self.runner_prefix}{local}"
 
+    def resolve_hub[T](self, dependency_type: type[T]) -> T:
+        """The hub's one process-scoped ``dependency_type``, resolved through its process container."""
+        return self.process.resolver.get(dependency_type)
 
-def tenant_services_of(app: FastAPI) -> TenantServices:
-    """The services of a wired ``app``'s only open tenant — the name every test reads a tenant field of an
-    app through; a hub-level owner is resolved from ``app.state.hub_process``."""
-    tenants = app.state.services.tenants
-    tenant = tenants.open_tenants.only()
-    assert tenant is not None, "tenant_services_of needs an app serving exactly one open tenant"
-    return tenants.open_services(StoreScope(tenant))
+    def default_adapter[T](self, adapter_type: type[T]) -> T:
+        """This tenant's one ``adapter_type``, resolved through its container scope."""
+        return self.process.tenants.resolve(StoreScope(self.tenant), adapter_type)
+
+
+def only_tenant(app: FastAPI) -> TenantId:
+    """A wired ``app``'s only open tenant."""
+    tenant = app.state.hub_process.resolver.get(OpenTenants).only()
+    assert tenant is not None, "the app must serve exactly one open tenant"
+    return tenant
+
+
+def tenant_adapter_of[T](app: FastAPI, adapter_type: type[T]) -> T:
+    """A wired ``app``'s only open tenant's one ``adapter_type``, resolved through its container scope."""
+    return app.state.hub_process.tenants.resolve(StoreScope(only_tenant(app)), adapter_type)
 
 
 def tenant_fleet_of(app: FastAPI) -> FleetService:
     """The fleet service of a wired ``app``'s only open tenant, resolved through its container scope."""
-    tenants = app.state.services.tenants
-    tenant = tenants.open_tenants.only()
-    assert tenant is not None, "tenant_fleet_of needs an app serving exactly one open tenant"
-    return app.state.hub_process.tenants.resolve(StoreScope(tenant), FleetService)
-
-
-def serve_default_tenant(hub: HubHarness, services: TenantServices) -> None:
-    """Serve every request in the default tenant from ``services`` — a test's stand-in, usually
-    ``hub.services`` with a field replaced by a counting double."""
-    assert hub.app is not None
-    tenants = hub.hub_services.tenants
-    default = default_tenant(hub.engine)
-
-    def open_services(scope: StoreScope) -> TenantServices:
-        return services if scope.tenant == default else tenants.open_services(scope)
-
-    hub.app.state.services = replace(hub.hub_services, tenants=replace(tenants, open_services=open_services))
+    return tenant_adapter_of(app, FleetService)
 
 
 @dataclass(frozen=True)
@@ -2018,7 +2028,7 @@ def build_hub(
         named = {RESERVED_HUB_SOURCE_NAME: source}
         return WorkSourceRegistry(dict(named), closers=dict(named), editors=dict(named))
 
-    core = overridden_core(
+    process = overridden_core(
         connections,
         clock=clock,
         system_artifacts=system_artifacts or SYSTEM_ARTIFACTS_PACKAGED,
@@ -2041,39 +2051,34 @@ def build_hub(
             flags=flags or HUB_FLAGS,
         ),
     )
-    default_stores = core.open(default)
+    default_scope = process.tenants.open(default).resolver
     hub_source = HubWorkSource(
-        default_stores.work_item_store,
-        default_stores.work_item_edits,
-        core.process.resolver.get(IReadUserRepository),
-        default_stores.tenant.get(GardenProposalDeliveryResolution),
+        default_scope.get(WorkItemStore),
+        default_scope.get(WorkItemEditService),
+        process.resolver.get(IReadUserRepository),
+        default_scope.get(GardenProposalDeliveryResolution),
     )
     built_sources[RESERVED_HUB_SOURCE_NAME] = hub_source
     editors[RESERVED_HUB_SOURCE_NAME] = hub_source
     closers[RESERVED_HUB_SOURCE_NAME] = hub_source
     work_source_registry = WorkSourceRegistry(built_sources, closers=closers, editors=editors)
 
-    hub_services = build_services(core)
-    hub_services.tenants.open_tenants.refresh()
-    services = hub_services.tenants.open_services(default)
-    app = create_hub_app(config, services=hub_services, process=core.process, flags=flags)
+    process.resolver.get(OpenTenants).refresh()
+    app = create_hub_app(config, process=process, flags=flags)
     app.state.hub_settings = settings
-    fleet = core.process.tenants.resolve(default, FleetService)
-    client = RunnerFleetClient(app, services=services, fleet=fleet, register_claimants=auto_register_claimants)
+    client = RunnerFleetClient(app, process=process, tenant=default.tenant, register_claimants=auto_register_claimants)
     # Warm FastAPI's per-router route-resolution cache: it lazily caches routes on first
     # use, which is thread-unsafe under the component tier's OS-thread races.
     # POST avoids reading the SPA fallback when built static assets are present.
     client.post("/api/_route_cache_warm")
     return HubHarness(
         client=client,
-        services=services,
-        hub_services=hub_services,
+        process=process,
         work_sources=work_source_registry,
         clock=clock,
         engine=engine,
-        events=services.events,
+        events=process.tenants.resolve(default, EventBroker),
         app=app,
-        core=core,
         config=config,
     )
 
@@ -2427,7 +2432,7 @@ def chunk_facts_of(hub: HubHarness, chunk_id: str) -> ChunkFacts:
     """A chunk's current facts, or the unminted default — the same fallback every route
     applies, for a test calling a write-verb domain service directly rather than through
     its route (which would otherwise supply this from its own ``ChunkChanged.before``)."""
-    return ChunkFacts.or_default(hub.services.chunks.facts.load_facts(chunk_id))
+    return ChunkFacts.or_default(hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id))
 
 
 def write_chunk_pause_facts(tmp_path: Path, chunk_id: str, *facts: tuple[bool, datetime]) -> None:
@@ -2654,7 +2659,7 @@ def _only_project_on(conn: sa.Connection) -> ProjectId:
 def make_ready(hub: HubHarness, chunk_id: str) -> None:
     """Promote ``chunk_id`` through the promote service — a replay once promoted — so a claim
     finds it ``ready``. Bypasses the HTTP route: no operator session and no SSE frame."""
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None, f"unknown chunk {chunk_id}"
     hub.default_adapter(PromoteService).promote(chunk)
 

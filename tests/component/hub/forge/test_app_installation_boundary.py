@@ -32,6 +32,7 @@ from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceFields, WorkSourceId
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal
+from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.forge.auth import ForgeScope, ScopedAuthorizations
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgets, ForgePriority
 from blizzard.hub.forge.internal.authorizations import ForgeAuthorizations
@@ -41,6 +42,12 @@ from blizzard.hub.forge.landing import ForgeAuthRefused, ForgeCapabilityMissing,
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, WriteLocks
 from blizzard.hub.secrets import StoreSecretReader, hub_key_provider
+from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
+from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
+from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.schema import repositories, work_sources
 from blizzard.hub.tenancy import StoreScope
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
@@ -77,7 +84,7 @@ class _World:
         keys = hub_key_provider({}, data_dir=tmp_path / "data")
         store_clock = FixedClock(_NOW)
         core = configured_core(self.engine, tmp_path, clock=store_clock)
-        self.stores = core.open(StoreScope(default_tenant(self.engine)))
+        self.tenant_scope = core.tenants.open(StoreScope(default_tenant(self.engine))).resolver
         self.authoring = config_authoring(self.engine, keys=keys, clock=store_clock)
         self.clock = ControlledClock(_NOW)
         self.github = AppGitHub(clock=self.clock, rate_remaining=4000)
@@ -94,21 +101,23 @@ class _World:
             OP,
         ).work_source_id
         self._act_as_the_installation()
-        live = tenant_live(self.stores)
+        live = tenant_live(self.tenant_scope)
         authorizations = ForgeAuthorizations(
             secrets=StoreSecretReader(
-                catalog=self.stores.secrets, sealed=self.stores.secrets, cipher=secret_cipher(keys)
+                catalog=self.tenant_scope.get(SecretStore),
+                sealed=self.tenant_scope.get(SecretStore),
+                cipher=secret_cipher(keys),
             ),
-            forges=self.stores.forge_records,
+            forges=self.tenant_scope.get(ForgeRecordStore),
             tokens=InstallationTokens(clock=self.clock, transport=self.github.transport),
         )
         self.bindings: dict[str, ForgeBinding] = {}
         self.budgets = ForgeBudgets(clock=self.clock, dialects=rate_dialect)
         self.write_locks = WriteLocks()
         self.registry = ForgeRegistry(
-            records=self.stores.repository_records,
-            forges=self.stores.forge_records,
-            credentials=self.stores.credential_records,
+            records=self.tenant_scope.get(RepositoryRecordStore),
+            forges=self.tenant_scope.get(ForgeRecordStore),
+            credentials=self.tenant_scope.get(CredentialRecordStore),
             objects=live.objects,
             authorizations=authorizations,
             build=self._build,
@@ -118,15 +127,15 @@ class _World:
             dialects=rate_dialect,
         )
         self.sources = WorkSourceEntry.registry(
-            records=self.stores.work_source_records,
-            forges=self.stores.forge_records,
-            credentials=self.stores.credential_records,
+            records=self.tenant_scope.get(WorkSourceRecordStore),
+            forges=self.tenant_scope.get(ForgeRecordStore),
+            credentials=self.tenant_scope.get(CredentialRecordStore),
             objects=live.objects,
             authorizations=ScopedAuthorizations(authorizations, ForgeScope.WORK_SOURCE),
-            users=core.process.resolver.get(IReadUserRepository),
-            work_item_store=self.stores.work_item_store,
-            edits=self.stores.work_item_edits,
-            resolution=self.stores.tenant.get(GardenProposalDeliveryResolution),
+            users=core.resolver.get(IReadUserRepository),
+            work_item_store=self.tenant_scope.get(WorkItemStore),
+            edits=self.tenant_scope.get(WorkItemEditService),
+            resolution=self.tenant_scope.get(GardenProposalDeliveryResolution),
             budgets=self.budgets,
         )
 
@@ -218,7 +227,7 @@ def test_landing_and_the_work_source_share_the_installation_budget_but_never_a_t
 
 def test_a_replaced_key_mints_under_its_new_revision_with_no_restart(world: _World, loop: ActionLoop) -> None:
     before = world.land(loop, world.widget)
-    secret = world.stores.secrets.get("app-key")
+    secret = world.tenant_scope.get(SecretStore).get("app-key")
     assert secret is not None
 
     world.authoring.replace_secret(secret, world.github.private_pem, OP)
@@ -228,7 +237,7 @@ def test_a_replaced_key_mints_under_its_new_revision_with_no_restart(world: _Wor
 
 
 def test_a_key_github_does_not_hold_refuses_the_landing_build_as_key_rejected(world: _World) -> None:
-    secret = world.stores.secrets.get("app-key")
+    secret = world.tenant_scope.get(SecretStore).get("app-key")
     assert secret is not None
     world.authoring.replace_secret(secret, app_key_pem(1), OP)
 

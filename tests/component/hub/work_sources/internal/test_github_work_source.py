@@ -16,8 +16,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.registry.scopes import Resolver
 from blizzard.hub.auth.users import IReadUserRepository
-from blizzard.hub.composition import TenantStores
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace, TraceLanding
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.work_sources import WorkAnnotateError, WorkCloseError, WorkItemGoneError
@@ -28,10 +28,16 @@ from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ForgeId
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceFields, WorkSourceId
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
+from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.forge.auth import ForgeScope, ScopedAuthorizations
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.secrets import hub_key_provider
+from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
+from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.tenancy import StoreScope
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
@@ -87,14 +93,14 @@ def _registry_world(
     *sources: tuple[str, _Source],
     tokens: dict[str, str] | None = None,
     close_forge_writes_enabled: bool = True,
-) -> tuple[IWorkSourceRegistry, ConfigAuthoring, TenantStores, dict[str, WorkSourceId]]:
+) -> tuple[IWorkSourceRegistry, ConfigAuthoring, Resolver, dict[str, WorkSourceId]]:
     """The production registry over a migrated store holding ``sources`` and their secrets,
     each written through ``ConfigAuthoring``, and each source's id by its slug."""
     engine = migrate_to(tmp_path, "head")[1]
     clock = FixedClock(datetime(2026, 1, 1, tzinfo=UTC))
     keys = hub_key_provider({}, data_dir=tmp_path / "data")
-    core = configured_core(engine, tmp_path, clock=clock)
-    stores = core.open(StoreScope(default_tenant(engine)))
+    process = configured_core(engine, tmp_path, clock=clock)
+    stores = process.tenants.open(StoreScope(default_tenant(engine))).resolver
     authoring = config_authoring(engine, keys=keys, clock=clock)
     for secret, value in (tokens or {"gh": "token"}).items():
         authoring.create_secret(SecretName.parse(secret), value, OP)
@@ -108,15 +114,15 @@ def _registry_world(
     _HELD_SCOPES.append(stores)
     live = tenant_live(stores)
     registry = WorkSourceEntry.registry(
-        records=stores.work_source_records,
-        forges=stores.forge_records,
-        credentials=stores.credential_records,
+        records=stores.get(WorkSourceRecordStore),
+        forges=stores.get(ForgeRecordStore),
+        credentials=stores.get(CredentialRecordStore),
         objects=live.objects,
         authorizations=ScopedAuthorizations(live.authorizations, ForgeScope.WORK_SOURCE),
-        users=core.process.resolver.get(IReadUserRepository),
-        work_item_store=stores.work_item_store,
-        edits=stores.work_item_edits,
-        resolution=stores.tenant.get(GardenProposalDeliveryResolution),
+        users=process.resolver.get(IReadUserRepository),
+        work_item_store=stores.get(WorkItemStore),
+        edits=stores.get(WorkItemEditService),
+        resolution=stores.get(GardenProposalDeliveryResolution),
         budgets=ForgeBudgets(clock=clock, dialects=rate_dialect),
         close_forge_writes_enabled=close_forge_writes_enabled,
     )
@@ -327,10 +333,10 @@ def test_a_retired_source_whose_secret_cannot_be_revealed_reads_as_absent(tmp_pa
     """Items already ingested from a retired source must stay readable: once its secret is retired too,
     the source reads as absent rather than failing every read path."""
     registry, authoring, stores, ids = _registry_world(tmp_path, ("one", _github("acme/one")))
-    record = stores.work_source_records.get(WorkSourceId(ids["one"]))
+    record = stores.get(WorkSourceRecordStore).get(WorkSourceId(ids["one"]))
     assert record is not None
     authoring.retire_work_source(record, OP)
-    secret = stores.secrets.get("gh")
+    secret = stores.get(SecretStore).get("gh")
     assert secret is not None
     authoring.retire_secret(secret, OP)
     assert registry.get(ids["one"]) is None
@@ -346,7 +352,7 @@ def test_a_source_whose_credential_builds_no_authorization_raises_work_source_er
     engine = migrate_to(tmp_path, "head")[1]
     clock = FixedClock(datetime(2026, 1, 1, tzinfo=UTC))
     keys = hub_key_provider({}, data_dir=tmp_path / "data")
-    stores = configured_core(engine, tmp_path, clock=clock).open(StoreScope(default_tenant(engine)))
+    stores = configured_core(engine, tmp_path, clock=clock).tenants.open(StoreScope(default_tenant(engine))).resolver
     authoring = config_authoring(engine, keys=keys, clock=clock)
     authoring.create_secret(SecretName.parse("gh"), "token", OP)
     record = authoring.create_work_source("one", None, _github("acme/one").fields(seed_forge(engine)), OP)
@@ -354,7 +360,7 @@ def test_a_source_whose_credential_builds_no_authorization_raises_work_source_er
         record = replace(record, fields=replace(record.fields, credential_id=CredentialId("cred_gone")))
     else:
         record = authoring.retire_work_source(record, OP)
-        secret = stores.secrets.get("gh")
+        secret = stores.get(SecretStore).get("gh")
         assert secret is not None
         authoring.retire_secret(secret, OP)
     live = tenant_live(stores)
@@ -362,8 +368,8 @@ def test_a_source_whose_credential_builds_no_authorization_raises_work_source_er
     with pytest.raises(WorkSourceError, match=said):
         WorkSourceEntry.built(
             record,
-            forges=stores.forge_records,
-            credentials=stores.credential_records,
+            forges=stores.get(ForgeRecordStore),
+            credentials=stores.get(CredentialRecordStore),
             authorizations=ScopedAuthorizations(live.authorizations, ForgeScope.WORK_SOURCE),
             budgets=ForgeBudgets(clock=clock, dialects=rate_dialect),
         )

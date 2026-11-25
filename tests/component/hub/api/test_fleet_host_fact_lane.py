@@ -16,7 +16,8 @@ from blizzard.foundation.fact_kinds import EXTERNAL_SUBSCRIPTION_USAGE_MISSED, E
 from blizzard.hub.domain.execution.facts import PushedFact
 from blizzard.hub.domain.execution.host_facts import HostFactIngestResult, HostFactIngestService
 from blizzard.hub.domain.kernel.high_water import HighWaterConflict
-from blizzard.hub.domain.runners.host import Host
+from blizzard.hub.domain.runners.host import Host, IReadHostRegistry
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
@@ -102,7 +103,7 @@ def test_a_batch_is_applied_once_and_a_replay_is_reacknowledged(tmp_path: Path) 
 
 
 def _held(hub: HubHarness, host: dict[str, Any]) -> Host:
-    held = hub.services.hosts.get_host(host["host_id"])
+    held = hub.default_adapter(IReadHostRegistry).get_host(host["host_id"])
     assert held is not None
     return held
 
@@ -116,7 +117,7 @@ def _samples(seqs: range, *, marker: float = 0.0) -> list[PushedFact]:
 
 
 def _stored_pcts(hub: HubHarness, host_id: str) -> list[float]:
-    usage = hub.services.hosts.usage_of([host_id])[host_id]
+    usage = hub.default_adapter(IReadHostRegistry).usage_of([host_id])[host_id]
     return [window.utilization_pct for sample in usage.samples for window in sample.windows]
 
 
@@ -172,7 +173,7 @@ def test_a_push_paused_after_its_mark_read_applies_no_seq_a_competing_push_appli
     assert (pushed.applied, pushed.already_applied, pushed.rejected) == ([], list(paused), [])
     assert pushed.slugs == frozenset()
     assert _stored_pcts(hub, held.host_id) == [competing[-1] * 10]
-    assert pushed.high_water == hub.services.hosts.high_water(held.host_id) == competing[-1]
+    assert pushed.high_water == hub.default_adapter(IReadHostRegistry).high_water(held.host_id) == competing[-1]
 
 
 def test_a_push_resumes_from_the_mark_a_competing_push_left_below_its_own_seqs(
@@ -191,7 +192,7 @@ def test_a_push_resumes_from_the_mark_a_competing_push_left_below_its_own_seqs(
     assert competed[0].applied == [1]
     assert (pushed.applied, pushed.already_applied) == ([2, 3], [1])
     assert _stored_pcts(hub, held.host_id) == [35.0]
-    assert pushed.high_water == hub.services.hosts.high_water(held.host_id) == 3
+    assert pushed.high_water == hub.default_adapter(IReadHostRegistry).high_water(held.host_id) == 3
 
 
 def test_a_mid_batch_crash_lands_neither_the_in_flight_fact_nor_its_mark(
@@ -218,7 +219,7 @@ def test_a_mid_batch_crash_lands_neither_the_in_flight_fact_nor_its_mark(
     monkeypatch.undo()
 
     assert _stored_pcts(hub, held.host_id) == [10.0]
-    assert hub.services.hosts.high_water(held.host_id) == 1
+    assert hub.default_adapter(IReadHostRegistry).high_water(held.host_id) == 1
     replay = hub.default_adapter(HostFactIngestService).ingest(held, _samples(range(1, 3)))
     assert (replay.applied, replay.already_applied) == ([2], [1])
     assert _stored_pcts(hub, held.host_id) == [20.0]
@@ -257,7 +258,7 @@ def test_a_mid_batch_crash_rolls_the_in_flight_miss_back_with_its_mark(
         hub.default_adapter(HostFactIngestService).ingest(held, misses)
 
     assert _stored_miss_slugs(hub, held.host_id) == ["first"]
-    assert hub.services.hosts.high_water(held.host_id) == 1
+    assert hub.default_adapter(IReadHostRegistry).high_water(held.host_id) == 1
 
 
 def test_a_conflict_on_a_mark_no_push_moved_surfaces_rather_than_retrying(
@@ -330,7 +331,7 @@ def test_a_retired_hosts_push_is_refused_and_its_mark_stays_put(tmp_path: Path) 
 
     # Retirement revokes the host's token, so the gate no longer resolves it.
     assert resp.status_code == 401
-    assert hub.services.hosts.high_water(host["host_id"]) == 1
+    assert hub.default_adapter(IReadHostRegistry).high_water(host["host_id"]) == 1
 
 
 def test_the_host_service_refuses_a_retired_host_whatever_token_admitted_it(tmp_path: Path) -> None:
@@ -339,10 +340,10 @@ def test_the_host_service_refuses_a_retired_host_whatever_token_admitted_it(tmp_
 
     hub = build_hub(tmp_path)
     host = _host(hub)
-    held = hub.services.hosts.get_host(host["host_id"])
+    held = hub.default_adapter(IReadHostRegistry).get_host(host["host_id"])
     assert held is not None
     assert hub.client.post(f"/api/hosts/{host['host_id']}/retire", json={}).status_code == 200
-    retired = hub.services.hosts.get_host(host["host_id"])
+    retired = hub.default_adapter(IReadHostRegistry).get_host(host["host_id"])
     assert retired is not None and retired.retired
 
     with pytest.raises(HostRetired):
@@ -350,7 +351,7 @@ def test_the_host_service_refuses_a_retired_host_whatever_token_admitted_it(tmp_
             retired, [PushedFact(1, EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED, _sample(1)["payload"])]
         )
 
-    assert hub.services.hosts.high_water(host["host_id"]) == 0
+    assert hub.default_adapter(IReadHostRegistry).high_water(host["host_id"]) == 0
 
 
 def test_a_host_mark_and_a_runner_mark_advance_independently(tmp_path: Path) -> None:
@@ -514,12 +515,12 @@ def test_the_runner_list_statement_count_stays_flat_as_the_page_grows(tmp_path: 
     host = _host(hub)
     _hosted_runner(hub, host, "r1", subscription="anthropic")
     _push(hub, host, _sample(1))
-    one = count_queries(hub.engine, lambda: hub.services.registry.list_runners())
+    one = count_queries(hub.engine, lambda: hub.default_adapter(IReadRunnerRegistry).list_runners())
     for i in range(2, 6):
         _hosted_runner(hub, host, f"r{i}", subscription="anthropic")
     other = _host(hub, "other")
     _hosted_runner(hub, other, "o1", subscription="anthropic")
 
-    many = count_queries(hub.engine, lambda: hub.services.registry.list_runners())
+    many = count_queries(hub.engine, lambda: hub.default_adapter(IReadRunnerRegistry).list_runners())
 
     assert many == one

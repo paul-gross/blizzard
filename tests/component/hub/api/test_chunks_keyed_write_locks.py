@@ -18,6 +18,8 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.graph.authoring import DefaultGraphService, GraphMintService
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.operations.promote import ChunkNotPromotable, PromoteService
@@ -28,7 +30,11 @@ from tests.support.scaffolding import HubHarness, build_hub, hub_scoped, ingest,
 
 
 def _live_chunks_holding(hub: HubHarness, source: str, ref: str) -> list[str]:
-    return [c.chunk_id for c in hub.services.chunks.record.list_all() if any(w.ref == ref for w in c.work_refs)]
+    return [
+        c.chunk_id
+        for c in hub.default_adapter(IReadChunkRecordRepository).list_all()
+        if any(w.ref == ref for w in c.work_refs)
+    ]
 
 
 def test_two_overlapping_ingests_of_one_pointer_mint_once(tmp_path: Path) -> None:
@@ -38,7 +44,7 @@ def test_two_overlapping_ingests_of_one_pointer_mint_once(tmp_path: Path) -> Non
     with_test_lock_wait(hub)
     entered = threading.Event()
     release = threading.Event()
-    record: Any = hub.services.chunks.record
+    record: Any = hub.default_adapter(IReadChunkRecordRepository)
     real_mint = record.mint
 
     def _blocking_mint(chunk: Chunk, *, transaction: LockedTransaction) -> None:
@@ -98,8 +104,7 @@ def test_ingests_of_different_pointers_lock_only_their_own_keys(tmp_path: Path) 
 def test_two_concurrent_first_default_graph_resolutions_mint_it_once(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     with_test_lock_wait(hub)
-    services = hub.services
-    graph_store: Any = services.graph_mint.graphs
+    graph_store: Any = hub.default_adapter(GraphMintService).graphs
     entered = threading.Event()
     release = threading.Event()
     real_mint = graph_store.mint
@@ -117,7 +122,7 @@ def test_two_concurrent_first_default_graph_resolutions_mint_it_once(tmp_path: P
 
     def _ensure(name: str) -> None:
         try:
-            graph = services.default_graph.ensure_default(
+            graph = hub.default_adapter(DefaultGraphService).ensure_default(
                 PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
             )
             ids[name] = graph.graph_id
@@ -153,7 +158,7 @@ def test_a_chunk_stopped_after_its_caller_resolved_it_is_not_promoted(tmp_path: 
     promotability is judged from the facts read in that unit, not from the entity it was handed."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=False)
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     stopped = hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"})
     assert stopped.status_code == 202, stopped.text

@@ -14,7 +14,11 @@ from typing import cast
 
 from blizzard.hub.domain.chunk.dependencies import DependencyService, PrerequisiteScope
 from blizzard.hub.domain.chunk.model import DependencyEdge
-from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.dependencies import (
+    IReadChunkDependenciesRepository,
+    IWriteChunkDependenciesRepository,
+)
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.operations.complete import CompleteService
 from blizzard.wire.route import CLAIM_DEPENDENCY
@@ -22,7 +26,7 @@ from tests.support.scaffolding import HubHarness, build_hub, count_queries, inge
 
 
 def _resolve(hub: HubHarness, chunk_id: str):
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     return chunk
 
@@ -117,7 +121,7 @@ def test_claim_denied_the_instant_the_edge_is_declared_mid_tick(tmp_path: Path) 
 
     entered_write = threading.Event()
     release_write = threading.Event()
-    dependencies_store = cast(IWriteChunkDependenciesRepository, hub.services.chunks.dependencies)
+    dependencies_store = cast(IWriteChunkDependenciesRepository, hub.default_adapter(IReadChunkDependenciesRepository))
     real_declare = dependencies_store.declare
 
     def _blocking_declare(

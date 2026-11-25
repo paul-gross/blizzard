@@ -15,6 +15,7 @@ from blizzard.auth_core import Permission, Role
 from blizzard.hub.api import auth_session
 from blizzard.hub.auth.permissions import permissions_for
 from blizzard.hub.domain.config.apply import UrgencyReferenceGuard
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
@@ -28,9 +29,11 @@ def hub(tmp_path: Path) -> HubHarness:
 
 
 def _graph(hub: HubHarness) -> str:
-    return hub.services.default_graph.ensure_default(
-        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
-    ).name
+    return (
+        hub.default_adapter(DefaultGraphService)
+        .ensure_default(PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml())
+        .name
+    )
 
 
 def _apply(hub: HubHarness, document: dict[str, Any], *, dry_run: bool = False) -> Any:

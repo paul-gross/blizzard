@@ -10,7 +10,10 @@ from pydantic import BaseModel
 
 from blizzard.hub.api.auth import RunnerAuth
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
-from blizzard.hub.api.hub_level import Hub
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.graph.model import IReadGraphRepository
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
     AuthenticationRevokedProblem,
@@ -38,8 +41,8 @@ def test_artifact_check_problem_variants_are_aggregated(tmp_path: Path, monkeypa
     body = {"name": "delta", "content": "x"}
     live, revoked, retired = seed_credential_runners(hub)
     other = hub.add_tenant("other")
-    before = hub.services.chunks.record.get(chunk)
-    facts = hub.services.chunks.facts.load_facts(chunk)
+    before = hub.default_adapter(IReadChunkRecordRepository).get(chunk)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk)
     observations: list[RefusalObservation] = []
 
     def observe(response: Response, status: int, model: type[BaseModel]) -> None:
@@ -59,17 +62,17 @@ def test_artifact_check_problem_variants_are_aggregated(tmp_path: Path, monkeypa
         return None
 
     with monkeypatch.context() as patch:
-        patch.setattr(hub.services.graphs, "get", missing_graph)
+        patch.setattr(hub.default_adapter(IReadGraphRepository), "get", missing_graph)
         observe(client.post(url, json=body, headers=bearer(live)), 500, PinnedGraphMissingProblem)
     with store_free(hub.app):
         observe(client.post(url, json=body, headers=bearer(live)), 503, HubStoreUnavailableProblem)
-    assert hub.services.chunks.record.get(chunk) == before
-    assert hub.services.chunks.facts.load_facts(chunk) == facts
+    assert hub.default_adapter(IReadChunkRecordRepository).get(chunk) == before
+    assert hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk) == facts
 
-    def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
+    def close_before_resolution(request: Request) -> AdmittedTenant:
         principal = RunnerAuth.of(request).demand()
         close_tenant(hub.engine, principal.tenant_id)
-        services.tenants.open_tenants.refresh()
+        hub.resolve_hub(OpenTenants).refresh()
         return resolve_tenant(request)
 
     hub.app.dependency_overrides[resolve_tenant] = close_before_resolution

@@ -1,5 +1,5 @@
 """``RunService`` against a real store — ``build_hub``'s
-own full wiring, exercised through ``TenantServices.routine_run`` directly (no HTTP route
+own full wiring, exercised through the tenant's ``RunService`` directly (no HTTP route
 yet; adds one). Covers full, delta with a baseline, delta downgraded, an
 override against a related scope, the routine's defaults reaching the chunk, the graph
 pin, and the promote — the acceptance list the plan owes."""
@@ -16,6 +16,8 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome
 from blizzard.hub.domain.garden.routines import (
@@ -28,8 +30,9 @@ from blizzard.hub.domain.garden.routines import (
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
 from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, RunService, ScopeNotRelatedError, ScopeRetiredError
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope, ScopeLifecycle, ScopeRegistry, ScopeSlug
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
-from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from blizzard.hub.graphs import PACKAGED, packaged_default_yaml
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.store import schema as s
@@ -53,7 +56,7 @@ _AUTHOR = WorkItemAuthor.user("usr_1")
 
 
 def _default_graph(hub: HubHarness) -> Graph:
-    return hub.services.default_graph.ensure_default(
+    return hub.default_adapter(DefaultGraphService).ensure_default(
         PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
 
@@ -109,7 +112,7 @@ def test_full_mode_mints_and_ingests_leaving_the_chunk_not_ready(tmp_path: Path)
     assert result.item.routine_name == "gardening"
     assert result.item.scope_slug == "blizzard"
     assert result.item.run_mode == "full"
-    facts = hub.services.chunks.facts.load_facts(result.chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(result.chunk_id)
     assert facts is not None
     assert facts.status() == ChunkStatus.NOT_READY
     assert not facts.promoted
@@ -130,7 +133,7 @@ def test_the_minted_chunk_carries_a_resolvable_run_context(tmp_path: Path) -> No
         author=_AUTHOR,
     )
 
-    minted = hub.services.chunks.record.get(result.chunk_id)
+    minted = hub.default_adapter(IReadChunkRecordRepository).get(result.chunk_id)
     assert minted is not None
     run = hub.default_adapter(IReadRunContextRepository).for_chunk(minted)
     assert run is not None
@@ -151,7 +154,7 @@ def test_chunk_is_pinned_to_the_routines_graph(tmp_path: Path) -> None:
         author=_AUTHOR,
     )
 
-    minted = hub.services.chunks.record.get(result.chunk_id)
+    minted = hub.default_adapter(IReadChunkRecordRepository).get(result.chunk_id)
     assert minted is not None
     assert minted.graph_id == graph.graph_id
 
@@ -168,7 +171,7 @@ def test_the_routines_model_and_effort_defaults_reach_the_minted_chunk(tmp_path:
         author=_AUTHOR,
     )
 
-    minted = hub.services.chunks.record.get(result.chunk_id)
+    minted = hub.default_adapter(IReadChunkRecordRepository).get(result.chunk_id)
     assert minted is not None
     assert minted.default_model == ["opus"]
     assert minted.default_effort == "high"
@@ -186,7 +189,7 @@ def test_the_routines_harnesses_default_reaches_the_minted_chunk(tmp_path: Path)
         author=_AUTHOR,
     )
 
-    minted = hub.services.chunks.record.get(result.chunk_id)
+    minted = hub.default_adapter(IReadChunkRecordRepository).get(result.chunk_id)
     assert minted is not None
     assert minted.default_harnesses == ["claude_code", "codex"]
 
@@ -384,7 +387,7 @@ def test_a_routine_whose_name_differs_from_its_slug_records_the_slug_as_lineage(
         "/api/graphs", json={"definition_yaml": PACKAGED.named("garden-routine").inlined_yaml(YAML_CODEC)}
     )
     assert minted_graph.status_code == 201, minted_graph.text
-    graph = hub.services.graphs.get(minted_graph.json()["graph_id"])
+    graph = hub.default_adapter(IReadGraphRepository).get(minted_graph.json()["graph_id"])
     assert graph is not None
     routine = hub.default_adapter(RoutineAuthoring).create(
         ctx=_CTX,
@@ -400,7 +403,7 @@ def test_a_routine_whose_name_differs_from_its_slug_records_the_slug_as_lineage(
     )
 
     assert result.item.routine_name == "gardening"
-    minted = hub.services.chunks.record.get(result.chunk_id)
+    minted = hub.default_adapter(IReadChunkRecordRepository).get(result.chunk_id)
     assert minted is not None
     run = hub.default_adapter(IReadRunContextRepository).for_chunk(minted)
     assert run is not None and run.routine_name == "gardening"

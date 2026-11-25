@@ -15,6 +15,7 @@ from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.api.chunk_events import ChunkChanged
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast, pushed_facts
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.execution.facts import FactIngestService
 from blizzard.hub.events.broker import EventBroker
 from blizzard.wire.facts import RunnerFact, RunnerFactBatch
@@ -409,9 +410,9 @@ def test_before_many_snapshots_carry_prev_status_only_and_read_fewer_statements(
     ids = _seed_scale(hub, 3)
 
     with capture_statements(hub.engine) as narrow:
-        snapshots = ChunkChanged.before_many(hub.services.chunk_frames, [*ids, "ch_never_minted"])
+        snapshots = ChunkChanged.before_many(hub.default_adapter(ChunkFrameLoader), [*ids, "ch_never_minted"])
     with capture_statements(hub.engine) as wide:
-        hub.services.chunks.facts.load_facts_for(ids)
+        hub.default_adapter(IReadChunkFactsRepository).load_facts_for(ids)
 
     assert {chunk_id: snapshot.prev_status for chunk_id, snapshot in snapshots.items()} == {
         **dict.fromkeys(ids, "running"),

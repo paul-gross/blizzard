@@ -14,10 +14,11 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
-from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, IWriteRunnerRegistry
 from blizzard.wire.route import RouteClaimPausedDenial
 from tests.support.route_classes import api_routes, dependency_names
 from tests.support.scaffolding import HubHarness, build_hub, pointer_token, report_lease, runner_token
@@ -153,7 +154,9 @@ def test_a_retire_rerun_finishes_a_partial_release(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _register(hub)
     chunk_id = _held_chunk(hub)
-    writer = cast(IWriteRunnerRegistry, hub.services.registry)  # the one store instance behind both seams
+    writer = cast(
+        IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry)
+    )  # the one store instance behind both seams
     writer.record_lifecycle("runner-a", retired=True, at=hub.clock.now(), by="op", expected_lifecycle=0)
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["route"] is not None
 
@@ -176,7 +179,7 @@ def _finished_chunk(hub: HubHarness, runner_id: str = "runner-a") -> str:
         json={"choice": "pass", "epoch": 1, "runner_id": runner_id, "from_node_id": node_id, "artifacts": []},
     )
     assert resp.status_code == 200 and resp.json()["outcome"] == "done", resp.text
-    assert hub.services.chunks.route.route_of(chunk_id) is not None
+    assert hub.default_adapter(IReadChunkRouteRepository).route_of(chunk_id) is not None
     return chunk_id
 
 
@@ -196,13 +199,13 @@ def test_a_forced_retire_leaves_a_finished_chunk_untouched(tmp_path: Path) -> No
     hub = build_hub(tmp_path)
     _register(hub)
     chunk_id = _finished_chunk(hub)
-    registration = hub.services.registry.get_runner("runner-a")
+    registration = hub.default_adapter(IReadRunnerRegistry).get_runner("runner-a")
     assert registration is not None
 
     outcome = hub.default_adapter(FleetService).retire(registration, by="op", force=True)
 
     assert outcome.released == ()
-    assert hub.services.chunks.route.route_of(chunk_id) is not None
+    assert hub.default_adapter(IReadChunkRouteRepository).route_of(chunk_id) is not None
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
     assert _retire(hub, force=True).json()["released_chunk_ids"] == []
 
@@ -298,7 +301,7 @@ def test_a_retired_runner_whose_token_still_resolves_is_refused_on_every_gated_f
     held = _held_chunk(hub)
     report_lease(hub, held, epoch=1, seq=1, runner_id="runner-a")
     # Retired with its route still live, so the routes that act on a held chunk have one to refuse on.
-    writer = cast(IWriteRunnerRegistry, hub.services.registry)
+    writer = cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry))
     writer.record_lifecycle("runner-a", retired=True, at=hub.clock.now(), by="op", expected_lifecycle=0)
     hub.clock.advance(timedelta(seconds=5))
     before = _store_rows(hub)
@@ -363,7 +366,7 @@ def test_the_retired_claim_refusal_parses_as_the_paused_denial_older_runners_rea
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     # Retired with its token still current — as when an enroll races the retire — so the claim
     # reaches the domain's refusal rather than the gate's 401 for a revoked token.
-    writer = cast(IWriteRunnerRegistry, hub.services.registry)
+    writer = cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry))
     writer.record_lifecycle("runner-a", retired=True, at=hub.clock.now(), by="op", expected_lifecycle=0)
 
     resp = hub.client.post(
@@ -388,7 +391,7 @@ def test_a_forced_retire_records_the_fact_before_its_first_release(
     retired_at_release: list[bool] = []
 
     def observed(chunk: Chunk, *, runner: RunnerLifecycleVersion) -> int | None:
-        registration = hub.services.registry.get_runner(runner.runner_id)
+        registration = hub.default_adapter(IReadRunnerRegistry).get_runner(runner.runner_id)
         assert registration is not None
         retired_at_release.append(registration.retired)
         return release_held(chunk, runner=runner)

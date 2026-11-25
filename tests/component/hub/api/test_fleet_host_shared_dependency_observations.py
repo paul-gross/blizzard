@@ -12,14 +12,14 @@ from pydantic import BaseModel
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.api.auth import HostAuth
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
-from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.runners.host import HostTokenRotation
 from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
-from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, IWriteRunnerRegistry
 from blizzard.hub.domain.runners.route import Route
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
@@ -130,7 +130,7 @@ def test_shared_refusals_match_each_host_operation(
         assert claim.status_code == 201, claim.text
         retire_url = path.format(runner_id="runner-a")
         observe(client.post(retire_url, json={}, headers=headers), 409, RunnerHoldsRoutesProblem)
-        registry = cast(IWriteRunnerRegistry, hub.services.registry)
+        registry = cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry))
         holdings = hub.default_adapter(FleetService).holdings
 
         def retire_after_read(runner_id: str) -> list[Route]:
@@ -187,10 +187,10 @@ def test_shared_refusals_match_each_host_operation(
         )
     )
 
-    def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
+    def close_before_resolution(request: Request) -> AdmittedTenant:
         principal = HostAuth.of(request).demand()
         close_tenant(hub.engine, principal.tenant_id)
-        services.tenants.open_tenants.refresh()
+        hub.resolve_hub(OpenTenants).refresh()
         return resolve_tenant(request)
 
     hub.app.dependency_overrides[resolve_tenant] = close_before_resolution

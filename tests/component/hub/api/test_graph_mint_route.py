@@ -7,7 +7,7 @@ from pathlib import Path
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.hub.documents import YAML_CODEC
-from blizzard.hub.domain.graph.model import GraphArtifact, ProducesSpec
+from blizzard.hub.domain.graph.model import GraphArtifact, IReadGraphRepository, ProducesSpec
 from blizzard.hub.graphs import PACKAGED, GraphFile
 from blizzard.wire.graph import GRAPH_DEFINITION_INVALID, GraphValidationReport
 from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
@@ -129,7 +129,7 @@ def test_mint_round_trips_node_produces_and_checks_through_the_store(tmp_path: P
     graph_id = minted.json()["graph_id"]
 
     # Reload from the store (not the in-memory mint) and assert the node carries both lists.
-    reloaded = hub.services.graphs.get(graph_id)
+    reloaded = hub.default_adapter(IReadGraphRepository).get(graph_id)
     assert reloaded is not None
     review = next(n for n in reloaded.nodes if n.name == "review")
     assert review.produces == [
@@ -180,7 +180,7 @@ def test_mint_round_trips_bounce_cap_through_the_store(tmp_path: Path) -> None:
     assert minted.status_code == 201, minted.text
     graph_id = minted.json()["graph_id"]
 
-    reloaded = hub.services.graphs.get(graph_id)
+    reloaded = hub.default_adapter(IReadGraphRepository).get(graph_id)
     assert reloaded is not None
     deliver = next(n for n in reloaded.nodes if n.name == "deliver")
     assert deliver.bounce_cap == 3
@@ -229,7 +229,7 @@ def test_mint_round_trips_poll_interval_and_timeout_through_the_store(tmp_path: 
     assert minted.status_code == 201, minted.text
     graph_id = minted.json()["graph_id"]
 
-    reloaded = hub.services.graphs.get(graph_id)
+    reloaded = hub.default_adapter(IReadGraphRepository).get(graph_id)
     assert reloaded is not None
     merge = next(n for n in reloaded.nodes if n.name == "merge")
     assert merge.poll_interval_seconds == 15
@@ -263,7 +263,7 @@ def test_mint_round_trips_graph_artifacts_through_the_store(tmp_path: Path) -> N
     assert minted.status_code == 201, minted.text
     graph_id = minted.json()["graph_id"]
 
-    reloaded = hub.services.graphs.get(graph_id)
+    reloaded = hub.default_adapter(IReadGraphRepository).get(graph_id)
     assert reloaded is not None
     assert reloaded.artifacts == [GraphArtifact(name="docket", content="the docket's baked text", ordinal=0)]
 
@@ -305,7 +305,7 @@ def test_a_file_declared_artifact_reminted_from_inlined_yaml_bakes_the_files_own
     minted = hub.client.post("/api/graphs", json={"definition_yaml": GraphFile(graph_path).inlined_yaml(YAML_CODEC)})
 
     assert minted.status_code == 201, minted.text
-    reloaded = hub.services.graphs.get(minted.json()["graph_id"])
+    reloaded = hub.default_adapter(IReadGraphRepository).get(minted.json()["graph_id"])
     assert reloaded is not None
     assert reloaded.artifacts == [GraphArtifact(name="docket", content=_DOCKET_TEXT, ordinal=0)]
 
@@ -320,8 +320,8 @@ def test_reminting_the_same_definition_yaml_bakes_identical_artifact_content(tmp
     assert first.status_code == 201, first.text
     assert second.status_code == 201, second.text
 
-    first_graph = hub.services.graphs.get(first.json()["graph_id"])
-    second_graph = hub.services.graphs.get(second.json()["graph_id"])
+    first_graph = hub.default_adapter(IReadGraphRepository).get(first.json()["graph_id"])
+    second_graph = hub.default_adapter(IReadGraphRepository).get(second.json()["graph_id"])
     assert first_graph is not None
     assert second_graph is not None
     assert first_graph.artifacts == second_graph.artifacts

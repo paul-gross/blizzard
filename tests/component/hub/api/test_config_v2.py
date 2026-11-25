@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.wire.config import CONFIG_DOCUMENT_INVALID, ConfigDocumentInvalidProblem
 from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
 from tests.support.scaffolding import build_hub
@@ -28,7 +29,7 @@ def test_v2_apply_dry_run_export_round_trip_and_noop(tmp_path: Path) -> None:
     assert dry.status_code == 200, dry.text
     assert dry.json()["apply_id"] is None
     assert [o["kind"] for o in dry.json()["outcomes"]] == ["forge", "work_source", "repository"]
-    assert hub.services.forge_records.list_all(include_retired=True) == []
+    assert hub.default_adapter(IReadForgeRepository).list_all(include_retired=True) == []
     applied = hub.client.post("/api/config/apply", json=document)
     assert applied.status_code == 200, applied.text
     assert applied.json()["warnings"] == []
@@ -52,7 +53,7 @@ def test_v2_refusals_are_located_and_atomic(tmp_path: Path) -> None:
     missing = hub.client.post("/api/config/apply", json={**base, "repositories": [{**REPO, "forge": "unknown"}]})
     assert missing.status_code == 422
     assert missing.json()["detail"][0]["loc"] == ["body", "repositories", 0, "forge"]
-    assert hub.services.forge_records.list_all(include_retired=True) == []
+    assert hub.default_adapter(IReadForgeRepository).list_all(include_retired=True) == []
     assert hub.client.post("/api/config/apply", json=base).status_code == 200
     wrong_kind = hub.client.post("/api/config/apply", json={"version": 2, "forges": [{**FORGE, "kind": "other"}]})
     assert wrong_kind.status_code == 422
@@ -110,7 +111,7 @@ def test_a_document_of_any_version_but_2_or_3_is_refused_naming_both(tmp_path: P
     assert detail["loc"] == ["body", "version"]
     assert detail["type"] == "config_version_retired"
     assert "version 2" in detail["msg"]
-    assert hub.services.forge_records.list_all(include_retired=True) == []
+    assert hub.default_adapter(IReadForgeRepository).list_all(include_retired=True) == []
 
 
 @pytest.mark.parametrize("path", ["/api/config/export", "/api/config/schema/repositories"])

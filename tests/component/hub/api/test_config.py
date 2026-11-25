@@ -14,6 +14,7 @@ from sqlalchemy import Connection
 
 from blizzard.auth_core import Role
 from blizzard.hub.api.user_names import user_names
+from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.domain.config import secret_lifecycle
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.secrets import secret_lock
@@ -197,7 +198,7 @@ def test_the_create_422s_name_the_offending_field(hub: HubHarness) -> None:
 def test_a_retired_secret_is_a_422_on_create_and_on_enable(hub: HubHarness) -> None:
     assert _create(hub).status_code == 201
     hub.client.post("/api/work-sources/demo/retire")
-    retire_credential(hub.services, "gh")
+    retire_credential(hub, "gh")
     assert hub.client.post("/api/secrets/gh/retire").status_code == 200
     assert _create(hub, slug="other", locator="acme/other").status_code == 422
     enabled = hub.client.post("/api/work-sources/demo/enable")
@@ -354,7 +355,7 @@ def test_a_referenced_secret_cannot_be_retired_and_shows_its_references(hub: Hub
     assert hub.client.get("/api/secrets/gh").json()["retired"] is False
     hub.client.post("/api/work-sources/demo/retire")
     assert [ref["kind"] for ref in hub.client.get("/api/secrets/gh").json()["references"]] == ["credential"]
-    retire_credential(hub.services, "gh")
+    retire_credential(hub, "gh")
     assert hub.client.get("/api/secrets/gh").json()["references"] == []
     assert hub.client.post("/api/secrets/gh/retire").status_code == 200
 
@@ -648,7 +649,7 @@ def test_repository_retire_and_enable_move_the_revision_and_guard_the_secret(hub
     assert (retired["revision"], retired["retired"]) == (2, True)
     assert hub.client.get("/api/repositories").json()["repositories"] == []
     assert len(hub.client.get("/api/repositories", params={"include_retired": True}).json()["repositories"]) == 1
-    retire_credential(hub.services, "gh")
+    retire_credential(hub, "gh")
     assert hub.client.post("/api/secrets/gh/retire").status_code == 200
     enabled = hub.client.post("/api/repositories/blizzard/enable")
     assert enabled.status_code == 422
@@ -1210,5 +1211,7 @@ def test_admin_records_name_a_user_actor_and_leave_a_non_user_actor_to_its_id(tm
     assert source["created_by"] == ada.user_id and source["created_by_name"] == "Ada Lovelace"
 
     # A stored id that is no user — a config door, a deleted user — carries no name.
-    assert user_names(hub.services.users, [ada.user_id, "migration", "usr_gone"]) == {ada.user_id: "Ada Lovelace"}
+    assert user_names(hub.default_adapter(IReadUserRepository), [ada.user_id, "migration", "usr_gone"]) == {
+        ada.user_id: "Ada Lovelace"
+    }
     assert hub.client.get("/api/work-sources/hub", headers=headers).json()["created_by_name"] is None

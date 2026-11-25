@@ -15,8 +15,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.hub.composition import HubServices, TenantServices
+from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import OperationalEvent, WorkRef
+from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.chunk.ports.work_sources import IWorkAnnotator, WorkAnnotateError, WorkAnnotateRefusal
 from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
 from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
@@ -25,13 +29,15 @@ from blizzard.hub.domain.operations.queue import GroupService
 from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
-from blizzard.hub.tenancy import StoreScope, TenantId
+from blizzard.hub.tenancy import TenantId
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
 from tests.support.scaffolding import (
     FakeAnnotator,
     FakeWorkSource,
     ForgeDouble,
     HubHarness,
+    TenantHarness,
     WorkSourceRegistry,
     build_hub,
     count_queries,
@@ -56,7 +62,7 @@ def test_live_work_refs_includes_not_ready_and_ready_chunks(tmp_path: Path) -> N
     ingest(hub, [{"source": "default", "ref": "1"}], promote=False)
     ingest(hub, [{"source": "default", "ref": "2"}], promote=True)
 
-    refs = hub.services.chunks.work_refs.live_work_refs()
+    refs = hub.default_adapter(IReadChunkWorkRefsRepository).live_work_refs()
 
     assert refs[WorkRef(source="default", ref="1")] is ChunkStatus.NOT_READY
     assert refs[WorkRef(source="default", ref="2")] is ChunkStatus.READY
@@ -65,11 +71,11 @@ def test_live_work_refs_includes_not_ready_and_ready_chunks(tmp_path: Path) -> N
 def test_live_work_refs_excludes_a_terminal_chunk(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource(name="default")})
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     hub.default_adapter(StopService).stop(chunk, by="test")
 
-    refs = hub.services.chunks.work_refs.live_work_refs()
+    refs = hub.default_adapter(IReadChunkWorkRefsRepository).live_work_refs()
 
     assert WorkRef(source="default", ref="1") not in refs
 
@@ -80,7 +86,7 @@ def test_live_work_refs_excludes_a_grouped_chunk_but_carries_its_ref_via_the_sur
     merged_id = ingest(hub, [{"source": "default", "ref": "2"}], promote=False)
 
     hub.default_adapter(GroupService).group(survivor_id, [merged_id])
-    refs = hub.services.chunks.work_refs.live_work_refs()
+    refs = hub.default_adapter(IReadChunkWorkRefsRepository).live_work_refs()
 
     assert refs[WorkRef(source="default", ref="1")] is ChunkStatus.NOT_READY
     assert refs[WorkRef(source="default", ref="2")] is ChunkStatus.NOT_READY  # via the survivor now
@@ -90,11 +96,11 @@ def test_live_work_refs_statement_count_does_not_grow_with_work_ref_count(tmp_pa
     hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource(name="default")})
     for ref in ("1", "2", "3"):
         ingest(hub, [{"source": "default", "ref": ref}], promote=True)
-    few_count = count_queries(hub.engine, lambda: hub.services.chunks.work_refs.live_work_refs())
+    few_count = count_queries(hub.engine, lambda: hub.default_adapter(IReadChunkWorkRefsRepository).live_work_refs())
 
     for ref in ("4", "5", "6", "7", "8", "9", "10", "11", "12"):
         ingest(hub, [{"source": "default", "ref": ref}], promote=True)
-    many_count = count_queries(hub.engine, lambda: hub.services.chunks.work_refs.live_work_refs())
+    many_count = count_queries(hub.engine, lambda: hub.default_adapter(IReadChunkWorkRefsRepository).live_work_refs())
 
     assert few_count == many_count
 
@@ -108,10 +114,10 @@ _FLOOR = timedelta(minutes=10)
 def _reconciler(hub: HubHarness, work_sources: WorkSourceRegistry) -> AnnotationReconciler:
     """A reconciler over ``hub``'s own store — a fresh one per call, as a restart builds."""
     tenant = TenantAnnotation(
-        facts=hub.services.chunks.facts,
+        facts=hub.default_adapter(IReadChunkFactsRepository),
         work_sources=work_sources,
         memory=ForgeAnnotationStore(hub_store_connections(hub.engine)),
-        events=hub.services.event_log,
+        events=hub.default_adapter(EventLogService),
         clock=hub.clock,
     )
     return AnnotationReconciler(
@@ -161,7 +167,7 @@ def test_sweep_clears_a_ref_the_hub_no_longer_holds(tmp_path: Path) -> None:
 def test_sweep_clears_a_stopped_chunk(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource(name="default")})
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     hub.default_adapter(StopService).stop(chunk, by="test")
     annotator = FakeAnnotator(initial={WorkRef(source="default", ref="1"): {WorkStatusMarker.INGESTED}})
@@ -281,7 +287,7 @@ def _annotation(client: TestClient) -> AnnotationReconciler:
 @pytest.fixture
 def hosted(
     tmp_path: Path, request: pytest.FixtureRequest
-) -> Iterator[tuple[TestClient, HubServices, ForgeAnnotationStore, ForgeDouble, str]]:
+) -> Iterator[tuple[TestClient, FastAPI, ForgeAnnotationStore, ForgeDouble, str]]:
     """A hosted hub whose work sources are store records the registry reads on use, so retiring a
     source or its secret through the hub's own routes reaches the very next sweep — beside the
     served forge double its sources talk HTTP to."""
@@ -290,15 +296,15 @@ def hosted(
     app = build_hosted_hub_app(config)
     # Never entered as a context manager: no lifespan, so no background sweep races the test's own passes.
     client = TestClient(app)
-    yield client, app.state.services, ForgeAnnotationStore(hub_store_connections(app.state.engine)), double, forge_url
+    yield client, app, ForgeAnnotationStore(hub_store_connections(app.state.engine)), double, forge_url
     app.state.engine.dispose()
 
 
 def test_a_retired_source_has_its_labels_cleared_once(
-    hosted: tuple[TestClient, HubServices, ForgeAnnotationStore, ForgeDouble, str],
+    hosted: tuple[TestClient, FastAPI, ForgeAnnotationStore, ForgeDouble, str],
 ) -> None:
-    client, services, memory, double, forge_url = hosted
-    source_id = create(client, services, forge_url, annotate=True)
+    client, app, memory, double, forge_url = hosted
+    source_id = create(client, app, forge_url, annotate=True)
     promote(client, "widget:1")
     _annotation(client).sweep()
     assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}
@@ -317,18 +323,18 @@ def test_a_retired_source_has_its_labels_cleared_once(
 
 
 def test_a_retired_source_whose_secret_is_also_retired_keeps_its_labels(
-    hosted: tuple[TestClient, HubServices, ForgeAnnotationStore, ForgeDouble, str],
+    hosted: tuple[TestClient, FastAPI, ForgeAnnotationStore, ForgeDouble, str],
 ) -> None:
     """With no credential left there is no clearer to reach the forge: the departure is
     forgotten rather than retried forever, and the labels stay as they were."""
-    client, services, memory, double, forge_url = hosted
-    source_id = create(client, services, forge_url, annotate=True)
+    client, app, memory, double, forge_url = hosted
+    source_id = create(client, app, forge_url, annotate=True)
     promote(client, "widget:1")
     _annotation(client).sweep()
     assert memory.annotated_sources() == {source_id}
 
     assert client.post(f"/api/work-sources/{source_id}/retire").status_code == 200
-    retire_credential(services, "gh")
+    retire_credential(client, "gh")
     assert client.post("/api/secrets/gh/retire").status_code == 200
     _annotation(client).sweep()
 
@@ -416,12 +422,11 @@ def test_unchanged_annotation_pass_has_one_hub_read_and_no_tenant_opens_as_tenan
 
     def open_tenant(tenant: TenantId) -> TenantAnnotation:
         opened.append(tenant)
-        services = hub.hub_services.tenants.open_services(StoreScope(tenant))
         return TenantAnnotation(
-            facts=services.chunks.facts,
-            work_sources=services.work_sources,
+            facts=hub.resolve(tenant, IReadChunkFactsRepository),
+            work_sources=hub.resolve(tenant, IWorkSourceRegistry),
             memory=ForgeAnnotationStore(scoped_connections(hub.engine, tenant)),
-            events=services.event_log,
+            events=hub.resolve(tenant, EventLogService),
             clock=hub.clock,
         )
 
@@ -505,8 +510,12 @@ def test_an_unfinished_departure_is_retried_on_the_next_sweep(tmp_path: Path) ->
     assert annotator.clear_calls == [WorkRef(source="default", ref="1")]
 
 
-def _skip_events(services: TenantServices) -> list[OperationalEvent]:
-    return [e for e in services.chunks.events.list_events() if e.kind == "forge-status-source-skipped"]
+def _skip_events(target: HubHarness | TenantHarness) -> list[OperationalEvent]:
+    return [
+        e
+        for e in target.default_adapter(IReadChunkEventsRepository).list_events()
+        if e.kind == "forge-status-source-skipped"
+    ]
 
 
 def test_an_unreadable_source_is_announced_once_across_repeated_passes(tmp_path: Path) -> None:
@@ -518,7 +527,7 @@ def test_an_unreadable_source_is_announced_once_across_repeated_passes(tmp_path:
     reconciler.sweep()
     reconciler.sweep_tenant(default_tenant(hub.engine))
 
-    (event,) = _skip_events(hub.services)
+    (event,) = _skip_events(hub)
     assert event.severity == "warning"
     assert event.detail == {"source": "default", "work_source_id": "default"}
 
@@ -535,7 +544,7 @@ def test_a_successful_read_re_arms_the_skip_announcement(tmp_path: Path) -> None
     hub.clock.advance(_FLOOR)
     reconciler.sweep()
 
-    assert len(_skip_events(hub.services)) == 2
+    assert len(_skip_events(hub)) == 2
 
 
 class _TogglingRegistry(WorkSourceRegistry):
@@ -563,7 +572,7 @@ def test_a_source_that_stops_annotating_mid_outage_is_announced_again_on_return(
     hub.clock.advance(_FLOOR)
     reconciler.sweep()
 
-    assert len(_skip_events(hub.services)) == 2
+    assert len(_skip_events(hub)) == 2
 
 
 def test_a_departed_sources_unreadable_clear_is_announced_once(tmp_path: Path) -> None:
@@ -575,7 +584,7 @@ def test_a_departed_sources_unreadable_clear_is_announced_once(tmp_path: Path) -
     restarted.sweep()
     restarted.sweep()
 
-    assert len(_skip_events(hub.services)) == 1
+    assert len(_skip_events(hub)) == 1
 
 
 def test_a_skip_is_recorded_in_its_own_tenants_event_log_only(tmp_path: Path) -> None:
@@ -584,17 +593,17 @@ def test_a_skip_is_recorded_in_its_own_tenants_event_log_only(tmp_path: Path) ->
     home = default_tenant(hub.engine)
     halves = {
         home: TenantAnnotation(
-            facts=hub.services.chunks.facts,
+            facts=hub.default_adapter(IReadChunkFactsRepository),
             work_sources=WorkSourceRegistry({}, {"default": _FlakyRead()}),
             memory=ForgeAnnotationStore(hub_store_connections(hub.engine)),
-            events=hub.services.event_log,
+            events=hub.default_adapter(EventLogService),
             clock=hub.clock,
         ),
         other.tenant: TenantAnnotation(
-            facts=other.services.chunks.facts,
+            facts=other.default_adapter(IReadChunkFactsRepository),
             work_sources=WorkSourceRegistry({}, {"default": FakeAnnotator()}),
             memory=ForgeAnnotationStore(scoped_connections(hub.engine, other.tenant)),
-            events=other.services.event_log,
+            events=other.default_adapter(EventLogService),
             clock=hub.clock,
         ),
     }
@@ -608,8 +617,8 @@ def test_a_skip_is_recorded_in_its_own_tenants_event_log_only(tmp_path: Path) ->
 
     reconciler.sweep()
 
-    assert len(_skip_events(hub.services)) == 1
-    assert _skip_events(other.services) == []
+    assert len(_skip_events(hub)) == 1
+    assert _skip_events(other) == []
 
 
 class _GrowingRegistry(WorkSourceRegistry):
@@ -675,7 +684,7 @@ def test_an_entering_source_is_remembered_before_its_first_label_write_and_forgo
 
 def test_the_work_refs_signature_moves_on_every_input_and_answers_in_one_statement(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource(name="default")})
-    work_refs = hub.services.chunks.work_refs
+    work_refs = hub.default_adapter(IReadChunkWorkRefsRepository)
     empty = work_refs.live_work_refs_signature()
     assert count_queries(hub.engine, work_refs.live_work_refs_signature) == 1
 
@@ -683,7 +692,7 @@ def test_the_work_refs_signature_moves_on_every_input_and_answers_in_one_stateme
     minted = work_refs.live_work_refs_signature()
     hub.client.post(f"/api/chunks/{chunk_id}/promote")
     promoted = work_refs.live_work_refs_signature()
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     hub.default_adapter(StopService).stop(chunk, by="test")
     stopped = work_refs.live_work_refs_signature()
@@ -717,8 +726,10 @@ class _RefusedWrites(FakeAnnotator):
         raise WorkAnnotateError("refused", refusal=_REFUSAL)
 
 
-def _refused_events(services: TenantServices) -> list[OperationalEvent]:
-    return [e for e in services.chunks.events.list_events() if e.kind == "forge-auth-refused"]
+def _refused_events(target: HubHarness | TenantHarness) -> list[OperationalEvent]:
+    return [
+        e for e in target.default_adapter(IReadChunkEventsRepository).list_events() if e.kind == "forge-auth-refused"
+    ]
 
 
 def test_a_refused_source_records_one_event_per_pass_naming_the_source_and_its_forge(tmp_path: Path) -> None:
@@ -728,10 +739,10 @@ def test_a_refused_source_records_one_event_per_pass_naming_the_source_and_its_f
     reconciler = _reconciler(hub, WorkSourceRegistry({}, {"default": _RefusedWrites()}))
 
     reconciler.sweep()
-    (event,) = _refused_events(hub.services)
+    (event,) = _refused_events(hub)
     reconciler.sweep()
 
-    assert len(_refused_events(hub.services)) == 2
+    assert len(_refused_events(hub)) == 2
     assert event.severity == "warning"
     assert event.chunk_id is None
     assert event.detail is not None
@@ -763,8 +774,8 @@ def test_a_refused_read_records_the_event_beside_the_skip(tmp_path: Path) -> Non
 
     _reconciler(hub, WorkSourceRegistry({}, {"default": _RefusedRead()})).sweep()
 
-    assert len(_refused_events(hub.services)) == 1
-    assert len(_skip_events(hub.services)) == 1
+    assert len(_refused_events(hub)) == 1
+    assert len(_skip_events(hub)) == 1
 
 
 def test_an_unrefused_failure_records_no_refusal_event(tmp_path: Path) -> None:
@@ -773,7 +784,7 @@ def test_an_unrefused_failure_records_no_refusal_event(tmp_path: Path) -> None:
     _reconciler(hub, WorkSourceRegistry({}, {"default": FakeAnnotator(fail_refs={"1"})})).sweep()
     _reconciler(hub, WorkSourceRegistry({}, {"default": _FlakyRead()})).sweep()
 
-    assert _refused_events(hub.services) == []
+    assert _refused_events(hub) == []
 
 
 class _RefusedBuild(WorkSourceRegistry):
@@ -788,9 +799,9 @@ def test_a_source_whose_build_is_refused_records_the_refusal_beside_the_skip(tmp
 
     _reconciler(hub, _RefusedBuild({}, {"default": FakeAnnotator()})).sweep()
 
-    (event,) = _refused_events(hub.services)
+    (event,) = _refused_events(hub)
     assert event.detail is not None
     assert event.detail["work_source_id"] == "default"
     assert event.detail["forge_id"] == "frg_example"
     assert event.detail["refusal"] == "credential-invalid"
-    assert len(_skip_events(hub.services)) == 1
+    assert len(_skip_events(hub)) == 1

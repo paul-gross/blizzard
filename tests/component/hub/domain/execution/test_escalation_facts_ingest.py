@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.api.ingest_broadcast import pushed_facts
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.execution.facts import FactIngestService
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
@@ -76,6 +77,6 @@ def test_a_push_of_escalations_applies_each_owes_no_close_and_reads_no_chunk_rec
     frames = [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == "event-logged"]
     assert [f for f in frames if f["kind"] == _KIND] == []
     for chunk_id in chunk_ids:
-        facts = hub.services.chunks.facts.load_facts(chunk_id)
+        facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
         assert facts is not None
         assert facts.status() == ChunkStatus.NEEDS_HUMAN

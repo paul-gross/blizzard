@@ -17,13 +17,16 @@ from blizzard.auth_core import Role
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.ports.queue import IReadChunkQueueRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.tenancy import StoreScope
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from tests.support.scaffolding import (
     FakeWorkSource,
     HubHarness,
@@ -163,8 +166,8 @@ def test_editor_listing_resolves_its_source_label_once_only_when_nonempty(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     hub = build_hub(tmp_path)
-    label = Mock(wraps=hub.services.work_sources.source_label)
-    monkeypatch.setattr(hub.services.work_sources, "source_label", label)
+    label = Mock(wraps=hub.default_adapter(IWorkSourceRegistry).source_label)
+    monkeypatch.setattr(hub.default_adapter(IWorkSourceRegistry), "source_label", label)
 
     empty = hub.client.get("/api/work-sources/hub/items")
     assert empty.status_code == 200 and empty.json()["items"] == []
@@ -238,7 +241,7 @@ def test_list_work_items_author_query_count_is_independent_of_item_count(tmp_pat
 
 def test_create_mints_exactly_one_chunk_on_the_default_graph_holding_the_new_pointer(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    default = hub.services.default_graph.ensure_default(
+    default = hub.default_adapter(DefaultGraphService).ensure_default(
         PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
 
@@ -306,12 +309,14 @@ def test_create_does_not_promote_and_priority_never_writes_a_queue_position(tmp_
         "/api/work-sources/hub/items", json={"title": "t", "body": "b", "stated_priority": "high"}
     ).json()
 
-    assert created["chunk_id"] not in hub.services.chunks.queue.queue_positions([created["chunk_id"]])
+    assert created["chunk_id"] not in hub.default_adapter(IReadChunkQueueRepository).queue_positions(
+        [created["chunk_id"]]
+    )
     assert hub.client.get("/api/queue").json()["entries"] == []
 
     promote = hub.client.post(f"/api/chunks/{created['chunk_id']}/promote")
     assert promote.status_code == 202
-    positions = hub.services.chunks.queue.queue_positions([created["chunk_id"]])
+    positions = hub.default_adapter(IReadChunkQueueRepository).queue_positions([created["chunk_id"]])
     assert created["chunk_id"] in positions  # the tail stamp promotion always writes
     assert [e["chunk_id"] for e in hub.client.get("/api/queue").json()["entries"]] == [created["chunk_id"]]
 
@@ -319,7 +324,7 @@ def test_create_does_not_promote_and_priority_never_writes_a_queue_position(tmp_
 def test_create_against_a_retired_default_graph_is_503_and_writes_no_item(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     doc = PACKAGED_GRAPHS.default.doc
-    graph = hub.services.default_graph.ensure_default(doc, definition_yaml=packaged_default_yaml())
+    graph = hub.default_adapter(DefaultGraphService).ensure_default(doc, definition_yaml=packaged_default_yaml())
     hub.resolve(default_tenant(hub.engine), GraphLifecycleService).retire(graph, by="operator")
 
     resp = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"})
@@ -340,7 +345,7 @@ def test_a_blank_title_rejects_before_the_default_graph_is_resolved(tmp_path: Pa
     assert blank.status_code == 422, blank.text
     assert hub.client.get("/api/graphs").json() == []
 
-    graph = hub.services.default_graph.ensure_default(
+    graph = hub.default_adapter(DefaultGraphService).ensure_default(
         PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     hub.resolve(default_tenant(hub.engine), GraphLifecycleService).retire(graph, by="operator")

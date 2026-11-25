@@ -18,6 +18,8 @@ from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import IReadRoutineRepository, RoutineAuthoring, RoutineEdit
 from blizzard.hub.domain.garden.scopes import ScopeSlug
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
+from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
 from tests.support.scaffolding import HubHarness, build_hub, default_project, project_record
@@ -35,9 +37,11 @@ def _project(hub: HubHarness) -> str:
 
 
 def _graph(hub: HubHarness) -> str:
-    return hub.services.default_graph.ensure_default(
-        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
-    ).name
+    return (
+        hub.default_adapter(DefaultGraphService)
+        .ensure_default(PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml())
+        .name
+    )
 
 
 def _urgency(hub: HubHarness, slug: str) -> dict[str, Any]:
@@ -243,7 +247,7 @@ def test_an_export_applied_back_writes_nothing(hub: HubHarness) -> None:
         slug="sweep",
         graph_name=_graph(hub),
         default_scope_slug=ScopeSlug.parse("blizzard"),
-        default_urgency=hub.services.urgency_reading.named("default_urgency", "urgent"),
+        default_urgency=hub.default_adapter(UrgencyReading).named("default_urgency", "urgent"),
     )
     _routine(hub, "other")
     assert _cadence(hub, {"key": "nightly", "routine": "sweep", "urgency": "urgent"}).status_code == 201

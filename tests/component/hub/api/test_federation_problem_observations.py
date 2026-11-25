@@ -8,9 +8,15 @@ from pydantic import BaseModel
 
 from blizzard.auth_core import Role
 from blizzard.hub.domain.execution.fleet import FleetService
-from blizzard.hub.domain.runners.host import HostAddition, HostLifecycleFact, HostReport, IWriteHostRegistry
+from blizzard.hub.domain.runners.host import (
+    HostAddition,
+    HostLifecycleFact,
+    HostReport,
+    IReadHostRegistry,
+    IWriteHostRegistry,
+)
 from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
-from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, IWriteRunnerRegistry
 from blizzard.wire.auth import (
     CliPkceRequiredProblem,
     CliRedirectRefusedProblem,
@@ -60,11 +66,11 @@ def test_authorize_problem_variants_match_runtime_responses(tmp_path: Path) -> N
     ):
         observe(hub.client.get(_PATH, params=params, follow_redirects=False), 400, model)
 
-    runners = cast(IWriteRunnerRegistry, hub.services.registry)
+    runners = cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry))
     runners.record_lifecycle("runner-a", retired=True, at=hub.clock.now(), by="op", expected_lifecycle=0)
     observe(hub.client.get(_PATH, params=_PARAMS, follow_redirects=False), 403, RunnerRetiredProblem)
 
-    hosts = cast(IWriteHostRegistry, hub.services.hosts)
+    hosts = cast(IWriteHostRegistry, hub.default_adapter(IReadHostRegistry))
     hosts.add(HostAddition("hs_test", "host", "host-hash", at=hub.clock.now(), by="op"))
     hosts.record_report(
         "hs_test",

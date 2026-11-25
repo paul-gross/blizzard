@@ -7,9 +7,11 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from starlette.exceptions import HTTPException
 
-from blizzard.hub.api.hub_level import hub_services
+from blizzard.foundation.registry.interface import ServiceAbsent
 from blizzard.hub.api.problem_exceptions import problem_http_exception
+from blizzard.hub.api.resolution import refuse_absent_service
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.tenancy import STORE_UNAVAILABLE
 from blizzard.wire import problem
 from blizzard.wire import route as route_wire
 from blizzard.wire import runner as runner_wire
@@ -52,12 +54,18 @@ def test_runner_never_connected_problem(tmp_path: Path) -> None:
     assert response.json()["detail"] == "runner ghost has not registered"
 
 
+def _absent_store_port() -> None:
+    """A dependency resolving a port the store-free graph declares absent."""
+    raise ServiceAbsent(STORE_UNAVAILABLE)
+
+
 def test_unwired_hub_dependency_is_scoped_to_runner_reach() -> None:
     app = FastAPI()
     app.add_exception_handler(HTTPException, problem_http_exception)
+    app.add_exception_handler(ServiceAbsent, refuse_absent_service)
 
-    @app.get("/api/fleet/identity", dependencies=[Depends(hub_services)])
-    @app.get("/unrelated", dependencies=[Depends(hub_services)])
+    @app.get("/api/fleet/identity", dependencies=[Depends(_absent_store_port)])
+    @app.get("/unrelated", dependencies=[Depends(_absent_store_port)])
     def endpoint() -> None:
         pass
 

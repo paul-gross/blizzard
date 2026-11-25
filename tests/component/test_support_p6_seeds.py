@@ -14,6 +14,7 @@ import sqlalchemy as sa
 from blizzard.auth_core import Role
 from blizzard.hub.auth.internal.hub_admin_repository import HubAdminRepository
 from blizzard.hub.auth.internal.membership_repository import MembershipRepository
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantClosed
 from tests.support.scaffolding import (
@@ -77,8 +78,8 @@ def test_an_added_tenants_client_acts_in_that_tenant_and_seeds_prefixed_runners(
     assert other.client.get("/api/fleet/summary").status_code == 200
 
     assert other.client.default_runner_id == other.runner_id("r1") == "beta-r1"
-    assert other.services.registry.get_runner("beta-r1") is not None
-    assert hub.services.registry.get_runner("beta-r1") is None
+    assert other.default_adapter(IReadRunnerRegistry).get_runner("beta-r1") is not None
+    assert hub.default_adapter(IReadRunnerRegistry).get_runner("beta-r1") is None
     with pytest.raises(AssertionError, match="unique across the hub"):
         other.client.get("/api/fleet/summary", params={"runner_id": "r1"})
 

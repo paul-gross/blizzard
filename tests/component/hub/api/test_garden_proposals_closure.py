@@ -130,7 +130,7 @@ def test_accept_with_no_body_override_mints_the_proposals_body_wrapped_in_the_te
     assert source == "hub"
 
     item = hub.client.get(f"/api/work-sources/{source}/items/{ref}").json()
-    findings: IReadFindingRepository = hub.services.findings
+    findings: IReadFindingRepository = hub.default_adapter(IReadFindingRepository)
     fin_1 = findings.get("fin_1")
     assert fin_1 is not None
     assert item["body"] == compose_minted_body("the proposal's own body", [fin_1])
@@ -178,7 +178,7 @@ def test_accept_with_a_body_override_mints_that_body_wrapped_in_the_template(tmp
     body = resp.json()
     source, ref = body["closure"]["source"], body["closure"]["ref"]
     item = hub.client.get(f"/api/work-sources/{source}/items/{ref}").json()
-    findings: IReadFindingRepository = hub.services.findings
+    findings: IReadFindingRepository = hub.default_adapter(IReadFindingRepository)
     fin_1 = findings.get("fin_1")
     assert fin_1 is not None
     assert item["body"] == compose_minted_body("a hand-drafted body", [fin_1])
@@ -205,7 +205,7 @@ def test_accept_declining_to_mint_records_declined_and_no_chunk(tmp_path: Path) 
 def test_accept_promotes_nothing_and_leaves_the_finding_untouched(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed(hub)
-    findings: IReadFindingRepository = hub.services.findings
+    findings: IReadFindingRepository = hub.default_adapter(IReadFindingRepository)
     before = findings.get("fin_1")
     assert before is not None
 
