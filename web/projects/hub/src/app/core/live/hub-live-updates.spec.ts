@@ -10,7 +10,6 @@ import {
   type EventSourceFactory,
   type FleetEventSource,
   hubEventStreamUrl,
-  hubApi,
 } from 'fleet';
 import { HUB_PROJECT_FILTER } from '../project-filter';
 import { chunkTranscriptSegmentKey, chunkTranscriptsKey } from 'fleet';
@@ -443,16 +442,14 @@ describe('HubLiveUpdates', () => {
 
     const source = FakeEventSource.instances[0];
     source.open();
-    for (const kind of [...Object.values(hubApi.ActivityRunnerChangeKind), ...Object.values(hubApi.RunnerChangeKind)]) {
+    const admitted = ['paused', 'resumed', 'locally-paused', 'locally-resumed'];
+    const muted = ['added', 'registered', 'heartbeat', 'external-usage', 'retired', 'reinstated', 'token-revoked'];
+    for (const kind of [...admitted, ...muted]) {
       source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind }));
     }
     source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1' }));
 
-    const admitted = new Set<string>(Object.values(hubApi.ActivityRunnerChangeKind));
-    expect(live.log().map((e) => e.data.kind)).toEqual([
-      ...Object.values(hubApi.ActivityRunnerChangeKind),
-      ...Object.values(hubApi.RunnerChangeKind).filter((kind) => admitted.has(kind)),
-    ]);
+    expect(live.log().map((e) => e.data.kind)).toEqual(admitted);
   });
 
   it('keeps an added runner out of the event feed but still invalidates the registry', () => {

@@ -2,26 +2,24 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import { QuestionsPanelView } from './questions-view';
+import type { BoardQuestionPresentation } from './questions.domain';
 
-const QUESTIONS = [
+const QUESTIONS: BoardQuestionPresentation[] = [
   {
     question_id: 'qn_01',
     chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
     question: 'Which API style should the endpoint use?',
     options: ['rest', 'graphql'],
-    epoch: 1,
     runner_id: 'rn_01',
-    asked_at: '2026-07-16T00:00:01Z',
-    answered: false,
+    runner_name: undefined,
   },
   {
     question_id: 'qn_02',
     chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YAB',
     question: 'Should the migration backfill in one pass?',
-    epoch: 2,
     runner_id: 'rn_02',
-    asked_at: '2026-07-16T00:00:02Z',
-    answered: false,
+    runner_name: undefined,
+    options: [],
   },
 ];
 

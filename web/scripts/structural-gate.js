@@ -992,7 +992,6 @@ const LAYERED_PROJECTS = [
  * list only shrinks. A file in no declared unit is keyed by its own folder.
  */
 const DOMAIN_BOUNDARY_EXEMPT = [
-  'fleet/src/lib/chunk',
   'hub/src/app/admin',
   'hub/src/app/admin/forges',
   'hub/src/app/admin/hub-settings',

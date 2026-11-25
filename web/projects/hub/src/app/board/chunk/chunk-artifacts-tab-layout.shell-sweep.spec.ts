@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ChunkPage, type hubApi } from 'fleet';
+import { ChunkPage } from 'fleet';
 import { assetArtifactView, chunkDetail, OPERATOR_ME_RESPONSE, stubHubClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
@@ -29,7 +29,7 @@ const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 /** Enough distinct artifact rows to overflow the nav list's own box at any viewport this
  * sweep uses — the load-bearing fixture for "the nav list actually scrolls" rather than
  * merely rendering short enough to never need to. */
-function overflowingArtifacts(): hubApi.ArtifactView[] {
+function overflowingArtifacts() {
   return Array.from({ length: 40 }, (_, i) => assetArtifactView({
     key: `build.artifact-${i}.1`,
     kind: 'asset',
@@ -42,7 +42,7 @@ function overflowingArtifacts(): hubApi.ArtifactView[] {
   }));
 }
 
-const CHAIN_DETAIL: hubApi.ChunkDetail = chunkDetail({
+const CHAIN_DETAIL = chunkDetail({
   chunk_id: CHUNK_ID,
   graph_id: 'gr_1',
   graph_name: 'default',

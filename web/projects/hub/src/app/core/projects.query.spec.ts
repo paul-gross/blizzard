@@ -43,6 +43,20 @@ describe('the projects reads', () => {
     expect(projects[0]).not.toBe(BLIZZARD);
   });
 
+  it('shares the wire cache with domain observers and lens resolution', async () => {
+    stub = stubHubClient({
+      'GET /api/projects': () => ({ projects: [BLIZZARD] }),
+    });
+    const client = new QueryClient();
+    const wire = projectsQueryOptions();
+    const domain = projectDomainsQueryOptions();
+    const cached = await client.fetchQuery(wire);
+
+    expect(domain.select(cached)).toEqual(await ensureProjectDomains(client));
+    expect(client.getQueryData(domain.queryKey)).toBe(cached);
+    expect(stub.forRoute('/api/projects', 'GET')).toHaveLength(1);
+  });
+
   it('reads one project by the segment a URL names, and answers none for a project the tenant does not hold', async () => {
     stub = stubHubClient({
       'GET /api/projects/{project}': (_request, { project }) =>

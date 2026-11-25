@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, output } from '@angular/c
 
 import { type KitAsyncStateValue, asyncState, injectRunnerHostNames } from 'fleet';
 import { QuestionsPanelView } from './questions-view';
-import { injectHubQuestionsQuery } from './questions.query';
+import { injectBoardQuestionsQuery } from './questions.query';
 
 /**
  * The open-questions panel — every agent ask across the
@@ -23,7 +23,7 @@ import { injectHubQuestionsQuery } from './questions.query';
   host: { '[style.display]': "state() === 'empty' ? 'none' : null" },
 })
 export class QuestionsPanel {
-  private readonly query = injectHubQuestionsQuery();
+  private readonly query = injectBoardQuestionsQuery();
   protected readonly runnerHosts = injectRunnerHostNames();
 
   /** Emitted with a chunk id when an ask is activated — opens it in the detail panel. */

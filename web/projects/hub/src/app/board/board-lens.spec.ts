@@ -24,7 +24,7 @@ import { injectHubBoardChunksQuery } from '../core/chunks.query';
 import { provideProjectLens } from '../core/project-lens';
 import { injectHubActivityQuery } from './activity/activity.query';
 import { injectHubChunkCountsQuery } from './chunks/chunk-counts.query';
-import { injectHubFleetSpendQuery } from './fleet-spend/fleet-spend.query';
+import { injectHubFleetSpendDomainQuery } from './fleet-spend/fleet-spend.query';
 import { GatesPanel } from './gates/gates-panel';
 import { injectHubDecisionsQuery } from './gates/gates.query';
 import {
@@ -51,7 +51,7 @@ class TestBoardReads {
   readonly questions = injectHubQuestionsQuery();
   readonly decisions = injectHubDecisionsQuery();
   readonly activity = injectHubActivityQuery();
-  readonly spend = injectHubFleetSpendQuery(() => '2026-10-10T00:00:00Z');
+  readonly spend = injectHubFleetSpendDomainQuery(() => '2026-10-10T00:00:00Z');
 }
 
 /** The rails as the board mounts them. */

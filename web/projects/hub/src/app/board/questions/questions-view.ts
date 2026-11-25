@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type QuestionView, compactRef, runnerBoardParts, runnerTitle, type RunnerBoardParts, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectList, KitSelectRow } from 'fleet';
+import { compactRef, runnerBoardParts, runnerTitle, type RunnerBoardParts, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectList, KitSelectRow } from 'fleet';
+import type { BoardQuestionPresentation } from './questions.domain';
 
 /**
  * The open-questions rail's presentational half — the ask list
@@ -24,7 +25,7 @@ export class QuestionsPanelView {
   readonly runnerHosts = input<ReadonlyMap<string, string>>(new Map());
 
   /** Every open ask across the fleet. */
-  readonly questions = input.required<readonly QuestionView[]>();
+  readonly questions = input.required<readonly BoardQuestionPresentation[]>();
 
   /** The questions query's async state (AC 3). */
   readonly state = input.required<KitAsyncStateValue>();
@@ -46,12 +47,12 @@ export class QuestionsPanelView {
   }
 
   /** The asking runner's host and name, held apart so each clips on its own, as the board's do. */
-  protected runner(question: QuestionView): RunnerBoardParts {
+  protected runner(question: BoardQuestionPresentation): RunnerBoardParts {
     return runnerBoardParts(question.runner_id, question.runner_name, this.runnerHosts().get(question.runner_id));
   }
 
   /** The asking runner's tooltip — its full display name, then its id. */
-  protected runnerTooltip(question: QuestionView): string {
+  protected runnerTooltip(question: BoardQuestionPresentation): string {
     return runnerTitle(question.runner_id, question.runner_name, this.runnerHosts().get(question.runner_id));
   }
 }

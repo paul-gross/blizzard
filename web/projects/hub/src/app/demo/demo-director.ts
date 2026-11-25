@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { type ChunkArtifact, injectHubChunkDetailQuery, sortArtifacts } from 'fleet';
-import { injectHubBoardChunksQuery } from '../core/chunks.query';
+import { injectDomainBoardChunksQuery } from '../core/chunks.query';
 
 import { type DemoConfig, demoQueryParams, readDemoConfig } from './demo-config';
 import { DEMO_RANDOM } from './demo-random';
@@ -54,7 +54,7 @@ export class DemoDirector {
    * already have rewritten the URL that carried the params. */
   private config: DemoConfig = readDemoConfig('');
 
-  private readonly chunksQuery = injectHubBoardChunksQuery();
+  private readonly chunksQuery = injectDomainBoardChunksQuery();
 
   /** The chunk the tour is on — drives the detail read the artifact list comes from. */
   private readonly touring = signal<string | null>(null);

@@ -3,7 +3,7 @@ import { type ChunkPageActions, type DaemonTarget, hubClient, provideChunkPageDa
 import { injectAwaitingHumanService } from '../chunks/awaiting-human.service';
 import { injectHubChunkControl } from '../chunks/hub-chunk-control';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { injectProjectsQuery } from '../../core/projects.query';
+import { injectProjectDomainsQuery } from '../../core/projects.query';
 import { injectShowProjectColors, projectColorOf } from '../../core/project-lens-colors';
 
 /** The graphs view's own path segments — the target every hub composition site links a
@@ -56,7 +56,7 @@ const HUB_TARGET: DaemonTarget = { plane: 'hub', client: hubClient };
  * operator-action port above. */
 export const HUB_CHUNK_PAGE_PROVIDERS: Provider[] = [
   provideChunkPageDaemon(() => {
-    const projects = injectProjectsQuery();
+    const projects = injectProjectDomainsQuery();
     const showProjectColors = injectShowProjectColors();
     return {
       target: () => HUB_TARGET,

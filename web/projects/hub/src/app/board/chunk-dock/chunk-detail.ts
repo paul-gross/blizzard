@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, input, output, si
 
 import { type ChunkDetailAggregate, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, injectRunnerHostNames, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, asyncState, type WorkItemsState } from 'fleet';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { injectProjectsQuery } from '../../core/projects.query';
+import { injectProjectDomainsQuery } from '../../core/projects.query';
 import { type CompleteVars } from '../chunks/complete.mutations';
 import { injectHubChunkControl } from '../chunks/hub-chunk-control';
 import { injectAwaitingHumanService } from '../chunks/awaiting-human.service';
@@ -55,7 +55,7 @@ export class ChunkDetail {
     },
   });
   private readonly meQuery = injectMeQuery();
-  private readonly projectsQuery = injectProjectsQuery();
+  private readonly projectsQuery = injectProjectDomainsQuery();
   protected readonly runnerHosts = injectRunnerHostNames();
 
   /** Whether the current identity may answer an open question (`question:answer`). */

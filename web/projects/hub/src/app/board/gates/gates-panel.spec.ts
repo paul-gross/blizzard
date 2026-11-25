@@ -2,9 +2,10 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import type { DecisionView } from 'fleet';
 import { decisionView, settle, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { GatesPanel } from './gates-panel';
+
+type DecisionResponse = ReturnType<typeof decisionView>;
 
 const GATES = [
   decisionView({
@@ -24,7 +25,7 @@ const GATES = [
 describe('GatesPanel', () => {
   let stub: RequestClientStub;
 
-  const render = async (gates: DecisionView[] | (() => DecisionView[] | Promise<DecisionView[]>) = GATES) => {
+  const render = async (gates: DecisionResponse[] | (() => DecisionResponse[] | Promise<DecisionResponse[]>) = GATES) => {
     stub = stubHubClient({ 'GET /api/decisions': async () => ({ decisions: typeof gates === 'function' ? await gates() : gates }) });
     await TestBed.configureTestingModule({
       imports: [GatesPanel],
@@ -72,8 +73,8 @@ describe('GatesPanel', () => {
   });
 
   it('keeps the loading panel visible until an empty read resolves', async () => {
-    let release!: (gates: DecisionView[]) => void;
-    const held = new Promise<DecisionView[]>((resolve) => (release = resolve));
+    let release!: (gates: DecisionResponse[]) => void;
+    const held = new Promise<DecisionResponse[]>((resolve) => (release = resolve));
     const fixture = await render(() => held);
     const el = fixture.nativeElement as HTMLElement;
     try {
@@ -88,7 +89,7 @@ describe('GatesPanel', () => {
   });
 
   it('reappears when gates arrive and hides again when they are resolved', async () => {
-    let gates: DecisionView[] = [];
+    let gates: DecisionResponse[] = [];
     const fixture = await render(() => gates);
     const el = fixture.nativeElement as HTMLElement;
     expect(el.style.display).toBe('none');

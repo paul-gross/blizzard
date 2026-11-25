@@ -2,12 +2,14 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { type DecisionView, type QuestionView } from 'fleet';
 import { decisionView, questionView, settle, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { GatesPanel } from '../gates/gates-panel';
 import { QuestionsPanel } from './questions-panel';
 
-const QUESTIONS: QuestionView[] = [
+type QuestionResponse = ReturnType<typeof questionView>;
+type DecisionResponse = ReturnType<typeof decisionView>;
+
+const QUESTIONS: QuestionResponse[] = [
   questionView({
     question_id: 'qn_01',
     chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
@@ -34,8 +36,8 @@ describe('QuestionsPanel', () => {
   let stub: RequestClientStub;
 
   const render = async (
-    questions: QuestionView[] | (() => QuestionView[] | Promise<QuestionView[]>) = QUESTIONS,
-    gates: () => DecisionView[] = () => [],
+    questions: QuestionResponse[] | (() => QuestionResponse[] | Promise<QuestionResponse[]>) = QUESTIONS,
+    gates: () => DecisionResponse[] = () => [],
   ) => {
     stub = stubHubClient({
       'GET /api/questions': () => typeof questions === 'function' ? questions() : questions,
@@ -104,8 +106,8 @@ describe('QuestionsPanel', () => {
   });
 
   it('keeps the loading panel visible until an empty read resolves', async () => {
-    let release!: (questions: QuestionView[]) => void;
-    const held = new Promise<QuestionView[]>((resolve) => (release = resolve));
+    let release!: (questions: QuestionResponse[]) => void;
+    const held = new Promise<QuestionResponse[]>((resolve) => (release = resolve));
     const fixture = await render(() => held);
     const el = fixture.nativeElement as HTMLElement;
     try {
@@ -120,7 +122,7 @@ describe('QuestionsPanel', () => {
   });
 
   it('reappears when questions arrive and hides again when they are answered', async () => {
-    let questions: QuestionView[] = [];
+    let questions: QuestionResponse[] = [];
     const fixture = await render(() => questions);
     const el = fixture.nativeElement as HTMLElement;
     expect(el.style.display).toBe('none');
@@ -155,8 +157,8 @@ describe('QuestionsPanel', () => {
   });
 
   it('hides questions and gates independently as their own reads change', async () => {
-    let questions: QuestionView[] = [];
-    let gates: DecisionView[] = [decisionView()];
+    let questions: QuestionResponse[] = [];
+    let gates: DecisionResponse[] = [decisionView()];
     const questionsFixture = await render(() => questions, () => gates);
     const gatesFixture = TestBed.createComponent(GatesPanel);
     await settle(gatesFixture);
