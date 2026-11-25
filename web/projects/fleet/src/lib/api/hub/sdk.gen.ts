@@ -829,7 +829,7 @@ export const getWorkItemsApiChunksChunkIdWorkItemsGet = <ThrowOnError extends bo
  * Reconcile a version-2 or version-3 YAML, JSON or TOML document in one transaction.
  *
  * A dry run rolls the transaction back; a refusal leaves the store unchanged.
- * See `docs/deployment/config-documents.md` for document and refusal details.
+ * See https://github.com/paul-gross/blizzard/blob/master/docs/deployment/config-documents.md for details.
  */
 export const applyConfigApiConfigApplyPost = <ThrowOnError extends boolean = false>(options: Options<ApplyConfigApiConfigApplyPostData, ThrowOnError>): RequestResult<ApplyConfigApiConfigApplyPostResponses, ApplyConfigApiConfigApplyPostErrors, ThrowOnError> => (options.client ?? client).post<ApplyConfigApiConfigApplyPostResponses, ApplyConfigApiConfigApplyPostErrors, ThrowOnError>({
     url: '/api/config/apply',

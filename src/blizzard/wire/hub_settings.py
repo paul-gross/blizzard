@@ -18,6 +18,7 @@ from blizzard.wire.vocabulary import OPEN
 
 def _acyclic_document(value: object) -> object:
     parents: set[int] = set()
+    visited: set[int] = set()
     stack: list[tuple[object, bool]] = [(value, False)]
     while stack:
         item, leaving = stack.pop()
@@ -27,9 +28,12 @@ def _acyclic_document(value: object) -> object:
         identity = id(container)
         if leaving:
             parents.remove(identity)
+            visited.add(identity)
             continue
         if identity in parents:
             raise ValueError("settings document contains a cycle")
+        if identity in visited:
+            continue
         parents.add(identity)
         stack.append((container, True))
         children = list(container.values()) if isinstance(container, dict) else container

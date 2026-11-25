@@ -86,6 +86,7 @@ def export_document(registry: ConfigRegistry, entries: Mapping[str, Entry]) -> d
 
 def _finite(value: object) -> bool:
     parents: set[int] = set()
+    visited: set[int] = set()
     stack: list[tuple[object, bool]] = [(value, False)]
     while stack:
         item, leaving = stack.pop()
@@ -97,9 +98,12 @@ def _finite(value: object) -> bool:
         identity = id(container)
         if leaving:
             parents.remove(identity)
+            visited.add(identity)
             continue
         if identity in parents:
             return False
+        if identity in visited:
+            continue
         parents.add(identity)
         stack.append((container, True))
         children = container.values() if isinstance(container, Mapping) else container

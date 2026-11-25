@@ -96,6 +96,25 @@ def test_invalid_yaml_bytes_are_refused_before_any_write(tmp_path: Path) -> None
     assert client.get(path + "/changes").json()["changes"] == []
 
 
+def test_shared_yaml_alias_dag_is_refused_without_writes(tmp_path: Path) -> None:
+    client = _hub(tmp_path).client
+    path = "/api/admin/settings"
+    nodes = ["leaf: &a0 [0]"]
+    nodes.extend(f"level{i}: &a{i} [*a{i - 1}, *a{i - 1}]" for i in range(1, 35))
+    response = client.post(
+        path + "/apply?dry_run=true", headers={"Content-Type": "application/yaml"}, content="\n".join(nodes)
+    )
+    assert response.status_code == 422, response.text
+    nodes.append("cycle: &cycle [*cycle]")
+    response = client.post(
+        path + "/apply?dry_run=true", headers={"Content-Type": "application/yaml"}, content="\n".join(nodes)
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "settings_invalid"
+    assert client.get(path).json()["revision"] == 0
+    assert client.get(path + "/changes").json()["changes"] == []
+
+
 def test_nonfinite_unknown_and_nested_document_values_are_invalid(tmp_path: Path) -> None:
     client = _hub(tmp_path).client
     path = "/api/admin/settings"

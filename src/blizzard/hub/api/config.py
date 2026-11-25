@@ -731,7 +731,7 @@ async def apply_config(
     """Reconcile a version-2 or version-3 YAML, JSON or TOML document in one transaction.
 
     A dry run rolls the transaction back; a refusal leaves the store unchanged.
-    See `docs/deployment/config-documents.md` for document and refusal details."""
+    See https://github.com/paul-gross/blizzard/blob/master/docs/deployment/config-documents.md for details."""
     document = _document(await request.body(), request.headers.get("content-type"))
     return await run_in_threadpool(_apply, document, identity, applying, dry_run=dry_run)
 

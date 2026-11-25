@@ -43018,7 +43018,7 @@
     },
     "/api/config/apply": {
       "post": {
-        "description": "Reconcile a version-2 or version-3 YAML, JSON or TOML document in one transaction.\n\nA dry run rolls the transaction back; a refusal leaves the store unchanged.\nSee `docs/deployment/config-documents.md` for document and refusal details.",
+        "description": "Reconcile a version-2 or version-3 YAML, JSON or TOML document in one transaction.\n\nA dry run rolls the transaction back; a refusal leaves the store unchanged.\nSee https://github.com/paul-gross/blizzard/blob/master/docs/deployment/config-documents.md for details.",
         "operationId": "apply_config_api_config_apply_post",
         "parameters": [
           {

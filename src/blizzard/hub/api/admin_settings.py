@@ -259,8 +259,10 @@ async def apply_document(
         )
     try:
         document = SETTINGS_EXPORT_ADAPTER.validate_python(codec.decode(await request.body()))
-    except (ConfigDecodeError, ValidationError) as exc:
+    except ConfigDecodeError as exc:
         _refuse(settings_invalid_problem, str(exc))
+    except ValidationError as exc:
+        _refuse(settings_invalid_problem, str(exc.errors(include_input=False, include_url=False)))
     return await run_in_threadpool(_apply_document, document, identity, *services, dry_run)
 
 

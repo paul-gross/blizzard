@@ -147,7 +147,8 @@ def config_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
     """Apply the declarative document FILE (.yaml, .yml, .json or .toml) in one transaction.
 
     Creates, edits or enables declared records; omitted records stay unchanged. A refusal writes nothing.
-    --dry-run prints the outcome without writing. See docs/deployment/config-documents.md."""
+    --dry-run prints the outcome without writing.
+    See https://github.com/paul-gross/blizzard/blob/master/docs/deployment/config-documents.md."""
     codec = codec_for_path(file)
     if codec is None:
         raise click.UsageError(f"{file.name}: unknown extension; use one of {', '.join(accepted_extensions())}")

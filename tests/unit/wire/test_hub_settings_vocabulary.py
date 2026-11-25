@@ -1,11 +1,32 @@
 """Hub settings responses preserve vocabulary values added by newer servers."""
 
 import pytest
+from pydantic import ValidationError
 
 from blizzard.foundation.config_keys import Lifetime
 from blizzard.foundation.unrecognized import Unrecognized
+from blizzard.hub.config import ConfigError
+from blizzard.hub.settings.footing import validate_document_values
 from blizzard.wire.config import ConfigApplyOutcome
-from blizzard.wire.hub_settings import HubSettingRow, HubSettingsChange
+from blizzard.wire.hub_settings import SETTINGS_EXPORT_ADAPTER, HubSettingRow, HubSettingsChange
+
+
+def test_shared_document_graph_is_linear_and_still_checks_cycles_and_nonfinite_values() -> None:
+    shared: list[object] = [1]
+    for _ in range(35):
+        shared = [shared, shared]
+    document = {"first": shared, "second": shared}
+    assert SETTINGS_EXPORT_ADAPTER.validate_python(document) == document
+    validate_document_values(document)
+
+    cycle: list[object] = []
+    cycle.append(cycle)
+    with pytest.raises(ValidationError):
+        SETTINGS_EXPORT_ADAPTER.validate_python({"first": shared, "second": cycle})
+    with pytest.raises(ConfigError, match="cycle"):
+        validate_document_values({"first": shared, "second": cycle})
+    with pytest.raises(ConfigError, match="non-finite"):
+        validate_document_values({"first": shared, "second": [float("inf")]})
 
 
 def test_settings_row_vocabulary_is_open() -> None:
