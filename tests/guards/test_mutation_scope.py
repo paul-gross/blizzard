@@ -704,13 +704,17 @@ def test_an_expired_budget_interrupts_the_mutation_loop(monkeypatch: pytest.Monk
 
 def test_budget_interrupt_reaches_a_waiting_mutation_loop() -> None:
     # Isolate the real SIGINT and bound the entire child, including its startup and cleanup.
+    # Linux's wait channel independently confirms the main thread is inside the signal wait.
     code = """
 import signal
 import threading
+import time
+from pathlib import Path
 from tests.guards.test_mutation_scope import m, _fake_mutmut
 
 signal.signal(signal.SIGINT, signal.default_int_handler)
-loop_entered = threading.Event()
+wait_channel = Path(f"/proc/self/task/{threading.get_native_id()}/wchan")
+observed_wait = threading.Event()
 
 class Timer:
     def __init__(self, interval, callback):
@@ -718,7 +722,12 @@ class Timer:
         self.daemon = False
     def start(self):
         def fire():
-            loop_entered.wait()
+            while True:
+                channel = wait_channel.read_text().strip()
+                if channel.endswith(("sys_pause", "sys_rt_sigsuspend")):
+                    break
+                time.sleep(0.01)
+            observed_wait.set()
             self.callback()
         threading.Thread(target=fire, daemon=True).start()
     def cancel(self):
@@ -731,7 +740,6 @@ def run(_names, _max_children):
     fake.get_mutant_runner(4).startup()
     while True:
         try:
-            loop_entered.set()
             signal.pause()
         except KeyboardInterrupt:
             caught = True
@@ -739,6 +747,7 @@ def run(_names, _max_children):
 
 fake = _fake_mutmut(run)
 assert m._run_with_budget(0.1, fake) is False
+assert observed_wait.is_set(), "the mutation loop never blocked in its signal wait"
 assert caught, "the mutation loop did not catch the budget interrupt"
 """
     subprocess.run([sys.executable, "-c", code], check=True, timeout=30)
