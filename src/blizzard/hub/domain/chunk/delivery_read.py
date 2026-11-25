@@ -12,7 +12,7 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import ChunkFacts, LandedRepos, is_landed_revision
 from blizzard.hub.domain.chunk.no_code import no_code_repos
 from blizzard.hub.domain.chunk.ports.commit_links import CommitLink, no_commit_link
-from blizzard.hub.domain.chunk.pr_markers import PrMarker, is_pr_marker_name
+from blizzard.hub.domain.chunk.pr_markers import AWAITING_MARKER, PrMarker, awaiting_marker_name, is_pr_marker_name
 
 
 @domain_model
@@ -104,11 +104,10 @@ class DeliveryRead:
                 resolved_no_code[repo] = max(resolved_no_code.get(repo, -1), row.epoch)
         script_prs: dict[str, tuple[str, int]] = {}
         script_epochs: dict[tuple[str, int], int] = {}
-        external_epochs: set[int] = set()
+        external_markers = [
+            row for row in sources.markers if row.name == AWAITING_MARKER or row.name.startswith(f"{AWAITING_MARKER}/")
+        ]
         # Write order settles replacement references for the same repo.
-        for row in sources.markers:
-            if row.name == "awaiting-external-merge":
-                external_epochs.add(row.epoch)
         for pr in sources.pr_markers:
             if not is_pr_marker_name(pr):
                 continue
@@ -124,7 +123,15 @@ class DeliveryRead:
         ]
         # A script-created PR is reviewable, not an external merge wait. Only the
         # explicitly authored marker signals that wait.
-        external = any(script_epochs.get((p.repo, p.number)) in external_epochs for p in open_prs)
+        latest_epoch = max((row.epoch for row in external_markers), default=-1)
+        latest_markers = [row for row in external_markers if row.epoch == latest_epoch]
+        scoped = {row.name for row in latest_markers if row.name != AWAITING_MARKER}
+        external = any(
+            awaiting_marker_name(p.repo, p.number) in scoped
+            if scoped
+            else script_epochs[(p.repo, p.number)] == latest_epoch
+            for p in open_prs
+        )
         closed_prs = [p for p in prs.values() if p not in open_prs]
         rows = [
             LandedRepo(

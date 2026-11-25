@@ -86,6 +86,7 @@ class ChunkArtifactsStore:
                                 s.artifacts.c.name.like("no-code/%"),
                                 s.artifacts.c.name.like(f"{PR_MARKER_PREFIX}%"),
                                 s.artifacts.c.name == "awaiting-external-merge",
+                                s.artifacts.c.name.like("awaiting-external-merge/%"),
                             ),
                         ),
                     )

@@ -732,6 +732,15 @@ def test_a_change_read_the_forge_refused_waits(refusal: Exception) -> None:
     assert double.named("merge") == [] and sink.landings() == []
 
 
+@pytest.mark.parametrize("refusal", [ForgeRejected("read refused"), ForgeUnavailable("offline")], ids=repr)
+def test_opened_change_is_recorded_before_a_failed_live_read(refusal: Exception) -> None:
+    double = _forge(replies={"change": [refusal]})
+    answer, sink = _land(double)
+    assert answer.choice == "pending"
+    assert double.named("open_change")
+    assert any(name.startswith("delivery-pr/") for name in sink.markers())
+
+
 def test_a_merge_refused_whose_reread_finds_it_merged_lands_the_merged_revision() -> None:
     double = _forge(replies={"merge": [ForgeRejected("Base branch was modified")]})
     open_change = change(_WIDGET, 1, branch="feat/x", sha=_SUBMITTED, base="main", mergeability=Mergeability.MERGEABLE)
