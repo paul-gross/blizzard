@@ -50,6 +50,7 @@ from tests.support.runner_fakes import (
     FakeTranscriptSource,
     SqlAlchemyRunnerStore,
     make_context,
+    make_envelope,
     make_stores,
     registered_identity,
     runner_store_errors,
@@ -674,6 +675,109 @@ def test_the_takeover_and_escalation_plurals_statement_count_is_flat_across_id_s
         assert one == four, plural
 
 
+# --- latest_epochs / leases_in_binding_tenure -------------------------------------------------
+
+
+def _lease_at(store: SqlAlchemyRunnerStore, chunk_id: str, epoch: int, *, at: datetime) -> None:
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=f"lease_{chunk_id}_{epoch}",
+                chunk_id=chunk_id,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=epoch,
+                retries_max=2,
+                created_at=at,
+            )
+        )
+    )
+
+
+def _seed_epoch_chunks(store: SqlAlchemyRunnerStore, n: int) -> dict[str, datetime]:
+    """``n`` chunks cycling through: a lease in tenure; a lease older than its binding; a lease behind a release
+    floor; a lease above that floor; and a takeover fence with no lease. Returns each chunk's binding instant,
+    plus one for a chunk the store has never heard of."""
+    bounds: dict[str, datetime] = {"ch_never": _NOW}
+    for i in range(n):
+        chunk_id, kind = f"ch_{i}", i % 5
+        bounds[chunk_id] = _NOW
+        if kind == 4:
+            record_takeover_in_unit(
+                store,
+                takeover_id=f"tko_{i}",
+                chunk_id=chunk_id,
+                lease_id=None,
+                workdir=f"/ws/{chunk_id}",
+                fence_epoch=9,
+                opened_at=_NOW,
+                session=SessionReference(CLAUDE_CODE_HARNESS_ID, f"sess-{i}"),
+                hold_epoch=0,
+            )
+            continue
+        _lease_at(store, chunk_id, 1, at=_NOW - timedelta(minutes=1) if kind == 1 else _NOW)
+        if kind in (2, 3):
+            store.record_binding(chunk_id=chunk_id, environment_id=f"e{i}", workdir=f"/ws/e{i}", bound_at=_NOW)
+            store.record_release(chunk_id=chunk_id, environment_id=f"e{i}", released_at=_NOW)
+        if kind == 3:
+            _lease_at(store, chunk_id, 2, at=_NOW)
+    return bounds
+
+
+def test_the_epoch_and_tenure_plurals_match_the_singulars_across_a_batch_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    store, _ = _store(tmp_path)
+    bounds = _seed_epoch_chunks(store, 10)
+
+    epochs = store.latest_epochs(bounds)
+    in_tenure = store.leases_in_binding_tenure(bounds)
+
+    assert "ch_never" not in epochs
+    assert epochs["ch_4"] == 9
+    assert in_tenure == {"ch_0", "ch_3", "ch_5", "ch_8"}
+    for chunk_id, bound_at in bounds.items():
+        assert epochs.get(chunk_id, 0) == store.latest_epoch(chunk_id)
+        assert (chunk_id in in_tenure) is store.has_lease_in_binding_tenure(chunk_id, bound_at)
+
+
+def test_the_epoch_and_tenure_plurals_issue_no_statement_for_no_ids(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+
+    assert support.count_queries(engine, lambda: (store.latest_epochs([]), store.leases_in_binding_tenure({}))) == 0
+
+
+def test_the_epoch_and_tenure_plurals_statement_count_is_flat_across_id_set_sizes(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    bounds = _seed_epoch_chunks(store, 5)
+    one = {"ch_0": bounds["ch_0"]}
+
+    for plural in (store.latest_epochs, store.leases_in_binding_tenure):
+        few = support.count_queries(engine, lambda plural=plural: plural(one))
+        many = support.count_queries(engine, lambda plural=plural: plural(bounds))
+        assert few == many, plural
+
+
+def test_the_epoch_and_tenure_plurals_rows_read_do_not_grow_with_lease_history(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    bounds = _seed_epoch_chunks(store, 5)
+
+    def rows() -> list[int]:
+        return [
+            support.count_rows_read(engine, lambda plural=plural: plural(bounds))
+            for plural in (store.latest_epochs, store.leases_in_binding_tenure)
+        ]
+
+    shallow = rows()
+    for chunk_id in ("ch_0", "ch_1", "ch_3"):  # each already answers with a row
+        for epoch in range(3, 13):
+            _lease_at(store, chunk_id, epoch, at=_NOW)
+
+    assert rows() == shallow
+
+
 # --- InterruptedClaims.reconcile ------------------------------------------------------------
 
 
@@ -711,6 +815,52 @@ def test_reconcile_reads_takeovers_and_escalations_once_across_1_and_4_held_chun
         one = [s for s in _reconcile_statements(tmp_path / f"{marker}1", 1) if marker in s]
         four = [s for s in _reconcile_statements(tmp_path / f"{marker}4", 4) if marker in s]
         assert len(one) == len(four) == 1, marker
+
+
+def test_reconcile_issues_the_same_statement_count_across_1_and_4_chunks_held_in_adopt(tmp_path: Path) -> None:
+    assert len(_reconcile_statements(tmp_path / "one", 1)) == len(_reconcile_statements(tmp_path / "four", 4)) == 8
+
+
+def _closed_lease(store: SqlAlchemyRunnerStore, chunk_id: str, epoch: int, *, at: datetime) -> None:
+    _lease_at(store, chunk_id, epoch, at=at)
+    store.record_closure(
+        lease_id=f"lease_{chunk_id}_{epoch}", chunk_id=chunk_id, node_id="nd_build", reason="failed", closed_at=at
+    )
+
+
+def test_reconcile_decides_each_held_chunk_by_its_own_epoch_and_binding_tenure(tmp_path: Path) -> None:
+    """``ch_new``'s lease predates its binding and ``ch_kept`` holds the hub's epoch, so both adopt;
+    ``ch_advance`` is in tenure behind the hub, so it is left."""
+    store, _ = _store(tmp_path)
+    earlier = _NOW - timedelta(minutes=10)
+    hub = FakeHub()
+    chunks = {  # chunk: (env, lease epoch, bound at, hub epoch)
+        "ch_new": ("e0", 1, _NOW, 5),
+        "ch_advance": ("e1", 1, _NOW - timedelta(minutes=20), 3),
+        "ch_kept": ("e2", 3, _NOW - timedelta(minutes=20), 3),
+    }
+    for chunk_id, (env, epoch, bound_at, hub_epoch) in chunks.items():
+        _closed_lease(store, chunk_id, epoch, at=earlier)
+        store.record_binding(chunk_id=chunk_id, environment_id=env, workdir=f"/ws/{env}", bound_at=bound_at)
+        store.set_route_token(chunk_id, token="rtok", at=_NOW)
+        hub.chunks[chunk_id] = ChunkState(
+            chunk_id=chunk_id, status=ChunkStatus.RUNNING, route_runner_id="r1", latest_epoch=hub_epoch
+        )
+        hub.envelopes[chunk_id] = make_envelope(
+            chunk_id, "build", node_id="nd_build", choices=[("pass", "ok")], epoch=hub_epoch
+        )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({f"e{i}": f"/ws/e{i}" for i in range(3)}),
+        harness=FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict="pass"),
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+    )
+
+    InterruptedClaims(ctx).reconcile()
+
+    assert store.active_lease_chunk_ids() == {"ch_new", "ch_kept"}
 
 
 # --- active_lease_chunk_ids -------------------------------------------------------------------

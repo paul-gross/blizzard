@@ -348,14 +348,15 @@ def recovery_owner(latest: Lease | None) -> str | None:
     return latest.harness_id if latest is not None else None
 
 
-def adopt_enters_node(latest: Lease | None, view: ChunkState, node_id: str) -> bool:
-    """Whether FILL's adopt enters ``node_id`` as a node entry — through the node's declared session
-    and harness selection — rather than spawning it under the latest owner: the chunk's latest lease
-    ran another node, so the chunk moved onto this one while the binding was held (a next node held
-    over a chunk pause, or an entry interrupted before its mint). A restart entry starts its node
-    afresh, so it never continues the session it restarted from."""
+def adopt_enters_node(latest: Lease | None, latest_closure_reason: str | None, view: ChunkState, node_id: str) -> bool:
+    """Whether FILL's adopt enters ``node_id`` as a node entry, through its declared session and harness selection,
+    not under the latest owner: the latest lease ran another node, or ran this one and closed ``transitioned`` (a
+    next node held over a chunk pause, or an entry interrupted before its mint). A restart entry starts its node
+    afresh, never continuing the session it restarted from."""
     restart_entry = view.latest_epoch is not None and view.latest_epoch in view.restart_epochs
-    return latest is not None and latest.node_id != node_id and not restart_entry
+    if latest is None or restart_entry:
+        return False
+    return latest.node_id != node_id or latest_closure_reason == LeaseClosureReason.TRANSITIONED
 
 
 def claim_carries_decision(view: ChunkState, node_id: str) -> bool:

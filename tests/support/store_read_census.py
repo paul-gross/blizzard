@@ -915,6 +915,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadClosedLeaseRepository, "closed_lease_ids"): lambda w: w.read.lease_record.closed_lease_ids(
         {w.lease_1, w.lease_2, "unknown"}
     ),
+    (IReadClosedLeaseRepository, "closure_reason"): lambda w: w.read.lease_record.closure_reason(w.lease_1),
     (IReadLeaseRecordRepository, "list_active_leases"): lambda w: w.read.lease_record.list_active_leases(),
     (IReadLeaseRecordRepository, "active_lease_for_chunk"): lambda w: w.read.lease_record.active_lease_for_chunk(
         w.chunk_1
@@ -930,6 +931,10 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadLeaseRecordRepository, "list_closed_leases"): lambda w: w.read.lease_record.list_closed_leases(10),
     (IReadLeaseRecordRepository, "attempt_count"): lambda w: w.read.lease_record.attempt_count(w.chunk_1, w.node_a),
     (IReadLeaseRecordRepository, "latest_epoch"): lambda w: w.read.lease_record.latest_epoch(w.chunk_1),
+    (IReadLeaseRecordRepository, "latest_epochs"): lambda w: w.read.lease_record.latest_epochs([w.chunk_1, "unknown"]),
+    (IReadLeaseRecordRepository, "leases_in_binding_tenure"): lambda w: w.read.lease_record.leases_in_binding_tenure(
+        {w.chunk_1: _t(0), "unknown": _t(0)}
+    ),
     (IReadLeaseRecordRepository, "has_lease_in_binding_tenure"): lambda w: (
         w.read.lease_record.has_lease_in_binding_tenure(w.chunk_1, _t(0))
     ),

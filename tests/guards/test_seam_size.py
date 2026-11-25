@@ -20,12 +20,20 @@ _SRC_DIR = _REPO_ROOT / "src" / "blizzard"
 
 _SEAM_SIZE_LIMIT = 12
 
-#: ``SpawnContext`` (14): ``Spawner`` and ``Attempt`` build each other and share one ``ctx``; no split until that breaks.
-#: ``IReadFlows`` and ``IReadGraphRepository`` (13): each reads one aggregate's store and gained the plural a bounded
-#: read needs (``open_turns_of``, ``get_enabled_by_names``); no split while the reads stay one aggregate's.
-#: ``IChunkStoreBundle`` (16): the structural face of the tenant's chunk-store bundle the chunk wiring registers each
-#: concept's port over; its members are the concepts' seams, read once each at registration, never called as a seam.
-_ACCEPTED_VIOLATIONS: set[str] = {"SpawnContext", "IReadFlows", "IReadGraphRepository", "IChunkStoreBundle"}
+#: Each entry states its width and why no split.
+_ACCEPTED_VIOLATIONS: set[str] = {
+    # 14: ``Spawner`` and ``Attempt`` build each other and share one ``ctx``; no split until that breaks.
+    "SpawnContext",
+    # 13: one aggregate's store, widened by the plural a bounded read needs (``open_turns_of``).
+    "IReadFlows",
+    # 13: one aggregate's store, widened by the plural a bounded read needs (``get_enabled_by_names``).
+    "IReadGraphRepository",
+    # 14: one aggregate's store, widened by ``latest_epochs`` and ``leases_in_binding_tenure``.
+    "IReadLeaseRecordRepository",
+    # 16: the structural face of the tenant's chunk-store bundle; each member seam is read once, at registration,
+    # to register that concept's port, and the bundle is never called as a seam.
+    "IChunkStoreBundle",
+}
 
 
 def _is_protocol(node: ast.ClassDef) -> bool:
