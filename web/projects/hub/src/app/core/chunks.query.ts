@@ -1,22 +1,21 @@
 import type { hubApi } from 'fleet';
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { listChunksApiChunksGet, laneStatus, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
+import { listChunksApiChunksGet, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 import { DRAIN_LIMIT, drainPages } from './paginated-read';
 import { hubBoardChunksKey, lensedKey } from './query-keys';
 import { injectProjectFilter } from './project-filter';
-import { fromBoardPage, fromBoardSummary, fromGraphProgressNode, fromRunnerClaimChunk } from './chunks.translate';
+import { fromBoardPage, fromBoardSummary } from './chunks.translate';
 
 export interface BoardChunksRead {
   readonly chunks: hubApi.ChunkSummary[];
   readonly pages: readonly hubApi.ChunksPageView[];
 }
-
 /**
  * The board's chunk list as one query, for the project `project` names (`null` for the whole tenant): `GET
  * /api/chunks?board_window=true`, with `?project=` under a lens, keyed by the lens so each project caches apart.
  */
-export function boardChunksQueryOptions(project: string | null) {
+export function boardChunksReadOptions(project: string | null) {
   return {
     queryKey: lensedKey(hubBoardChunksKey, project),
     queryFn: async (): Promise<BoardChunksRead> => {
@@ -35,30 +34,13 @@ export function boardChunksQueryOptions(project: string | null) {
       );
       return { chunks: pages.flatMap((page) => page.chunks), pages };
     },
-    select: (read: BoardChunksRead) => ({
-      ...read,
-      pages: read.pages.map(fromBoardPage),
-      chunks: read.chunks.map((chunk) => ({
-        ...chunk,
-        laneStatus: laneStatus(chunk.status),
-        graphProgress: chunk.graph_progress.map(fromGraphProgressNode),
-      })),
-    }),
   };
 }
 
-/** Tenant-wide runner claims use the board's raw cache without projecting its wire values into the view. */
-export function runnerChunksQueryOptions() {
-  return {
-    ...boardChunksQueryOptions(null),
-    select: (read: BoardChunksRead) => ({ chunks: read.chunks.map(fromRunnerClaimChunk) }),
-  };
-}
-
-/** Domain observer over the same lensed cache as the remaining wire consumers. */
+/** Domain observer over the shared lensed wire cache. */
 export function domainBoardChunksQueryOptions(project: string | null) {
   return {
-    ...boardChunksQueryOptions(project),
+    ...boardChunksReadOptions(project),
     select: (read: BoardChunksRead) => ({
       chunks: read.chunks.map(fromBoardSummary),
       pages: read.pages.map(fromBoardPage),
@@ -70,23 +52,6 @@ export function injectDomainBoardChunksQuery() {
   const projectFilter = injectProjectFilter();
   return injectQuery(() => ({
     ...domainBoardChunksQueryOptions(projectFilter()),
-    refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
-  }));
-}
-
-/**
- * Hub `GET /api/chunks?board_window=true` read — the board's chunk list (derived
- * status + current node). Under a project lens it reads only the lensed project's chunks,
- * in the same order. {@link drainPages} follows `next_cursor` to exhaustion so this
- * query resolves the chunks and original pages whole.
- */
-export function injectHubBoardChunksQuery() {
-  const projectFilter = injectProjectFilter();
-  return injectQuery(() => ({
-    ...boardChunksQueryOptions(projectFilter()),
-    // Covered by chunk-changed, question-asked/-answered, and decision-opened/-resolved
-    // (EVENT_INVALIDATION_REGISTRY, core/live/hub-live-updates.ts) — this is the backstop, not the
-    // primary freshness path. See LIVE_COVERED_POLL_BACKSTOP_MS.
     refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
   }));
 }

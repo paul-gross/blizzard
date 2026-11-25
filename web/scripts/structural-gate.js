@@ -61,7 +61,7 @@
  *
  * Also the open-vocabulary sweeps (`open-vocabulary-sweep.js`, `bzh:frontend-open-vocabulary`), with no
  * exemption list: every template `@switch` carries an `@default`, and, in a `*.translate.ts` file or a unit
- * still on `DOMAIN_BOUNDARY_EXEMPT` — where wire vocabularies are read — a full `Record` keyed by a
+ * query or mutation file — where wire vocabularies are read — a full `Record` keyed by a
  * generated vocabulary is built through `openLookup` instead.
  *
  * Finally, the containers-compose sweep (`containers-compose-sweep.js`,
@@ -76,6 +76,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
+const { assertRetirementCensusWorks, retirementViolations } = require('./retirement-census');
 const { assertPlacementDetectorWorks, placementViolations } = require('./placement-sweep');
 const { assertDisjointDiffsDetectorWorks, disjointDiffsViolations } = require('./disjoint-diffs-sweep');
 const {
@@ -983,103 +984,17 @@ const LAYERED_PROJECTS = [
   { name: 'runner', root: 'runner/src/app', kernel: 'core', specSupport: null, layers: RUNNER_LAYERS },
 ];
 
-/**
- * The domain-boundary exemptions (`bzh:frontend-domain-boundary`): each entry is a package-layers unit,
- * `<source root>/<unit>` (the longest `LAYERED_PROJECTS` key prefixing a file), and passes every file in
- * it, except for strict scopes. One reason covers the whole list: these units still read wire types outside the boundary and move
- * behind it one landing at a time (`decision:ui-toolkit/incremental-replacement`). A unit leaves the list
- * in the landing that moves it; an entry whose unit no longer consumes a wire type fails as stale, so the
- * list only shrinks. A file in no declared unit is keyed by its own folder.
- */
-const DOMAIN_BOUNDARY_EXEMPT = [
-  'hub/src/app/admin',
-  'hub/src/app/admin/forges',
-  'hub/src/app/admin/hub-settings',
-  'hub/src/app/board',
-  'hub/src/app/core',
-];
+// No units remain exempt from the domain boundary.
+const DOMAIN_BOUNDARY_EXEMPT = [];
 
-const DOMAIN_BOUNDARY_SUBKEYED = 'hub/src/app/admin';
-/** A strict scope is a folder prefix, or a concept stem (`<dir>/<concept>`) matching that concept's own files
- * (`<concept>.*`), so a concept can be pinned inside a unit whose other concepts are still exempt. */
-const DOMAIN_BOUNDARY_STRICT_SCOPES = [
-  'hub/src/app/admin/projects',
-  'hub/src/app/admin/hub-settings/hub-settings.domain',
-  'hub/src/app/admin/hub-settings/hub-settings.form',
-  'hub/src/app/admin/hub-settings/hub-settings.service',
-  'hub/src/app/admin/config-history',
-  'hub/src/app/admin/config-field-diff',
-  'hub/src/app/admin/config-revisions',
-  'hub/src/app/admin/admin-shell',
-  'fleet/src/lib/chunk/awaiting-human',
-  'hub/src/app/core/auth',
-  'hub/src/app/core/lens-note',
-  'hub/src/app/core/lensed-project',
-  'hub/src/app/core/project-lens-colors',
-  'hub/src/app/core/chunks',
-  'hub/src/app/core/board-done-policy',
-  'hub/src/app/core/chunk-detail-header',
-  'hub/src/app/core/flow-place',
-  'hub/src/app/core/runners.domain',
-  'hub/src/app/core/runners.translate',
-  'hub/src/app/core/work-items/board-work-items',
-  'hub/src/app/runners/runner-prerequisite',
-  'hub/src/app/board/board-page',
-  'hub/src/app/board/board.fixture',
-  'hub/src/app/board/board-card',
-  'hub/src/app/board/board-list',
-  'hub/src/app/board/node-strip',
-  'hub/src/app/board/board-shell',
-  'hub/src/app/board/glance',
-  'hub/src/app/board/tracks',
-  'hub/src/app/board/activity',
-  'hub/src/app/board/queue',
-  'hub/src/app/board/chunks/urgency.model',
-  'hub/src/app/board/chunk-dock/chunk-detail',
-  'hub/src/app/board/chunk-dock/chunk-detail-panel',
-  'hub/src/app/board/chunk/chunk-page',
-  'hub/src/app/board/chunk/chunk-page-layout',
-  'hub/src/app/board/chunk/chunk-page-transcripts',
-  'hub/src/app/board/fleet-spend/fleet-spend.domain',
-  'hub/src/app/board/fleet-spend/fleet-spend.translate',
-  'fleet/src/lib/chunk/chunk-artifacts-panel',
-  'fleet/src/lib/chunk/chunk-card',
-  'fleet/src/lib/chunk/chunk-detail',
-  'fleet/src/lib/chunk/chunk-page',
-  'hub/src/app/board/chunk-dock/chunk-detail.model',
-];
-
-/** The `DOMAIN_BOUNDARY_EXEMPT` unit of `rel`, a `projects/`-relative posix path.
- * @param {string} rel
- */
+/** @param {string} rel projects-relative path */
 function domainBoundaryUnitOf(rel) {
   for (const project of LAYERED_PROJECTS) {
     if (!rel.startsWith(`${project.root}/`)) continue;
     const unit = layerUnitOf(rel.slice(project.root.length + 1), project.layers);
-    if (unit === null) continue;
-    const key = `${project.root}/${unit}`;
-    if (key !== DOMAIN_BOUNDARY_SUBKEYED) return key;
-    const rest = rel.slice(key.length + 1).split('/');
-    return rest.length > 1 ? `${key}/${rest[0]}` : key;
+    if (unit !== null) return `${project.root}/${unit}`;
   }
   return path.posix.dirname(rel);
-}
-
-/** Proves the admin keying before the sweep relies on it: a subfolder of `admin/` is its own unit, a file directly in
- * `admin/` keeps the root's, and no other unit is split. */
-function assertDomainBoundaryKeyingWorks() {
-  const cases = [
-    ['hub/src/app/admin/work-sources/x.ts', 'hub/src/app/admin/work-sources'],
-    ['hub/src/app/admin/projects/deep/y.ts', 'hub/src/app/admin/projects'],
-    ['hub/src/app/admin/config-edit.model.ts', 'hub/src/app/admin'],
-    ['hub/src/app/board/z.ts', 'hub/src/app/board'],
-    ['hub/src/app/garden/cadences/c.ts', 'hub/src/app/garden/cadences'],
-  ];
-  const wrong = cases
-    .map(([rel, want]) => [rel, want, domainBoundaryUnitOf(rel)])
-    .filter(([, want, got]) => want !== got)
-    .map(([rel, want, got]) => `${rel}: want ${want}, got ${got}`);
-  if (wrong.length > 0) throw new Error(`domain-boundary keying self-test failed:\n${wrong.join('\n')}`);
 }
 
 /** The domain-boundary sweep over the real tree, one printable line per finding, in three reports.
@@ -1087,20 +1002,13 @@ function assertDomainBoundaryKeyingWorks() {
  */
 function domainBoundaryViolations(exempt = DOMAIN_BOUNDARY_EXEMPT) {
   const { consumers, stale, reach } = sweepDomainBoundary({
-    root: ROOT, unitOf: domainBoundaryUnitOf, exempt, strictScopes: DOMAIN_BOUNDARY_STRICT_SCOPES,
+    root: ROOT, unitOf: domainBoundaryUnitOf, exempt,
   });
   return {
     consumers: consumers.map((c) => `  ${c.file} (${c.unit}): ${c.names.join(', ')}`),
     stale: stale.map((unit) => `  ${unit}`),
     reach: reach.map((r) => `  ${r.file}: ${r.names.join(', ')}`),
   };
-}
-
-/** Whether `rel` sits in a unit still on `DOMAIN_BOUNDARY_EXEMPT`.
- * @param {string} rel
- */
-function inExemptDomainBoundaryUnit(rel) {
-  return DOMAIN_BOUNDARY_EXEMPT.includes(domainBoundaryUnitOf(rel));
 }
 
 const CSS_IMPORT = /@import\s+(?:url\(\s*)?['"]([^'"]+)['"]/g;
@@ -1400,6 +1308,7 @@ function main() {
   assertRealTimerDetectorWorks();
   assertKitFloorDetectorWorks();
   assertKitStoriesDetectorWorks();
+  assertRetirementCensusWorks();
   assertBoardControlDetectorWorks();
   assertDockControlDetectorWorks();
   assertInvalidateReturnedDetectorWorks();
@@ -1409,7 +1318,6 @@ function main() {
   assertBackendCitationDetectorWorks();
   assertClientCallPlacementDetectorWorks();
   assertDomainBoundaryDetectorWorks();
-  assertDomainBoundaryKeyingWorks();
   assertPackageLayersDetectorWorks();
   assertContainersComposeDetectorWorks();
   assertTemplateSwitchDetectorWorks();
@@ -1484,6 +1392,7 @@ function main() {
     }
   }
 
+  const retirementLines = retirementViolations();
   const placementLines = placementViolations();
   const disjointDiffsLines = disjointDiffsViolations();
   const backendCitationLines = backendCitationViolations();
@@ -1501,9 +1410,10 @@ function main() {
   const containersComposeLines = containersComposeViolations();
   const kitStories = kitStoriesViolations(readKitSources());
   const templateSwitchLines = templateSwitchViolations();
-  const vocabularyRecordLines = vocabularyRecordViolations(inExemptDomainBoundaryUnit);
+  const vocabularyRecordLines = vocabularyRecordViolations();
 
   if (
+    retirementLines.length > 0 ||
     realTimerViolations.length > 0 ||
     kitFloorViolations.length > 0 ||
     kitStories.unstoried.length > 0 ||
@@ -1524,6 +1434,10 @@ function main() {
     templateSwitchLines.length > 0 ||
     vocabularyRecordLines.length > 0
   ) {
+    if (retirementLines.length > 0) {
+      console.error('structural-gate: retired wire-projection references:\n');
+      for (const line of retirementLines) console.error(`  ${line}`);
+    }
     if (realTimerViolations.length > 0) {
       console.error('structural-gate: real timers in merge-gating specs:\n');
       for (const v of realTimerViolations) console.error(`  ${v.file}: ${v.timer}(…, ${v.delay})`);
@@ -1683,6 +1597,7 @@ function main() {
     return;
   }
 
+  console.log('structural-gate: retirement census clean.');
   console.log('structural-gate: real-timer sweep clean.');
   console.log('structural-gate: kit floor clean.');
   console.log('structural-gate: kit-stories sweep clean.');

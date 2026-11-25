@@ -4,7 +4,7 @@ import { injectQueries } from '@tanstack/angular-query-experimental/inject-queri
 
 import { fromFlowFactView, getFlowRecordApiFlowsFlowIdRecordGet } from 'fleet';
 import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
-import { boardChunksQueryOptions } from '../core/chunks.query';
+import { boardChunksReadOptions } from '../core/chunks.query';
 import { activeFlowsQueryOptions } from '../core/flows.query';
 import { injectProjectFilter } from '../core/project-filter';
 import { hubFlowsKey } from '../core/query-keys';
@@ -42,11 +42,11 @@ export function injectDeliveryRepositoriesQuery() {
 export function injectDeliveryChunksQuery() {
   const projectFilter = injectProjectFilter();
   return injectQuery(() => {
-    const options = boardChunksQueryOptions(projectFilter());
+    const options = boardChunksReadOptions(projectFilter());
     return {
       ...options,
       refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
-      select: (read: Parameters<typeof options.select>[0]) => read.chunks.map(fromChunkSummary),
+      select: (read: Awaited<ReturnType<typeof options.queryFn>>) => read.chunks.map(fromChunkSummary),
     };
   });
 }

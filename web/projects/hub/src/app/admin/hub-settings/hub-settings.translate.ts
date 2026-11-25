@@ -1,7 +1,7 @@
 // bzh:frontend-domain-boundary — the hub settings wire read into the edit's domain.
-import { type HubSettingRow, readRefusal, type RefusalMap, type SaveOutcome, settingValueText } from 'fleet';
+import { readRefusal, type RefusalMap, type SaveOutcome, settingValueText } from 'fleet';
 
-import type { HubSettingBaseline, HubSettingDraft } from './hub-settings.domain';
+import type { HubSettingBaseline, HubSettingDraft, HubSettingRow } from './hub-settings.domain';
 
 /** What an edit of `row` starts from: the key, the settings read's revision, and the key's value, all from one read. */
 export function toHubSettingBaseline(revision: number, row: HubSettingRow): HubSettingBaseline {
@@ -19,4 +19,18 @@ const HUB_SETTING_REFUSALS: RefusalMap<HubSettingDraft> = { field: () => null, k
  * a refusal, so none can be placed on a field. */
 export function hubSettingRefusal(error: unknown): SaveOutcome<HubSettingDraft> {
   return readRefusal(error, HUB_SETTING_REFUSALS, 'Save failed.');
+}
+
+import type { HubSettingRow as WireHubSettingRow, HubSettingsChange } from 'fleet';
+import type { HubSettings, HubSettingsHistoryPage } from './hub-settings.domain';
+
+export function toHubSettings(view: { revision: number; settings: WireHubSettingRow[] }): HubSettings {
+  return { revision: view.revision, settings: view.settings.map((row) => ({ ...row })) };
+}
+
+export function toHubSettingsHistoryPage(page: { changes: HubSettingsChange[]; next_before: number | null }): HubSettingsHistoryPage {
+  return {
+    next_before: page.next_before,
+    changes: page.changes.map((change) => ({ ...change, diff: change.diff.map((field) => ({ ...field })) })),
+  };
 }

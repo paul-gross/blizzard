@@ -1,4 +1,4 @@
-import type { HubSettingRow } from 'fleet';
+import type { HubSettingRow } from './hub-settings.domain';
 
 import { hubSettingRefusal, toHubSettingBaseline } from './hub-settings.translate';
 
@@ -32,4 +32,14 @@ describe('hubSettingRefusal', () => {
     });
     expect(hubSettingRefusal(new Error('network'))).toEqual({ ok: false, fields: {}, form: 'Save failed.' });
   });
+});
+
+import { toHubSettings, toHubSettingsHistoryPage } from './hub-settings.translate';
+
+it('preserves settings and history fields including cursors and field values', () => {
+  const settings = { revision: 7, settings: [{ key: 'key', value: { a: 1 }, lifetime: 'pass' as const, source: 'default' as const, revision: null, written_at: null, written_by: null }] };
+  expect(toHubSettings(settings)).toEqual(settings);
+  const page = { changes: [{ id: 2, revision: 7, op: 'edit' as const, door: 'api' as const, actor: 'a', recorded_at: 'now', apply_id: null,
+    diff: [{ field: 'key', old: null, new: { a: 1 }, old_label: null, new_label: 'new' }] }], next_before: 2 };
+  expect(toHubSettingsHistoryPage(page)).toEqual(page);
 });

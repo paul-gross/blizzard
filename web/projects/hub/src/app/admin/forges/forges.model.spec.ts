@@ -1,15 +1,10 @@
-import type { ForgeSummary } from 'fleet';
 import { lifecycleTone } from '../../core/lifecycle-tone';
 import { forge, forgeRecord } from '../../forge/forge.builders';
 import { budgetFacts, FORGE_FIELD_VIEWS, forgeOptions, forgeRecordVm, forgeRows } from './forges.model';
 
-const GITHUB: ForgeSummary = {
-  forge_id: 'frg_1', slug: 'github', name: 'GitHub', kind: 'github', api_base: 'https://api.github.com',
-  web_base: null, web_origin: 'https://github.com', revision: 2, retired: false,
-  created_at: '2026-01-01T00:00:00Z', created_by: 'usr_1', created_by_name: 'Ana',
-};
-const GITLAB: ForgeSummary = { ...GITHUB, forge_id: 'frg_2', slug: 'gitlab', kind: 'gitlab', name: 'GitLab' };
-const RETIRED: ForgeSummary = { ...GITHUB, forge_id: 'frg_3', slug: 'old', retired: true };
+const GITHUB = forge();
+const GITLAB = forge({ id: 'frg_2', slug: 'gitlab', kind: 'gitlab', name: 'GitLab' });
+const RETIRED = forge({ id: 'frg_3', slug: 'old', retired: true });
 
 describe('forge admin models', () => {
   it('filters lifecycle and shows slug, name and kind', () => {

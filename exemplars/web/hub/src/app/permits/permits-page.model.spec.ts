@@ -1,9 +1,9 @@
 // exemplar: bzh:frontend-containers-compose, bzh:frontend-open-vocabulary — each derivation proved as a pure function, no TestBed.
 
-import { type PermitState, type PermitView } from 'fleet';
+import type { Permit } from './permits.domain';
 import { permitProjectLabel, permitsLabel, withPendingPermitChanges } from './permits-page.model';
 
-const REQUESTED: PermitView = {
+const REQUESTED: Permit = {
   permit_id: 'pmt_1',
   project_id: 'prj_core',
   project_slug: 'core',
@@ -19,7 +19,7 @@ const REQUESTED: PermitView = {
   revocation_note: null,
 };
 
-const GRANTED: PermitView = { ...REQUESTED, permit_id: 'pmt_2', state: 'granted', verbs: ['suspend', 'revoke'] };
+const GRANTED: Permit = { ...REQUESTED, permit_id: 'pmt_2', state: 'granted', verbs: ['suspend', 'revoke'] };
 
 describe('permitsLabel', () => {
   it('names the holder the listing is narrowed to', () => {
@@ -52,7 +52,7 @@ describe('withPendingPermitChanges', () => {
   });
 
   it('passes a state this build does not know through raw', () => {
-    const lapsed = { ...REQUESTED, state: 'lapsed' as PermitState };
+    const lapsed = { ...REQUESTED, state: { unlisted: 'lapsed' } };
 
     expect(withPendingPermitChanges([lapsed], [], [])).toEqual([{ permit: lapsed, state: 'lapsed', pending: false }]);
   });

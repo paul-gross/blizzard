@@ -19,7 +19,7 @@ export interface HubEventsFilters {
  * TanStack Query and the generated hub client (bzh:generated-client). `filters`
  * is a function so a caller-owned signal set recomputes it reactively; each
  * distinct filter combination rides in the query key, so it caches as its own
- * entry — same idiom as {@link injectHubFleetSpendQuery}'s `since` window. The project lens is one more axis, read
+ * entry — same idiom as {@link injectHubFleetSpendDomainQuery}'s `since` window. The project lens is one more axis, read
  * from the shell rather than the caller: under a lens the read sends `?project=` (the hub keeps the events of the
  * project's chunks and of the runners that serve it) and keys on it.
  *

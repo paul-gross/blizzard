@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, u
 import { form } from '@angular/forms/signals';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
-import { asyncState, type EditBaseline, errorMessage, type KitAsyncStateValue, RecordKind, restingAsyncState, submitForm, ViewportService } from 'fleet';
+import { asyncState, type EditBaseline, errorMessage, type KitAsyncStateValue, restingAsyncState, submitForm, ViewportService } from 'fleet';
 import { map } from 'rxjs';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
@@ -32,7 +32,7 @@ export class ForgeDetailPage {
   private readonly viewport = inject(ViewportService);
   private readonly key = toSignal(this.route.paramMap.pipe(map((params) => params.get('key'))), { initialValue: null });
   private readonly forgeQuery = injectForgeRecordQuery(() => this.key());
-  private readonly historyQuery = injectConfigHistoryQuery(RecordKind.FORGE, () => this.forgeQuery.data()?.id ?? null);
+  private readonly historyQuery = injectConfigHistoryQuery('forge', () => this.forgeQuery.data()?.id ?? null);
   private readonly meQuery = injectMeQuery();
   private readonly forgeService = injectForgeService();
   private readonly lifecycleMutation = injectForgeLifecycleMutation();
@@ -42,7 +42,7 @@ export class ForgeDetailPage {
   protected readonly lastChange = computed(() => lastChange(this.historyQuery.data()));
   protected readonly revisions = computed(() => revisionRows(this.historyQuery.data()));
   protected readonly revisionsState = computed<KitAsyncStateValue>(() => asyncState(this.historyQuery, this.revisions().length === 0));
-  protected readonly cliCommand = computed(() => detailCliCommand(this.viewport.mode(), RecordKind.FORGE, this.forgeQuery.data()?.slug));
+  protected readonly cliCommand = computed(() => detailCliCommand(this.viewport.mode(), 'forge', this.forgeQuery.data()?.slug));
   protected readonly actions = computed(() => configActions(this.viewport.mode(), hasPermission(this.meQuery.data(), 'config:edit'), this.forgeQuery.data()));
   /** What the edit started from — `null` while no edit is under way. A refresh of the read does not replace it. */
   protected readonly editBaseline = signal<EditBaseline<ForgeDraft> | null>(null);

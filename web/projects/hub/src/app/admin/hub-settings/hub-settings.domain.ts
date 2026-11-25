@@ -12,3 +12,36 @@ export interface HubSettingDraft {
 export interface HubSettingBaseline extends EditBaseline<HubSettingDraft> {
   readonly current: unknown;
 }
+
+import type { ConfigFieldChange } from '../config-history.domain';
+
+export interface HubSettingRow {
+  readonly key: string;
+  readonly value: unknown;
+  readonly lifetime: string;
+  readonly source: string;
+  readonly revision: number | null;
+  readonly written_at: string | null;
+  readonly written_by: string | null;
+}
+
+export interface HubSettings {
+  readonly revision: number;
+  readonly settings: readonly HubSettingRow[];
+}
+
+export interface HubSettingsChange {
+  readonly id: number;
+  readonly revision: number;
+  readonly op: string;
+  readonly door: string;
+  readonly actor: string;
+  readonly recorded_at: string;
+  readonly apply_id: string | null;
+  readonly diff: readonly ConfigFieldChange[];
+}
+
+export interface HubSettingsHistoryPage {
+  readonly changes: readonly HubSettingsChange[];
+  readonly next_before: number | null;
+}

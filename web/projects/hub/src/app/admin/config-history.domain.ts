@@ -1,3 +1,9 @@
+/** Record kinds accepted by the history filter. Response kinds remain open strings. */
+export type ConfigRecordKind = 'work_source' | 'secret' | 'repository' | 'forge' | 'credential' | 'scope' | 'routine' | 'cadence' | 'project' | 'project_source_link' | 'project_repository_link' | 'urgency' | 'urgency_order' | 'tenant_settings';
+
+/** A reference may name a record kind newer than this client. */
+export interface ConfigRecordRef { readonly kind: string; readonly key: string; readonly label: string | null }
+
 /** A recorded change, preserving the hub's order and diff values and labels. */
 export interface ConfigChange {
   readonly id: number;

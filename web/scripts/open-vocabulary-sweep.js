@@ -18,9 +18,8 @@
  * either. The vocabularies and fields are read at run time from `fleet/src/lib/api/{hub,runner}/
  * types.gen.ts`. A table written inside an `openLookup(…)` call, or declared by an unexported
  * `const` this file reads only inside `openLookup(…)` calls, is the helper's own table and passes.
- * Scope is where wire vocabularies are still read: every `*.translate.ts` file, and every file in a
- * unit the caller names as still on the domain-boundary exemption list (`structural-gate.js`'s
- * `DOMAIN_BOUNDARY_EXEMPT`), except specs, stories, and the generated `fleet/src/lib/api/`. A file the
+ * Scope is where wire vocabularies are read: every `*.translate.ts`, `*.query.ts`, and
+ * `*.mutations.ts` file, except specs, stories, and the generated `fleet/src/lib/api/`. A file the
  * domain-boundary sweep keeps from importing a vocabulary cannot key a table by one.
  *
  * Run through `npm run structural-gate`; this module only exports.
@@ -269,13 +268,12 @@ function vocabularyRecords(source, vocabulary) {
 
 /**
  * @param {string} rel `projects/`-relative posix path
- * @param {(rel: string) => boolean} inExemptUnit whether `rel` sits in a unit still exempt from the domain boundary
  */
-function inRecordScope(rel, inExemptUnit) {
+function inRecordScope(rel) {
   if (!rel.endsWith(".ts") || rel.endsWith(".spec.ts") || rel.endsWith(".stories.ts") || rel.startsWith(GENERATED_API_DIR)) {
     return false;
   }
-  return rel.endsWith(".translate.ts") || rel.endsWith(".query.ts") || rel.endsWith(".mutations.ts") || inExemptUnit(rel);
+  return rel.endsWith(".translate.ts") || rel.endsWith(".query.ts") || rel.endsWith(".mutations.ts");
 }
 
 /** Prove the template-switch sweep catches a bare `@switch`, nested or not, and passes one with
@@ -354,20 +352,19 @@ function assertVocabularyRecordDetectorWorks() {
       throw new Error(`vocabulary-record sweep false-positived on \`${source}\``);
     }
   }
-  // The scope pin: translators and files in still-exempt units are held; a migrated unit's files, specs,
-  // stories, and the generated client are not.
-  const exempt = (/** @type {string} */ rel) => rel.startsWith("hub/src/app/events/");
-  for (const rel of ["hub/src/app/events/events-view.ts", "hub/src/app/admin/admin.translate.ts", "hub/src/app/admin/admin.query.ts", "hub/src/app/admin/admin.mutations.ts", "fleet/src/lib/testing/builders/chunk.translate.ts"]) {
-    if (!inRecordScope(rel, exempt)) throw new Error(`vocabulary-record sweep scoped out \`${rel}\``);
+  // The scope pin: boundary files are held; presentation files, specs, stories, and generated code are not.
+  for (const rel of ["hub/src/app/admin/admin.translate.ts", "hub/src/app/admin/admin.query.ts", "hub/src/app/admin/admin.mutations.ts", "fleet/src/lib/testing/builders/chunk.translate.ts"]) {
+    if (!inRecordScope(rel)) throw new Error(`vocabulary-record sweep scoped out \`${rel}\``);
   }
   for (const rel of [
     "hub/src/app/admin/admin-view.ts",
+    "hub/src/app/events/events-view.ts",
     "hub/src/app/events/events-view.spec.ts",
     "hub/src/app/admin/admin.translate.spec.ts",
     "hub/src/app/events/events.stories.ts",
     "fleet/src/lib/api/hub/types.gen.ts",
   ]) {
-    if (inRecordScope(rel, exempt)) throw new Error(`vocabulary-record sweep scoped in \`${rel}\``);
+    if (inRecordScope(rel)) throw new Error(`vocabulary-record sweep scoped in \`${rel}\``);
   }
 }
 
@@ -386,11 +383,10 @@ function templateSwitchViolations(projectsDir = PROJECTS_DIR) {
 }
 
 /** Vocabulary-keyed tables under `projects/` not built through the helper, one report line each.
- * @param {(rel: string) => boolean} inExemptUnit whether a file sits in a unit still exempt from the domain boundary
  * @param {string} [projectsDir] absolute
  * @returns {string[]}
  */
-function vocabularyRecordViolations(inExemptUnit, projectsDir = PROJECTS_DIR) {
+function vocabularyRecordViolations(projectsDir = PROJECTS_DIR) {
   const vocabulary = readVocabulary(TYPES_FILES.map((rel) => fs.readFileSync(path.join(projectsDir, rel), "utf8")));
   if (vocabulary.vocabularies.size === 0) {
     throw new Error(`vocabulary-record sweep found no vocabularies in ${TYPES_FILES.join(", ")}`);
@@ -399,7 +395,7 @@ function vocabularyRecordViolations(inExemptUnit, projectsDir = PROJECTS_DIR) {
   const lines = [];
   for (const file of walk(projectsDir, [".ts"])) {
     const rel = toPosix(path.relative(projectsDir, file));
-    if (!inRecordScope(rel, inExemptUnit)) continue;
+    if (!inRecordScope(rel)) continue;
     for (const hit of vocabularyRecords(fs.readFileSync(file, "utf8"), vocabulary)) lines.push(`  ${rel}:${hit.line}: ${hit.text}`);
   }
   return lines;

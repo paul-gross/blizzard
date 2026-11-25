@@ -6,11 +6,11 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { type PermitView } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
+import { permitWire } from './permits.fixtures.translate';
 import { PermitDetail } from './permit-detail';
 
-const REVOKED: PermitView = {
+const REVOKED: ReturnType<typeof permitWire> = {
   permit_id: 'pmt_1',
   project_id: 'prj_core',
   project_slug: 'core',

@@ -6,6 +6,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 
 import { type PermitView } from 'fleet';
 import { type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
+import { fromPermitView } from './permits.translate';
 import { injectPermitQuery } from './permits.query';
 
 const GRANTED: PermitView = {
@@ -63,6 +64,6 @@ describe('injectPermitQuery', () => {
     await settle(fixture);
 
     expect(stub.forRoute('/api/permits/pmt_1', 'GET')).toHaveLength(1);
-    expect(fixture.componentInstance.query.data()).toEqual(GRANTED);
+    expect(fixture.componentInstance.query.data()).toEqual(fromPermitView(GRANTED));
   });
 });

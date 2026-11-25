@@ -14,8 +14,7 @@
  * permitted under `fleet/src/lib/api/` and `fleet/src/lib/testing/transport/`, and in `*.query.ts`,
  * `*.mutations.ts`, and `*.translate.ts` files and their own focused specs; every other `.ts` under
  * `projects/` (`.storybook/` included) is judged. A unit the caller exempts passes, and an exempt unit
- * that no longer consumes the wire outside a strict scope is reported stale. A strict scope is a folder
- * prefix or a concept stem (`<dir>/<concept>.*`); a parent unit's exemption cannot excuse it. Separately, a production file or a story whose
+ * that no longer consumes the wire is reported stale. Separately, a production file or a story whose
  * consumed symbol is declared under `testing/transport/` reaches the test transport; specs and test
  * helpers may.
  *
@@ -463,13 +462,11 @@ function referencedDeclarations(checker, sf) {
  * Run the symbol-origin sweep over the tree at `root`.
  *
  * @param {{ root: string, memory?: Map<string, string> | null, unitOf: (rel: string) => string,
- *   exempt: readonly string[], strictScopes?: readonly string[] }} opts `unitOf` maps a `projects/`-relative file to its exemption unit;
- *   `strictScopes` are projects-relative directory prefixes, without a trailing slash, or concept stems (a scope
- *   followed by `.` matches that concept's own files)
+ *   exempt: readonly string[] }} opts `unitOf` maps a `projects/`-relative file to its exemption unit
  * @returns {DomainBoundaryResult} unexempted consumers, consumers an exemption passed, exempt units
  *   that consume nothing, and transport reach — paths `projects/`-relative
  */
-function sweepDomainBoundary({ root, memory = null, unitOf, exempt, strictScopes = [] }) {
+function sweepDomainBoundary({ root, memory = null, unitOf, exempt }) {
   const projects = toPosix(path.join(root, "projects"));
   const files = memory ? [...memory.keys()] : walkSources(projects);
   const program = createProgram(root, files, memory);
@@ -501,8 +498,7 @@ function sweepDomainBoundary({ root, memory = null, unitOf, exempt, strictScopes
     }
     if (judgeWire && wireNames.size > 0) {
       const unit = unitOf(rel);
-      const strict = strictScopes.some((scope) => rel.startsWith(`${scope}/`) || rel.startsWith(`${scope}.`));
-      (exempt.includes(unit) && !strict ? exempted : consumers).push({ file: rel, unit, names: [...wireNames].sort() });
+      (exempt.includes(unit) ? exempted : consumers).push({ file: rel, unit, names: [...wireNames].sort() });
     }
     if (judgeReach && transportNames.size > 0) reach.push({ file: rel, names: [...transportNames].sort() });
   }
@@ -652,35 +648,17 @@ function assertDomainBoundaryDetectorWorks() {
     if (!file.includes("/reach-")) throw new Error(`domain-boundary detector false-positived transport reach from ${file}`);
   }
 
-  const strictScopes = ["hub/src/app/admin/projects"];
-  const admin = "hub/src/app/admin";
-  const strictRun = (/** @type {Map<string, string>} */ sources) =>
-    sweepDomainBoundary({ root, memory: sources, unitOf, exempt: [admin], strictScopes });
-  const strictResult = strictRun(memory);
-  for (const file of ["hub/src/app/admin/projects/view.ts", "hub/src/app/admin/projects/view.spec.ts"]) {
-    if (!strictResult.consumers.some((c) => c.file === file)) throw new Error(`strict scope missed ${file}`);
+  // The former migration scopes are now covered unconditionally, without changing
+  // the focused boundary-file allowances.
+  const full = run([]);
+  for (const file of ["hub/src/app/admin/projects/view.ts", "hub/src/app/admin/projects/view.spec.ts", "hub/src/app/admin/sibling/view.ts", "hub/src/app/admin/stem.model.ts", "hub/src/app/admin/other.model.ts"]) {
+    if (!full.consumers.some((c) => c.file === file)) throw new Error(`domain-boundary detector missed ${file}`);
   }
   for (const suffix of ["query.ts", "query.spec.ts", "mutations.ts", "mutations.spec.ts", "translate.ts", "translate.spec.ts"]) {
     const file = `hub/src/app/admin/projects/project.${suffix}`;
-    if ([...strictResult.consumers, ...strictResult.exempted].some((c) => c.file === file)) {
-      throw new Error(`strict scope rejected boundary file ${file}`);
-    }
+    if (full.consumers.some((c) => c.file === file)) throw new Error(`domain-boundary detector rejected boundary file ${file}`);
   }
-  if (!strictResult.exempted.some((c) => c.file === "hub/src/app/admin/sibling/view.ts") || strictResult.stale.includes(admin)) {
-    throw new Error("strict scope did not preserve the sibling exemption");
-  }
-  const stemRun = sweepDomainBoundary({ root, memory, unitOf, exempt: [admin], strictScopes: ["hub/src/app/admin/stem"] });
-  if (!stemRun.consumers.some((c) => c.file === "hub/src/app/admin/stem.model.ts")) throw new Error("stem scope missed its own concept's file");
-  if (!stemRun.exempted.some((c) => c.file === "hub/src/app/admin/other.model.ts")) {
-    throw new Error("stem scope caught a different-stem sibling");
-  }
-  const withoutSibling = new Map(memory);
-  withoutSibling.delete(`${p}/hub/src/app/admin/sibling/view.ts`);
-  withoutSibling.delete(`${p}/hub/src/app/admin/stem.model.ts`);
-  withoutSibling.delete(`${p}/hub/src/app/admin/other.model.ts`);
-  if (!strictRun(withoutSibling).stale.includes(admin)) {
-    throw new Error("strict scope sustained a stale parent exemption");
-  }
+
 }
 
 module.exports = {

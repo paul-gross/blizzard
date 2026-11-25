@@ -1,13 +1,12 @@
 // bzh:frontend-domain-boundary — the one place the secret wire is read and written.
 import {
   type EditBaseline,
-  RecordKind,
-  type RecordRefView,
   type RefusalMap,
   type SecretCreateRequestWritable,
   type SecretView,
 } from 'fleet';
 
+import type { ConfigRecordRef } from '../config-history.domain';
 import type { Secret, SecretCreateDraft, SecretReplaceDraft } from './secret.domain';
 import { EMPTY_SECRET_REPLACE_DRAFT } from './secret.domain';
 
@@ -25,10 +24,10 @@ export function fromSecretView(wire: SecretView): Secret {
 }
 
 /** The record kind the change history and the CLI change verb name a secret by. */
-export const SECRET_RECORD_KIND = RecordKind.SECRET;
+export const SECRET_RECORD_KIND = 'secret';
 
 /** The links a secret's referring records are shown as. */
-export function secretReferenceRefs(secret: Secret): readonly RecordRefView[] {
+export function secretReferenceRefs(secret: Secret): readonly ConfigRecordRef[] {
   return secret.references.map((ref) => ({ kind: ref.kind, key: ref.key, label: ref.label }));
 }
 

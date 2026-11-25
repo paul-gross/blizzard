@@ -8,7 +8,7 @@ import { injectProjectDomainsQuery } from '../core/projects.query';
 import { changesTotal, liveUrgencyCount, tabCount } from './admin-shell.model';
 import { injectConfigChangesQuery } from './changes/changes.query';
 import { injectCredentialsQuery } from './credentials/credentials.query';
-import { injectForgesQuery } from './forges/forges.query';
+import { injectForgeListQuery } from './forges/forges.query';
 import { injectMembersQuery } from './members/members.query';
 import { injectLensLinks } from './projects/lens-links';
 import { injectRepositoriesQuery } from './repositories/repositories.query';
@@ -40,7 +40,7 @@ export class AdminShell {
   private readonly urgenciesQuery = injectDomainUrgenciesQuery();
   private readonly sourcesQuery = injectWorkSourcesQuery(() => false);
   private readonly repositoriesQuery = injectRepositoriesQuery(() => false);
-  private readonly forgesQuery = injectForgesQuery(() => false);
+  private readonly forgesQuery = injectForgeListQuery(() => false);
   private readonly credentialsQuery = injectCredentialsQuery(() => false);
   private readonly secretsQuery = injectSecretsQuery(() => false);
   private readonly sourceLinks = injectLensLinks('source');

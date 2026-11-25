@@ -1,5 +1,5 @@
 import { changeEntriesOf, changesOf, HUB_SETTING_FIELD_VIEWS, recordOf, revisionsOf } from './hub-settings.model';
-import type { HubSettingsChange, HubSettingRow } from 'fleet';
+import type { HubSettingsChange, HubSettingRow } from './hub-settings.domain';
 
 it('derives records, revisions and field values', () => {
   const row: HubSettingRow = { key: 'sweep', value: 60, lifetime: 'pass', source: 'default', revision: null, written_at: null, written_by: null };

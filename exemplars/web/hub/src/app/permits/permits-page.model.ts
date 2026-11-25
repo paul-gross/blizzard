@@ -1,6 +1,8 @@
 // exemplar: bzh:frontend-containers-compose, bzh:frontend-pending-override, bzh:frontend-open-vocabulary — the derivations the page composes.
 
-import { openLookup, PermitState, PermitVerb, type PermitView } from 'fleet';
+import { openLookup } from 'fleet';
+import type { Permit, PermitVerb } from './permits.domain';
+import { permitStateLabel } from './permits.domain';
 import type { PermitMoveVars, PermitRevokeVars } from './permits.mutations';
 
 /** The query param narrowing the listing to one holder. */
@@ -12,44 +14,44 @@ export function permitsLabel(holder: string | null): string {
 }
 
 /** The label `permit`'s project shows by: its name, else its slug, else its id; `''` when the hub knows none. */
-export function permitProjectLabel(permit: PermitView): string {
+export function permitProjectLabel(permit: Permit): string {
   return permit.project_name ?? permit.project_slug ?? permit.project_id ?? '';
 }
 
 /** One listed permit as the view renders it. */
 export interface PermitRow {
-  readonly permit: PermitView;
+  readonly permit: Permit;
   /** The permit's state, or the state an in-flight verb will leave it in. */
-  readonly state: PermitState;
+  readonly state: string;
   /** Whether a verb is in flight for this permit. */
   readonly pending: boolean;
 }
 
 /** The state each verb leaves a permit in; a verb this build cannot place leaves the permit's own. */
-const STATE_AFTER = openLookup<PermitVerb, PermitState | null>(
+const STATE_AFTER = openLookup<PermitVerb, string | null>(
   {
-    [PermitVerb.GRANT]: PermitState.GRANTED,
-    [PermitVerb.SUSPEND]: PermitState.SUSPENDED,
-    [PermitVerb.RESUME]: PermitState.GRANTED,
-    [PermitVerb.REVOKE]: PermitState.REVOKED,
+    grant: 'granted',
+    suspend: 'suspended',
+    resume: 'granted',
+    revoke: 'revoked',
   },
   () => null,
 );
 
 /** `permits` as rows, each in-flight move or revocation applied over its own permit. */
 export function withPendingPermitChanges(
-  permits: readonly PermitView[],
+  permits: readonly Permit[],
   moves: readonly PermitMoveVars[],
   revokes: readonly PermitRevokeVars[],
 ): PermitRow[] {
   const pending = new Map<string, PermitVerb>([
     ...moves.map((vars): [string, PermitVerb] => [vars.permitId, vars.verb]),
-    ...revokes.map((vars): [string, PermitVerb] => [vars.permitId, PermitVerb.REVOKE]),
+    ...revokes.map((vars): [string, PermitVerb] => [vars.permitId, 'revoke']),
   ]);
   return permits.map((permit) => {
     const verb = pending.get(permit.permit_id);
     return verb === undefined
-      ? { permit, state: permit.state, pending: false }
-      : { permit, state: STATE_AFTER(verb) ?? permit.state, pending: true };
+      ? { permit, state: permitStateLabel(permit.state), pending: false }
+      : { permit, state: STATE_AFTER(verb) ?? permitStateLabel(permit.state), pending: true };
   });
 }

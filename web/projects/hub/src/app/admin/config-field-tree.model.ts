@@ -1,4 +1,4 @@
-import type { FieldChangeView } from 'fleet';
+import type { ConfigFieldChange } from './config-history.domain';
 
 import { type ConfigFieldOption, type MarkImageSource, markIsImage } from './config-edit.model';
 
@@ -111,8 +111,8 @@ export function fieldChanges<D>(
   fields: readonly ConfigFieldView<D>[],
   baseline: D,
   draft: D,
-): readonly FieldChangeView[] {
-  const diff: FieldChangeView[] = [];
+): readonly ConfigFieldChange[] {
+  const diff: ConfigFieldChange[] = [];
   for (const field of shownFieldViews(fields, 'edit', draft)) {
     const choice = defaultChoiceOf(field);
     if (choice !== null && (valueOf(baseline, choice.key) === true || valueOf(draft, choice.key) === true)) {
@@ -143,7 +143,7 @@ function defaultChange<D>(
   choice: DefaultChoice<D>,
   baseline: D,
   draft: D,
-): FieldChangeView | null {
+): ConfigFieldChange | null {
   const wasDefault = valueOf(baseline, choice.key) === true;
   const isDefault = valueOf(draft, choice.key) === true;
   if (wasDefault && isDefault) return null;

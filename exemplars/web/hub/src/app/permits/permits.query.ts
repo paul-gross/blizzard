@@ -9,6 +9,7 @@ import {
 } from 'fleet';
 import { DRAIN_LIMIT, drainPages } from '../core/paginated-read';
 import { injectProjectFilter } from '../core/project-filter';
+import { fromPermitView } from './permits.translate';
 import { hubPermitKey, hubPermitsKey, lensedKey } from '../core/query-keys';
 
 /** `GET /api/permits` — the lensed project's permits, newest requested first, narrowed to `holder()` when named. */
@@ -19,6 +20,7 @@ export function injectPermitsQuery(holder: () => string | null) {
     const project = filter();
     return {
       queryKey: lensedKey([...hubPermitsKey, named], project),
+      select: (permits: PermitView[]) => permits.map(fromPermitView),
       queryFn: (): Promise<PermitView[]> =>
         drainPages(
           (cursor) =>
@@ -39,6 +41,7 @@ export function injectPermitQuery(permitId: () => string | null) {
     return {
       queryKey: hubPermitKey(id),
       enabled: id !== null,
+      select: fromPermitView,
       queryFn: async (): Promise<PermitView> => {
         const { data, error } = await getPermitApiPermitsPermitIdGet({ path: { permit_id: id! }, throwOnError: false });
         if (error) throw error;

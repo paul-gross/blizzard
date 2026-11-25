@@ -160,6 +160,22 @@ describe('MembersPage', () => {
     expect(stub.forRoute('/api/users/usr_guest/role', 'POST')).toHaveLength(0);
   });
 
+  it('renders the refreshed server listing after a role change', async () => {
+    let changed = false;
+    const { fixture, el } = await mount(ME_ADMIN, () =>
+      [MEMBERS[0], member({ ...MEMBERS[1], role: changed ? 'contributor' : 'guest' })].map(memberWire), {
+      'PUT /api/members/{user_id}': () => {
+        changed = true;
+        return memberWire({ ...MEMBERS[1], role: 'contributor' });
+      },
+    });
+    await choose(fixture, el, 'usr_guest', 'contributor');
+    await settle(fixture);
+    expect(stub.forRoute('/api/members', 'GET')).toHaveLength(2);
+    expect(el.querySelector('[data-user-id="usr_guest"] [data-testid="members-table-role-select"]')?.getAttribute('aria-label'))
+      .toContain('contributor');
+  });
+
   it('surfaces a refused role change instead of appearing to succeed', async () => {
     const { fixture, el } = await mount(ME_ADMIN, () => MEMBERS.map(memberWire), {
       'PUT /api/members/{user_id}': () => stubError(409, { detail: 'a tenant keeps at least one admin' }),

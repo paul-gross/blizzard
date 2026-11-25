@@ -1,4 +1,5 @@
-import { type HubSettingRow, type HubSettingsChange, settingValueText } from 'fleet';
+import { settingValueText } from 'fleet';
+import type { HubSettingRow, HubSettingsChange } from './hub-settings.domain';
 import type { ChangeEntryVm } from '../changes/changes.model';
 import type { ConfigFieldView } from '../config-field-tree.model';
 import type { ConfigRecordVm } from '../config-record-panel';
@@ -20,7 +21,7 @@ export function changeEntriesOf(changes: readonly HubSettingsChange[]): readonly
   }));
 }
 
-export function changesOf(pages: readonly { changes: HubSettingsChange[] }[] | undefined): HubSettingsChange[] {
+export function changesOf(pages: readonly { changes: readonly HubSettingsChange[] }[] | undefined): HubSettingsChange[] {
   return pages?.flatMap((page) => page.changes) ?? [];
 }
 export function revisionsOf(changes: readonly HubSettingsChange[]) {

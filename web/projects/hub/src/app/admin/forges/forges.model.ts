@@ -1,4 +1,4 @@
-import { formatAbsolute, RecordKind, type ForgeSummary } from 'fleet';
+import { formatAbsolute } from 'fleet';
 import { lifecycleTone } from '../../core/lifecycle-tone';
 import type { ConfigFieldView } from '../config-field-tree.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
@@ -55,8 +55,8 @@ export function forgeRecordVm(forge: ForgeRecord | undefined): ConfigRecordVm | 
     links: {
       heading: 'Used by',
       links: [
-        ...forge.repositories.map((ref) => recordLink({ ...ref, kind: RecordKind.REPOSITORY })),
-        ...forge.workSources.map((ref) => recordLink({ ...ref, kind: RecordKind.WORK_SOURCE })),
+        ...forge.repositories.map((ref) => recordLink({ ...ref, kind: 'repository' })),
+        ...forge.workSources.map((ref) => recordLink({ ...ref, kind: 'work_source' })),
       ],
       emptyText: 'No repositories or work sources use this forge.',
     },
@@ -66,10 +66,10 @@ export function forgeRecordVm(forge: ForgeRecord | undefined): ConfigRecordVm | 
 
 /** Only enabled forges are offered. A source's provider must match the forge's kind. */
 export function forgeOptions(
-  forges: readonly ForgeSummary[],
+  forges: readonly Forge[],
   provider?: string,
 ): readonly { value: string; label: string; kind: string }[] {
   return forges
     .filter((forge) => !forge.retired && (provider === undefined || forge.kind === provider))
-    .map((forge) => ({ value: forge.forge_id, label: `${forge.slug} · ${forge.name}`, kind: forge.kind }));
+    .map((forge) => ({ value: forge.id, label: `${forge.slug} · ${forge.name}`, kind: forge.kind }));
 }

@@ -3,10 +3,11 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { type KitAsyncStateValue, openLookup, PermitVerb, FleetWhen, KitAsyncState, KitButton, KitDialog, KitPanel, KitTextInput } from 'fleet';
+import { type KitAsyncStateValue, openLookup, FleetWhen, KitAsyncState, KitButton, KitDialog, KitPanel, KitTextInput } from 'fleet';
 import { AppLink } from 'fleet/shell';
 import { type PermitRow, permitProjectLabel } from './permits-page.model';
-import type { PermitMove, PermitMoveVars, PermitRevokeVars } from './permits.mutations';
+import type { PermitMove } from './permits.domain';
+import type { PermitMoveVars, PermitRevokeVars } from './permits.mutations';
 
 /** Each move's control label. A verb this build does not know is offered no control: the hub names it legal, but
  * this build cannot say what it does. */
@@ -45,7 +46,7 @@ export class PermitsView {
   }
 
   protected canRevoke(row: PermitRow): boolean {
-    return row.permit.verbs.includes(PermitVerb.REVOKE);
+    return row.permit.verbs.includes('revoke');
   }
 
   protected moveLabel(verb: PermitMove): string {
