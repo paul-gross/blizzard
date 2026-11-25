@@ -165,6 +165,34 @@ class ChunkArtifactsStore:
                 ).all()
             ]
 
+    def load_latest_artifacts(self, chunk_id: str) -> list[StoredArtifact]:
+        rows = s.artifacts
+        rival = rows.alias("rival")
+        beaten = newer_row_exists(
+            self._store,
+            rival,
+            partition=[
+                (rows.c.chunk_id, rival.c.chunk_id),
+                (rows.c.node_name, rival.c.node_name),
+                (rows.c.name, rival.c.name),
+            ],
+            # Higher epoch wins; within one, the earlier write does, so those pairs are swapped.
+            order=[
+                (rows.c.epoch, rival.c.epoch),
+                (rival.c.seq, rows.c.seq),
+                (rival.c.artifact_id, rows.c.artifact_id),
+            ],
+        )
+        with self._store.read("load_latest_artifacts") as conn:
+            return [
+                _stored_artifact(a)
+                for a in conn.execute(
+                    self._store.select(rows)
+                    .where(rows.c.chunk_id == chunk_id, ~beaten)
+                    .order_by(rows.c.seq, rows.c.artifact_id)
+                ).all()
+            ]
+
     def load_artifacts_for(self, chunk_ids: Sequence[str]) -> dict[str, list[StoredArtifact]]:
         grouped: dict[str, list[StoredArtifact]] = {}
         with self._store.read("load_artifacts_for") as conn:

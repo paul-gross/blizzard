@@ -337,18 +337,6 @@
           "role": "owner"
         },
         {
-          "file": "../blizzard-context/verification/blizzard/gaps.md",
-          "symbol": "session-stickiness-effective-model-and-context-accounting",
-          "role": "allowed",
-          "reason": "Restates the admitted range's current bounds while describing an unrelated model-stickiness gap."
-        },
-        {
-          "file": "../blizzard-context/verification/blizzard/gaps.md",
-          "symbol": "opencodes-compaction-tail-marker",
-          "role": "allowed",
-          "reason": "Restates the admitted range's current bounds while describing the compaction-tail-marker gap."
-        },
-        {
           "file": "../blizzard-context/verification/blizzard/manual.md",
           "symbol": "blizzardmanual-opencode-compatibility",
           "role": "allowed",

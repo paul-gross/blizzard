@@ -466,12 +466,11 @@ def get_question(question_id: str, services: Services) -> QuestionView:
     if row is None:
         raise ProblemHTTPException(partial(problems.question_not_found_problem, question_id))
     labels = ProjectLabels.read(services.projects, [row.project_id])
-    facts = ChunkFacts.or_default(services.chunks.facts.load_facts(row.chunk_id))
     return questions_api.question_view(
         row,
         services.registry.names_for([row.runner_id]),
         labels.fields(row.project_id),
-        superseded_by_restart=facts.restarted_past(row.epoch),
+        superseded_by_restart=services.chunks.facts.restarted_past(row.chunk_id, row.epoch),
     )
 
 
@@ -487,7 +486,11 @@ def get_envelope(chunk_id: str, services: Services) -> NodeEnvelope:
     facts = ChunkFacts.or_default(services.chunks.facts.load_facts(chunk_id))
     try:
         envelope = Envelope.current(
-            chunk, graph, facts, services.chunks.artifacts.load_artifacts(chunk_id), label=services.work_ref_label
+            chunk,
+            graph,
+            facts,
+            services.chunks.artifacts.load_latest_artifacts(chunk_id),
+            label=services.work_ref_label,
         )
     except NoCurrentNode as exc:
         raise ProblemHTTPException(partial(problems.no_current_node_problem, exc)) from exc
@@ -635,12 +638,13 @@ def get_chunk_analytics_counts_files(
     records: Records,
     run_contexts: RunContexts,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
+    limit: Annotated[int | None, Query(ge=1)] = None,
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/files`` — the same
     rows, over the window it names, gated on the chunk carrying a run context rather than
-    on operator credentials."""
+    on operator credentials. ``limit`` as on that route."""
     _routine_run_or_404(chunk_id, records, run_contexts)
-    return counts_response(queries.counts_by_file(window.event_scope.criteria))
+    return counts_response(queries.counts_by_file(window.event_scope.criteria, limit=limit))
 
 
 @router.get("/chunks/{chunk_id}/analytics/counts/skills", response_model=AnalyticsCountsResponse)

@@ -34342,7 +34342,7 @@
     },
     "/api/analytics/counts/files": {
       "get": {
-        "description": "Occurrence counts by file path among ``file_read`` events, honoring every other\nfilter. ``kind`` is not offered: this count fixes it to ``file_read``. ``limit`` opts\ninto the top N by count; omitted, every path returns.",
+        "description": "Occurrence counts by file path among ``file_read`` events, honoring every other\nfilter. ``kind`` is not offered: this count fixes it to ``file_read``. ``limit`` opts\ninto the top N by count. Omitted, every path returns, since the complete distribution is the default answer:\none aggregated row per distinct path in the filtered set, so its size tracks paths read, not events.",
         "operationId": "counts_by_file_api_analytics_counts_files_get",
         "parameters": [
           {
@@ -47308,7 +47308,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/analytics/counts/files": {
       "get": {
-        "description": "A worker's own routine-run read of ``GET /api/analytics/counts/files`` \u2014 the same\nrows, over the window it names, gated on the chunk carrying a run context rather than\non operator credentials.",
+        "description": "A worker's own routine-run read of ``GET /api/analytics/counts/files`` \u2014 the same\nrows, over the window it names, gated on the chunk carrying a run context rather than\non operator credentials. ``limit`` as on that route.",
         "operationId": "get_chunk_analytics_counts_files_api_fleet_chunks__chunk_id__analytics_counts_files_get",
         "parameters": [
           {
@@ -47318,6 +47318,23 @@
             "schema": {
               "title": "Chunk Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
             }
           },
           {
@@ -65829,7 +65846,7 @@
     },
     "/api/runs": {
       "get": {
-        "description": "Every routine run minted in `[since, until)`, newest first \u2014 of the project `?project=` names, else of\nevery project; `since`/`until` default to the last 24 hours ending now. Each row carries its routine, scope,\nmode, its derived outcome, and, where it delivered, every finding-set row it published.\n422 on a malformed instant or an inverted span.",
+        "description": "Every routine run minted in `[since, until)`, newest first \u2014 of the project `?project=` names, else of\nevery project; `since`/`until` default to the last 24 hours ending now. Each row carries its routine, scope,\nmode, its derived outcome, and, where it delivered, every finding-set row it published.\nNot paged: the window's span cap bounds the set, and the answer is the window's whole run list.\n422 on a malformed instant or an inverted span.",
         "operationId": "list_runs_api_runs_get",
         "parameters": [
           {

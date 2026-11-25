@@ -31,12 +31,21 @@ def _window_params(since: str | None, until: str | None, by_name: bool = False) 
 
 
 def _counts(
-    lease_id: str, request: Request, suffix: str, since: str | None, until: str | None, by_name: bool = False
+    lease_id: str,
+    request: Request,
+    suffix: str,
+    since: str | None,
+    until: str | None,
+    by_name: bool = False,
+    limit: int | None = None,
 ) -> AnalyticsCountsResponse:
     lease = authorized_lease(lease_id, request)
+    params = _window_params(since, until, by_name)
+    if limit is not None:
+        params["limit"] = str(limit)
     upstream = HubProxy.of(request, "analytics").get(
         f"/api/fleet/chunks/{lease.chunk_id}/analytics/counts/{suffix}",
-        params=_window_params(since, until, by_name),
+        params=params,
         chunk_id=lease.chunk_id,
         timeout=ANALYTICS_HUB_TIMEOUT,
     )
@@ -64,9 +73,10 @@ def get_analytics_counts_files(
     request: Request,
     since: Annotated[str | None, Query()] = None,
     until: Annotated[str | None, Query()] = None,
+    limit: Annotated[int | None, Query(ge=1)] = None,
 ) -> AnalyticsCountsResponse:
     """Forward this lease's chunk's counts-by-file read to the hub over the window."""
-    return _counts(lease_id, request, "files", since, until)
+    return _counts(lease_id, request, "files", since, until, limit=limit)
 
 
 @router.get(

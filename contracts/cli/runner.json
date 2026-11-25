@@ -127,6 +127,18 @@
                   "required": false,
                   "secondary_opts": [],
                   "type": "datetime"
+                },
+                {
+                  "help": "Return only the N paths with the highest counts.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "limit",
+                  "opts": [
+                    "--limit"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "integer range"
                 }
               ],
               "path": "runner analytics counts files",

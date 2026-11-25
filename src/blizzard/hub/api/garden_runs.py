@@ -202,6 +202,7 @@ def list_runs(
     """Every routine run minted in `[since, until)`, newest first — of the project `?project=` names, else of
     every project; `since`/`until` default to the last 24 hours ending now. Each row carries its routine, scope,
     mode, its derived outcome, and, where it delivered, every finding-set row it published.
+    Not paged: the window's span cap bounds the set, and the answer is the window's whole run list.
     422 on a malformed instant or an inverted span."""
     return _runs(runs, graphs, projects, project, since, until)
 

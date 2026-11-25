@@ -45,6 +45,21 @@ test('test_a_workers_analytics_reads_proxy_through_to_the_mock_hubs_seeded_rows'
   expect(byName.body.spend).toEqual(rows);
 });
 
+test('test_a_workers_counts_files_limit_reaches_the_hub_and_bounds_the_rows', async ({ mockHub, runnerHost, workerCheckpoint }) => {
+  const runner = runnerHost.runners[RUNNER]!;
+  const rows = ['a.py', 'b.py', 'c.py'].map((key, index) => ({ key, count: 3 - index, graph_name: null, node_name: null }));
+  const { leaseId, headers } = await seededLeaseWithWorker(mockHub, runnerHost, workerCheckpoint, {
+    ...holdingChunk(workerCheckpoint),
+    garden_run: { routine_name: 'nightly', scope_slug: 'blizzard' },
+    analytics: { counts_files: rows },
+  });
+
+  const limited = await runner.leaseAnalytics(leaseId, 'counts', 'files', { headers, params: { limit: '2' } });
+
+  expect(limited.status).toBe(200);
+  expect(limited.body.counts).toEqual(rows.slice(0, 2));
+});
+
 test('test_a_leases_chunk_with_no_run_context_is_a_legible_refusal_not_an_empty_bucket', async ({ mockHub, runnerHost, workerCheckpoint }) => {
   const runner = runnerHost.runners[RUNNER]!;
   // No `garden_run` at all: the chunk is no routine run.

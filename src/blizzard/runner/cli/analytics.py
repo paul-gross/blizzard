@@ -48,22 +48,24 @@ _by_name_option = click.option(
 )
 
 
-def _read(verb: str, path: str, since: datetime, until: datetime | None, by_name: bool = False) -> None:
+def _read(
+    verb: str, path: str, since: datetime, until: datetime | None, by_name: bool = False, limit: int | None = None
+) -> None:
     worker = WorkerCall.of(verb)
-    resp = worker.get(
-        worker.leased(f"analytics/{path}"),
-        failure=f"could not read {path}",
-        params=_window_params(since, until, by_name),
-    )
+    params = _window_params(since, until, by_name)
+    if limit is not None:
+        params["limit"] = str(limit)
+    resp = worker.get(worker.leased(f"analytics/{path}"), failure=f"could not read {path}", params=params)
     click.echo(resp.text)
 
 
 @counts_group.command("files")
 @since_option(required=True)
 @until_option()
-def counts_files(since: datetime, until: datetime | None) -> None:
+@click.option("--limit", type=click.IntRange(min=1), help="Return only the N paths with the highest counts.")
+def counts_files(since: datetime, until: datetime | None, limit: int | None) -> None:
     """Worker: file-read occurrence counts over the window, as JSON."""
-    _read("analytics counts files", "counts/files", since, until)
+    _read("analytics counts files", "counts/files", since, until, limit=limit)
 
 
 @counts_group.command("skills")

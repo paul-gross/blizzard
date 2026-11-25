@@ -184,7 +184,8 @@ export const countsByAgentTypeApiAnalyticsCountsAgentTypesGet = <ThrowOnError ex
  *
  * Occurrence counts by file path among ``file_read`` events, honoring every other
  * filter. ``kind`` is not offered: this count fixes it to ``file_read``. ``limit`` opts
- * into the top N by count; omitted, every path returns.
+ * into the top N by count. Omitted, every path returns, since the complete distribution is the default answer:
+ * one aggregated row per distinct path in the filtered set, so its size tracks paths read, not events.
  */
 export const countsByFileApiAnalyticsCountsFilesGet = <ThrowOnError extends boolean = false>(options?: Options<CountsByFileApiAnalyticsCountsFilesGetData, ThrowOnError>): RequestResult<CountsByFileApiAnalyticsCountsFilesGetResponses, CountsByFileApiAnalyticsCountsFilesGetErrors, ThrowOnError> => (options?.client ?? client).get<CountsByFileApiAnalyticsCountsFilesGetResponses, CountsByFileApiAnalyticsCountsFilesGetErrors, ThrowOnError>({ url: '/api/analytics/counts/files', ...options });
 
@@ -1243,7 +1244,7 @@ export const getChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCoun
  *
  * A worker's own routine-run read of ``GET /api/analytics/counts/files`` — the same
  * rows, over the window it names, gated on the chunk carrying a run context rather than
- * on operator credentials.
+ * on operator credentials. ``limit`` as on that route.
  */
 export const getChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetData, ThrowOnError>): RequestResult<GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetResponses, GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetResponses, GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/analytics/counts/files', ...options });
 
@@ -2993,6 +2994,7 @@ export const revokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPost = <ThrowOnE
  * Every routine run minted in `[since, until)`, newest first — of the project `?project=` names, else of
  * every project; `since`/`until` default to the last 24 hours ending now. Each row carries its routine, scope,
  * mode, its derived outcome, and, where it delivered, every finding-set row it published.
+ * Not paged: the window's span cap bounds the set, and the answer is the window's whole run list.
  * 422 on a malformed instant or an inverted span.
  */
 export const listRunsApiRunsGet = <ThrowOnError extends boolean = false>(options?: Options<ListRunsApiRunsGetData, ThrowOnError>): RequestResult<ListRunsApiRunsGetResponses, ListRunsApiRunsGetErrors, ThrowOnError> => (options?.client ?? client).get<ListRunsApiRunsGetResponses, ListRunsApiRunsGetErrors, ThrowOnError>({ url: '/api/runs', ...options });

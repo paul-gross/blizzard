@@ -144,6 +144,41 @@ def test_by_name_is_forwarded_as_a_query_param(monkeypatch: pytest.MonkeyPatch, 
     assert calls[0]["by_name"] == "true"
 
 
+@pytest.mark.parametrize(("flags", "sent"), [(["--limit", "5"], "5"), ([], None)])
+def test_counts_files_sends_limit_only_when_given(flags: list[str], sent: str | None) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_get(
+        url: str, *, headers: dict[str, object], timeout: float, params: dict[str, object], **_: object
+    ) -> _FakeResponse:
+        calls.append(params)
+        return _FakeResponse(text=_COUNTS_TEXT)
+
+    bound = bind_stubs(get=fake_get)
+    argv = ["analytics", "counts", "files", "--since", "2026-01-01T10:00:00", *flags]
+    result = bound.runner.invoke(runner_group, argv, env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls[0].get("limit") == sent
+
+
+def test_counts_files_refuses_a_limit_below_one() -> None:
+    attempted = False
+
+    def fake_get(*args: object, **kwargs: object) -> _FakeResponse:
+        nonlocal attempted
+        attempted = True
+        return _FakeResponse()
+
+    bound = bind_stubs(get=fake_get)
+    argv = ["analytics", "counts", "files", "--since", "2026-01-01T10:00:00", "--limit", "0"]
+    result = bound.runner.invoke(runner_group, argv, env=_ENV)
+
+    assert result.exit_code != 0
+    assert "--limit" in result.output
+    assert attempted is False
+
+
 @pytest.mark.parametrize(("argv", "_path"), _VERBS)
 def test_since_is_required(monkeypatch: pytest.MonkeyPatch, argv: list[str], _path: str) -> None:
     attempted = False

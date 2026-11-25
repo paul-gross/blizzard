@@ -242,6 +242,21 @@ def test_same_rows_as_the_operator_route(tmp_path: Path, suffix: str) -> None:
     assert fleet.json()[key] != []  # a window covering the seed proves the window reaches the query
 
 
+def test_counts_files_limit_keeps_the_top_rows_with_their_full_counts(tmp_path: Path) -> None:
+    hub, chunk_id = _seeded_hub(tmp_path)
+    params = {"since": "2020-01-01T00:00:00Z"}
+    path = _fleet_path(chunk_id, "counts/files")
+
+    every = hub.client.get(path, params=params).json()["counts"]
+    limited = hub.client.get(path, params={**params, "limit": 1})
+
+    assert limited.status_code == 200, limited.text
+    assert len(every) > 1
+    assert limited.json()["counts"] == every[:1]
+    assert limited.json() == hub.client.get(_OPERATOR_PATH["counts/files"], params={**params, "limit": 1}).json()
+    assert hub.client.get(path, params={**params, "limit": 0}).status_code == 422
+
+
 _BY_NAME_ROUTES = ["counts/nodes", "spend/nodes", "spend/graphs"]
 _BY_NAME_WINDOW = {"since": "2020-01-01T00:00:00Z", "until": "2030-01-01T00:00:00Z"}
 

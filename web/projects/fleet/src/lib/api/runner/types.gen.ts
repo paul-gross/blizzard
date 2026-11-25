@@ -7994,6 +7994,10 @@ export type GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCount
          * Until
          */
         until?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number | null;
     };
     url: '/runners/{runner_id}/api/leases/{lease_id}/analytics/counts/files';
 };

@@ -21,6 +21,11 @@ class IReadChunkFactsRepository(Protocol):
     reads from."""
 
     def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None: ...
+    def restarted_past(self, chunk_id: str, epoch: int) -> bool:
+        """Whether an operator restart minted an epoch above ``epoch``, answering what ``ChunkFacts.restarted_past``
+        answers over :meth:`load_facts` — ``False`` for an ephemeral or unknown chunk."""
+        ...
+
     def load_all_facts(self) -> dict[str, ChunkFacts]:
         """Every non-ephemeral (non-grouped, non-deleted) chunk's complete
         :class:`ChunkFacts`, keyed by chunk id — the fleet-summary bulk read.

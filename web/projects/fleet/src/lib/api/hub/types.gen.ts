@@ -26904,6 +26904,10 @@ export type GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFile
     };
     query: {
         /**
+         * Limit
+         */
+        limit?: number | null;
+        /**
          * Since
          */
         since: string;
