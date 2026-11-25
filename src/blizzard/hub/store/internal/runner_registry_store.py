@@ -7,12 +7,13 @@ own fact table.
 
 from __future__ import annotations
 
+import heapq
 import json
 from collections.abc import Collection, Iterable, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Connection, Row
+from sqlalchemy import Connection, Row, Table
 
 from blizzard.foundation.runner_version import VersionRefusalReason
 from blizzard.foundation.store.batching import id_batches
@@ -201,23 +202,8 @@ class RunnerRegistryStore:
         if runners is not None and not runners:
             return []
         with self._store.read("list_pause_facts_since") as conn:
-            fleet_query = self._store.select(s.runner_pause_facts).where(s.runner_pause_facts.c.set_at >= since)
-            local_query = self._store.select(s.runner_local_pause_facts).where(
-                s.runner_local_pause_facts.c.set_at >= since
-            )
-            if runners is not None:
-                fleet_query = fleet_query.where(s.runner_pause_facts.c.runner_id.in_(sorted(runners)))
-                local_query = local_query.where(s.runner_local_pause_facts.c.runner_id.in_(sorted(runners)))
-            fleet_rows = conn.execute(
-                fleet_query.order_by(s.runner_pause_facts.c.set_at.desc(), s.runner_pause_facts.c.id.desc()).limit(
-                    limit
-                )
-            ).all()
-            local_rows = conn.execute(
-                local_query.order_by(
-                    s.runner_local_pause_facts.c.set_at.desc(), s.runner_local_pause_facts.c.id.desc()
-                ).limit(limit)
-            ).all()
+            fleet_rows = self._newest_pause_rows(conn, s.runner_pause_facts, since, limit=limit, runners=runners)
+            local_rows = self._newest_pause_rows(conn, s.runner_local_pause_facts, since, limit=limit, runners=runners)
         fleet = [
             RecordedPause(
                 key=f"runner_pause_facts:{r.id}",
@@ -244,6 +230,26 @@ class RunnerRegistryStore:
             for r in local_rows
         ]
         return [*fleet, *local]
+
+    def _newest_pause_rows(
+        self, conn: Connection, table: Table, since: datetime, *, limit: int, runners: Collection[str] | None
+    ) -> Sequence[Row[Any]]:
+        """The newest ``limit`` rows of one pause-fact table at or after ``since``. A narrowed read caps each
+        runner-id batch at ``limit``, then merges the batches and caps the merge."""
+        query = (
+            self._store.select(table)
+            .where(table.c.set_at >= since)
+            .order_by(table.c.set_at.desc(), table.c.id.desc())
+            .limit(limit)
+        )
+        if runners is None:
+            return conn.execute(query).all()
+        rows = [
+            row
+            for batch in id_batches(sorted(runners))
+            for row in conn.execute(query.where(table.c.runner_id.in_(batch)))
+        ]
+        return heapq.nlargest(limit, rows, key=lambda row: (row.set_at, row.id))
 
     def names_for(self, runner_ids: Iterable[str]) -> dict[str, str]:
         ids = list(dict.fromkeys(runner_ids))

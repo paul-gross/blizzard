@@ -9,15 +9,18 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy import Engine, event
 from sqlalchemy.pool import ConnectionPoolEntry
 
+from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryOutcome,
     DeliveryPlan,
+    DeliverySurvivors,
     DeltaMaterialization,
     NewFinding,
     NewFindingFact,
@@ -42,6 +45,7 @@ from tests.support.scaffolding import (
     hub_scoped,
     hub_store_connections,
     migrated_hub_at,
+    most_bound_per_statement,
     seed_chunk,
     seed_graph,
     stamp,
@@ -726,3 +730,95 @@ def test_deliver_clean_plan_records_only_the_finding_set(tmp_path: Path) -> None
         assert set_rows[0].measurement is None
         marker_rows = conn.execute(hub_scoped(sa.select(artifacts).where(artifacts.c.name == "garden-delivered"))).all()
         assert len(marker_rows) == 1
+
+
+def _batched_plan(project_id: str, *, visit: int) -> DeliveryPlan:
+    """Five one-finding deltas and five proposals. Every visit resolves the same artifacts and refs, under set,
+    finding, and proposal ids of its own."""
+    return DeliveryPlan(
+        chunk_id="ch_1",
+        node_id=f"nd_{visit}",
+        node_name="garden-survey",
+        epoch=visit,
+        at=_NOW,
+        run=replace(_RUN, project_id=project_id),
+        deltas=[
+            DeltaMaterialization(
+                finding_set=NewFindingSet(
+                    finding_set_id=f"fins_{visit}_{i}",
+                    artifact_id=f"art_{i}",
+                    scope_slug="blizzard",
+                    revisions={},
+                    measurement=None,
+                ),
+                new_findings=[
+                    NewFinding(
+                        finding_id=f"fin_{visit}_{i}",
+                        routine_name="nightly",
+                        scope_slug="blizzard",
+                        class_="stale-docstring",
+                        locus="a.py:1",
+                        summary="s",
+                        introduced=None,
+                        introduced_at=None,
+                    )
+                ],
+                facts=[
+                    NewFindingFact(
+                        finding_id=f"fin_{visit}_{i}",
+                        kind="add",
+                        finding_set_id=f"fins_{visit}_{i}",
+                        note=None,
+                        ref=f"r{i}",
+                    )
+                ],
+            )
+            for i in range(5)
+        ],
+        proposals=[
+            NewProposal(
+                proposal_id=f"gprop_{visit}_{i}",
+                routine_name="nightly",
+                class_="fix-the-source",
+                title="t",
+                body="b",
+                source_artifact_id=f"art_docket_{i}",
+                ref="p1",
+                finding_ids=[],
+            )
+            for i in range(5)
+        ],
+    )
+
+
+def test_admit_batches_its_idempotence_reads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A replayed visit spanning several batches still drops every materialized delta and proposal and
+    substitutes every dropped ref, and no statement binds more than one batch of ids."""
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 2)
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    first = _batched_plan(project, visit=1)
+    with delivery_unit(hub_store_connections(engine), first) as unit:
+        store.deliver(first, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
+    second = _batched_plan(project, visit=2)
+    admitted: list[object] = []
+
+    def admit() -> None:
+        with delivery_unit(hub_store_connections(engine), second) as unit:
+            admitted.append(
+                store.delivery.admit(second, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
+            )
+
+    for ids in (
+        {f"art_{i}" for i in range(5)},
+        {f"fins_1_{i}" for i in range(5)},
+        {f"art_docket_{i}" for i in range(5)},
+    ):
+        assert most_bound_per_statement(engine, admit, ids) == 2
+
+    assert admitted[0] == DeliverySurvivors(
+        deltas=[],
+        proposals=[],
+        ref_substitutions={f"fin_2_{i}": f"fin_1_{i}" for i in range(5)},
+        uninserted_finding_ids={f"fin_2_{i}" for i in range(5)},
+    )

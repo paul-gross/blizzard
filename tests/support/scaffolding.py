@@ -18,7 +18,7 @@ import tempfile
 import threading
 import time
 import weakref
-from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
@@ -2917,6 +2917,14 @@ def count_queries(engine: Engine, fn: Callable[[], object]) -> int:
     with capture_statements(engine) as statements:
         fn()
     return len(statements)
+
+
+def most_bound_per_statement(engine: Engine, fn: Callable[[], object], ids: Collection[str]) -> int:
+    """The most of ``ids`` any one statement ``fn`` issues on ``engine`` binds — what a batching test holds at or
+    under a lowered ``BATCH_SIZE``."""
+    with capture_statements(engine) as statements:
+        fn()
+    return max((sum(p in ids for p in parameters) for _, parameters in statements), default=0)
 
 
 def count_rows_read(engine: Engine, fn: Callable[[], object]) -> int:

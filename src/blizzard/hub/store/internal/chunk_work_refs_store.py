@@ -132,7 +132,7 @@ class ChunkWorkRefsStore:
                 ).all()
                 pairs.extend((WorkRef(source=source, ref=row.ref), row.chunk_id) for row in rows)
         held_ids = sorted({chunk_id for _, chunk_id in pairs})
-        ephemeral: set[str] = ephemeral_ids_in(conn, held_ids) if held_ids else set()
+        ephemeral = {chunk_id for batch in id_batches(held_ids) for chunk_id in ephemeral_ids_in(conn, batch)}
         maybe_live_ids = {
             chunk_id
             for batch in id_batches([c for c in held_ids if c not in ephemeral])

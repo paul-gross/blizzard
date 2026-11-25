@@ -128,16 +128,19 @@ class _HeldAt(Protocol):
 
 def stale_revision[H: _HeldAt](conn: Connection, expected: Sequence[H]) -> tuple[H, int] | None:
     """The first of ``expected`` whose stored revision has moved from the one a write was planned on, beside the
-    revision stored now, in one read; ``None`` when none has."""
+    revision stored now, in one read per id batch; ``None`` when none has."""
     if not expected:
         return None
     stmts = statements_of(conn)
-    rows = conn.execute(
-        stmts.select(urgencies, urgencies.c.urgency_id, urgencies.c.revision).where(
-            urgencies.c.urgency_id.in_([named.urgency_id for named in expected])
+    stored: dict[str, int] = {
+        row.urgency_id: row.revision
+        for batch in id_batches([named.urgency_id for named in expected])
+        for row in conn.execute(
+            stmts.select(urgencies, urgencies.c.urgency_id, urgencies.c.revision).where(
+                urgencies.c.urgency_id.in_(batch)
+            )
         )
-    ).all()
-    stored: dict[str, int] = {row.urgency_id: row.revision for row in rows}
+    }
     for named in expected:
         if stored.get(named.urgency_id) != named.revision:
             return named, stored.get(named.urgency_id, 0)
