@@ -110,6 +110,7 @@ NON_TEST_JOBS: frozenset[str] = frozenset(
         "gate.yml:playwright-static",
         "gate.yml:compat",
         "gate.yml:process-ref-lint",
+        "gate.yml:restatement-sweep",
         "isolation-cross-check.yml:mock-ref",
         "isolation-cross-check.yml:compare",
         "pr.yml:versions-changed",

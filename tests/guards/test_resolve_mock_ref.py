@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 from tests.support.repo_files import repo_root
 
@@ -63,7 +64,7 @@ def test_a_tag_run_resolves_the_tag_to_the_commit_it_peels_to(mock: dict[str, st
 def test_a_tag_run_fails_naming_the_missing_tag(mock: dict[str, str]) -> None:
     result = _resolve(mock, EVENT_NAME="push", REF="refs/tags/v9.9.9")
     assert result.returncode != 0
-    assert "::error::" in result.stderr and "v9.9.9" in result.stderr
+    assert "::error::resolve-mock-ref: mock has no tag 'v9.9.9'" in result.stderr
 
 
 def test_a_release_pull_request_uses_the_matching_mock_branch(mock: dict[str, str]) -> None:
@@ -79,7 +80,7 @@ def test_a_release_pull_request_falls_back_to_the_release_branch(mock: dict[str,
 def test_a_release_pull_request_fails_naming_the_missing_release_branch(mock: dict[str, str]) -> None:
     result = _resolve(mock, EVENT_NAME="pull_request", BASE_REF="release/9.9", HEAD_REF="fix/other")
     assert result.returncode != 0
-    assert "::error::" in result.stderr and "release/9.9" in result.stderr
+    assert "::error::resolve-mock-ref: mock has no branch 'release/9.9'" in result.stderr
 
 
 def test_a_master_pull_request_uses_the_matching_mock_branch(mock: dict[str, str]) -> None:
@@ -129,3 +130,12 @@ def test_a_context_matching_no_row_fails_rather_than_defaulting_to_master(
     assert result.returncode != 0
     assert "::error::" in result.stderr
     assert result.stdout == ""
+
+
+def test_the_action_resolves_and_checks_out_the_one_repository_its_input_names() -> None:
+    action = yaml.safe_load(_SCRIPT.with_name("action.yml").read_text())
+    assert action["inputs"]["repository"]["default"] == "paul-gross/blizzard-mock"
+    resolve, checkout = action["runs"]["steps"]
+    assert resolve["env"]["MOCK_URL"] == "https://github.com/${{ inputs.repository }}"
+    assert checkout["with"]["repository"] == "${{ inputs.repository }}"
+    assert checkout["with"]["persist-credentials"] is False

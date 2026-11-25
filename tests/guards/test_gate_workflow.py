@@ -1,4 +1,4 @@
-"""``.github/workflows/gate.yml``'s compatibility job: when it runs and how it reads the event."""
+"""``.github/workflows/gate.yml``'s jobs: when each runs, what it checks out, and how it reads the event."""
 
 from __future__ import annotations
 
@@ -69,3 +69,27 @@ def test_each_pytest_shard_records_its_timings_and_keeps_only_that_file_on_succe
     assert upload["with"]["name"] == timings
     assert upload["with"]["path"] == f"{timings}.json"
     assert upload["with"]["retention-days"] <= 14
+
+
+def test_the_restatement_sweep_runs_on_the_hotfix_lane_and_skips_tags_and_release_lines() -> None:
+    job = _jobs()["restatement-sweep"]
+    assert job["name"] == "restatement sweep (blizzard:restatement-sweep)"
+    assert job["if"] == "${{ github.ref_type != 'tag' && !startsWith(github.base_ref, 'release/') }}"
+    assert "lint_only" not in job["if"]
+    assert "needs" not in job
+
+
+def test_the_restatement_sweep_checks_out_its_siblings_beside_blizzard() -> None:
+    steps = _jobs()["restatement-sweep"]["steps"]
+    [checkout] = [s for s in steps if str(s.get("uses", "")).startswith("actions/checkout")]
+    assert checkout["with"] == {"path": "blizzard", "persist-credentials": False}
+    resolved = [s.get("with") for s in steps if s.get("uses") == "./blizzard/.github/actions/resolve-mock-ref"]
+    assert resolved == [None, {"repository": "paul-gross/blizzard-context", "path": "blizzard-context"}]
+
+
+def test_the_restatement_sweep_runs_the_task_from_blizzard_and_so_does_the_local_gate() -> None:
+    command = "mise run restatement-check"
+    [step] = [s for s in _jobs()["restatement-sweep"]["steps"] if s.get("run") == command]
+    assert step["working-directory"] == "blizzard"
+    assert "if" not in step and "continue-on-error" not in step
+    assert command in (repo_root() / "scripts/ci-gate.sh").read_text().splitlines()

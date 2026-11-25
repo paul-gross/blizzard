@@ -23,7 +23,7 @@
 # A pull request into `master` from a `hotfix/` branch of this repository is the operator's fast
 # lane: `gate` and `upper-tiers` get `lint_only`, so of their jobs only the lint-class ones run
 # (ruff + pyright + structural gate; spec drift + change notes + flag lifecycle + dprint; the
-# process-reference lint) and the rest are skipped by condition, a skipped job passing its required
+# process-reference lint; the restatement sweep) and the rest are skipped by condition, a skipped job passing its required
 # check. The store baseline and the rehearsal keep their own conditions, so a hotfix that changes a
 # store revision or cuts a release still runs its proof.
 name: pr

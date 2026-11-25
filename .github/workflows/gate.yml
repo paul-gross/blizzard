@@ -6,7 +6,8 @@
 #
 # Every check here is seams-mocked and token-free: it installs dependencies and
 # runs, needing no real forge, no tokens, and no network beyond the package
-# installs (blizzard-context verification/blizzard/tier-rules.md).
+# installs and the sibling checkouts the restatement sweep reads
+# (blizzard-context verification/blizzard/tier-rules.md).
 name: gate
 
 on:
@@ -345,3 +346,41 @@ jobs:
       - run: uv sync
       - name: process-reference, change-history and route-clause prose lint (mise run process-ref-lint)
         run: mise run process-ref-lint
+
+  # The one-home census reads across three repositories, so it runs over sibling checkouts, as the task's paths expect.
+  # blizzard-context carries no release lines or tags, so a tag or a pull request into `release/*` has nothing to hold
+  # the tree to, and the job is skipped.
+  restatement-sweep:
+    name: restatement sweep (blizzard:restatement-sweep)
+    if: ${{ github.ref_type != 'tag' && !startsWith(github.base_ref, 'release/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout blizzard
+        uses: actions/checkout@v5
+        with:
+          path: blizzard
+          persist-credentials: false
+      - name: resolve and checkout blizzard-mock
+        uses: ./blizzard/.github/actions/resolve-mock-ref
+      - name: resolve and checkout blizzard-context (by the mock's ref rules)
+        uses: ./blizzard/.github/actions/resolve-mock-ref
+        with:
+          repository: paul-gross/blizzard-context
+          path: blizzard-context
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          working-directory: blizzard
+      - uses: jdx/mise-action@v4
+        with:
+          version: 2026.9.2
+          install: false
+          working_directory: blizzard
+        env:
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
+      - name: restatement sweep (mise run restatement-check)
+        working-directory: blizzard
+        env:
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
+        run: mise run restatement-check
