@@ -34,6 +34,14 @@ describe('injectSettingsService', () => {
     expect(calls[0].body).toEqual({ set: { 'throttle.budget.usd': 25 } });
   });
 
+  it('sends an unset key`s plain text as typed', async () => {
+    const service = configure({ 'PATCH /runners/{runner_id}/api/settings': () => runnerSettingsView() });
+
+    expect(await service.set({ key: 'throttle.pace.window', current: null }, BASELINE, { value: 'seven_day' })).toEqual({ ok: true });
+
+    expect(stub.forRoute('/runners/rn_1/api/settings', 'PATCH')[0].body).toEqual({ set: { 'throttle.pace.window': 'seven_day' } });
+  });
+
   it('resets the host`s key to its default through the host route', async () => {
     const service = configure({ 'PATCH /api/host/settings': () => runnerSettingsView() }, { kind: 'host' });
 
@@ -47,7 +55,7 @@ describe('injectSettingsService', () => {
   it('sends nothing for text that does not read as a value', async () => {
     const service = configure({ 'PATCH /runners/{runner_id}/api/settings': () => runnerSettingsView() });
 
-    expect(await service.set(BUDGET, BASELINE, { value: '{x' })).toEqual({
+    expect(await service.set({ ...BUDGET, current: 10 }, BASELINE, { value: '{x' })).toEqual({
       ok: false,
       fields: { value: 'Enter a valid JSON value.' },
       form: null,

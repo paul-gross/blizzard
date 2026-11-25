@@ -43,5 +43,6 @@ export const Oldest: Story = { args: { hasNext: false } };
 export const LoadingMore: Story = { args: { loadingNext: true } };
 export const Loading: Story = { args: { state: 'loading', changes: [] } };
 export const Empty: Story = { args: { state: 'empty', changes: [], hasNext: false } };
+export const Unserved: Story = { args: { title: 'r-claude', recordId: 'rn_1', unserved: 'Starting — its settings read once its host serves it.', changes: [], hasNext: false } };
 export const Phone: Story = { globals: { viewport: { value: 'phone', isRotated: false } } };
 export const PhoneSm: Story = { globals: { viewport: { value: 'phone-sm', isRotated: false } } };

@@ -5,6 +5,7 @@
   [line]="line()"
   [groups]="groups()"
   [settingsError]="record()?.settingsError ?? null"
+  [unserved]="ref().unserved"
   [editDisabled]="pending()"
   (edit)="onEdit($event)"
 />

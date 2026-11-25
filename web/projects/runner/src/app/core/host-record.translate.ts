@@ -10,5 +10,5 @@ const stateOf = openLookup<runnerApi.HostWorkspaceView['state'], HostRecordState
 
 /** A host record's revision, state, and stated settings, as a workspace or subscription read carries them. */
 export function hostRecordFacts(wire: Pick<runnerApi.HostWorkspaceView, 'revision' | 'state' | 'settings'>): HostRecordFacts {
-  return { revision: wire.revision ?? null, state: stateOf(wire.state ?? 'active'), settings: { ...(wire.settings ?? {}) } };
+  return { revision: wire.revision, state: stateOf(wire.state), settings: { ...wire.settings } };
 }

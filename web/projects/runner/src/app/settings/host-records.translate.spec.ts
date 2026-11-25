@@ -2,18 +2,8 @@ import { hostSubscriptionView } from 'fleet/testing';
 
 import { runnerSubscription } from '../core/host-subscription.translate';
 import { hostWorkspace } from '../core/host-workspace.builders';
-import { RECORD_FIELDS, type HostRecord } from './host-records.domain';
-import {
-  parseRecordField,
-  recordFieldError,
-  recordRefusal,
-  subscriptionRecord,
-  toRecordBaseline,
-  toRecordBody,
-  workspaceRecord,
-} from './host-records.translate';
-
-const field = (kind: 'workspace' | 'subscription', name: string) => RECORD_FIELDS[kind].find((f) => f.name === name)!;
+import type { HostRecord } from './host-records.domain';
+import { recordRefusal, subscriptionRecord, toRecordBaseline, toRecordCreate, toRecordEdit, workspaceRecord } from './host-records.translate';
 
 const WEB: HostRecord = {
   kind: 'workspace',
@@ -73,41 +63,19 @@ describe('host records translate', () => {
     expect(toRecordBaseline({ ...WEB, revision: null })).toBeNull();
   });
 
-  it('reads each field type`s text as its value', () => {
-    expect(parseRecordField(field('workspace', 'root'), '  /srv  ')).toEqual({ value: '/srv' });
-    expect(parseRecordField(field('workspace', 'root'), '  ')).toEqual({ value: null });
-    expect(parseRecordField(field('workspace', 'max_environments'), '4')).toEqual({ value: 4 });
-    expect(parseRecordField(field('workspace', 'max_environments'), '4x')).toEqual({ error: 'Enter a whole number.' });
-    expect(parseRecordField(field('workspace', 'envs'), 'a, b c')).toEqual({ value: ['a', 'b', 'c'] });
-    expect(parseRecordField(field('workspace', 'repo'), 'a https://a\n\nb https://b')).toEqual({
-      value: [
-        { name: 'a', url: 'https://a' },
-        { name: 'b', url: 'https://b' },
-      ],
-    });
-    expect(parseRecordField(field('workspace', 'repo'), 'a')).toEqual({ error: 'Write each repository as its name and its URL.' });
-    expect(parseRecordField(field('workspace', 'prompt'), ' line\n')).toEqual({ value: ' line\n' });
-  });
-
-  it('requires a create`s required keys, and refuses an edit returning a subscription`s name to its default', () => {
-    expect(recordFieldError(field('workspace', 'id'), 'create', '')).toBe('Required.');
-    expect(recordFieldError(field('subscription', 'name'), 'edit', '')).toBe('Required.');
-    expect(recordFieldError(field('workspace', 'root'), 'edit', '')).toBeNull();
-  });
-
   it('states every non-blank field of a create', () => {
-    expect(toRecordBody('workspace', null, { id: 'web', root: '/srv', envs: '', max_environments: '2' })).toEqual({
-      body: { id: 'web', root: '/srv', max_environments: 2 },
+    expect(toRecordCreate('workspace', { id: 'web', root: '/srv', envs: '', max_environments: '2' })).toEqual({
+      write: { kind: 'workspace', body: { id: 'web', root: '/srv', max_environments: 2 } },
     });
-    expect(toRecordBody('subscription', null, { slug: 'max', name: '', provider: 'anthropic' })).toEqual({ errors: { name: 'Required.' } });
+    expect(toRecordCreate('subscription', { slug: 'max', name: '', provider: 'anthropic' })).toEqual({ errors: { name: 'Required.' } });
   });
 
   it('states only the fields an edit changed, a cleared one as null', () => {
     const before = toRecordBaseline(WEB)!.draft;
-    expect(toRecordBody('workspace', before, { ...before, root: '/srv/new', envs: '', id: 'ignored' })).toEqual({
-      body: { root: '/srv/new', envs: null },
+    expect(toRecordEdit('workspace', before, { ...before, root: '/srv/new', envs: '', id: 'ignored' })).toEqual({
+      write: { kind: 'workspace', body: { root: '/srv/new', envs: null } },
     });
-    expect(toRecordBody('workspace', before, { ...before, max_environments: 'x' })).toEqual({
+    expect(toRecordEdit('workspace', before, { ...before, max_environments: 'x' })).toEqual({
       errors: { max_environments: 'Enter a whole number.' },
     });
   });

@@ -37,9 +37,10 @@ async function fetchSettings(target: SettingsTarget): Promise<runnerApi.Settings
  * `SettingsRecord`. While it holds a revision its daemon has not taken up ({@link revisionPending}) it is re-read
  * every {@link SETTINGS_PENDING_POLL_MS}; otherwise on the live backstop.
  */
-export function settingsQueryOptions(target: SettingsTarget) {
+export function settingsQueryOptions(target: SettingsTarget, enabled = true) {
   return {
     queryKey: settingsKeyOf(target),
+    enabled,
     queryFn: () => fetchSettings(target),
     select: fromSettingsView,
     refetchInterval: (query: { state: { data?: runnerApi.SettingsView } }) =>
@@ -49,9 +50,9 @@ export function settingsQueryOptions(target: SettingsTarget) {
   };
 }
 
-/** {@link settingsQueryOptions} over the target `target` names. */
-export function injectSettingsQuery(target: () => SettingsTarget) {
-  return injectQuery(() => settingsQueryOptions(target()));
+/** {@link settingsQueryOptions} over the target `target` names, read only while `enabled` holds. */
+export function injectSettingsQuery(target: () => SettingsTarget, enabled: () => boolean = () => true) {
+  return injectQuery(() => settingsQueryOptions(target(), enabled()));
 }
 
 async function fetchChanges(target: HistoryTarget, before: number | undefined): Promise<SettingsChangesPage> {
@@ -78,10 +79,11 @@ async function fetchChanges(target: HistoryTarget, before: number | undefined): 
 /** `GET /api/host/settings/changes` or `GET /runners/{runner_id}/api/settings/changes` — `target`'s change log,
  * newest first, a page of {@link SETTINGS_CHANGES_PAGE} at a time. The host's log is filtered to the record it is
  * of: the host record's own rows by `record_kind`, a workspace's or a subscription's by `record_kind` and
- * `record_key`. */
-export function injectSettingsChangesQuery(target: () => HistoryTarget) {
+ * `record_key`. Read only while `enabled` holds. */
+export function injectSettingsChangesQuery(target: () => HistoryTarget, enabled: () => boolean = () => true) {
   return injectInfiniteQuery(() => ({
     queryKey: settingsChangesKeyOf(target()),
+    enabled: enabled(),
     initialPageParam: undefined as number | undefined,
     queryFn: ({ pageParam }: { pageParam: number | undefined }) => fetchChanges(target(), pageParam),
     getNextPageParam: (last: SettingsChangesPage) => last.nextBefore ?? undefined,

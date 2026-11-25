@@ -7,6 +7,7 @@ import {
   settingRowOf,
   settingsChanges,
   settingsRecords,
+  unservedReason,
   whileEditing,
 } from './settings.model';
 
@@ -19,11 +20,30 @@ describe('settings model', () => {
     ];
 
     expect(settingsRecords(runners, null)).toEqual([
-      { id: 'host', title: 'Host', target: { kind: 'host' }, retired: false },
-      { id: 'rn_1', title: 'r-claude', target: { kind: 'runner', runnerId: 'rn_1' }, retired: false },
-      { id: 'rn_2', title: 'r-old', target: { kind: 'runner', runnerId: 'rn_2' }, retired: true },
+      { id: 'host', title: 'Host', target: { kind: 'host' }, retired: false, unserved: null },
+      { id: 'rn_1', title: 'r-claude', target: { kind: 'runner', runnerId: 'rn_1' }, retired: false, unserved: null },
+      { id: 'rn_2', title: 'r-old', target: { kind: 'runner', runnerId: 'rn_2' }, retired: true, unserved: null },
     ]);
     expect(settingsRecords(runners, 'r-old').map((r) => r.id)).toEqual(['host', 'rn_2']);
+  });
+
+  it('names why a runner its host does not serve cannot be read, and nothing once it is served', () => {
+    expect(unservedReason(hostRunner())).toBeNull();
+    expect(unservedReason(hostRunner({ state: 'halted', served: true, halted_reasons: ['hub refused'] }))).toBeNull();
+    expect(unservedReason(hostRunner({ state: 'starting', served: false }))).toBe('Starting — its settings read once its host serves it.');
+    expect(unservedReason(hostRunner({ state: 'halted', served: false, halted_reasons: ['a', 'b'] }))).toBe('Halted: a; b');
+    expect(unservedReason(hostRunner({ state: 'halted', served: false }))).toBe('Halted — its host does not serve it.');
+    expect(
+      unservedReason(hostRunner({ state: 'start_failed', served: false, start_failure: { step: 'compose', error: 'boom' } })),
+    ).toBe('Failed to start at compose: boom');
+    expect(
+      unservedReason(
+        hostRunner({ state: 'start_failed', served: false, start_failure: { step: { kind: 'unknown', raw: 'warm' }, error: 'x' } }),
+      ),
+    ).toBe('Failed to start at warm: x');
+    expect(unservedReason(hostRunner({ state: 'start_failed', served: false }))).toBe('Failed to start.');
+    expect(unservedReason(hostRunner({ state: 'retired', served: false }))).toBe('Retired — its host no longer serves it.');
+    expect(settingsRecords([hostRunner({ state: 'starting', served: false })], null)[1].unserved).toMatch(/^Starting/);
   });
 
   it('badges each lifetime, an unknown one raw and idle', () => {

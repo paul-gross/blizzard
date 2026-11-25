@@ -114,25 +114,29 @@ function isSettingsProblem(error: unknown): error is runnerApi.SettingsProblem {
   return typeof error === 'object' && error !== null && typeof (error as { code?: unknown }).code === 'string';
 }
 
-/** A refused write of `key` as a {@link SaveOutcome}: a revision conflict is the form line, keeping the draft; any
- * other refusal is the value's line — the problem's own `detail` for the key it names, each `errors[]` entry for
- * `key` on the value and any other key's on the form line. Anything else reads through `readRefusal`. */
-export function settingRefusal(error: unknown, key: string): SaveOutcome<SettingDraft> {
-  if (!isSettingsProblem(error)) {
-    return readRefusal<SettingDraft>(error, { field: (path) => (path === 'set' || path === 'unset' ? 'value' : null), kinds: {} });
-  }
+/** A refused settings write as a {@link SaveOutcome}, `null` when `error` is no `SettingsProblem`: a revision
+ * conflict is the form line, keeping the draft; any other refusal states each refused key — each `errors[]` entry,
+ * or the problem's own `key` and `detail` when it lists none — beside the field `fieldOf` names for it, and on the
+ * form line where it names none, an `errors[]` entry after its key. */
+export function settingsProblemOutcome<D>(error: unknown, fieldOf: (key: string | null) => keyof D | null): SaveOutcome<D> | null {
+  if (!isSettingsProblem(error)) return null;
   if (error.code === 'revision_conflict') return { ok: false, fields: {}, form: error.detail };
-  const errors = error.errors ?? [];
-  if (errors.length === 0) {
-    return error.key === null || error.key === key
-      ? { ok: false, fields: { value: error.detail }, form: null }
-      : { ok: false, fields: {}, form: error.detail };
+  const errors = error.errors ?? [{ key: error.key, message: error.detail, own: true }];
+  const fields: Partial<Record<keyof D, string>> = {};
+  const form: string[] = [];
+  for (const e of errors) {
+    const name = fieldOf(e.key);
+    if (name === null) form.push(e.key && !('own' in e) ? `${e.key}: ${e.message}` : e.message);
+    else fields[name] = fields[name] ? `${fields[name]}; ${e.message}` : e.message;
   }
-  const own = errors.filter((e) => e.key === key).map((e) => e.message);
-  const other = errors.filter((e) => e.key !== key).map((e) => `${e.key}: ${e.message}`);
-  return {
-    ok: false,
-    fields: own.length > 0 ? { value: own.join('; ') } : {},
-    form: other.length > 0 ? other.join('; ') : null,
-  };
+  return { ok: false, fields, form: form.length > 0 ? form.join('; ') : null };
+}
+
+/** A refused write of `key` as a {@link SaveOutcome}, read by {@link settingsProblemOutcome} with a refusal of `key`,
+ * or naming no key, on the value. Anything else reads through `readRefusal`. */
+export function settingRefusal(error: unknown, key: string): SaveOutcome<SettingDraft> {
+  return (
+    settingsProblemOutcome<SettingDraft>(error, (k) => (k === null || k === key ? 'value' : null)) ??
+    readRefusal<SettingDraft>(error, { field: (path) => (path === 'set' || path === 'unset' ? 'value' : null), kinds: {} })
+  );
 }

@@ -78,6 +78,7 @@ export const FailedRebuild: Story = {
 export const SettingsError: Story = { args: { groups: [], settingsError: "throttle.budget.usd: expected a number, got 'lots'" } };
 export const Loading: Story = { args: { state: 'loading', line: null, groups: [] } };
 export const Unavailable: Story = { args: { state: 'error', line: null, groups: [] } };
+export const Unserved: Story = { args: { line: null, groups: [], unserved: 'Halted: hub refused the runner token' } };
 export const Empty: Story = { args: { state: 'empty', groups: [] } };
 export const Phone: Story = { globals: { viewport: { value: 'phone', isRotated: false } } };
 export const PhoneSm: Story = { globals: { viewport: { value: 'phone-sm', isRotated: false } } };

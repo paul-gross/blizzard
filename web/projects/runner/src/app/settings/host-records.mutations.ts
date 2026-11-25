@@ -5,20 +5,13 @@ import { runnerApi } from 'fleet';
 import { hostRecordMutationKey } from '../core/mutation-keys';
 import { hostSettingsChangesKey, hostSubscriptionsKey, hostWorkspacesKey } from '../core/query-keys';
 import type { HostRecordKind } from './host-records.domain';
+import type { RecordCreate, RecordEdit } from './host-records.translate';
 
-/** A new record of `kind`, its body as its create request states it. */
-export interface RecordCreateVars {
-  readonly kind: HostRecordKind;
-  readonly body: Record<string, unknown>;
-}
+/** A new record, its body its create request. */
+export type RecordCreateVars = RecordCreate;
 
-/** A sparse edit of the `kind` record `key`, sent against the revision the edit started from. */
-export interface RecordEditVars {
-  readonly kind: HostRecordKind;
-  readonly key: string;
-  readonly revision: number;
-  readonly body: Record<string, unknown>;
-}
+/** A sparse edit of the record `key`, sent against the revision the edit started from. */
+export type RecordEditVars = RecordEdit & { readonly key: string; readonly revision: number };
 
 /** A retire or an enable of the `kind` record `key`. */
 export interface RecordLifecycleVars {
@@ -26,8 +19,8 @@ export interface RecordLifecycleVars {
   readonly key: string;
 }
 
-/** What a write to a `kind` record re-reads once it settles: every read of that kind — the Host tab's and the
- * Settings tab's — and the host's change log, which carries the record's history. */
+/** What a write to a `kind` record re-reads once it settles: every read of that kind, and the host's change log,
+ * which carries the record's history. */
 export function recordInvalidations(kind: HostRecordKind): readonly (readonly unknown[])[] {
   return [kind === 'workspace' ? hostWorkspacesKey : hostSubscriptionsKey, hostSettingsChangesKey];
 }
@@ -39,8 +32,8 @@ function settle(queryClient: QueryClient, kind: HostRecordKind): Promise<unknown
 async function create(vars: RecordCreateVars): Promise<void> {
   const { error } =
     vars.kind === 'workspace'
-      ? await runnerApi.createWorkspaceApiHostWorkspacesPost({ body: vars.body as runnerApi.HostWorkspaceCreateRequest, throwOnError: false })
-      : await runnerApi.createSubscriptionApiHostSubscriptionsPost({ body: vars.body as runnerApi.HostSubscriptionCreateRequest, throwOnError: false });
+      ? await runnerApi.createWorkspaceApiHostWorkspacesPost({ body: vars.body, throwOnError: false })
+      : await runnerApi.createSubscriptionApiHostSubscriptionsPost({ body: vars.body, throwOnError: false });
   if (error) throw error;
 }
 
@@ -51,13 +44,13 @@ async function edit(vars: RecordEditVars): Promise<void> {
       ? await runnerApi.editWorkspaceApiHostWorkspacesWorkspaceIdPatch({
           path: { workspace_id: vars.key },
           headers,
-          body: vars.body as runnerApi.HostWorkspacePatchRequest,
+          body: vars.body,
           throwOnError: false,
         })
       : await runnerApi.editSubscriptionApiHostSubscriptionsSlugPatch({
           path: { slug: vars.key },
           headers,
-          body: vars.body as runnerApi.HostSubscriptionPatchRequest,
+          body: vars.body,
           throwOnError: false,
         });
   if (error) throw error;

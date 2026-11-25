@@ -6,7 +6,7 @@ import { type RequestClientStub, runnerSettingRowView, runnerSettingsView, settl
 import type { SettingsRecordRef } from './settings.model';
 import { SettingsRecordPanel } from './settings-record';
 
-const RUNNER: SettingsRecordRef = { id: 'rn_1', title: 'r-claude', target: { kind: 'runner', runnerId: 'rn_1' }, retired: false };
+const RUNNER: SettingsRecordRef = { id: 'rn_1', title: 'r-claude', target: { kind: 'runner', runnerId: 'rn_1' }, retired: false, unserved: null };
 const BUDGET = 'throttle.budget.usd';
 const VIEW = runnerSettingsView({
   revision: 7,
@@ -154,5 +154,18 @@ describe('SettingsRecordPanel', () => {
 
     expect(q('settings-rn_1-error')?.textContent).toContain('bad entry');
     expect(q('settings-rn_1-empty')).toBeNull();
+  });
+
+  it('says why a runner its host does not serve cannot be read, reading nothing, and reads it once it is served', async () => {
+    const { fixture, q } = await render({ ref: { ...RUNNER, unserved: 'Halted: hub refused' } });
+
+    expect(q('settings-rn_1-unserved')?.textContent).toContain('Halted: hub refused');
+    expect(stub.forRoute('/runners/rn_1/api/settings', 'GET')).toHaveLength(0);
+
+    fixture.componentRef.setInput('ref', RUNNER);
+    await settle(fixture, 12);
+
+    expect(q('settings-rn_1-unserved')).toBeNull();
+    expect(q(`settings-rn_1-value-${BUDGET}`)?.textContent).toContain('10');
   });
 });

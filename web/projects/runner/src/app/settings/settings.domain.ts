@@ -100,9 +100,11 @@ export function canEditSetting(superuser: boolean, row: SettingRow, recordRetire
   return superuser && !recordRetired && (row.lifetime === 'pass' || row.lifetime === 'session');
 }
 
-/** Whether the record holds a revision the daemon has not yet taken up, a state a failed rebuild also holds. */
+/** Whether the record holds a written revision the daemon has not yet taken up — one newer than the revision in
+ * force, or any written revision while none is in force — a state a failed rebuild also holds. */
 export function revisionPending(record: SettingsRecord): boolean {
-  return record.inForce.revision !== null && record.inForce.revision < record.revision;
+  const running = record.inForce.revision;
+  return record.revision > 0 && (running === null || running < record.revision);
 }
 
 /** Whose change log History reads: a settings record's, or one workspace's or subscription's rows of the host's log. */

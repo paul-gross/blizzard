@@ -12,7 +12,7 @@ describe('settings domain', () => {
     expect(canEditSetting(true, settingRow({ lifetime: { kind: 'unknown', raw: 'tick' } }), false)).toBe(false);
   });
 
-  it('reads a revision pending while the one in force is older', () => {
+  it('reads a written revision pending while the one in force is older or none is in force', () => {
     expect(revisionPending(settingsRecord())).toBe(false);
     expect(revisionPending(settingsRecord({ revision: 4 }))).toBe(true);
     expect(
@@ -20,6 +20,7 @@ describe('settings domain', () => {
         settingsRecord({ revision: 4, inForce: { revision: 3, since: null, failed: { revision: 4, error: 'x', since: '' } } }),
       ),
     ).toBe(true);
-    expect(revisionPending(settingsRecord({ inForce: { revision: null, since: null, failed: null } }))).toBe(false);
+    expect(revisionPending(settingsRecord({ inForce: { revision: null, since: null, failed: null } }))).toBe(true);
+    expect(revisionPending(settingsRecord({ revision: 0, inForce: { revision: null, since: null, failed: null } }))).toBe(false);
   });
 });

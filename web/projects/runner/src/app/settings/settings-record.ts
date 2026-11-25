@@ -41,7 +41,10 @@ export class SettingsRecordPanel {
   /** Whether the session is the host's superuser, who alone edits. */
   readonly superuser = input.required<boolean>();
 
-  private readonly query = injectSettingsQuery(() => this.ref().target);
+  private readonly query = injectSettingsQuery(
+    () => this.ref().target,
+    () => this.ref().unserved === null,
+  );
   private readonly service = injectSettingsService(() => this.ref().target);
 
   protected readonly record = computed(() => this.query.data());

@@ -8,8 +8,13 @@ import {
   type HostRecordKind,
   type RecordDraft,
   type RecordField,
+  type RecordFieldType,
+  type RecordFieldValue,
+  recordFieldError,
   recordFields,
+  parseRecordField,
 } from './host-records.domain';
+import { settingsProblemOutcome } from './settings.translate';
 
 /** A workspace read as the record its panel holds. */
 export function workspaceRecord(workspace: HostWorkspace): HostRecord {
@@ -46,42 +51,39 @@ export function toRecordBaseline(record: HostRecord): EditBaseline<RecordDraft> 
   return { id: record.key, revision: record.revision, draft };
 }
 
-/** One field's text read as its key's value: `null` for blank text, or why the text reads as none. */
-export function parseRecordField(field: RecordField, text: string): { value: unknown } | { error: string } {
-  const trimmed = text.trim();
-  if (trimmed === '') return { value: null };
-  if (field.type === 'multiline') return { value: text };
-  if (field.type === 'whole') return /^\d+$/.test(trimmed) ? { value: Number(trimmed) } : { error: 'Enter a whole number.' };
-  if (field.type === 'list') return { value: trimmed.split(/[\s,]+/).filter((name) => name !== '') };
-  if (field.type === 'repos') return parseRepos(trimmed);
-  return { value: trimmed };
-}
+type Fields<K extends HostRecordKind> = (typeof RECORD_FIELDS)[K][number];
 
-function parseRepos(text: string): { value: runnerApi.HostWorkspaceRepoWrite[] } | { error: string } {
-  const repos: runnerApi.HostWorkspaceRepoWrite[] = [];
-  for (const line of text.split('\n').map((l) => l.trim()).filter((l) => l !== '')) {
-    const parts = line.split(/\s+/);
-    if (parts.length !== 2) return { error: 'Write each repository as its name and its URL.' };
-    repos.push({ name: parts[0], url: parts[1] });
-  }
-  return { value: repos };
-}
+/** Each field's name to the value its text reads as. */
+type Shape<Fs extends { readonly name: string; readonly type: RecordFieldType }> = {
+  [F in Fs as F['name']]: RecordFieldValue<F['type']>;
+};
 
-/** Why `text` cannot stand in `field` on a form of `mode`, or `null` while it can. */
-export function recordFieldError(field: RecordField, mode: 'create' | 'edit', text: string): string | null {
-  const parsed = parseRecordField(field, text);
-  if ('error' in parsed) return parsed.error;
-  if (parsed.value === null && (mode === 'create' ? field.required : field.refusesDefault)) return 'Required.';
-  return null;
-}
+/** `Request`, while `S` names exactly its keys, each with a value the request takes; `never` once the field table and
+ * the generated request drift, so every body built against it stops compiling. */
+type Keyed<S, Request> = [keyof S] extends [keyof Request]
+  ? [keyof Request] extends [keyof S]
+    ? { [N in keyof S]: N extends keyof Request ? (S[N] extends NonNullable<Request[N]> ? true : false) : false }[keyof S] extends true
+      ? Request
+      : never
+    : never
+  : never;
 
-/** A draft read as its request body, or each field's reason it reads as none. A create states every non-blank field;
- * an edit only the fields changed from `before`, a field cleared to blank returning its key to its default. */
-export function toRecordBody(
-  kind: HostRecordKind,
-  before: RecordDraft | null,
-  after: RecordDraft,
-): { body: Record<string, unknown> } | { errors: Partial<Record<string, string>> } {
+type CreateBody<K extends HostRecordKind, Request> = Keyed<Shape<Fields<K>>, Request>;
+type EditBody<K extends HostRecordKind, Request> = Keyed<Shape<Exclude<Fields<K>, { readonly immutable: true }>>, Request>;
+
+/** A create of a `kind` record, its body its create request. */
+export type RecordCreate =
+  | { readonly kind: 'workspace'; readonly body: CreateBody<'workspace', runnerApi.HostWorkspaceCreateRequest> }
+  | { readonly kind: 'subscription'; readonly body: CreateBody<'subscription', runnerApi.HostSubscriptionCreateRequest> };
+
+/** A sparse edit of a `kind` record, its body its patch request. */
+export type RecordEdit =
+  | { readonly kind: 'workspace'; readonly body: EditBody<'workspace', runnerApi.HostWorkspacePatchRequest> }
+  | { readonly kind: 'subscription'; readonly body: EditBody<'subscription', runnerApi.HostSubscriptionPatchRequest> };
+
+type BodyRead<W> = { readonly write: W } | { readonly errors: Partial<Record<string, string>> };
+
+function readBody(kind: HostRecordKind, before: RecordDraft | null, after: RecordDraft): BodyRead<Record<string, unknown>> {
   const mode = before === null ? 'create' : 'edit';
   const body: Record<string, unknown> = {};
   const errors: Record<string, string> = {};
@@ -96,28 +98,27 @@ export function toRecordBody(
     const parsed = parseRecordField(f, text) as { value: unknown };
     if (parsed.value !== null || mode === 'edit') body[f.name] = parsed.value;
   }
-  return Object.keys(errors).length > 0 ? { errors } : { body };
+  return Object.keys(errors).length > 0 ? { errors } : { write: body };
 }
 
-function isSettingsProblem(error: unknown): error is runnerApi.SettingsProblem {
-  return typeof error === 'object' && error !== null && typeof (error as { code?: unknown }).code === 'string';
+/** A create's draft read as its request, stating every non-blank field, or each field's reason it reads as none.
+ * The body holds only {@link RECORD_FIELDS} keys, which {@link RecordCreate} holds to the request's. */
+export function toRecordCreate(kind: HostRecordKind, draft: RecordDraft): BodyRead<RecordCreate> {
+  const read = readBody(kind, null, draft);
+  return 'errors' in read ? read : { write: { kind, body: read.write } as RecordCreate };
 }
 
-/** A refused write of a `kind` record as a {@link SaveOutcome}: a revision conflict on the form line, keeping the
- * draft; each refusal naming a field the form states beside it, any other on the form line. Anything else reads
- * through `readRefusal`. */
+/** An edit's draft read as its request, stating only the fields changed from `before` — a field cleared to blank
+ * returning its key to its default — or each field's reason it reads as none. */
+export function toRecordEdit(kind: HostRecordKind, before: RecordDraft, after: RecordDraft): BodyRead<RecordEdit> {
+  const read = readBody(kind, before, after);
+  return 'errors' in read ? read : { write: { kind, body: read.write } as RecordEdit };
+}
+
+/** A refused write of a `kind` record as a {@link SaveOutcome}, read by {@link settingsProblemOutcome} with each
+ * refusal naming a field the form states beside it. Anything else reads through `readRefusal`. */
 export function recordRefusal(error: unknown, kind: HostRecordKind): SaveOutcome<RecordDraft> {
-  const names = new Set(RECORD_FIELDS[kind].map((f) => f.name));
+  const names = new Set<string>(RECORD_FIELDS[kind].map((f) => f.name));
   const fieldOf = (key: string | null | undefined): string | null => (key && names.has(key) ? key : null);
-  if (!isSettingsProblem(error)) return readRefusal<RecordDraft>(error, { field: fieldOf, kinds: {} });
-  if (error.code === 'revision_conflict') return { ok: false, fields: {}, form: error.detail };
-  const errors = error.errors ?? [{ key: error.key ?? '', message: error.detail }];
-  const fields: Record<string, string> = {};
-  const form: string[] = [];
-  for (const e of errors) {
-    const name = fieldOf(e.key);
-    if (name === null) form.push(e.key ? `${e.key}: ${e.message}` : e.message);
-    else fields[name] = fields[name] ? `${fields[name]}; ${e.message}` : e.message;
-  }
-  return { ok: false, fields, form: form.length > 0 ? form.join('; ') : null };
+  return settingsProblemOutcome<RecordDraft>(error, fieldOf) ?? readRefusal<RecordDraft>(error, { field: fieldOf, kinds: {} });
 }

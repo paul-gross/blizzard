@@ -11,6 +11,8 @@ export interface HistoryRef {
   readonly id: string;
   readonly title: string;
   readonly target: HistoryTarget;
+  /** Why the log cannot be read — its runner is not served — `null` once it can. */
+  readonly unserved?: string | null;
 }
 
 /** One record's change log, read a page at a time. */
@@ -23,7 +25,10 @@ export interface HistoryRef {
 export class SettingsHistory {
   readonly ref = input.required<HistoryRef>();
 
-  protected readonly query = injectSettingsChangesQuery(() => this.ref().target);
+  protected readonly query = injectSettingsChangesQuery(
+    () => this.ref().target,
+    () => (this.ref().unserved ?? null) === null,
+  );
   protected readonly changes = computed(() => settingsChanges(this.query.data()?.pages));
   protected readonly state = computed(() => asyncState(this.query, this.changes().length === 0));
 }

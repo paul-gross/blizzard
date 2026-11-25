@@ -1,8 +1,9 @@
-import { settingValueText, type Tone, type UnknownHostValue } from 'fleet';
+import { settingValueText, type Tone, unlisted, type UnknownHostValue } from 'fleet';
 
 import type { HostRunner } from '../core/host-runner.domain';
 import {
   canEditSetting,
+  revisionPending,
   type FailedRebuild,
   type SettingLifetime,
   type SettingRow,
@@ -21,12 +22,34 @@ export interface SettingsRecordRef {
   readonly target: SettingsTarget;
   /** Whether the record is a runner its host has retired, whose keys take no edit. */
   readonly retired: boolean;
+  /** Why the record cannot be read — its runner is not served, so its routes do not answer — `null` once it can. */
+  readonly unserved: string | null;
+}
+
+/** Why `runner`'s settings cannot be read, `null` while its host serves it. */
+export function unservedReason(runner: HostRunner): string | null {
+  if (runner.served) return null;
+  switch (runner.state) {
+    case 'starting':
+      return 'Starting — its settings read once its host serves it.';
+    case 'start_failed': {
+      const failure = runner.start_failure;
+      const step = failure === null ? null : typeof failure.step === 'string' ? failure.step : failure.step.raw;
+      return failure === null ? 'Failed to start.' : `Failed to start at ${step}: ${failure.error}`;
+    }
+    case 'retired':
+      return 'Retired — its host no longer serves it.';
+    default: {
+      const reasons = runner.halted_reasons.join('; ');
+      return reasons === '' ? 'Halted — its host does not serve it.' : `Halted: ${reasons}`;
+    }
+  }
 }
 
 /** The host's record, then one per hosted runner with an id, the Runner filter's alone when it names one. A runner
- * with no id has no settings record to read. */
+ * with no id has no settings record to read; one its host does not serve names why ({@link unservedReason}). */
 export function settingsRecords(runners: readonly HostRunner[], runnerFilter: string | null): readonly SettingsRecordRef[] {
-  const host: SettingsRecordRef = { id: 'host', title: 'Host', target: { kind: 'host' }, retired: false };
+  const host: SettingsRecordRef = { id: 'host', title: 'Host', target: { kind: 'host' }, retired: false, unserved: null };
   const hosted = runners.flatMap((runner): SettingsRecordRef[] =>
     runner.runner_id === null || (runnerFilter !== null && runner.name !== runnerFilter)
       ? []
@@ -36,6 +59,7 @@ export function settingsRecords(runners: readonly HostRunner[], runnerFilter: st
             title: runner.name,
             target: { kind: 'runner', runnerId: runner.runner_id },
             retired: runner.state === 'retired',
+            unserved: unservedReason(runner),
           },
         ],
   );
@@ -64,7 +88,7 @@ export function lifetimeBadge(lifetime: SettingLifetime): SettingBadge {
     case 'immutable':
       return { label: lifetime, tone: 'idle' };
     default:
-      return { label: String(lifetime), tone: 'idle' };
+      return { label: unlisted(lifetime), tone: 'idle' };
   }
 }
 
@@ -132,8 +156,7 @@ export interface InForceLineVm {
 export function inForceLine(record: SettingsRecord | undefined): InForceLineVm | null {
   if (record === undefined) return null;
   const { revision, since, failed } = record.inForce;
-  const behind = revision === null || revision < record.revision;
-  const pending = behind && failed?.revision !== record.revision && record.revision > 0 ? record.revision : null;
+  const pending = revisionPending(record) && failed?.revision !== record.revision ? record.revision : null;
   return { running: revision, since, pending, failed };
 }
 

@@ -7,7 +7,7 @@ import {
   injectRecordEnableMutation,
   injectRecordRetireMutation,
 } from './host-records.mutations';
-import { recordRefusal, toRecordBody } from './host-records.translate';
+import { recordRefusal, toRecordCreate, toRecordEdit } from './host-records.translate';
 
 /** A verb on a host record, each with its own control and its own pending state. */
 export type RecordVerb = 'create' | 'edit' | 'retire' | 'enable';
@@ -41,17 +41,16 @@ export function injectHostRecordsService(kind: () => HostRecordKind): HostRecord
       return recordRefusal(error, kind());
     }
   };
-  const bodyOf = (before: RecordDraft | null, after: RecordDraft) => toRecordBody(kind(), before, after);
   return {
     create(draft) {
-      const read = bodyOf(null, draft);
+      const read = toRecordCreate(kind(), draft);
       if ('errors' in read) return Promise.resolve({ ok: false, fields: read.errors, form: null });
-      return send(() => mutations.create.mutateAsync({ kind: kind(), body: read.body }));
+      return send(() => mutations.create.mutateAsync(read.write));
     },
     edit(before, after) {
-      const read = bodyOf(before.draft, after);
+      const read = toRecordEdit(kind(), before.draft, after);
       if ('errors' in read) return Promise.resolve({ ok: false, fields: read.errors, form: null });
-      return send(() => mutations.edit.mutateAsync({ kind: kind(), key: before.id, revision: before.revision, body: read.body }));
+      return send(() => mutations.edit.mutateAsync({ ...read.write, key: before.id, revision: before.revision }));
     },
     retire: (key) => send(() => mutations.retire.mutateAsync({ kind: kind(), key })),
     enable: (key) => send(() => mutations.enable.mutateAsync({ kind: kind(), key })),

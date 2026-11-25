@@ -6,7 +6,7 @@ import { SettingsInForce } from './settings-in-force';
 
 /** One settings record's panel: its `in_force` line on top, then every key grouped by table with its value, source,
  * and lifetime badge, an Edit control on each key the session may edit. A record whose keys could not be resolved
- * shows why in their place. */
+ * shows why in their place, and one whose runner is not served says why in place of the read. */
 @Component({
   selector: 'app-settings-record-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -22,6 +22,8 @@ export class SettingsRecordView {
   readonly line = input.required<InForceLineVm | null>();
   readonly groups = input.required<readonly SettingGroupVm[]>();
   readonly settingsError = input<string | null>(null);
+  /** Why the record cannot be read, shown in place of its read; `null` while it can be. */
+  readonly unserved = input<string | null>(null);
   /** Holds every Edit control off while this record's write is in flight. */
   readonly editDisabled = input(false);
 

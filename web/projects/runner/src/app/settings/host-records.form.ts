@@ -1,7 +1,6 @@
 import { type FieldTree, schema, validateTree } from '@angular/forms/signals';
 
-import type { RecordDraft, RecordField, RecordFormMode } from './host-records.domain';
-import { recordFieldError } from './host-records.translate';
+import { type RecordDraft, type RecordField, type RecordFormMode, recordFieldError } from './host-records.domain';
 
 /** A create's or an edit's rules: each field's text must read as its key's value, and each required key be stated.
  * Judged over the whole draft, since which fields the form shows is the open form's. */
