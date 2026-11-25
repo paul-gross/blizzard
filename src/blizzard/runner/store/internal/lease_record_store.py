@@ -113,6 +113,7 @@ class LeaseRecordStore:
         stmt = (
             self._store.select(lease_closures, lease_closures.c.reason)
             .where(lease_closures.c.lease_id == lease_id)
+            .order_by(lease_closures.c.id)
             .limit(1)
         )
         rows = self._store.all(stmt)
@@ -237,7 +238,7 @@ class LeaseRecordStore:
                     .group_by(binding_releases.c.chunk_id)
                     .subquery()
                 )
-                # The newest mint above the floor decides each chunk's own bound, so one row per chunk comes back.
+                # Each chunk's newest mint above its floor is what its caller-supplied bound is compared against.
                 stmt = (
                     st.select(leases, leases.c.chunk_id, func.max(leases.c.created_at).label("newest"))
                     .outerjoin(floors, floors.c.chunk_id == leases.c.chunk_id)

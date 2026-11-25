@@ -356,9 +356,11 @@ entirely rather than falling back within it, so the single-harness fallback abov
 session for an interrupted claim (an adopted same-node or restart entry, a requeue resumed, a reclaimed claim), keep the
 prior lease's own owner when that owner is still a member of the current envelope's (possibly since-edited) acceptable
 set, and escalate the same way, spawning nothing, when it has fallen out of one; a chunk with no prior owner selects as
-any fresh mint does. An adopt after that node's own step transitioned (a self-loop) is a node entry, not an adopted
-same-node entry. A rotated session pool's replacement is a fresh mint instead: it walks the set from its first member
-and escalates the same way, whatever owned the session it replaces.
+any fresh mint does. One adopted claim is not such a recovery: when the last attempt at the node being adopted finished
+by transitioning back into that same node, with no gate holding its choice, the runner starts the node as it does any
+new arrival, and the node's `session` mode and acceptable set decide the session and harness. At a restart entry the
+adopted claim still recovers on the prior owner, as above. A rotated session pool's replacement is a fresh mint instead:
+it walks the set from its first member and escalates the same way, whatever owned the session it replaces.
 
 ## OpenCode configuration
 

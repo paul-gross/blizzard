@@ -50,6 +50,7 @@ from tests.support.runner_fakes import (
     FakeTranscriptSource,
     SqlAlchemyRunnerStore,
     make_context,
+    make_envelope,
     make_stores,
     registered_identity,
     runner_store_errors,
@@ -818,6 +819,48 @@ def test_reconcile_reads_takeovers_and_escalations_once_across_1_and_4_held_chun
 
 def test_reconcile_issues_the_same_statement_count_across_1_and_4_chunks_held_in_adopt(tmp_path: Path) -> None:
     assert len(_reconcile_statements(tmp_path / "one", 1)) == len(_reconcile_statements(tmp_path / "four", 4)) == 8
+
+
+def _closed_lease(store: SqlAlchemyRunnerStore, chunk_id: str, epoch: int, *, at: datetime) -> None:
+    _lease_at(store, chunk_id, epoch, at=at)
+    store.record_closure(
+        lease_id=f"lease_{chunk_id}_{epoch}", chunk_id=chunk_id, node_id="nd_build", reason="failed", closed_at=at
+    )
+
+
+def test_reconcile_decides_each_held_chunk_by_its_own_epoch_and_binding_tenure(tmp_path: Path) -> None:
+    """``ch_new``'s lease predates its binding and ``ch_kept`` holds the hub's epoch, so both adopt;
+    ``ch_advance`` is in tenure behind the hub, so it is left."""
+    store, _ = _store(tmp_path)
+    earlier = _NOW - timedelta(minutes=10)
+    hub = FakeHub()
+    chunks = {  # chunk: (env, lease epoch, bound at, hub epoch)
+        "ch_new": ("e0", 1, _NOW, 5),
+        "ch_advance": ("e1", 1, _NOW - timedelta(minutes=20), 3),
+        "ch_kept": ("e2", 3, _NOW - timedelta(minutes=20), 3),
+    }
+    for chunk_id, (env, epoch, bound_at, hub_epoch) in chunks.items():
+        _closed_lease(store, chunk_id, epoch, at=earlier)
+        store.record_binding(chunk_id=chunk_id, environment_id=env, workdir=f"/ws/{env}", bound_at=bound_at)
+        store.set_route_token(chunk_id, token="rtok", at=_NOW)
+        hub.chunks[chunk_id] = ChunkState(
+            chunk_id=chunk_id, status=ChunkStatus.RUNNING, route_runner_id="r1", latest_epoch=hub_epoch
+        )
+        hub.envelopes[chunk_id] = make_envelope(
+            chunk_id, "build", node_id="nd_build", choices=[("pass", "ok")], epoch=hub_epoch
+        )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({f"e{i}": f"/ws/e{i}" for i in range(3)}),
+        harness=FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict="pass"),
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+    )
+
+    InterruptedClaims(ctx).reconcile()
+
+    assert store.active_lease_chunk_ids() == {"ch_new", "ch_kept"}
 
 
 # --- active_lease_chunk_ids -------------------------------------------------------------------

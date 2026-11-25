@@ -362,6 +362,7 @@ def test_adopt_enters_a_node_the_latest_lease_did_not_run_unless_it_is_a_restart
     ("reason", "enters"), [("transitioned", True), ("parked", False), ("failed", False), (None, False)]
 )
 def test_adopt_enters_the_same_node_only_after_its_step_transitioned(reason: str | None, enters: bool) -> None:
+    """``parked`` stays out, though it completes a step elsewhere: its same-node park paths are untraced."""
     held = ChunkState(chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id=_ME, latest_epoch=1)
     restarted = ChunkState(
         chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id=_ME, latest_epoch=2, restart_epochs=[2]
