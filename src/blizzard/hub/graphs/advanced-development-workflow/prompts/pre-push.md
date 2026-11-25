@@ -10,13 +10,17 @@ every conflict resolution faithful to the intent recorded in the `reviewed-plan`
 ## Start from what is actually there
 
 In each repo, fetch first — the worktree's view of the base branch is as stale as the moment the environment was
-acquired — then check what the branch carries. A repo already rebased and pushed needs no second rebase, but it still
+acquired — then check what the branch carries. Whatever state a repo carrying the change arrives in — a detached HEAD,
+the base branch, no upstream — put it back on the declared branch
+(`blizzard runner artifact get branch --node plan --content`) at the repo's newest declared `git_commit` before
+rebasing, using the environment's connect step so its upstream is that branch on origin. The local branch may carry
+another name; the upstream is what must match. A repo already rebased and pushed needs no second rebase, but it still
 needs its tip declared (below).
 
 ## What must be true when you finish
 
-**One branch per repo, the declared one** (`blizzard runner artifact get branch --node plan --content`). Every
-environment's work for a repo is rolled up into a single branch; delivery refuses a repo that arrives with two.
+**One branch per repo, the declared one.** Every environment's work for a repo is rolled up into a single branch;
+delivery refuses a repo that arrives with two.
 
 **Every ahead repo is rebased onto the current base** — the repo's recorded base branch. Where a repo has work in more
 than one environment, rebase those onto each other first, then onto the base. Resolve every conflict **inside the
@@ -27,7 +31,8 @@ exception: a commit that repaired a base failure another chunk already landed th
 **The procedural checks are green on the rebased result.** Run the project's linter and the unit tests covering what the
 change — and any conflict resolution — touched. Targeted, not the entire suite.
 
-**Each rewritten branch is pushed** — with `--force-with-lease`, never a bare `--force`.
+**Each rewritten branch is pushed to the declared branch on origin by name** —
+`git push --force-with-lease origin HEAD:<branch>`, never a bare `--force`, never relying on the local branch's name.
 
 **Every repo you touched is declared, every time.** For each, run
 `blizzard runner artifact commit --repo <repo> --branch <branch> --commit <sha>` — `--env <id>` is added if the chunk

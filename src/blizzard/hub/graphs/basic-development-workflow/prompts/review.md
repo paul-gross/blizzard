@@ -3,10 +3,10 @@
 Review cold against the work item. Earlier `review-findings` make this a delta re-visit; otherwise review the whole
 change.
 
-## Check out the change
+## Confirm the change
 
-Run `blizzard runner artifact list` first. Take the newest `git_commit` per repo; check out and confirm each tip in its
-leased environment before reading the diff.
+Run `blizzard runner artifact list`. Confirm each repo's branch tip is its newest `git_commit` and leave HEAD on the
+branch: read a differing commit by sha, never check it out.
 
 ## Review the work
 
@@ -37,7 +37,7 @@ to a full review only for a new repo or commits reshaping the change rather than
 
 The `review-finding-refutes` asset holds findings the build declined, with its arguments; the newest epoch is the
 complete record; never dig for an older one. One with no recognizable entries (e.g. a bare build status) reads as
-"nothing refuted"; move on.
+"nothing refuted".
 
 Match a refutation to a finding by its anchor, never its id — every pass renumbers. Answer every refutation entry
 explicitly — silence is not acceptance. A refutation is a claim you adjudicate, never a veto; an accepted one resolves
