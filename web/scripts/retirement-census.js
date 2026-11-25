@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
-const { createProgram, walkTs } = require('./placement-sweep');
+const { createProgram } = require('./placement-sweep');
 
 const ROOT = path.resolve(__dirname, '..');
 const INVENTORY = {
@@ -269,6 +269,17 @@ function sourceProse(file, text) {
   return lines;
 }
 
+// Unlike placement's walkTs, include hidden source folders such as .storybook.
+const IGNORED_DIRECTORIES = new Set(['node_modules', 'dist', 'build', '.git', '.angular', '.venv',
+  '__pycache__', '.pytest_cache', '.ruff_cache', '.hypothesis', '.vitest-attachments']);
+function walkTypeScript(dir, readDir = (directory) => fs.readdirSync(directory, { withFileTypes: true })) {
+  return readDir(dir).flatMap((entry) => {
+    const file = path.join(dir, entry.name);
+    if (entry.isDirectory()) return IGNORED_DIRECTORIES.has(entry.name) ? [] : walkTypeScript(file, readDir);
+    return entry.isFile() && file.endsWith('.ts') ? [file] : [];
+  });
+}
+
 function assertRetirementCensusWorks() {
   const root = '/retirement-fixture';
   const base = `${root}/projects/hub/src/app`;
@@ -276,6 +287,7 @@ function assertRetirementCensusWorks() {
     [`${base}/core/projects.query.ts`]: 'export function injectProjectsQuery() {}',
     [`${base}/barrel.ts`]: "export { injectProjectsQuery as old } from './core/projects.query';",
     [`${base}/nested.ts`]: "export { old as renamed } from './barrel';",
+    [`${root}/projects/fleet/.storybook/retired-proof.ts`]: "import { renamed as forbidden } from '../../hub/src/app/nested'; forbidden();",
     [`${base}/consumer.ts`]: "import { renamed as useOld } from './nested'; useOld();",
     [`${base}/local.ts`]: "import { renamed as x } from './nested'; export { x as final };",
     [`${base}/final.ts`]: "import { final as f } from './local'; f();",
@@ -295,8 +307,30 @@ function assertRetirementCensusWorks() {
     [`${base}/legal-generated.ts`]: "import * as generated from './generated.gen'; generated.injectProjectsQuery();",
 
   }));
-  const result = census(root, [...memory.keys()], memory).join('\n');
-  for (const name of ['projects.query.ts', 'barrel.ts', 'nested.ts', 'consumer.ts', 'star.ts', 'local.ts', 'final.ts', 'ns-consumer.ts', 'ns-barrel.ts', 'ns-use.ts', 'ns-named.ts', 'ns-bracket.ts', 'ns-type.ts']) {
+  // Exercise the real enumeration path, including a hidden Storybook folder and ignored trees.
+  const ignored = `${root}/projects/fleet/node_modules/ignored.ts`;
+  const allFiles = [...memory.keys(), ignored];
+  const directories = new Map();
+  for (const file of allFiles) {
+    let parent = path.dirname(file);
+    while (parent.startsWith(`${root}/projects`)) {
+      const child = file.startsWith(parent + '/') ? file.slice(parent.length + 1).split('/')[0] : '';
+      if (!directories.has(parent)) directories.set(parent, new Set());
+      directories.get(parent).add(child);
+      if (parent === `${root}/projects`) break;
+      parent = path.dirname(parent);
+    }
+  }
+  const readDir = (dir) => [...(directories.get(dir) || [])].map((name) => ({
+    name, isDirectory: () => directories.has(path.join(dir, name)),
+    isFile: () => !directories.has(path.join(dir, name)),
+  }));
+  const enumerated = walkTypeScript(`${root}/projects`, readDir);
+  if (!enumerated.includes(`${root}/projects/fleet/.storybook/retired-proof.ts`) || enumerated.includes(ignored)) {
+    throw new Error('retirement census source enumeration missed Storybook or traversed dependencies');
+  }
+  const result = census(root, enumerated, memory).join('\n');
+  for (const name of ['retired-proof.ts', 'projects.query.ts', 'barrel.ts', 'nested.ts', 'consumer.ts', 'star.ts', 'local.ts', 'final.ts', 'ns-consumer.ts', 'ns-barrel.ts', 'ns-use.ts', 'ns-named.ts', 'ns-bracket.ts', 'ns-type.ts']) {
     if (!result.includes(name)) throw new Error(`retirement census missed ${name}`);
   }
   for (const name of ['legal.ts', 'private.translate.ts', 'transport.ts', 'legal-ns.ts', 'legal-generated.ts', 'generated.gen.ts']) {
@@ -304,7 +338,7 @@ function assertRetirementCensusWorks() {
   }
   memory.set(`${base}/core/projects.query.ts`, 'export const unrelated = 1;');
   const dangling = census(root, [...memory.keys()], memory).join('\n');
-  for (const name of ['barrel.ts', 'nested.ts', 'consumer.ts', 'star.ts', 'local.ts', 'final.ts', 'ns-consumer.ts', 'ns-barrel.ts', 'ns-use.ts', 'ns-named.ts', 'ns-bracket.ts', 'ns-type.ts']) {
+  for (const name of ['retired-proof.ts', 'barrel.ts', 'nested.ts', 'consumer.ts', 'star.ts', 'local.ts', 'final.ts', 'ns-consumer.ts', 'ns-barrel.ts', 'ns-use.ts', 'ns-named.ts', 'ns-bracket.ts', 'ns-type.ts']) {
     if (!dangling.includes(name)) throw new Error(`retirement census missed dangling ${name}`);
   }
   for (const name of RETIRED_NAMES) {
@@ -333,7 +367,7 @@ function walk(dir) {
 }
 function retirementViolations() {
   const repo = path.dirname(ROOT);
-  const files = walkTs(path.join(ROOT, 'projects'));
+  const files = walkTypeScript(path.join(ROOT, 'projects'));
   const citations = ['README.md', 'SECURITY.md', 'docs', 'exemplars', 'src', 'scripts', 'tests', 'web'].flatMap((name) => {
     const target = path.join(repo, name);
     return fs.existsSync(target) && fs.statSync(target).isFile() ? [target] : walk(target);
