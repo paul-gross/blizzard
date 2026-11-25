@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { FLEET_CLOCK, type FleetSpendView } from 'fleet';
+import { FLEET_CLOCK } from 'fleet';
 import { fleetSpendView, type RequestClientStub, settle, stubError, stubHubClient, type StubDetailBody, type StubHttpError } from 'fleet/testing';
 import { FleetSpendPanel } from './fleet-spend-panel';
 
@@ -10,7 +10,7 @@ describe('FleetSpendPanel', () => {
   let stub: RequestClientStub;
   afterEach(() => stub.restore());
 
-  async function mount(answer: (search: string) => FleetSpendView | StubHttpError<number, StubDetailBody>) {
+  async function mount(answer: (search: string) => ReturnType<typeof fleetSpendView> | StubHttpError<number, StubDetailBody>) {
     stub = stubHubClient({ 'GET /api/spend': (request) => answer(request.search) });
     await TestBed.configureTestingModule({
       imports: [FleetSpendPanel],

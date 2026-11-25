@@ -4,13 +4,12 @@ import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type ChunkDetail as ChunkDetailModel } from 'fleet';
 import { settle, OPERATOR_ME_RESPONSE, chunkDetail, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { ChunkDetail } from './chunk-detail';
 import { hubChunkKey, hubChunkWorkItemsKey } from '../../core/query-keys';
 
 // An unacquired chunk the Delete verb reaches.
-const DELETABLE_DETAIL: ChunkDetailModel = chunkDetail({
+const DELETABLE_DETAIL = chunkDetail({
   graph_name: null,
   current_node_name: null,
   chunk_id: 'ch_deletable',

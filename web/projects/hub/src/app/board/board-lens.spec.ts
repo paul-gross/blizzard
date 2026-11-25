@@ -20,19 +20,19 @@ import {
   settle,
   stubHubClient,
 } from 'fleet/testing';
-import { injectHubBoardChunksQuery } from '../core/chunks.query';
+import { injectDomainBoardChunksQuery } from '../core/chunks.query';
 import { provideProjectLens } from '../core/project-lens';
 import { injectHubActivityQuery } from './activity/activity.query';
 import { injectHubChunkCountsQuery } from './chunks/chunk-counts.query';
 import { injectHubFleetSpendDomainQuery } from './fleet-spend/fleet-spend.query';
 import { GatesPanel } from './gates/gates-panel';
-import { injectHubDecisionsQuery } from './gates/gates.query';
+import { injectBoardDecisionsQuery } from './gates/gates.query';
 import {
   injectHubBacklogQuery,
   injectHubQueueQuery,
 } from './queue/queue.query';
 import { QuestionsPanel } from './questions/questions-panel';
-import { injectHubQuestionsQuery } from './questions/questions.query';
+import { injectBoardQuestionsQuery } from './questions/questions.query';
 
 @Component({ selector: 'app-test-lens-view', template: '' })
 class TestView {}
@@ -44,12 +44,12 @@ class TestView {}
   template: '',
 })
 class TestBoardReads {
-  readonly chunks = injectHubBoardChunksQuery();
+  readonly chunks = injectDomainBoardChunksQuery();
   readonly counts = injectHubChunkCountsQuery();
   readonly queue = injectHubQueueQuery();
   readonly backlog = injectHubBacklogQuery(() => true);
-  readonly questions = injectHubQuestionsQuery();
-  readonly decisions = injectHubDecisionsQuery();
+  readonly questions = injectBoardQuestionsQuery();
+  readonly decisions = injectBoardDecisionsQuery();
   readonly activity = injectHubActivityQuery();
   readonly spend = injectHubFleetSpendDomainQuery(() => '2026-10-10T00:00:00Z');
 }
@@ -62,7 +62,7 @@ class TestBoardReads {
   template: '<app-questions-panel /><app-gates-panel />',
 })
 class TestBoardRails {
-  readonly chunks = injectHubBoardChunksQuery();
+  readonly chunks = injectDomainBoardChunksQuery();
 }
 
 /**
