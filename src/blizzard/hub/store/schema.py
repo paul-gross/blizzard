@@ -1301,7 +1301,7 @@ findings = Table(
     CheckConstraint("source IN ('routine', 'review')", name="ck_findings_source"),
 )
 
-# A project's bucket by (routine_name, scope_slug), and its recurrence by (routine_name, class).
+# A project's bucket by (routine_name, scope_slug), and a routine's classes by (routine_name, class).
 Index(
     "ix_findings_tenant_project_routine_scope",
     findings.c.tenant_id,

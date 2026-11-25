@@ -164,13 +164,23 @@ class DeliverySurvivors:
     def links(self) -> list[tuple[str, str]]:
         """Every ``(proposal_id, finding_id)`` link the surviving proposals owe. An unresolved citation names a
         finding this visit never inserted, so its link is dropped like the delta was rather than pointing at
-        nothing."""
-        return [
-            (p.proposal_id, self.ref_substitutions.get(finding_id, finding_id))
-            for p in self.proposals
-            for finding_id in p.finding_ids
-            if finding_id in self.ref_substitutions or finding_id not in self.uninserted_finding_ids
-        ]
+        nothing. Two citations of one proposal that resolve to one finding, a ref and the id it recorded, raise
+        :class:`GardenDeliveryRejected`."""
+        links: list[tuple[str, str]] = []
+        for p in self.proposals:
+            seen: set[str] = set()
+            for finding_id in p.finding_ids:
+                if finding_id in self.uninserted_finding_ids and finding_id not in self.ref_substitutions:
+                    continue
+                resolved = self.ref_substitutions.get(finding_id, finding_id)
+                if resolved in seen:
+                    raise GardenDeliveryRejected(
+                        f"proposal {p.ref!r} cites finding {resolved!r} more than once",
+                        GardenDeliveryFault.PROPOSALS,
+                    )
+                seen.add(resolved)
+                links.append((p.proposal_id, resolved))
+        return links
 
 
 # --- Repository seam (I-prefix — bzh:repository-split) ---------------------------
@@ -344,6 +354,7 @@ def write_delivery_plan(
     admitted = delivery.admit(plan, admission=admission, terminal=terminal, transaction=transaction)
     if isinstance(admitted, DeliveryOutcome):
         return admitted
+    links = admitted.links()  # refuses a repeated citation ahead of the first insert
     project_id = plan.run.project_id
     findings.insert_many(
         [
@@ -413,7 +424,6 @@ def write_delivery_plan(
         ],
         transaction=transaction,
     )
-    links = admitted.links()
     if links:
         outside = delivery.findings_outside_project(
             [finding_id for _, finding_id in links], project_id, transaction=transaction

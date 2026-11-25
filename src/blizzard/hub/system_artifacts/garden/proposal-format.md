@@ -20,7 +20,8 @@ mints one; `ref` names it only within its own submission, the same way a finding
   graph's own proposals must cite one is that graph's own propose prompt to decide, never the hub's. Each entry given is
   either a `fin_` id already live on this routine, or the submission-local `ref` an `add` op in a delta delivered by
   this same call carries — resolved against the id the hub mints for it at delivery, so a proposal may answer a finding
-  this very run opened.
+  this very run opened. Name each finding once: a `ref` and the `fin_` id that `ref` minted on an earlier delivery name
+  the same finding, and a proposal citing both is refused.
 
 How `title` and `body` read is `garden/voice`'s to say, unless the deployment's own agent-facing context states a voice
 for garden proposals, which then replaces it whole.

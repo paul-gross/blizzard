@@ -485,18 +485,6 @@ class FindingStore:
         with self._store.read("distinct_classes") as conn:
             return list(conn.execute(stmt).scalars())
 
-    def count_by_class(self, project_id: str, routine_name: str, class_: str) -> int:
-        """How often `class_` recurs for `routine_name` — filtered on
-        `ix_findings_tenant_project_routine_class`."""
-        with self._store.read("count_by_class") as conn:
-            return conn.execute(
-                self._store.select(findings, func.count()).where(
-                    findings.c.project_id == project_id,
-                    findings.c.routine_name == routine_name,
-                    findings.c.class_ == class_,
-                )
-            ).scalar_one()
-
     def has_delivery_for_proposal(self, proposal_id: str) -> bool:
         with self._store.read("has_delivery_for_proposal") as conn:
             row = conn.execute(

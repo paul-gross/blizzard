@@ -429,12 +429,6 @@ class IReadFindingRepository(Protocol):
         `exclude_exited` is `list_for_routine`'s."""
         ...
 
-    def count_by_class(self, project_id: str, routine_name: str, class_: str) -> int:
-        """How often `class_` recurs for `routine_name`
-        (blizzard-product:/delivered/garden/machinery.md §What the store buys) — a count,
-        never the rows themselves."""
-        ...
-
     def list_page(
         self,
         *,
