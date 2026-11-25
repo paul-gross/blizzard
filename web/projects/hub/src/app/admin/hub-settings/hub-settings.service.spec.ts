@@ -1,13 +1,12 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { HubSettingRow } from 'fleet';
 import { type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
 
 import { injectHubSettingsService } from './hub-settings.service';
 import { toHubSettingBaseline } from './hub-settings.translate';
 
-const row = (value: unknown): HubSettingRow => ({
+const row = (value: unknown): Parameters<typeof toHubSettingBaseline>[1] => ({
   key: 'alpha', value, lifetime: 'pass', source: 'entry', revision: 7, written_at: null, written_by: null,
 });
 
@@ -57,21 +56,12 @@ describe('injectHubSettingsService', () => {
     expect(written()).toHaveLength(0);
   });
 
-  it('answers a settings-invalid refusal for the key on value', async () => {
+  it('answers a settings-invalid refusal on the form line', async () => {
     const service = configure(() =>
-      stubError(422, { type: 'urn:blizzard:problem:settings-invalid', detail: 'refused', errors: { alpha: 'too small' } }),
+      stubError(422, { type: 'urn:blizzard:problem:settings-invalid', detail: 'config: too small', errors: { config: 'too small' } }),
     );
     expect(await service.edit(toHubSettingBaseline(7, row(60)), { value: '1', useDefault: false })).toEqual({
-      ok: false, fields: { value: 'too small' }, form: null,
-    });
-  });
-
-  it('answers a refused unset on the form line', async () => {
-    const service = configure(() =>
-      stubError(422, { type: 'urn:blizzard:problem:settings-invalid', detail: 'refused', errors: { alpha: 'too small' } }),
-    );
-    expect(await service.edit(toHubSettingBaseline(7, row(60)), { value: '60', useDefault: true })).toEqual({
-      ok: false, fields: {}, form: 'refused',
+      ok: false, fields: {}, form: 'config: too small',
     });
   });
 

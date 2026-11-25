@@ -33,7 +33,7 @@ export function injectHubSettingsService(): HubSettingsService {
         await mutation.mutateAsync({ key: before.id, revision: before.revision, value, unset: after.useDefault });
         return { ok: true };
       } catch (error) {
-        return hubSettingRefusal(error, before.id, after.useDefault);
+        return hubSettingRefusal(error);
       }
     },
   };

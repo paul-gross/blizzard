@@ -10,7 +10,7 @@
   </fleet-kit-async-state>
   <fleet-kit-section-head label="History" />
   <app-config-revisions [rows]="revisions()" [state]="historyState()" testidPrefix="hub-settings" />
-  @for (entry of entries(); track $index) {
+  @for (entry of entries(); track entry.rows[0].id) {
     <app-change-entry-panel [vm]="entry" state="ready" emptyText="" />
   }
   @if (hasNext()) { <fleet-kit-button [disabled]="loadingNext()" (click)="loadMore.emit()">Load more</fleet-kit-button> }
