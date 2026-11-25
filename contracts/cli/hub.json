@@ -3814,7 +3814,7 @@
     "config": {
       "commands": {
         "apply": {
-          "help": "Apply the declarative document FILE (.yaml, .yml, .json or .toml) in one transaction.\n\nCreates, edits or enables declared records; omitted records stay unchanged. A refusal writes nothing.\n--dry-run prints the outcome without writing. See docs/deployment/config-documents.md.",
+          "help": "Apply the declarative document FILE (.yaml, .yml, .json or .toml) in one transaction.\n\nCreates, edits or enables declared records; omitted records stay unchanged. A refusal writes nothing.\n--dry-run prints the outcome without writing.\nSee https://github.com/paul-gross/blizzard/blob/master/docs/deployment/config-documents.md.",
           "params": [
             {
               "hidden": false,
