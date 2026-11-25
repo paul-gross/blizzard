@@ -22,7 +22,7 @@ export interface BoardPageMetadata {
   readonly next_cursor: string | null;
   readonly board_done_policy: BoardDoneWindow | null | undefined;
 }
-/** Chunk facts used to render runner claims and workspace occupancy. */
+/** Chunk facts for runner claims and workspace occupancy. */
 export interface RunnerClaimChunk {
   readonly chunk_id: string;
   readonly runner_id: string | null;
