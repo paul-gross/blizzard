@@ -326,7 +326,12 @@ def test_a_token_without_exp_is_refused_at_the_callback(tmp_path: Path) -> None:
 
 
 def _bounce_in(
-    client: TestClient, private_key: rsa.RSAPrivateKey, *, jti: str, runner_id: str = _RUNNER_ID, role: str = "contributor"
+    client: TestClient,
+    private_key: rsa.RSAPrivateKey,
+    *,
+    jti: str,
+    runner_id: str = _RUNNER_ID,
+    role: str = "contributor",
 ) -> None:
     """Drive the full SSO bounce so ``client`` holds a live runner session cookie."""
     names = CookieNames(runner_id)
