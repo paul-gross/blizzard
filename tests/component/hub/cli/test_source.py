@@ -68,6 +68,7 @@ def test_create_list_and_show_with_and_without_json(client: TestClient) -> None:
     listed = _source(["list"])
     assert "hub  built-in" in listed.output
     rows = json.loads(_source(["list", "--json"]).stdout)
+    assert rows == client.get("/api/work-sources").json()["sources"]
     assert {r["slug"] for r in rows} == {"hub", "demo"}
     source_id = next(r["work_source_id"] for r in rows if r["slug"] == "demo")
     assert f"demo  demo  {source_id}  r1  enabled  github  acme/demo" in listed.output

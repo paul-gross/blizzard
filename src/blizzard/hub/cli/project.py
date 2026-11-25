@@ -124,7 +124,9 @@ def project_create(cli: CliContext, slug: str, name: str | None, description: st
 @project_group.command("list", cls=FleetCommand)
 def project_list(cli: CliContext) -> None:
     """List the tenant's projects — slug, name, color, id, revision."""
-    raw, listing = cli.decode(cli.get("/api/projects", "GET /projects"), _PROJECTS, "GET /projects")
+    raw, listing, _ = cli.decode_rows(
+        "/api/projects", "GET /projects", page=_PROJECTS, rows=lambda page: page.projects, key="projects"
+    )
     cli.show(raw["projects"], ProjectListing(listing.projects))
 
 

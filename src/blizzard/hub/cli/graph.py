@@ -127,9 +127,9 @@ def graph_show(cli: CliContext, graph_id: str) -> None:
 def graph_mint(cli: CliContext, path: str) -> None:
     """Mint a graph from PATH's definition; PATH may be '-' to read stdin.
 
-    A file PATH is decoded by extension (.yaml, .yml, .json; else refused); YAML is strict — a duplicate key is an
-    error, 'yes' or a date stays a string. It inlines file references relative to its own directory: a 'prompt' only
-    when it reads as a path, every 'artifacts:' value always. Stdin is sent as is. Refusal lists every error."""
+    A file PATH is decoded by extension (.yaml, .yml, .json, .toml; else refused); YAML is strict — a duplicate key
+    is an error, 'yes' or a date stays a string. It inlines file references relative to its own directory: a 'prompt'
+    only when it reads as a path, every 'artifacts:' value always. Stdin is sent as is. Refusal lists every error."""
     if path == "-":
         definition_yaml = click.get_text_stream("stdin").read()
     else:

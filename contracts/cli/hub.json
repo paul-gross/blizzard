@@ -124,7 +124,7 @@
           ],
           "commands": {
             "apply": {
-              "help": "Apply a TOML settings document FILE.",
+              "help": "Apply a settings document FILE.",
               "params": [
                 {
                   "hidden": false,
@@ -175,7 +175,7 @@
                 }
               ],
               "path": "hub admin settings apply",
-              "short_help": "Apply a TOML settings document FILE."
+              "short_help": "Apply a settings document FILE."
             },
             "changes": {
               "help": "List settings changes, newest first.",
@@ -3814,7 +3814,7 @@
     "config": {
       "commands": {
         "apply": {
-          "help": "Apply the declarative document FILE (.yaml, .yml or .json) in one transaction.\n\nCreates what is absent, edits only the fields the document states, enables what is retired, and never\ntouches a record it leaves out. Any refusal leaves everything unchanged; --dry-run prints the same outcome. The\nhub applies a version-2 or a version-3 document; version 3 declares credentials, and names the one each work\nsource and repository acts with.",
+          "help": "Apply the declarative document FILE (.yaml, .yml, .json or .toml) in one transaction.\n\nCreates, edits or enables declared records; omitted records stay unchanged. A refusal writes nothing.\n--dry-run prints the outcome without writing.\nSee https://github.com/paul-gross/blizzard/blob/master/docs/deployment/config-documents.md.",
           "params": [
             {
               "hidden": false,
@@ -3877,7 +3877,7 @@
             }
           ],
           "path": "hub config apply",
-          "short_help": "Apply the declarative document FILE (.yaml, .yml or .json) in one transaction."
+          "short_help": "Apply the declarative document FILE (.yaml, .yml, .json or .toml) in one transaction."
         },
         "changes": {
           "help": "List configuration changes newest first \u2014 who changed which record, through which door, and what.\n\nShows the newest page unless --all. A secret's value never appears.",
@@ -7214,7 +7214,7 @@
           "short_help": "List every minted graph, newest first \u2014 name, graph_id, effective, retired."
         },
         "mint": {
-          "help": "Mint a graph from PATH's definition; PATH may be '-' to read stdin.\n\nA file PATH is decoded by extension (.yaml, .yml, .json; else refused); YAML is strict \u2014 a duplicate key is an\nerror, 'yes' or a date stays a string. It inlines file references relative to its own directory: a 'prompt' only\nwhen it reads as a path, every 'artifacts:' value always. Stdin is sent as is. Refusal lists every error.",
+          "help": "Mint a graph from PATH's definition; PATH may be '-' to read stdin.\n\nA file PATH is decoded by extension (.yaml, .yml, .json, .toml; else refused); YAML is strict \u2014 a duplicate key\nis an error, 'yes' or a date stays a string. It inlines file references relative to its own directory: a 'prompt'\nonly when it reads as a path, every 'artifacts:' value always. Stdin is sent as is. Refusal lists every error.",
           "params": [
             {
               "hidden": false,

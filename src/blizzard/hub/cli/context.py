@@ -13,6 +13,7 @@ import click
 from pydantic import TypeAdapter
 
 from blizzard.cli.answer import decode_answer as _decode_answer
+from blizzard.cli.answer import peer_address
 from blizzard.cli.collaborators import ClientFactory, HTTPError, Response
 from blizzard.cli.operator_trace import ITraceHeaders
 from blizzard.cli.refusal import refusal_of
@@ -129,59 +130,74 @@ class CliContext:
         """:func:`decode_answer` for this context's hub: ``(raw body, value)``."""
         return decode_answer(response, adapter, operation=operation, hub_url=self.hub_url)
 
-    def get_all[P: _CursorPage](
+    def decode_rows[P, R](
         self,
         path: str,
         operation: str,
         *,
         page: TypeAdapter[P],
+        rows: Callable[[P], Sequence[R]],
+        key: str | None,
         params: dict[str, str] | None = None,
-    ) -> list[P]:
-        """Every page of a cursor-paginated list read, decoded against ``page``'s model: pages of up to 1000,
-        following ``next_cursor`` until it is absent. The caller reads the rows off each page."""
+    ) -> tuple[Any, P, list[tuple[Any, R]]]:
+        """Read a container and pair each original row with its decoded interpretation."""
+        raw, value = self.decode(self.get(path, operation, params=params), page, operation)
+        raw_rows: object = (
+            raw if key is None else cast(dict[str, Any], raw).get(key, []) if isinstance(raw, dict) else None
+        )
+        typed_rows = rows(value)
+        if not isinstance(raw_rows, list) or len(cast(list[Any], raw_rows)) != len(typed_rows):
+            raise click.ClickException(
+                f"{operation}: unreadable answer from the hub at {peer_address(self.hub_url)} (1 validation error)"
+            )
+        return cast(Any, raw), value, list(zip(cast(list[Any], raw_rows), typed_rows, strict=True))
+
+    def get_all[P: _CursorPage, R](
+        self,
+        path: str,
+        operation: str,
+        *,
+        page: TypeAdapter[P],
+        rows: Callable[[P], Sequence[R]],
+        key: str,
+        params: dict[str, str] | None = None,
+    ) -> list[tuple[Any, R]]:
+        """Read all cursor pages as original and decoded row pairs."""
         page_params = dict(params or {})
         page_params["limit"] = "1000"
-        pages: list[P] = []
-        cursor: str | None = None
+        pairs: list[tuple[Any, R]] = []
         while True:
-            if cursor is not None:
-                page_params["cursor"] = cursor
-            _, value = self.decode(self.get(path, operation, params=page_params), page, operation)
-            pages.append(value)
-            cursor = value.next_cursor
-            if cursor is None:
-                return pages
+            _, value, batch = self.decode_rows(path, operation, page=page, rows=rows, key=key, params=page_params)
+            pairs.extend(batch)
+            if value.next_cursor is None:
+                return pairs
+            page_params["cursor"] = value.next_cursor
 
-    def get_before_pages[P: _BeforePage](
+    def get_before_pages[P: _BeforePage, R](
         self,
         path: str,
         operation: str,
         *,
         page: TypeAdapter[P],
-        rows_of: Callable[[P], Sequence[Any]],
+        rows: Callable[[P], Sequence[R]],
+        key: str,
         params: dict[str, str] | None = None,
         want: int | None,
         first_page_only: bool = False,
-    ) -> tuple[list[Any], Any]:
-        """Rows of a keyset-paginated read (``next_before`` fed back as ``before``), newest first: each page decoded
-        against ``page``'s model and ``rows_of`` its rows, concatenated until ``want`` are held (``None``: every page),
-        and the walk stops early when ``next_before`` is ``None``. ``first_page_only`` reads the first page alone,
-        sending ``params`` as given. Returns the rows and the last ``next_before``.
-
-        With ``want`` set, each page asks for ``limit`` = what is still wanted, capped at the ``limit`` in
-        ``params`` when one is given."""
+    ) -> tuple[list[tuple[Any, R]], Any]:
+        """Read keyset pages as row pairs and return the final continuation."""
         page_params = dict(params or {})
         cap = int(page_params["limit"]) if "limit" in page_params else None
-        rows: list[Any] = []
+        pairs: list[tuple[Any, R]] = []
         while True:
             if want is not None and not first_page_only:
-                remaining = want - len(rows)
+                remaining = want - len(pairs)
                 page_params["limit"] = str(remaining if cap is None else min(remaining, cap))
-            _, value = self.decode(self.get(path, operation, params=page_params), page, operation)
-            rows.extend(rows_of(value))
+            _, value, batch = self.decode_rows(path, operation, page=page, rows=rows, key=key, params=page_params)
+            pairs.extend(batch)
             next_before = value.next_before
-            if next_before is None or first_page_only or (want is not None and len(rows) >= want):
-                return rows, next_before
+            if next_before is None or first_page_only or (want is not None and len(pairs) >= want):
+                return pairs, next_before
             page_params["before"] = str(next_before)
 
     def post(

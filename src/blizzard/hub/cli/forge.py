@@ -54,7 +54,9 @@ def forge_create(cli: CliContext, slug: str, name: str | None, kind: str, api_ba
 def forge_list(cli: CliContext, include_retired: bool) -> None:
     """List forges by slug with their id, revision, state and API origin."""
     params = {"include_retired": "true"} if include_retired else None
-    raw, listing = cli.decode(cli.get("/api/forges", "GET /forges", params=params), _FORGES, "GET /forges")
+    raw, listing, _ = cli.decode_rows(
+        "/api/forges", "GET /forges", page=_FORGES, rows=lambda page: page.forges, key="forges", params=params
+    )
     cli.show(raw["forges"], ForgeListing(listing.forges))
 
 

@@ -651,7 +651,7 @@ def _document(body: bytes, content_type: str | None) -> ConfigDocumentV2 | Confi
         raise ProblemHTTPException(
             partial(
                 problems.config_media_type_unsupported_problem,
-                f"unsupported content type {content_type!r}; send a YAML or JSON document",
+                f"unsupported content type {content_type!r}; send a YAML, JSON or TOML document",
             )
         )
     try:
@@ -716,7 +716,7 @@ _APPLY_BODY = {
                 },
             }
         }
-        for media_type in ("application/yaml", "application/json")
+        for media_type in ("application/yaml", "application/json", "application/toml")
     },
 }
 
@@ -728,14 +728,10 @@ async def apply_config(
     applying: Annotated[_Applying, Depends(_applying)],
     dry_run: bool = False,
 ) -> ConfigApplyResponse:
-    """Reconcile a version-2 or version-3 document (YAML or JSON, by `Content-Type`; told apart by `version`) in one
-    transaction: create what is absent, edit only the fields an entry states, enable what is retired, leave unnamed
-    records alone. Forges are declared, and every work source and repository names its forge by id or slug; a
-    version-3 document declares credentials too, and each work source and repository names the one it acts with by id
-    or slug, as `credential`. `dry_run` rolls the same transaction back, with the same `outcomes` and no `apply_id`.
-    422 invalid — `config_version_retired` for any `version` but 2 or 3, a missing one included — 409 conflict, 415
-    unknown `Content-Type`; a refusal leaves the store unchanged. 403 when a cadence write would leave it promoting its
-    runs and the caller may not promote chunks."""
+    """Reconcile a version-2 or version-3 YAML, JSON or TOML document in one transaction.
+
+    A dry run rolls the transaction back; a refusal leaves the store unchanged.
+    See https://github.com/paul-gross/blizzard/blob/master/docs/deployment/config-documents.md for details."""
     document = _document(await request.body(), request.headers.get("content-type"))
     return await run_in_threadpool(_apply, document, identity, applying, dry_run=dry_run)
 

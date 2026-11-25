@@ -9,69 +9,54 @@ from pathlib import Path
 from typing import Any, cast
 
 import click
-from pydantic import BaseModel, TypeAdapter, model_validator
+from pydantic import TypeAdapter, ValidationError
 
 from blizzard.cli.get_group import GetGroup
-from blizzard.foundation.toml_emit import toml_document
 from blizzard.hub.cli.command import AdminCommand
 from blizzard.hub.cli.config import ApplyListing
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
 from blizzard.hub.config import ConfigError, HubConfig
+from blizzard.hub.documents import TOML_CODEC, ConfigDecodeError, ConfigEncodeError, accepted_extensions, codec_for_path
 from blizzard.wire.config import ConfigApplyResponse
 from blizzard.wire.hub_settings import (
+    SETTINGS_EXPORT_ADAPTER,
     HubSettingRow,
     HubSettingsChange,
     HubSettingsChanges,
     HubSettingsView,
-    SettingsExportDocument,
 )
 
 _PATH = "/api/admin/settings"
 
 _SETTINGS = TypeAdapter(HubSettingsView)
 _APPLIED = TypeAdapter(ConfigApplyResponse)
-_EXPORT: TypeAdapter[SettingsExportDocument] = TypeAdapter(SettingsExportDocument)
+_CHANGES = TypeAdapter(HubSettingsChanges)
 
 
-class ChangesAnswer(BaseModel):
-    """A settings change-log page as the hub answered it: decoded against :class:`HubSettingsChanges`, its rows also
-    kept as sent so ``--json`` prints them unchanged."""
-
-    raw_changes: list[Any]
-    page: HubSettingsChanges
-
-    @model_validator(mode="before")
-    @classmethod
-    def _of_answer(cls, value: Any) -> Any:
-        if isinstance(value, dict):
-            answer = cast(dict[str, Any], value)
-            return {"raw_changes": answer.get("changes"), "page": answer}
-        return value
-
-    @property
-    def next_before(self) -> int | None:
-        return self.page.next_before
-
-    def rows(self) -> list[tuple[Any, HubSettingsChange]]:
-        """Each row as sent beside its decoded form."""
-        return list(zip(self.raw_changes, self.page.changes, strict=True))
-
-
-_CHANGES = TypeAdapter(ChangesAnswer)
-
-
-def _json_value(value: object, *, what: str) -> None:
+def _json_value(value: object, *, what: str, parents: set[int] | None = None) -> None:
+    parents = parents if parents is not None else set()
+    identity = id(value)
     if isinstance(value, (date, time)):
         raise click.ClickException(f"{what} contains a TOML date or time; quote it to use a string instead")
     if isinstance(value, float) and not math.isfinite(value):
         raise click.ClickException(f"{what} contains a non-finite number, which JSON cannot represent")
-    if isinstance(value, dict):
-        for item in cast(dict[str, object], value).values():
-            _json_value(item, what=what)
-    elif isinstance(value, list):
-        for item in cast(list[object], value):
-            _json_value(item, what=what)
+    if isinstance(value, (dict, list)):
+        if identity in parents:
+            raise click.ClickException(f"{what} contains a cycle, which JSON cannot represent")
+        parents.add(identity)
+        if isinstance(value, dict):
+            mapping = cast(dict[object, object], value)
+            if any(not isinstance(key, str) for key in mapping):
+                raise click.ClickException(f"{what} contains a non-string key, which JSON cannot represent")
+            items = mapping.values()
+        else:
+            items = cast(list[object], value)
+        for item in items:
+            _json_value(item, what=what, parents=parents)
+        parents.remove(identity)
+    elif value is not None and not isinstance(value, (str, bool, int, float)):
+        raise click.ClickException(f"{what} contains a value which JSON cannot represent")
 
 
 class SettingsListing(Listing):
@@ -103,14 +88,16 @@ def _show(cli: CliContext, raw: Any, view: HubSettingsView) -> None:
 @click.argument("key", required=False)
 def settings_get(cli: CliContext, key: str | None) -> None:
     """Show all settings, or the row for KEY."""
-    raw, view = cli.decode(cli.get(_PATH, "GET /admin/settings"), _SETTINGS, "GET /admin/settings")
+    raw, view, pairs = cli.decode_rows(
+        _PATH, "GET /admin/settings", page=_SETTINGS, rows=lambda p: p.settings, key="settings"
+    )
     if key is None:
         _show(cli, raw, view)
         return
-    index = next((i for i, row in enumerate(view.settings) if row.key == key), None)
-    if index is None:
+    match = next(((raw_row, row) for raw_row, row in pairs if row.key == key), None)
+    if match is None:
         raise click.ClickException(f"no setting named {key}")
-    cli.show(raw["settings"][index], SettingsListing([view.settings[index]]))
+    cli.show(match[0], SettingsListing([match[1]]))
 
 
 def _write(cli: CliContext, body: dict[str, object]) -> None:
@@ -148,7 +135,8 @@ def settings_changes(cli: CliContext, everything: bool) -> None:
         f"{_PATH}/changes",
         "GET /admin/settings/changes",
         page=_CHANGES,
-        rows_of=ChangesAnswer.rows,
+        rows=lambda p: p.changes,
+        key="changes",
         want=None,
         first_page_only=not everything,
     )
@@ -159,12 +147,16 @@ def settings_changes(cli: CliContext, everything: bool) -> None:
 @click.argument("file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option("--dry-run", is_flag=True, help="Show what would change and write nothing.")
 def settings_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
-    """Apply a TOML settings document FILE."""
+    """Apply a settings document FILE."""
+    codec = codec_for_path(file)
+    if codec is None:
+        raise click.UsageError(f"{file.name}: unknown extension; use one of {', '.join(accepted_extensions())}")
     try:
-        document = HubConfig.decode_text(file.read_text(), what=str(file))
-    except ConfigError as exc:
-        raise click.ClickException(str(exc)) from exc
-    _json_value(document, what=str(file))
+        document = codec.decode(file.read_bytes())
+        _json_value(document, what=str(file))
+        document = SETTINGS_EXPORT_ADAPTER.validate_python(document)
+    except (ConfigDecodeError, ValidationError) as exc:
+        raise click.ClickException(f"{file}: {exc}") from exc
     resp = cli.post(
         f"{_PATH}/apply",
         "POST /admin/settings/apply",
@@ -179,8 +171,12 @@ def settings_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
 def settings_export(cli: CliContext) -> None:
     """Export the settings document as TOML (or JSON with --json)."""
     resp = cli.get(f"{_PATH}/export", "GET /admin/settings/export")
-    raw, document = cli.decode(resp, _EXPORT, "GET /admin/settings/export")
+    raw, document = cli.decode(resp, SETTINGS_EXPORT_ADAPTER, "GET /admin/settings/export")
     if cli.as_json:
         cli.show_lines(raw)
     else:
-        click.echo(toml_document(document), nl=False)
+        try:
+            encoded = TOML_CODEC.encode(document)
+        except ConfigEncodeError as exc:
+            raise click.ClickException(str(exc)) from exc
+        click.echo(encoded.decode("utf-8"), nl=False)

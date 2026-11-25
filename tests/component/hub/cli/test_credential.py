@@ -59,6 +59,7 @@ def test_create_list_and_get_with_and_without_json(client: TestClient) -> None:
     _seed()
 
     listed = json.loads(_cred(["list", "--json"]).stdout)
+    assert listed == client.get("/api/credentials").json()["credentials"]
     assert [(r["slug"], r["binding"], r["secret_name"]) for r in listed] == [("gh", "github.token", "gh-test")]
     assert f"gh  gh  {listed[0]['credential_id']}  r1  enabled  forge-invalid  github.token" in _cred(["list"]).output
     shown = _cred(["get", "gh"])

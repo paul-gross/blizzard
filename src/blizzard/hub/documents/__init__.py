@@ -8,14 +8,18 @@ from __future__ import annotations
 
 from pathlib import PurePath
 
-from blizzard.hub.documents.codec import ConfigDecodeError, IConfigCodec
+from blizzard.hub.documents.codec import ConfigDecodeError, ConfigEncodeError, IConfigCodec
 from blizzard.hub.documents.internal.json_codec import JSON_CODEC
+from blizzard.hub.documents.internal.toml_codec import TOML_CODEC
 from blizzard.hub.documents.internal.yaml_codec import YAML_CODEC
 
 __all__ = [
     "CONFIG_CODECS",
+    "JSON_CODEC",
+    "TOML_CODEC",
     "YAML_CODEC",
     "ConfigDecodeError",
+    "ConfigEncodeError",
     "IConfigCodec",
     "accepted_extensions",
     "codec_for_media_type",
@@ -23,7 +27,7 @@ __all__ = [
 ]
 
 #: Every binding, YAML first.
-CONFIG_CODECS: tuple[IConfigCodec, ...] = (YAML_CODEC, JSON_CODEC)
+CONFIG_CODECS: tuple[IConfigCodec, ...] = (YAML_CODEC, JSON_CODEC, TOML_CODEC)
 
 
 def codec_for_media_type(media_type: str) -> IConfigCodec | None:

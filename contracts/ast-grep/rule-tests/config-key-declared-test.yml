@@ -15,3 +15,5 @@ invalid:
     import tomllib as toml
   - |
     from tomllib import loads
+  - |
+    from tomllib import load as read_toml

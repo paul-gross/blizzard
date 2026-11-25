@@ -101,8 +101,14 @@ def source_create(
 def source_list(cli: CliContext, include_retired: bool) -> None:
     """List the built-in hub source and every work source — slug, name, id, revision, state, provider, locator."""
     params = {"include_retired": "true"} if include_retired else None
-    resp = cli.get("/api/work-sources", "GET /work-sources", params=params)
-    raw, listing = cli.decode(resp, _SOURCES, "GET /work-sources")
+    raw, listing, _ = cli.decode_rows(
+        "/api/work-sources",
+        "GET /work-sources",
+        page=_SOURCES,
+        rows=lambda page: page.sources,
+        key="sources",
+        params=params,
+    )
     cli.show(raw["sources"], SourceListing(listing.sources))
 
 

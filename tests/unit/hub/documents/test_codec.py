@@ -6,8 +6,10 @@ import pytest
 
 from blizzard.hub.documents import (
     CONFIG_CODECS,
+    TOML_CODEC,
     YAML_CODEC,
     ConfigDecodeError,
+    ConfigEncodeError,
     IConfigCodec,
     accepted_extensions,
     codec_for_media_type,
@@ -52,13 +54,28 @@ def test_malformed_syntax_carries_the_parser_position() -> None:
     assert raised.value.line is not None
 
 
+@pytest.mark.parametrize(
+    ("document", "problem"),
+    [
+        (b"a: \xff\n", "invalid start byte"),
+        (b"a: \x00\n", "unacceptable character"),
+        (b"a: !!int invalid\n", "invalid literal"),
+    ],
+)
+def test_yaml_reader_and_constructor_failures_are_decode_errors(document: bytes, problem: str) -> None:
+    with pytest.raises(ConfigDecodeError, match=problem) as raised:
+        YAML_CODEC.decode(document)
+
+    assert raised.value.__cause__ is not None
+
+
 @pytest.mark.parametrize("document", [b"", b"- a\n- b\n", b"just a scalar\n"])
 def test_a_root_that_is_not_a_mapping_is_refused(document: bytes) -> None:
     with pytest.raises(ConfigDecodeError, match="mapping"):
         YAML_CODEC.decode(document)
 
 
-@pytest.mark.parametrize("codec", CONFIG_CODECS, ids=lambda codec: codec.extensions[0])
+@pytest.mark.parametrize("codec", CONFIG_CODECS[:2], ids=lambda codec: codec.extensions[0])
 def test_encode_round_trips_through_decode(codec: IConfigCodec) -> None:
     document: dict[str, object] = {
         "yes": "yes",
@@ -100,6 +117,7 @@ def test_json_encodes_json() -> None:
         ("text/x-yaml", (".yaml", ".yml")),
         ("application/json", (".json",)),
         ("Application/JSON; charset=utf-8", (".json",)),
+        ("application/toml", (".toml",)),
     ],
 )
 def test_registry_resolves_a_media_type_to_the_binding_declaring_it(
@@ -113,7 +131,12 @@ def test_registry_resolves_a_media_type_to_the_binding_declaring_it(
 
 @pytest.mark.parametrize(
     ("path", "media_type"),
-    [("graph.yaml", "application/yaml"), ("a/b/graph.YML", "application/yaml"), ("graph.json", "application/json")],
+    [
+        ("graph.yaml", "application/yaml"),
+        ("a/b/graph.YML", "application/yaml"),
+        ("graph.json", "application/json"),
+        ("graph.TOML", "application/toml"),
+    ],
 )
 def test_registry_resolves_a_path_by_its_extension(path: str, media_type: str) -> None:
     assert codec_for_path(path) is codec_for_media_type(media_type)
@@ -126,7 +149,31 @@ def test_registry_answers_none_for_what_no_binding_declares() -> None:
 
 
 def test_accepted_extensions_lists_every_declared_extension() -> None:
-    assert accepted_extensions() == (".yaml", ".yml", ".json")
+    assert accepted_extensions() == (".yaml", ".yml", ".json", ".toml")
+
+
+@pytest.mark.parametrize("codec", CONFIG_CODECS, ids=lambda codec: codec.extensions[0])
+def test_common_domain_round_trips(codec: IConfigCodec) -> None:
+    document: dict[str, object] = {"name": "é", "nested": {"values": [1, 2.5, True, "yes"]}}
+    assert codec.decode(codec.encode(document)) == document
+
+
+@pytest.mark.parametrize("source", [b"x = 2001-01-01", b"x = inf", b"x = [nan]"])
+def test_toml_refuses_non_json_values(source: bytes) -> None:
+    with pytest.raises(ConfigDecodeError):
+        TOML_CODEC.decode(source)
+
+
+@pytest.mark.parametrize("value", [None, [None], float("inf"), {"x": float("nan")}, (1, 2), {1: "x"}])
+def test_toml_refuses_unrepresentable_values(value: object) -> None:
+    with pytest.raises(ConfigEncodeError):
+        TOML_CODEC.encode({"value": value})
+
+
+def test_toml_syntax_error_has_position() -> None:
+    with pytest.raises(ConfigDecodeError) as raised:
+        TOML_CODEC.decode(b"x = 1\nx = 2\n")
+    assert (raised.value.line, raised.value.column) == (2, 6)
 
 
 def test_json_reads_tab_whitespace_and_surrogate_pair_escapes() -> None:

@@ -198,8 +198,10 @@ def _resolve_cadence(cli: CliContext, slug: str, project: str | None) -> tuple[A
     """The cadence SLUG within ``project``, a retired one included, as sent beside its decoded form. With no project
     named, SLUG resolves only in a tenant holding one project: a slug is unique within its project alone."""
     params = {"include_retired": "true"} | project_query(_project(cli, project))
-    raw, rows = cli.decode(cli.get("/api/cadences", "GET /cadences", params=params), _CADENCES, "GET /cadences")
-    matched = next(((sent, row) for sent, row in zip(raw, rows, strict=True) if row.slug == slug), None)
+    _, _, pairs = cli.decode_rows(
+        "/api/cadences", "GET /cadences", page=_CADENCES, rows=lambda page: page, key=None, params=params
+    )
+    matched = next(((sent, row) for sent, row in pairs if row.slug == slug), None)
     if matched is None:
         raise click.ClickException(f"unknown cadence {slug!r}")
     return matched

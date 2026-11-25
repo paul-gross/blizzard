@@ -6,12 +6,14 @@ import pytest
 
 from blizzard.foundation.config_keys import INTEGER, TABLE, ConfigKey, ConfigRegistry, Lifetime
 from blizzard.foundation.settings_record.vocabulary import Entry
+from blizzard.hub.config import ConfigError
 from blizzard.hub.settings.footing import (
     SettingNotLive,
     SettingUnknown,
     export_document,
     require_settable,
     setting_keys,
+    validate_document_values,
 )
 
 REGISTRY = ConfigRegistry(
@@ -63,3 +65,13 @@ def test_export_leaves_out_every_key_apply_would_refuse() -> None:
     document = export_document(REGISTRY, entries)
     assert document == {"live": 5, "group": {"child": 6}}
     require_settable(REGISTRY, {"live", "group.child"})
+
+
+def test_document_values_reject_nonfinite_and_cycles_but_allow_shared_values() -> None:
+    shared: list[object] = [1.5]
+    validate_document_values({"first": shared, "second": shared})
+    cycle: list[object] = []
+    cycle.append(cycle)
+    for value in (float("nan"), {"nested": [float("inf")]}, cycle):
+        with pytest.raises(ConfigError):
+            validate_document_values({"value": value})

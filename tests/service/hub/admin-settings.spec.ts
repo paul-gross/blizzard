@@ -27,6 +27,18 @@ test('implicit operator sees conflicts and refusals without partial writes', asy
   expect(current.body.settings).toEqual(expect.arrayContaining([expect.objectContaining({ key: 'action_pass_seconds', value: 5, written_by: 'operator' })]));
 });
 
+test('invalid YAML settings documents are refused without writes', async ({ api }) => {
+  const before = (await api.get(path)).body;
+  const history = (await api.get(path + '/changes')).body;
+  for (const data of ['auth: &a\n  child: *a\n', 'action_pass_seconds: \x00']) {
+    const response = await api.post(path + '/apply', { headers: { 'Content-Type': 'application/yaml' }, data });
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('settings_invalid');
+  }
+  expect((await api.get(path)).body).toEqual(before);
+  expect((await api.get(path + '/changes')).body).toEqual(history);
+});
+
 test('apply previews atomically and CLI TOML export reapplies unchanged', async ({ api, cli }, testInfo) => {
   const initial = await api.get(path);
   const revision = initial.body.revision as number;
@@ -59,5 +71,15 @@ test('apply previews atomically and CLI TOML export reapplies unchanged', async 
     expect.arrayContaining([expect.objectContaining({ key: 'action_pass_seconds', op: 'unchanged' }), expect.objectContaining({ key: 'transcripts.record_max_bytes', op: 'unchanged' })]),
   );
   expect(JSON.parse(reapplied.stdout).outcomes.every((outcome: { op: string }) => outcome.op === 'unchanged')).toBe(true);
+  for (const [contentType, data] of [
+    ['application/toml', exported.stdout],
+    ['application/yaml', 'action_pass_seconds: 6\ntranscripts:\n  record_max_bytes: 1024\n'],
+    ['application/json', JSON.stringify(document)],
+  ] as const) {
+    const response = await api.post(path + '/apply', { headers: { 'Content-Type': contentType }, data });
+    expect(response.status).toBe(200);
+    expect(response.body.outcomes.every((outcome: { op: string }) => outcome.op === 'unchanged')).toBe(true);
+  }
   expect((await api.get(path)).body.revision).toBe(revision + 1);
+  expect((await api.get(path + '/changes')).body.changes).toEqual(changes.body.changes);
 });

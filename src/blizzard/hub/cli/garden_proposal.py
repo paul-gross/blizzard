@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 import click
-from pydantic import BaseModel, TypeAdapter, model_validator
+from pydantic import TypeAdapter
 
 from blizzard.cli.collaborators import Response
 from blizzard.cli.get_group import GetGroup
@@ -24,32 +24,7 @@ from blizzard.wire.garden_proposal import (
     GardenProposalView,
 )
 
-
-class ProposalsPageAnswer(BaseModel):
-    """A proposals page as the hub answered it: decoded against :class:`GardenProposalsPageView`, its rows also kept
-    as sent so ``--json`` prints them unchanged."""
-
-    raw_proposals: list[Any]
-    page: GardenProposalsPageView
-
-    @model_validator(mode="before")
-    @classmethod
-    def _of_answer(cls, value: Any) -> Any:
-        if isinstance(value, dict):
-            answer = cast(dict[str, Any], value)
-            return {"raw_proposals": answer.get("proposals", []), "page": answer}
-        return value
-
-    @property
-    def next_cursor(self) -> str | None:
-        return self.page.next_cursor
-
-    def rows(self) -> list[tuple[Any, GardenProposalView]]:
-        """Each row as sent beside its decoded form."""
-        return list(zip(self.raw_proposals, self.page.proposals, strict=True))
-
-
-_PROPOSALS_PAGE = TypeAdapter(ProposalsPageAnswer)
+_PROPOSALS_PAGE = TypeAdapter(GardenProposalsPageView)
 _PROPOSAL = TypeAdapter(GardenProposalView)
 _ACCEPTED = TypeAdapter(GardenProposalAcceptResponse)
 
@@ -119,8 +94,14 @@ def garden_proposal_group() -> None:
 def garden_proposal_list(cli: CliContext, origin: str | None, project: str | None) -> None:
     """List every garden proposal, newest first."""
     params = ({"origin": origin} if origin is not None else {}) | project_query(project)
-    pages = cli.get_all("/api/garden-proposals", "GET /garden-proposals", page=_PROPOSALS_PAGE, params=params)
-    rows = [row for page in pages for row in page.rows()]
+    rows = cli.get_all(
+        "/api/garden-proposals",
+        "GET /garden-proposals",
+        page=_PROPOSALS_PAGE,
+        rows=lambda p: p.proposals,
+        key="proposals",
+        params=params,
+    )
     cli.show([sent for sent, _ in rows], GardenProposalListing(rows))
 
 

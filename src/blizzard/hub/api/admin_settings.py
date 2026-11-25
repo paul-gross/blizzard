@@ -6,7 +6,9 @@ from functools import partial
 from typing import Annotated, Any, NoReturn, Protocol, cast
 
 from dishka.integrations.fastapi import FromDishka, inject_sync
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, Query, Request
+from pydantic import ValidationError
+from starlette.concurrency import run_in_threadpool
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.config_keys import TABLE, ConfigRegistry, Lifetime
@@ -20,12 +22,15 @@ from blizzard.hub.api.door import RequestDoor
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problems_admin import setting_not_live_problem, setting_unknown_problem, settings_invalid_problem
 from blizzard.hub.auth.models import ResolvedIdentity
+from blizzard.hub.config import ConfigError
+from blizzard.hub.documents import ConfigDecodeError, codec_for_media_type
 from blizzard.hub.settings.footing import (
     HubSettingsFooting,
     SettingNotLive,
     SettingUnknown,
     require_settable,
     settable_declarations,
+    validate_document_values,
 )
 from blizzard.hub.settings.footing import (
     export_document as export_settable_document,
@@ -36,6 +41,7 @@ from blizzard.hub.settings.service import HubSettingsAuthoring
 from blizzard.hub.settings.values import thaw
 from blizzard.wire.config import ConfigApplyOutcome, ConfigApplyResponse, FieldChangeView
 from blizzard.wire.hub_settings import (
+    SETTINGS_EXPORT_ADAPTER,
     HubSettingRow,
     HubSettingsChange,
     HubSettingsChanges,
@@ -173,6 +179,10 @@ def changes(
 
 
 def _document(footing: HubSettingsFooting, document: dict[str, object]) -> dict[str, object]:
+    try:
+        validate_document_values(document)
+    except ConfigError as exc:
+        _refuse(settings_invalid_problem, str(exc))
     registry = footing.key_registry
     result: dict[str, object] = {}
 
@@ -190,10 +200,12 @@ def _document(footing: HubSettingsFooting, document: dict[str, object]) -> dict[
     return result
 
 
-@router.post("/apply", response_model=ConfigApplyResponse)
-@inject_sync
-def apply_document(
-    document: dict[str, object], identity: Admin, authoring: Authoring, footing: Footing, dry_run: bool = False
+def _apply_document(
+    document: SettingsExportDocument,
+    identity: ResolvedIdentity,
+    authoring: HubSettingsAuthoring,
+    footing: HubSettingsFooting,
+    dry_run: bool,
 ) -> ConfigApplyResponse:
     entries = _document(footing, document)
     if any(value is None for value in entries.values()):
@@ -216,6 +228,42 @@ def apply_document(
             )
         )
     return ConfigApplyResponse(dry_run=dry_run, apply_id=apply_id, outcomes=outcomes)
+
+
+@inject_sync
+def _apply_services(authoring: Authoring, footing: Footing) -> tuple[HubSettingsAuthoring, HubSettingsFooting]:
+    return authoring, footing
+
+
+_APPLY_BODY = {
+    "required": True,
+    "content": {
+        media_type: {"schema": {"type": "object", "additionalProperties": True}}
+        for media_type in ("application/json", "application/yaml", "application/toml")
+    },
+}
+
+
+@router.post("/apply", response_model=ConfigApplyResponse, openapi_extra={"requestBody": _APPLY_BODY})
+async def apply_document(
+    request: Request,
+    identity: Admin,
+    services: Annotated[tuple[HubSettingsAuthoring, HubSettingsFooting], Depends(_apply_services)],
+    dry_run: bool = False,
+) -> ConfigApplyResponse:
+    content_type = request.headers.get("content-type")
+    codec = codec_for_media_type(content_type or "")
+    if codec is None:
+        raise ProblemHTTPException(
+            partial(problems.config_media_type_unsupported_problem, f"unsupported content type {content_type!r}")
+        )
+    try:
+        document = SETTINGS_EXPORT_ADAPTER.validate_python(codec.decode(await request.body()))
+    except ConfigDecodeError as exc:
+        _refuse(settings_invalid_problem, str(exc))
+    except ValidationError as exc:
+        _refuse(settings_invalid_problem, str(exc.errors(include_input=False, include_url=False)))
+    return await run_in_threadpool(_apply_document, document, identity, *services, dry_run)
 
 
 @router.get("/export", response_model=SettingsExportDocument)

@@ -11,7 +11,6 @@ from pydantic import TypeAdapter
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.pages import read_pages
 from blizzard.hub.cli.project_option import project_query
 from blizzard.hub.cli.views import ChunkLine, Cost, QuestionLine, RunnerLine
 from blizzard.wire.chunk import ChunksPageView, ChunkSummary
@@ -61,7 +60,9 @@ class FleetStatus:
 def status(cli: CliContext, project: str | None) -> None:
     """The fleet view: every chunk with its derived status, the runners, and open questions."""
     lens = project_query(project)
-    raw_chunks, pages = read_pages(cli, "/api/chunks", "GET /chunks", page=_CHUNKS, key="chunks", params=lens)
+    chunk_pairs = cli.get_all(
+        "/api/chunks", "GET /chunks", page=_CHUNKS, rows=lambda p: p.chunks, key="chunks", params=lens
+    )
     raw_runners, registry = cli.decode(cli.get("/api/runners", "GET /runners"), _RUNNERS, "GET /runners")
     raw_questions, questions = cli.decode(
         cli.get("/api/questions", "GET /questions", params=lens), _QUESTIONS, "GET /questions"
@@ -70,9 +71,17 @@ def status(cli: CliContext, project: str | None) -> None:
         cli.get("/api/spend", "GET /spend", params={"since": _FLEET_SPEND_SINCE} | lens), _SPEND, "GET /spend"
     )
     view = FleetStatus(
-        chunks=[row for page in pages for row in page.chunks],
+        chunks=[row for _, row in chunk_pairs],
         runners=registry.runners,
         questions=questions,
         spend=spend,
     )
-    cli.show({"chunks": raw_chunks, "runners": raw_runners, "questions": raw_questions, "spend": raw_spend}, view)
+    cli.show(
+        {
+            "chunks": [raw for raw, _ in chunk_pairs],
+            "runners": raw_runners,
+            "questions": raw_questions,
+            "spend": raw_spend,
+        },
+        view,
+    )

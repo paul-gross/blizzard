@@ -8,7 +8,6 @@ from pydantic import TypeAdapter
 from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.pages import read_pages
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing, urgency_label
 from blizzard.wire.queue import BacklogPageView, BacklogPeekEntry, BacklogPeekResponse
@@ -37,10 +36,15 @@ def backlog_group() -> None:
 @project_option(required_by_hub=False)
 def backlog_show(cli: CliContext, project: str | None) -> None:
     """Show the whole backlog, front first, at its whole-list positions."""
-    raw, pages = read_pages(
-        cli, "/api/backlog", "GET /backlog", page=_PAGE, key="entries", params=project_query(project)
+    pairs = cli.get_all(
+        "/api/backlog",
+        "GET /backlog",
+        page=_PAGE,
+        rows=lambda p: p.entries,
+        key="entries",
+        params=project_query(project),
     )
-    cli.show({"entries": raw}, BacklogListing([entry for page in pages for entry in page.entries]))
+    cli.show({"entries": [raw for raw, _ in pairs]}, BacklogListing([entry for _, entry in pairs]))
 
 
 @backlog_group.command("set", cls=FleetCommand)
@@ -66,8 +70,8 @@ def backlog_move(cli: CliContext, chunk_id: str, position: int) -> None:
     """Move CHUNK_ID to POSITION in the backlog (``0`` is the front).
 
     No other chunk changes place. Refused when CHUNK_ID is not in the backlog, a ready chunk included."""
-    pages = cli.get_all("/api/backlog", "GET /backlog", page=_PAGE)
-    rest = [entry.chunk_id for page in pages for entry in page.entries if entry.chunk_id != chunk_id]
+    pairs = cli.get_all("/api/backlog", "GET /backlog", page=_PAGE, rows=lambda p: p.entries, key="entries")
+    rest = [entry.chunk_id for _, entry in pairs if entry.chunk_id != chunk_id]
     index = min(max(position, 0), len(rest))
     after_chunk_id = rest[index - 1] if index > 0 else None
     resp = cli.post(

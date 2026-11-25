@@ -9,9 +9,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Protocol
 
-from blizzard.hub.documents.errors import ConfigDecodeError
+from blizzard.hub.documents.errors import ConfigDecodeError, ConfigEncodeError
 
-__all__ = ["ConfigDecodeError", "IConfigCodec"]
+__all__ = ["ConfigDecodeError", "ConfigEncodeError", "IConfigCodec"]
 
 
 class IConfigCodec(Protocol):

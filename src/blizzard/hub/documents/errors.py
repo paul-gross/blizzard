@@ -13,3 +13,7 @@ class ConfigDecodeError(ValueError):
         self.problem = problem
         self.line = line
         self.column = column
+
+
+class ConfigEncodeError(ValueError):
+    """A document cannot be represented by the requested codec."""

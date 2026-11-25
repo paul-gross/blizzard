@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, NotRequired, TypedDict, cast
+from typing import NotRequired, TypedDict, cast
 
 import click
-from pydantic import BaseModel, TypeAdapter, model_validator
+from pydantic import TypeAdapter
 
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.cli.refusal import refusal_of
@@ -47,31 +47,7 @@ _KINDS = click.Choice(
 )
 
 
-class ChangesPageAnswer(BaseModel):
-    """A change-log page as the hub answered it: decoded against :class:`ConfigChangesPage`, its rows also kept as
-    sent so ``--json`` prints them unchanged."""
-
-    raw_changes: list[Any]
-    page: ConfigChangesPage
-
-    @model_validator(mode="before")
-    @classmethod
-    def _of_answer(cls, value: Any) -> Any:
-        if isinstance(value, dict):
-            answer = cast(dict[str, Any], value)
-            return {"raw_changes": answer.get("changes"), "page": answer}
-        return value
-
-    @property
-    def next_before(self) -> int | None:
-        return self.page.next_before
-
-    def rows(self) -> list[tuple[Any, ConfigChangeView]]:
-        """Each row as sent beside its decoded form."""
-        return list(zip(self.raw_changes, self.page.changes, strict=True))
-
-
-CHANGES_PAGE = TypeAdapter(ChangesPageAnswer)
+CHANGES_PAGE = TypeAdapter(ConfigChangesPage)
 _APPLIED = TypeAdapter(ConfigApplyResponse)
 #: The document model an export decodes against, by the version it asks for.
 _DOCUMENTS: dict[str, TypeAdapter[ConfigDocumentV2 | ConfigDocumentV3]] = {
@@ -155,7 +131,8 @@ def config_changes(cli: CliContext, kind: str | None, key: str | None, everythin
         "/api/config/changes",
         "GET /config/changes",
         page=CHANGES_PAGE,
-        rows_of=ChangesPageAnswer.rows,
+        rows=lambda p: p.changes,
+        key="changes",
         params=params,
         want=None,
         first_page_only=not everything,
@@ -167,12 +144,11 @@ def config_changes(cli: CliContext, kind: str | None, key: str | None, everythin
 @click.argument("file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option("--dry-run", "dry_run", is_flag=True, default=False, help="Show what would change and write nothing.")
 def config_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
-    """Apply the declarative document FILE (.yaml, .yml or .json) in one transaction.
+    """Apply the declarative document FILE (.yaml, .yml, .json or .toml) in one transaction.
 
-    Creates what is absent, edits only the fields the document states, enables what is retired, and never
-    touches a record it leaves out. Any refusal leaves everything unchanged; --dry-run prints the same outcome. The
-    hub applies a version-2 or a version-3 document; version 3 declares credentials, and names the one each work
-    source and repository acts with."""
+    Creates, edits or enables declared records; omitted records stay unchanged. A refusal writes nothing.
+    --dry-run prints the outcome without writing.
+    See https://github.com/paul-gross/blizzard/blob/master/docs/deployment/config-documents.md."""
     codec = codec_for_path(file)
     if codec is None:
         raise click.UsageError(f"{file.name}: unknown extension; use one of {', '.join(accepted_extensions())}")

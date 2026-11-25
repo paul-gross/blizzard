@@ -8,7 +8,6 @@ from pydantic import TypeAdapter
 from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.pages import read_pages
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing, urgency_label
 from blizzard.wire.queue import QueuePageView, QueuePeekEntry, QueuePeekResponse
@@ -35,8 +34,10 @@ def queue_group() -> None:
 @project_option(required_by_hub=False)
 def queue_show(cli: CliContext, project: str | None) -> None:
     """Show the whole ready queue, front first."""
-    raw, pages = read_pages(cli, "/api/queue", "GET /queue", page=_PAGE, key="entries", params=project_query(project))
-    cli.show({"entries": raw}, QueueListing([entry for page in pages for entry in page.entries]))
+    pairs = cli.get_all(
+        "/api/queue", "GET /queue", page=_PAGE, rows=lambda p: p.entries, key="entries", params=project_query(project)
+    )
+    cli.show({"entries": [raw for raw, _ in pairs]}, QueueListing([entry for _, entry in pairs]))
 
 
 @queue_group.command("set", cls=FleetCommand)
@@ -62,8 +63,8 @@ def queue_move(cli: CliContext, chunk_id: str, position: int) -> None:
     """Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).
 
     No other chunk changes place. Refused when CHUNK_ID is not ready, a backlog chunk included."""
-    pages = cli.get_all("/api/queue", "GET /queue", page=_PAGE)
-    rest = [entry.chunk_id for page in pages for entry in page.entries if entry.chunk_id != chunk_id]
+    pairs = cli.get_all("/api/queue", "GET /queue", page=_PAGE, rows=lambda p: p.entries, key="entries")
+    rest = [entry.chunk_id for _, entry in pairs if entry.chunk_id != chunk_id]
     index = min(max(position, 0), len(rest))
     after_chunk_id = rest[index - 1] if index > 0 else None
     resp = cli.post(

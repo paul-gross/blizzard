@@ -111,8 +111,14 @@ def credential_create(
 def credential_list(cli: CliContext, include_retired: bool) -> None:
     """List credentials by slug with their id, revision, state, forge, binding and authority."""
     params = {"include_retired": "true"} if include_retired else None
-    resp = cli.get("/api/credentials", "GET /credentials", params=params)
-    raw, listed = cli.decode(resp, _LIST, "GET /credentials")
+    raw, listed, _ = cli.decode_rows(
+        "/api/credentials",
+        "GET /credentials",
+        page=_LIST,
+        rows=lambda page: page.credentials,
+        key="credentials",
+        params=params,
+    )
     cli.show(raw["credentials"], CredentialListing(listed.credentials))
 
 

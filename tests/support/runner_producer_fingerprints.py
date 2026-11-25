@@ -2,7 +2,7 @@
 
 FINGERPRINTS = """\
 src/blizzard/hub/api/admin_invariants.py 2 3b7a7969c36d6e20b5a5b84738c13f894c38329ecaa4c01d5a4b99a595e897b8
-src/blizzard/hub/api/admin_settings.py 3 94b706743c5b0ea3d59069d9a657dab0dc82a960cb78ce5049dac65285351f17
+src/blizzard/hub/api/admin_settings.py 4 6ecc1760a44fd73526bdfb4410d99635e2af47a26e7567fa0a6b8bc051a5123d
 src/blizzard/hub/api/admin_tenants.py 9 dfc8f084e6dfd45c2a25ef48955ce4f58b6eabd1909fc3869de25d7500718757
 src/blizzard/hub/api/analytics.py 12 2734bfe63ccfd2ebc48a7e817329581f9463a86ca09f93a2dd21ecd88792d697
 src/blizzard/hub/api/auth.py 5 12ac8948923033da98c0be3f084798ab23f1f1be9f9306a73736ad0eac3db863
@@ -14,7 +14,7 @@ src/blizzard/hub/api/chunk_edit.py 3 b78147f9b8c131e7db259cd48ffa5488234ffa1f2e6
 src/blizzard/hub/api/chunk_views.py 1 b76c0da7085a6f79cf674a9ee2cd3dba4cad778ed5390e55b04d7361ac40cbcd
 src/blizzard/hub/api/chunks.py 59 7387245819b417f093c456f24470f725d2cd107c17efbbbb3ba177706a6a64ba
 src/blizzard/hub/api/clock.py 6 745d3fe368177b14c1abc62605d05016683895e6da0c8bd54ebc2772e1affcf0
-src/blizzard/hub/api/config.py 5 a1e561089ec3706a31a41533eb9660dbb485086ac2fdd72f417cca4b236a8b1e
+src/blizzard/hub/api/config.py 5 4fb425ce62ae489a9ccff4a5ae05d7682f2c38e4647494b75d4e08aef9c5e673
 src/blizzard/hub/api/credential_params.py 1 29a4c9fa85532ba645b2dbc6d74afc0aa6f4774c0cd5c94925b487633fdb3a9e
 src/blizzard/hub/api/credentials.py 8 4873b3d4dedbcfc7245a39ead180d9ef0eadf47b736b828fa0a1df81263e7d9c
 src/blizzard/hub/api/decisions.py 6 2c32b27ecace4744f17591e0cb8e2aa58247ce790e9ed8fdfdf950ed93283ac4
