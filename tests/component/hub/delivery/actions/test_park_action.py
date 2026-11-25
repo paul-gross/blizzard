@@ -15,7 +15,10 @@ from blizzard.hub.delivery.actions.landing.park import Park
 from blizzard.hub.delivery.actions.landing.repo import Admitted, Landed, LandingRun, RepoLanding, Waiting
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
+from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.chunk.no_code import no_code_marker
+from blizzard.hub.domain.chunk.pr_markers import decode_pr_marker, pr_marker_content
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.forge.landing import ChangeState, CommitSummary, ComparisonStatus, ForgeRejected, ForgeUnavailable
@@ -173,6 +176,42 @@ def test_refused_watch_of_earlier_epoch_records_the_specific_wait_without_repost
     assert answer.choice == "awaiting-merge"
     assert f"awaiting-external-merge/{_WIDGET}/1" in sink.markers()
     assert f"delivery-pr/{_WIDGET}/1" not in sink.markers()
+
+
+def test_revisit_after_first_park_lands_records_second_park_wait_on_refused_read():
+    visit = parked_visit((_WIDGET, _GADGET))
+    targets = tuple(
+        replace(target, landing_policy=LandingPolicy.PARK, landing_position=index)
+        for index, target in enumerate(visit.resolution.targets)
+    )
+    first = replace(marker(visit), data=pr_marker_content(_WIDGET, 1, "http://forge/acme/widget/pull/1"))
+    second = _row(
+        ArtifactKind.ASSET, f"delivery-pr/{_GADGET}/2", pr_marker_content(_GADGET, 2, "http://forge/acme/gadget/pull/2")
+    )
+    old_wait = _row(ArtifactKind.ASSET, f"awaiting-external-merge/{_GADGET}/2", "")
+    visit = replace(
+        visit, epoch=2, resolution=replace(visit.resolution, targets=targets), markers=(first, second, old_wait)
+    )
+    forge = _forge(_WIDGET, _GADGET)
+    forge.repo(_WIDGET).changes[1] = _merged(visit)
+    forge.repo(_GADGET).replies["recently_closed"] = [ForgeRejected("cannot read")]
+
+    answer, sink = _land(forge, visit)
+
+    assert answer.choice == "awaiting-merge"
+    assert [row.repo for row in sink.landings()] == [_WIDGET]
+    assert f"awaiting-external-merge/{_GADGET}/2" in sink.markers()
+    assert f"delivery-pr/{_GADGET}/2" not in sink.markers()
+    rows = [
+        *visit.markers,
+        *(replace(_row(ArtifactKind.ASSET, name, data), epoch=2) for name, data in sink.markers().items()),
+    ]
+    markers = [row for row in rows if not row.name.startswith("delivery-pr/")]
+    markers.append(replace(_row(ArtifactKind.ASSET, f"merged/{_WIDGET}", "merged"), epoch=2))
+    prs = [parsed for row in rows if (parsed := decode_pr_marker(row.name, row.epoch, row.data)) is not None]
+    view = DeliveryRead.of(ChunkFacts(minted=True), DeliverySources(markers=markers, pr_markers=prs))
+    assert [p.repo for p in view.open_prs] == [_GADGET]
+    assert view.awaiting_external_merge
 
 
 def test_each_parked_repository_uses_its_own_timeout_and_marker_clock():
