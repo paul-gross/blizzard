@@ -11,6 +11,9 @@ import { ConfigMaster } from './config-master';
 import { ConfigFieldTreeDialog } from './config-field-tree-dialog';
 import type { RevisionRowVm } from './config-history.model';
 import { ConfigRecordPanel, type ConfigRecordVm } from './config-record-panel';
+import type { HubSettingDraft } from './hub-settings/hub-settings.domain';
+import { hubSettingRules } from './hub-settings/hub-settings.form';
+import { HUB_SETTING_FIELD_VIEWS } from './hub-settings/hub-settings.model';
 import { SECRET_CREATE_FIELD_VIEWS } from './secrets/secrets.model';
 import { secretCreateRules } from './secrets/secret.form';
 import type { SecretCreateDraft } from './secrets/secret.domain';
@@ -185,6 +188,26 @@ async function mountSecretForm() {
   return fixture;
 }
 
+async function mountSettingForm() {
+  await TestBed.configureTestingModule({
+    imports: [ConfigFieldTreeDialog], providers: [provideZonelessChangeDetection()],
+  }).compileComponents();
+  const fixture = TestBed.createComponent(ConfigFieldTreeDialog<HubSettingDraft>);
+  const baseline: HubSettingDraft = { value: '60', useDefault: true };
+  const draft = form(signal<HubSettingDraft>({ ...baseline }), hubSettingRules(() => 60), {
+    injector: TestBed.inject(Injector),
+  });
+  fixture.componentRef.setInput('heading', 'Edit egress.sweep_seconds');
+  fixture.componentRef.setInput('mode', 'edit');
+  fixture.componentRef.setInput('form', draft);
+  fixture.componentRef.setInput('baseline', baseline);
+  fixture.componentRef.setInput('fields', HUB_SETTING_FIELD_VIEWS);
+  fixture.componentRef.setInput('submitLabel', 'Save');
+  fixture.componentRef.setInput('testidPrefix', 'hub-setting-edit');
+  await fixture.whenStable();
+  return fixture;
+}
+
 async function sweep(
   width: number,
   body: (root: HTMLElement) => Promise<void> | void,
@@ -293,6 +316,20 @@ describe('admin config surfaces shell sweep (web:shell-sweep)', () => {
     }, mountSecretForm);
   });
 
+  it.each([390, 320])('hub setting edit at %ipx: the value and the Default chip are reachable without overflow', async (width) => {
+    await sweep(width, () => {
+      const value = document.querySelector<HTMLElement>('[data-testid="hub-setting-edit-field-value"]')!;
+      const chip = document.querySelector<HTMLButtonElement>('[data-testid="hub-setting-edit-field-useDefault"] fleet-kit-chip button')!;
+      for (const el of [value, chip]) {
+        const box = el.getBoundingClientRect();
+        expect(box.width).toBeGreaterThan(0);
+        expect(box.left).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(width);
+      }
+      expect(chip.getAttribute('aria-pressed')).toBe('true');
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+    }, mountSettingForm);
+  });
   it('desktop: the detail carries its write controls and no CLI command, with no overflow', async () => {
     await sweep(
       1280,

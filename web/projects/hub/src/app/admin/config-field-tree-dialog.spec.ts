@@ -7,7 +7,7 @@ import { KitField, KitTextInput, type SaveOutcome, submitForm } from 'fleet';
 import { ConfigFieldTreeDialog } from './config-field-tree-dialog';
 import type { ConfigFieldView } from './config-field-tree.model';
 
-import { SourceDialogHost, TimeoutDialogHost, UrgencyDialogHost } from './config-field-tree-dialog.story-host';
+import { SettingDialogHost, SourceDialogHost, TimeoutDialogHost, UrgencyDialogHost } from './config-field-tree-dialog.story-host';
 
 interface ProjectedDraft { name: string; setting: { value: string } }
 
@@ -316,6 +316,26 @@ describe('ConfigFieldTreeDialog', () => {
       host.f.policy().value.set('merge');
       await fixture.whenStable();
       expect(document.querySelector('[data-testid="kit-or-default-chip"]')).toBeNull();
+    });
+  });
+
+  describe('a text field with a default choice', () => {
+    const chip = () => document.querySelector<HTMLButtonElement>('[data-testid="set-field-useDefault"] fleet-kit-chip button')!;
+    const value = () => document.querySelector<HTMLInputElement>('[data-testid="set-field-value"] input, input[data-testid="set-field-value"]')!;
+    const save = () => document.querySelector<HTMLButtonElement>('[data-testid="kit-form-save"]')!;
+
+    it('disables the input when Default is chosen, names it in the diff, and saves the choice', async () => {
+      const { host, fixture, q, submit } = await mount(SettingDialogHost, { useDefault: false });
+      await fixture.whenStable();
+      expect(value().disabled).toBe(false);
+      expect(save().disabled).toBe(true);
+      chip().click();
+      await fixture.whenStable();
+      expect(value().disabled).toBe(true);
+      expect(q('set-diff')!.textContent).toContain('Default');
+      expect(q('set-diff')!.textContent).toContain('75');
+      await submit();
+      expect(host.saved).toEqual([{ value: '75', useDefault: true }]);
     });
   });
 
