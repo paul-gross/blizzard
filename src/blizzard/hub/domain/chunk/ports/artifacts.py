@@ -45,8 +45,8 @@ class IReadChunkArtifactsRepository(Protocol):
         ...
 
     def load_latest_artifacts(self, chunk_id: str) -> list[StoredArtifact]:
-        """The row per ``(node_name, name)`` that ``LatestArtifacts.of`` keeps from :meth:`load_artifacts` — highest
-        epoch, then earliest ``(seq, artifact_id)`` — in that same ``(seq, artifact_id)`` order."""
+        """One row of the chunk per ``(node_name, name)`` — the highest epoch, then within it the earliest
+        ``(seq, artifact_id)`` — returned in ``(seq, artifact_id)`` order."""
         ...
 
     def load_artifacts_for(self, chunk_ids: Sequence[str]) -> dict[str, list[StoredArtifact]]:

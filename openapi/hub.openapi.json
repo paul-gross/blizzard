@@ -65846,7 +65846,7 @@
     },
     "/api/runs": {
       "get": {
-        "description": "Every routine run minted in `[since, until)`, newest first \u2014 of the project `?project=` names, else of\nevery project; `since`/`until` default to the last 24 hours ending now. Each row carries its routine, scope,\nmode, its derived outcome, and, where it delivered, every finding-set row it published.\nNot paged: the window, at most 366 days, bounds the set, and the answer is the window's whole run list.\n422 on a malformed instant or an inverted span.",
+        "description": "Every routine run minted in `[since, until)`, newest first \u2014 of the project `?project=` names, else of\nevery project; `since`/`until` default to the last 24 hours ending now. Each row carries its routine, scope,\nmode, its derived outcome, and, where it delivered, every finding-set row it published.\nNot paged: the window's span cap bounds the set, and the answer is the window's whole run list.\n422 on a malformed instant or an inverted span.",
         "operationId": "list_runs_api_runs_get",
         "parameters": [
           {
