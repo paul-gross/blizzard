@@ -11,7 +11,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor, JudgedBy
 from blizzard.hub.domain.delivery.flows import PollPolicy
 from blizzard.hub.domain.graph.actions import LAND, RESERVED_WAITS
-from blizzard.hub.domain.graph.authoring import Reification
+from blizzard.hub.domain.graph.authoring import Reification, UnreadableDefinitionHeld, reconciliation_basis
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, GraphDoc, GraphParseError, ProducesSpec
 from blizzard.hub.graphs import PACKAGED
 
@@ -345,3 +345,17 @@ def test_a_hub_node_naming_no_poll_timeout_waits_three_hours() -> None:
     assert deliver is not None and deliver.poll_timeout_seconds is None
 
     assert PollPolicy.of(deliver).timeout == timedelta(hours=3)
+
+
+def test_reconciliation_compares_against_a_readable_newest_mint() -> None:
+    minted = _bas_dwf_doc()
+    assert reconciliation_basis("g", minted=minted, unreadable=False, every_mint_retired=False) is minted
+
+
+def test_reconciliation_treats_an_unreadable_enabled_name_as_changed() -> None:
+    assert reconciliation_basis("g", minted=None, unreadable=True, every_mint_retired=False) is None
+
+
+def test_reconciliation_holds_an_unreadable_fully_retired_name() -> None:
+    with pytest.raises(UnreadableDefinitionHeld, match="'g'"):
+        reconciliation_basis("g", minted=None, unreadable=True, every_mint_retired=True)

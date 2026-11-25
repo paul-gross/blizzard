@@ -55,6 +55,31 @@ def resolve_default(name: str, *, enabled: Graph | None, any_minted: bool) -> Gr
     return None
 
 
+class UnreadableDefinitionHeld(Exception):
+    """The newest stored definition of a name no longer parses and every mint of it is retired.
+
+    Nothing tells whether the offered definition changed, so minting could silently lift the brake."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(
+            f"the newest stored definition of {name!r} no longer parses and every mint of the name is retired, "
+            f"so nothing was minted — re-enable a mint (`blizzard hub graph enable <graph_id> --tenant <tenant_id>`) "
+            f"and sync again, or mint the definition by hand (`blizzard hub graph mint <path> --tenant <tenant_id>`)"
+        )
+        self.name = name
+
+
+def reconciliation_basis(
+    name: str, *, minted: GraphDoc | None, unreadable: bool, every_mint_retired: bool
+) -> GraphDoc | None:
+    """What reconciliation compares a definition of ``name`` against: ``minted``, the parsed newest mint,
+    ``None`` — which mints — when there is none or the stored side is ``unreadable``; and
+    :class:`UnreadableDefinitionHeld` when it is unreadable and ``every_mint_retired``."""
+    if unreadable and every_mint_retired:
+        raise UnreadableDefinitionHeld(name)
+    return minted
+
+
 @domain_model
 @dataclass(frozen=True)
 class Reification:

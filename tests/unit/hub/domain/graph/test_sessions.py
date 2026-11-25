@@ -15,6 +15,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy import create_engine
 
+from blizzard import __version__
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.hub.domain.graph.authoring import Reification
@@ -440,3 +441,33 @@ def test_a_graph_declaring_no_sessions_round_trips_to_an_empty_list() -> None:
 
     assert loaded is not None
     assert loaded.sessions == []
+
+
+@pytest.mark.parametrize(("value", "kind"), [(["high", "low"], "list"), ({"a": 1}, "map"), (True, "boolean")])
+def test_an_effort_that_is_not_a_single_value_is_refused_naming_the_session_and_key(value: object, kind: str) -> None:
+    with pytest.raises(GraphParseError, match=f"session 'code': `effort` must be a single value, got a {kind}"):
+        GraphDoc.of(_doc(sessions={"code": {"effort": value}}))
+
+
+def test_a_numeric_compaction_window_still_reads_as_text() -> None:
+    doc = GraphDoc.of(_doc(sessions={"code": {"compaction_window": 400000}}))
+    assert doc.sessions["code"].compaction_window == "400000"
+
+
+def test_an_unknown_rotate_key_is_rejected_naming_the_key_and_the_recognised_ones() -> None:
+    with pytest.raises(GraphParseError) as refused:
+        GraphDoc.of(_doc(sessions={"code": {"rotate": {"max_context_token": 100000}}}))
+
+    message = str(refused.value)
+    assert message.startswith("session 'code' `rotate`: unknown key(s) max_context_token ")
+    assert "['max_context_tokens', 'max_invocations', 'max_transcript_bytes']" in message
+
+
+def test_the_unknown_session_key_message_reads_whole() -> None:
+    with pytest.raises(GraphParseError) as refused:
+        GraphDoc.of(_doc(sessions={"code": {"efort": "high"}}))
+
+    assert str(refused.value) == (
+        f"session 'code': unknown key(s) efort — this hub (blizzard {__version__}) "
+        f"recognizes only {sorted(SESSION_KNOWN_KEYS)}"
+    )

@@ -166,6 +166,11 @@ A packaged graph that fails to load or validate reports failed and exits `graph 
 others — or the other tenants — from reconciling. Confirm a sync with `blizzard hub graph list --tenant <tenant_id>` —
 the newest mint per name should read effective.
 
+A graph whose newest stored definition no longer parses, with every mint of its name retired, is held: nothing is
+minted, the graph reports failed, and `graph sync` exits non-zero. To lift the hold, re-enable one of its mints with
+`blizzard hub graph enable <graph_id> --tenant <tenant_id>` and sync again, or mint the definition by hand with
+`blizzard hub graph mint <path> --tenant <tenant_id>`.
+
 Minting is additive: the new definition becomes effective for future resolution while every in-flight chunk stays pinned
 to the definition it started under; moving one deliberately is `hub chunk migrate`, owned by
 [chunk-operations/migration.md](./chunk-operations/migration.md).
