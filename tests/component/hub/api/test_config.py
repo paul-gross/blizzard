@@ -890,7 +890,7 @@ def test_a_malformed_body_is_422_and_an_unknown_media_type_is_415(hub: HubHarnes
     assert declared_refusal_mismatches(spec, plain, "post", _APPLY, 415, ConfigMediaTypeUnsupportedProblem) == []
     assert (plain.json()["type"], plain.json()["detail"]) == (
         CONFIG_MEDIA_TYPE_UNSUPPORTED,
-        "unsupported content type 'text/plain'; send a YAML or JSON document",
+        "unsupported content type 'text/plain'; send a YAML, JSON or TOML document",
     )
 
 
