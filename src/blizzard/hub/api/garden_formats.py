@@ -1,9 +1,10 @@
-"""The garden artifact formats parsed at the app boundary: the published pydantic shapes validate
-an artifact's raw JSON and the result maps to the garden domain's own models
+"""The garden artifact formats at the app boundary: the published pydantic shapes validate
+an artifact's raw JSON, mapping it to the garden domain's own models, and render the one the hub writes
 (:class:`~blizzard.hub.domain.garden.formats.IGardenFormats`, ``bzh:data-roles``)."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from pydantic import TypeAdapter, ValidationError
@@ -13,6 +14,7 @@ from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejecte
 from blizzard.hub.domain.garden.formats import (
     DeferredReviewEntry,
     DeliveredDelta,
+    DeliveredReviewFinding,
     FindingAddOp,
     FindingGoneOp,
     FindingObservedOp,
@@ -30,6 +32,9 @@ from blizzard.wire.finding import (
     FindingDelta,
     FixedReviewFindingEntry,
     GoneFindingOp,
+    MintedReviewFinding,
+    MintedReviewFindingsDelivered,
+    NoneDeferredReviewFindingsDelivered,
     ObservedFindingOp,
     RefutedReviewFindingEntry,
     ReviewFindingDelta,
@@ -80,6 +85,13 @@ class GardenFormats:
                 f"artifact {artifact_name!r} does not match the review-finding-delta shape: {_summarize(exc)}"
             ) from exc
         return ReviewDelta(entries=[_review_entry(entry) for entry in wire.entries])
+
+    def review_delivered(self, minted: Sequence[DeliveredReviewFinding]) -> str:
+        if not minted:
+            return NoneDeferredReviewFindingsDelivered().model_dump_json()
+        return MintedReviewFindingsDelivered(
+            findings=[MintedReviewFinding(ref=m.ref, finding_id=m.finding_id, scope_slug=m.scope_slug) for m in minted]
+        ).model_dump_json()
 
 
 def _finding_op(op: AddFindingOp | ObservedFindingOp | GoneFindingOp) -> FindingOp:

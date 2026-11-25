@@ -83,6 +83,9 @@ disposition here is its own model, so an extra field on the wrong one is a shape
 }
 ```
 
+A delivered delta is answered by the chunk's `review-findings-delivered` asset (`review/findings-delivered-format`),
+which names the hub finding each `deferred` entry minted.
+
 ## What gets rejected
 
 The whole delta is refused, writing nothing, on: malformed JSON or a shape mismatch against this format; a `ref` carried

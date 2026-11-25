@@ -15,6 +15,7 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.ids import IdPrefix
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, WorkRef
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -86,8 +87,8 @@ class _FakeReviewFindingsRepo:
     def insert_facts(self, rows: Sequence[FindingFactInsert], *, transaction: LockedTransaction) -> None:
         self.writes.append(("finding_facts", list(rows)))
 
-    def record_marker(self, plan: ReviewFindingsPlan, *, transaction: LockedTransaction) -> None:
-        self.writes.append(("marker", plan.chunk_id))
+    def record_marker(self, plan: ReviewFindingsPlan, *, content: str, transaction: LockedTransaction) -> None:
+        self.writes.append(("marker", content))
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"should not touch {name!r}")
@@ -107,6 +108,7 @@ def _service(
         delivery=_as_write_repo(repo),
         findings=cast(IWriteFindingRepository, repo),
         scopes=cast(IWriteScopeRepository, repo),
+        formats=GardenFormats(),
         facts=facts if facts is not None else FakeStatusFacts().as_port(),
         transactions=transactions if transactions is not None else FakeTransactions(),
         clock=FixedClock(instant=_T0),
@@ -242,6 +244,19 @@ def test_deliver_mints_each_named_scope_in_the_unit_then_writes_findings_then_fa
     assert [kind for kind, _ in repo.writes] == ["scope", "scope", "findings", "finding_facts", "marker"]
     assert repo.writes[0] == ("scope", (_PROJECT, "blizzard", repo.written_in[0]))
     assert repo.writes[1] == ("scope", (_PROJECT, "other", repo.written_in[0]))
+
+
+def test_a_plan_lists_each_minted_finding_by_its_entrys_ref_for_the_marker() -> None:
+    repo = _FakeReviewFindingsRepo()
+    validated = ValidatedReviewFindings(deferred=[_deferred(ref="F1"), _deferred(ref="F2", scope="other")])
+
+    _service(repo).deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1)
+
+    plan = repo.delivered[0]
+    assert [(d.ref, d.finding_id, d.scope_slug) for d in plan.delivered_findings] == [
+        ("F1", plan.new_findings[0].finding_id, "blizzard"),
+        ("F2", plan.new_findings[1].finding_id, "other"),
+    ]
 
 
 @pytest.mark.parametrize("outcome", [ReviewFindingsOutcome.ALREADY_RECORDED, ReviewFindingsOutcome.FENCED])

@@ -1,9 +1,9 @@
-"""The garden formats — a run's finding delta, its proposal candidates, and a review round's
-finding delta — as the garden domain reads them, and the port that parses one from raw JSON."""
+"""The garden formats — a run's finding delta, its proposal candidates, a review round's finding delta, and what a
+review delivery minted — as the garden domain holds them, and the port between each and its raw JSON."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -104,9 +104,19 @@ class ReviewDelta:
     entries: list[ReviewEntry]
 
 
+@domain_model
+@dataclass(frozen=True)
+class DeliveredReviewFinding:
+    """One hub finding a review delivery minted, by the delta entry's ``ref``."""
+
+    ref: str
+    finding_id: str
+    scope_slug: str
+
+
 class IGardenFormats(Protocol):
-    """Parses a garden artifact's raw JSON into its domain model. A JSON or shape failure raises
-    the domain's own rejection, naming ``artifact_name`` and an operator-legible reason."""
+    """Parses a garden artifact's raw JSON into its domain model, and renders the one the hub writes. A JSON or shape
+    failure raises the domain's own rejection, naming ``artifact_name`` and an operator-legible reason."""
 
     def finding_delta(self, artifact_name: str, raw: str) -> DeliveredDelta:
         """Raises :class:`~blizzard.hub.domain.garden.delivery.validation.GardenDeliveryRejected`."""
@@ -118,4 +128,9 @@ class IGardenFormats(Protocol):
 
     def review_delta(self, artifact_name: str, raw: str) -> ReviewDelta:
         """Raises :class:`~blizzard.hub.domain.garden.review.validation.ReviewFindingsRejected`."""
+        ...
+
+    def review_delivered(self, minted: Sequence[DeliveredReviewFinding]) -> str:
+        """The `review-findings-delivered` content (`review/findings-delivered-format`) naming every finding in
+        ``minted``, or stating that none were deferred when it is empty."""
         ...

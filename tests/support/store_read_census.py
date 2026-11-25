@@ -27,6 +27,7 @@ from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.foundation.tokens import TokenHash
+from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.auth.auth_state import IReadAuthStateRepository
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.facts import AuthFactsService, IReadAuthFactsRepository
@@ -2008,6 +2009,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             delivery=review_findings_store,
             findings=finding_store,
             scopes=ScopeStore(store_connections),
+            formats=GardenFormats(),
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             transaction=unit,

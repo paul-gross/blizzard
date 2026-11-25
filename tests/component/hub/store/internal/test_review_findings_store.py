@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -105,6 +106,10 @@ def test_deliver_writes_every_row(tmp_path: Path) -> None:
         assert marker_rows[0].chunk_id == "ch_1"
         assert marker_rows[0].node_id == "nd_1"
         assert marker_rows[0].epoch == 1
+        assert json.loads(marker_rows[0].data) == {
+            "outcome": "minted",
+            "findings": [{"ref": "F1", "finding_id": "fin_1", "scope_slug": "blizzard"}],
+        }
 
 
 def test_deliver_mints_an_unseen_scope_in_the_same_transaction(tmp_path: Path) -> None:
@@ -174,6 +179,7 @@ def test_deliver_on_an_empty_plan_still_writes_a_marker_and_nothing_else(tmp_pat
             hub_scoped(sa.select(artifacts).where(artifacts.c.name == "review-findings-delivered"))
         ).all()
         assert len(marker_rows) == 1
+        assert json.loads(marker_rows[0].data) == {"outcome": "none-deferred", "findings": []}
 
 
 def test_deliver_replay_mints_nothing_new(tmp_path: Path) -> None:
@@ -182,6 +188,9 @@ def test_deliver_replay_mints_nothing_new(tmp_path: Path) -> None:
     with chunk_unit(hub_store_connections(engine), plan.chunk_id) as unit:
         first = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
     assert first is ReviewFindingsOutcome.RECORDED
+    marker = sa.select(artifacts.c.data).where(artifacts.c.name == "review-findings-delivered")
+    with engine.connect() as conn:
+        written = conn.execute(hub_scoped(marker)).scalar_one()
 
     with chunk_unit(hub_store_connections(engine), plan.chunk_id) as unit:
         second = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
@@ -191,6 +200,23 @@ def test_deliver_replay_mints_nothing_new(tmp_path: Path) -> None:
         assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(findings))).scalar_one() == 1
         assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(finding_facts))).scalar_one() == 1
         assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(artifacts))).scalar_one() == 1
+        assert conn.execute(hub_scoped(marker)).scalar_one() == written
+
+
+def test_a_failure_writing_the_marker_leaves_no_finding(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The marker and the findings it names commit together or not at all."""
+    store, engine = _store_and_engine(tmp_path)
+
+    def _boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("marker write failed")
+
+    monkeypatch.setattr(store.delivery, "record_marker", _boom)
+
+    with pytest.raises(RuntimeError), chunk_unit(hub_store_connections(engine), "ch_1") as unit:
+        store.deliver(_plan(), admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
+
+    with engine.connect() as conn:
+        assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(findings))).scalar_one() == 0
 
 
 def test_deliver_survives_a_racing_mint_of_the_same_unseen_scope(
