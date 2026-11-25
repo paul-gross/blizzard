@@ -25,6 +25,7 @@ from blizzard.hub.domain.garden.delivery.materialize import (
     DeliverySurvivors,
     GardenDelivery,
     IWriteGardenDeliveryRepository,
+    NewProposal,
 )
 from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected, ValidatedDelivery
 from blizzard.hub.domain.garden.findings.model import (
@@ -165,6 +166,19 @@ def _add(
 
 def _proposal(*, findings: list[str]) -> ProposalCandidate:
     return candidate({"ref": "p1", "class": "remediate", "title": "t", "body": "b", "findings": findings})
+
+
+def _new_proposal(finding_ids: list[str]) -> NewProposal:
+    return NewProposal(
+        proposal_id="gp_1",
+        routine_name="nightly",
+        class_="remediate",
+        title="t",
+        body="b",
+        source_artifact_id="art_p",
+        ref="p1",
+        finding_ids=finding_ids,
+    )
 
 
 def test_deliver_builds_a_finding_and_its_add_fact_from_an_add_op() -> None:
@@ -556,6 +570,55 @@ def test_deliver_refuses_a_citation_of_another_projects_finding_before_any_link_
     assert exc.value.fault is GardenDeliveryFault.PROPOSALS
     assert "nothing was written" in str(exc.value)
     assert [kind for kind, _ in repo.writes] == ["proposals"]
+
+
+def test_links_refuses_a_ref_and_the_id_it_recorded_cited_by_one_proposal() -> None:
+    minted, recorded = _fin(), _fin()
+    survivors = DeliverySurvivors(
+        deltas=[],
+        proposals=[_new_proposal([minted, recorded])],
+        ref_substitutions={minted: recorded},
+        uninserted_finding_ids={minted},
+    )
+
+    with pytest.raises(GardenDeliveryRejected, match=recorded) as exc:
+        survivors.links()
+
+    assert exc.value.fault is GardenDeliveryFault.PROPOSALS
+    assert "'p1'" in str(exc.value)
+
+
+def test_deliver_refuses_a_resolved_repeat_before_any_row_or_marker() -> None:
+    recorded = _fin()
+
+    @dataclass
+    class _Substituting(_FakeGardenDeliveryRepo):
+        def admit(
+            self, plan: DeliveryPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
+        ) -> DeliveryOutcome | DeliverySurvivors:
+            minted = plan.deltas[0].new_findings[0].finding_id
+            return DeliverySurvivors(
+                deltas=[],
+                proposals=plan.proposals,
+                ref_substitutions={minted: recorded},
+                uninserted_finding_ids={minted},
+            )
+
+    repo = _Substituting()
+    delta = DeliveredDelta(scope="runner", findings=[_add(ref="F1")])
+    validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[_proposal(findings=["F1", recorded])])
+
+    with pytest.raises(GardenDeliveryRejected, match=recorded):
+        _service(repo).deliver(
+            validated,
+            chunk=_CHUNK,
+            node=_NODE,
+            epoch=1,
+            delta_artifact_ids=["art_1"],
+            proposal_artifact_ids=["art_p"],
+        )
+
+    assert repo.writes == []
 
 
 @pytest.mark.parametrize(

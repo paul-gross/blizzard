@@ -182,14 +182,13 @@ def check_delta(
     run: RunContext,
     live_findings: LiveFindings,
     exited_ids: frozenset[str] = frozenset(),
+    seen_ids: set[str],
     resolutions: CommitResolutions | None = None,
 ) -> dict[tuple[str, str], datetime | None]:
     """Validate one already-parsed delta against `run` and `live_findings`, raising
-    :class:`GardenDeliveryRejected` on the first failure: `delta.scope`, every commit sha,
-    every `add` op's non-blank class, locus and summary, every transformation's id, one op per id, and a
-    `gone` op's non-empty note. `exited_ids`
-    only distinguishes an exited id from an unknown one in the message. Returns every
-    `(repo, sha)` resolved for an `add`'s `introduced` commit, for `introduced_at`."""
+    :class:`GardenDeliveryRejected` on the first failure. `seen_ids` holds the ids earlier deltas of this delivery
+    named, and gains this delta's; `exited_ids` only tells an exited id from an unknown one in the message. Returns
+    every `(repo, sha)` resolved for an `add`'s `introduced` commit, for `introduced_at`."""
     if delta.scope != run.scope_slug:
         raise GardenDeliveryRejected(
             f"delta declares scope {delta.scope!r}, this run's declared scope is {run.scope_slug!r}",
@@ -200,7 +199,6 @@ def check_delta(
 
     introduced_at: dict[tuple[str, str], datetime | None] = {}
     single_repo = single_repo_of(delta)
-    seen_ids: set[str] = set()
     for op in delta.findings:
         if isinstance(op, FindingAddOp):
             for value, field_name in ((op.class_, "class"), (op.locus, "locus"), (op.summary, "summary")):
@@ -236,7 +234,7 @@ def check_delta(
             # Two ops naming one finding could durably write contradictory facts, an
             # `observed` and a `resolved` both landing on the same record.
             raise GardenDeliveryRejected(
-                f"finding {op.id!r} is named by more than one op in this delta", GardenDeliveryFault.DELTA
+                f"finding {op.id!r} is named by more than one op in this delivery", GardenDeliveryFault.DELTA
             )
         seen_ids.add(op.id)
         if isinstance(op, FindingGoneOp) and not op.note.strip():
@@ -393,10 +391,16 @@ def validate_delivery(
     exited_ids: frozenset[str] = resolve_exited(absent) if absent else frozenset()
 
     introduced_at: dict[tuple[str, str], datetime | None] = {}
+    seen_ids: set[str] = set()
     for delta in deltas:
         introduced_at.update(
             check_delta(
-                delta, run=run, live_findings=live_findings, exited_ids=exited_ids, resolutions=resolutions or {}
+                delta,
+                run=run,
+                live_findings=live_findings,
+                exited_ids=exited_ids,
+                seen_ids=seen_ids,
+                resolutions=resolutions or {},
             )
         )
     known_refs = check_add_refs(deltas)

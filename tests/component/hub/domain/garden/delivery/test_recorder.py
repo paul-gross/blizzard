@@ -637,6 +637,32 @@ def test_a_republished_dockets_ref_citation_still_resolves_after_its_delta_is_dr
         assert [link.finding_id for link in links] == [minted_finding_id, minted_finding_id]
 
 
+def test_a_redelivery_citing_a_ref_and_the_id_it_recorded_is_refused(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    seed_scope(hub, SCOPE)
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op(ref="F1")]))
+    record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=["F1"]))
+    assert deliver(hub, chunk_id, delta=["delta"], proposals=["docket"]) == Delivered("recorded")
+    with hub.engine.begin() as conn:
+        minted_finding_id = conn.execute(hub_scoped(select(s.findings.c.finding_id))).scalar_one()
+
+    def written() -> list[int]:
+        tables = (s.garden_proposals, s.garden_proposal_findings, s.artifacts)
+        with hub.engine.begin() as conn:
+            return [len(conn.execute(hub_scoped(select(table))).all()) for table in tables]
+
+    record_artifact(
+        hub, chunk_id, name="docket", content=_proposals(findings=["F1", minted_finding_id]), epoch=_EPOCH + 1
+    )
+    before = written()
+    second = deliver(hub, chunk_id, delta=["delta"], proposals=["docket"], epoch=_EPOCH + 1)
+
+    assert second.outcome == "invalid"
+    assert f"{minted_finding_id!r} more than once" in second.detail
+    assert written() == before
+
+
 # --- one bucket, two readers ------------------------------------------------
 
 

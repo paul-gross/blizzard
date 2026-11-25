@@ -89,7 +89,7 @@ def _check(
 ):
     """:func:`check_delta` over the resolutions the recorder would have made for `delta`."""
     resolutions = resolve_commits(commits_to_resolve([delta], run=run), resolve_commit)
-    return _check_delta(delta, run=run, live_findings=live_findings, resolutions=resolutions)
+    return _check_delta(delta, run=run, live_findings=live_findings, seen_ids=set(), resolutions=resolutions)
 
 
 _GOOD_COMMIT = "a" * 40
@@ -408,6 +408,22 @@ def test_validate_delivery_rejects_an_add_ref_duplicated_across_two_delta_artifa
             proposal_artifacts={},
             bucket=_bucket([]),
         )
+
+
+def test_validate_delivery_rejects_one_finding_named_across_two_delta_artifacts() -> None:
+    delta_a = DeliveredDelta(scope="runner", findings=[FindingObservedOp(id=_FIN1)])
+    delta_b = DeliveredDelta(scope="runner", findings=[FindingGoneOp(id=_FIN1, note="no longer reproduces")])
+
+    with pytest.raises(GardenDeliveryRejected, match="more than one op in this delivery") as exc:
+        _validate(
+            formats=_FORMATS,
+            run=_RUN,
+            delta_artifacts={"survey-a.json": wire_json(delta_a), "survey-b.json": wire_json(delta_b)},
+            proposal_artifacts={},
+            bucket=_bucket([_finding(_FIN1)]),
+        )
+
+    assert exc.value.fault is GardenDeliveryFault.DELTA
 
 
 def test_validate_delivery_still_accepts_a_proposal_citing_a_prior_runs_live_id() -> None:

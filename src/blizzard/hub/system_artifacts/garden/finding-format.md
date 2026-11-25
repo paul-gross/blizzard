@@ -60,6 +60,9 @@ finding.
 - `findings` — the operations below. Emit one only for a finding the run actually visited: a finding the run did not
   look at gets no entry, and keeps its last word. Silence about a finding is never a claim about it.
 
+One finding takes at most one op across every delta a delivery carries. A delivery that names a finding in more than
+one op, in one delta or in two, is refused whole.
+
 ### FindingDelta
 
 ```json

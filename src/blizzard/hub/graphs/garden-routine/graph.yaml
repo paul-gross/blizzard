@@ -120,7 +120,8 @@ nodes:
     # that every finding carries the fields the format requires, that every
     # transformation's id is well-formed and live on this routine, that a proposal's
     # own citation is either such a live fin_ id or a ref this delivery's own add op
-    # carries — unique within its delta and within the citing proposal — and that any
+    # carries — one op per finding across all the deltas, and each finding once in the
+    # citing proposal, a ref and the id it minted counting as one — and that any
     # commit cited exists. It reads none of the prose. On success it mints a
     # fin_<ULID> per addition, a fins_<ULID> set per artifact list, applies the
     # transformations, and attaches the surviving proposals to the routine. A run
@@ -131,11 +132,11 @@ nodes:
           description: The delta and proposals are durable; findings and proposals are attached to the routine.
           to: done
         invalid:
-          description: The delta failed validation — a malformed entry, an unknown finding id, an add-op ref repeated, or a commit that does not exist. Nothing was written.
+          description: The delta failed validation — a malformed entry, an unknown finding id, a finding named by more than one op across the deltas, an add-op ref repeated, or a commit that does not exist. Nothing was written.
           to: reconcile
           prompt_addendum: ./prompts/reconcile.from-deliver.md
         invalid-proposals:
-          description: The docket failed validation — a malformed entry, a citation of an unknown or non-live finding id or of a ref no add op carries, a proposal ref or citation repeated, or a citation of a finding in another project. A citation that spans both artifacts counts here. Nothing was written.
+          description: The docket failed validation — a malformed entry, a citation of an unknown or non-live finding id or of a ref no add op carries, a proposal ref or citation repeated, one finding cited twice by its ref and its id, or a citation of a finding in another project. A citation that spans both artifacts counts here. Nothing was written.
           to: propose
           prompt_addendum: ./prompts/propose.from-deliver-invalid.md
         failure:

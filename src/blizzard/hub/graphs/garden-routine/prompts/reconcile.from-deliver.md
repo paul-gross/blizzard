@@ -4,8 +4,8 @@ Delivery rejected your delta on validation and wrote nothing. The failure is att
 `blizzard runner artifact get garden-delivery-failure --content`.
 
 This is a structural problem, not a judgment one: a malformed entry, a missing required field, a `fin_` id that is not
-live on this routine, an add-op ref repeated, or a commit reference that does not resolve. Your findings are not in
-question — the shape they were submitted in is.
+live on this routine, a finding named by more than one op, an add-op ref repeated, or a commit reference that does not
+resolve. Your findings are not in question — the shape they were submitted in is.
 
 Re-read the delta shape with `blizzard runner artifact get --scope system garden/finding-format --content` — a
 `FindingDelta` is `scope`, `revisions`, `measurement`, and `findings`, each entry an `add`/`observed`/`gone` op per the
