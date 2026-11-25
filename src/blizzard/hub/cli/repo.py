@@ -125,8 +125,14 @@ def repo_create(
 def repo_list(cli: CliContext, include_retired: bool) -> None:
     """List every repository — slug, name, id, revision, state, owner/repo, base branch."""
     params = {"include_retired": "true"} if include_retired else None
-    resp = cli.get("/api/repositories", "GET /repositories", params=params)
-    raw, listing = cli.decode(resp, _REPOSITORIES, "GET /repositories")
+    raw, listing, _ = cli.decode_rows(
+        "/api/repositories",
+        "GET /repositories",
+        page=_REPOSITORIES,
+        rows=lambda page: page.repositories,
+        key="repositories",
+        params=params,
+    )
     cli.show(raw["repositories"], RepoListing(listing.repositories))
 
 

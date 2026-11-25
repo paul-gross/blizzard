@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 import click
-from pydantic import BaseModel, TypeAdapter, model_validator
+from pydantic import TypeAdapter
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.foundation.roles import dto
@@ -20,33 +20,9 @@ from blizzard.wire.flow import ChunkFlowPlaceView, FlowFactView, FlowListView, F
 _RECORD_PAGE = 200
 
 
-class RecordPageAnswer(BaseModel):
-    """A flow-record page as the hub answered it: decoded against :class:`FlowRecordPage`, its facts also kept as
-    sent so ``--json`` prints them unchanged."""
-
-    raw_facts: list[Any]
-    page: FlowRecordPage
-
-    @model_validator(mode="before")
-    @classmethod
-    def _of_answer(cls, value: Any) -> Any:
-        if isinstance(value, dict):
-            answer = cast(dict[str, Any], value)
-            return {"raw_facts": answer.get("facts", []), "page": answer}
-        return value
-
-    @property
-    def next_before(self) -> int | None:
-        return self.page.next_before
-
-    def rows(self) -> list[tuple[Any, FlowFactView]]:
-        """Each fact as sent beside its decoded form."""
-        return list(zip(self.raw_facts, self.page.facts, strict=True))
-
-
 _FLOWS = TypeAdapter(FlowListView)
 _FLOW = TypeAdapter(FlowView)
-_RECORD = TypeAdapter(RecordPageAnswer)
+_RECORD = TypeAdapter(FlowRecordPage)
 
 
 def flow_label(row: FlowView | ChunkFlowPlaceView) -> str:
@@ -149,7 +125,8 @@ def flow_show(cli: CliContext, flow_id: str, record: bool, limit: int) -> None:
         f"/api/flows/{flow_id}/record",
         "GET /flows/{id}/record",
         page=_RECORD,
-        rows_of=RecordPageAnswer.rows,
+        rows=lambda p: p.facts,
+        key="facts",
         params={"limit": str(_RECORD_PAGE)},
         want=limit,
     )

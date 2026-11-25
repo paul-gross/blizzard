@@ -63,6 +63,7 @@ def test_create_list_and_show_with_and_without_json(client: TestClient) -> None:
     _seed()
 
     listed = json.loads(_repo(["list", "--json"]).stdout)
+    assert listed == client.get("/api/repositories").json()["repositories"]
     assert [(r["slug"], r["name"]) for r in listed] == [("blizzard", "blizzard")]
     assert (
         f"blizzard  blizzard  {listed[0]['repository_id']}  r1  enabled  paul-gross/blizzard  master"
@@ -80,6 +81,7 @@ def test_forge_cli_create_edit_show_and_lifecycle(client: TestClient) -> None:
     created = _cli("forge", ["create", "ghe", "--kind", "github", "--api-base", "https://ghe.example/api/v3"])
     assert created.exit_code == 0, created.output
     listed = json.loads(_cli("forge", ["list", "--json"]).stdout)
+    assert listed == client.get("/api/forges").json()["forges"]
     assert [(r["slug"], r["web_origin"]) for r in listed] == [("ghe", "https://ghe.example")]
     assert json.loads(_cli("forge", ["get", "ghe", "--json"]).stdout) == client.get("/api/forges/ghe").json()
     assert "revision 2" in _cli("forge", ["edit", "ghe", "--name", "Enterprise", "--if-match", "1"]).output

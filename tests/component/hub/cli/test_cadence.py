@@ -89,6 +89,11 @@ def test_create_list_and_show_with_the_flag_notice_on_stderr_while_off(client: T
     shown = _cli("get", "evening", "--json")
     assert shown.exit_code == 0, shown.output
     body = json.loads(shown.stdout)
+    assert body == next(
+        row
+        for row in client.get("/api/cadences", params={"include_retired": "true"}).json()
+        if row["slug"] == "evening"
+    )
     assert (body["slug"], body["spacing_minutes"], body["anchor"]) == ("evening", 14400, "started")
     assert body["attention"] == [{"reason": "no_chores", "chore": None, "scope": None}]
     assert _NOTICE in shown.stderr

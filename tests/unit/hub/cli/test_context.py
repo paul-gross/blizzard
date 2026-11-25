@@ -312,10 +312,10 @@ def test_get_before_pages_stops_at_the_wanted_row_count() -> None:
     ctx, calls = _keyset_ctx([([1, 2], 10), ([3, 4], 20), ([5, 6], 30)])
 
     rows, next_before = ctx.get_before_pages(
-        "/api/x", "GET /x", page=_KEYSET, rows_of=_rows_of, params={"limit": "2"}, want=4
+        "/api/x", "GET /x", page=_KEYSET, rows=_rows_of, key="rows", params={"limit": "2"}, want=4
     )
 
-    assert rows == [1, 2, 3, 4]
+    assert rows == [(1, 1), (2, 2), (3, 3), (4, 4)]
     assert next_before == 20
     assert [c.get("before") for c in calls] == [None, "10"]
     assert [c["limit"] for c in calls] == ["2", "2"]
@@ -324,18 +324,20 @@ def test_get_before_pages_stops_at_the_wanted_row_count() -> None:
 def test_get_before_pages_shrinks_the_last_page_to_what_is_still_wanted() -> None:
     ctx, calls = _keyset_ctx([([1, 2], 10), ([3], 20)])
 
-    rows, _ = ctx.get_before_pages("/api/x", "GET /x", page=_KEYSET, rows_of=_rows_of, params={"limit": "2"}, want=3)
+    rows, _ = ctx.get_before_pages(
+        "/api/x", "GET /x", page=_KEYSET, rows=_rows_of, key="rows", params={"limit": "2"}, want=3
+    )
 
-    assert rows == [1, 2, 3]
+    assert rows == [(1, 1), (2, 2), (3, 3)]
     assert [c["limit"] for c in calls] == ["2", "1"]
 
 
 def test_get_before_pages_without_a_want_reads_every_page() -> None:
     ctx, calls = _keyset_ctx([([1], 10), ([2], 20), ([3], None)])
 
-    rows, next_before = ctx.get_before_pages("/api/x", "GET /x", page=_KEYSET, rows_of=_rows_of, want=None)
+    rows, next_before = ctx.get_before_pages("/api/x", "GET /x", page=_KEYSET, rows=_rows_of, key="rows", want=None)
 
-    assert rows == [1, 2, 3]
+    assert rows == [(1, 1), (2, 2), (3, 3)]
     assert next_before is None
     assert len(calls) == 3
     assert all("limit" not in c for c in calls)
@@ -344,9 +346,9 @@ def test_get_before_pages_without_a_want_reads_every_page() -> None:
 def test_get_before_pages_stops_exactly_when_next_before_is_none() -> None:
     ctx, calls = _keyset_ctx([([1, 2], None)])
 
-    rows, next_before = ctx.get_before_pages("/api/x", "GET /x", page=_KEYSET, rows_of=_rows_of, want=50)
+    rows, next_before = ctx.get_before_pages("/api/x", "GET /x", page=_KEYSET, rows=_rows_of, key="rows", want=50)
 
-    assert rows == [1, 2]
+    assert rows == [(1, 1), (2, 2)]
     assert next_before is None
     assert len(calls) == 1
 
@@ -355,10 +357,10 @@ def test_get_before_pages_first_page_only_reads_one_page() -> None:
     ctx, calls = _keyset_ctx([([1], 10), ([2], None)])
 
     rows, next_before = ctx.get_before_pages(
-        "/api/x", "GET /x", page=_KEYSET, rows_of=_rows_of, want=None, first_page_only=True
+        "/api/x", "GET /x", page=_KEYSET, rows=_rows_of, key="rows", want=None, first_page_only=True
     )
 
-    assert rows == [1]
+    assert rows == [(1, 1)]
     assert next_before == 10
     assert len(calls) == 1 and "limit" not in calls[0]
 
@@ -426,9 +428,11 @@ def test_get_all_follows_the_cursor_across_pages_and_asks_for_a_thousand() -> No
         sent.append({**kwargs, "params": dict(params)})
         return pages[len(sent) - 1]
 
-    decoded = _ctx(bind_stubs(get=fake_get)).get_all("/api/x", "GET /x", page=_CURSOR, params={"project": "p"})
+    decoded = _ctx(bind_stubs(get=fake_get)).get_all(
+        "/api/x", "GET /x", page=_CURSOR, rows=lambda p: p.rows, key="rows", params={"project": "p"}
+    )
 
-    assert [row for page in decoded for row in page.rows] == [1, 2, 3]
+    assert [row for _, row in decoded] == [1, 2, 3]
     assert [s["params"] for s in sent] == [
         {"project": "p", "limit": "1000"},
         {"project": "p", "limit": "1000", "cursor": "c1"},
@@ -439,7 +443,7 @@ def test_get_all_names_its_operation_when_a_page_fails() -> None:
     bound = bind_stubs(get=_get_answering({"/api/x": _FakeResponse(500)}, []))
 
     with pytest.raises(click.ClickException) as exc_info:
-        _ctx(bound).get_all("/api/x", "GET /the-label", page=_CURSOR)
+        _ctx(bound).get_all("/api/x", "GET /the-label", page=_CURSOR, rows=lambda p: p.rows, key="rows")
 
     assert exc_info.value.message.startswith("GET /the-label failed: ")
 
@@ -486,3 +490,30 @@ def test_decode_strips_credentials_from_the_origin() -> None:
 
     assert "pw" not in exc_info.value.message
     assert "at http://hub.local:8421 " in exc_info.value.message
+
+
+class _DefaultRows(BaseModel):
+    rows: list[int] = []
+
+
+def test_decode_rows_preserves_raw_and_accepts_nonpaginated_and_bare_arrays() -> None:
+    ctx = _ctx(bind_stubs(get=_get_answering({"/api/x": _FakeResponse(200, {"rows": ["1"], "extra": 2})}, [])))
+    raw, value, pairs = ctx.decode_rows(
+        "/api/x", "GET /x", page=TypeAdapter(_DefaultRows), rows=lambda p: p.rows, key="rows"
+    )
+    assert raw == {"rows": ["1"], "extra": 2}
+    assert value.rows == [1]
+    assert pairs == [("1", 1)]
+    ctx = _ctx(bind_stubs(get=_get_answering({"/api/x": _FakeResponse(200, ["2"])}, [])))
+    raw, _, pairs = ctx.decode_rows("/api/x", "GET /x", page=TypeAdapter(list[int]), rows=lambda p: p, key=None)
+    assert raw == ["2"] and pairs == [("2", 2)]
+
+
+def test_decode_rows_absent_default_and_mismatch() -> None:
+    ctx = _ctx(bind_stubs(get=_get_answering({"/api/x": _FakeResponse(200, {})}, [])))
+    raw, _, pairs = ctx.decode_rows(
+        "/api/x", "GET /x", page=TypeAdapter(_DefaultRows), rows=lambda p: p.rows, key="rows"
+    )
+    assert raw == {} and pairs == []
+    with pytest.raises(click.ClickException, match="GET /label: unreadable answer from the hub"):
+        ctx.decode_rows("/api/x", "GET /label", page=TypeAdapter(_DefaultRows), rows=lambda p: [1], key="rows")

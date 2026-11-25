@@ -8,7 +8,7 @@ from pydantic import TypeAdapter
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
-from blizzard.hub.cli.config import CHANGES_PAGE, ChangeListing, ChangesPageAnswer
+from blizzard.hub.cli.config import CHANGES_PAGE, ChangeListing
 from blizzard.hub.cli.context import CliContext
 from blizzard.wire.urgency import SettingsView
 
@@ -89,7 +89,8 @@ def settings_changes(cli: CliContext, everything: bool) -> None:
         "/api/config/changes",
         "GET /config/changes",
         page=CHANGES_PAGE,
-        rows_of=ChangesPageAnswer.rows,
+        rows=lambda p: p.changes,
+        key="changes",
         params={"record_kind": "tenant_settings"},
         want=None,
         first_page_only=not everything,

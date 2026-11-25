@@ -16,7 +16,6 @@ from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.flow import flow_label, place_label
-from blizzard.hub.cli.pages import read_pages
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import ChunkLine, Cost, Listing, pointer_label, urgency_label
 from blizzard.wire.chunk import (
@@ -168,10 +167,10 @@ def chunk_group() -> None:
 @project_option(required_by_hub=False)
 def chunk_list(cli: CliContext, project: str | None) -> None:
     """List chunks with each one's status."""
-    raw, pages = read_pages(
-        cli, "/api/chunks", "GET /chunks", page=_CHUNKS, key="chunks", params=project_query(project)
+    pairs = cli.get_all(
+        "/api/chunks", "GET /chunks", page=_CHUNKS, rows=lambda p: p.chunks, key="chunks", params=project_query(project)
     )
-    cli.show(raw, ChunkListing([row for page in pages for row in page.chunks]))
+    cli.show([raw for raw, _ in pairs], ChunkListing([row for _, row in pairs]))
 
 
 @chunk_group.command("get", cls=FleetCommand)

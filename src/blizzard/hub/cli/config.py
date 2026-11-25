@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, NotRequired, TypedDict, cast
+from typing import NotRequired, TypedDict, cast
 
 import click
-from pydantic import BaseModel, TypeAdapter, model_validator
+from pydantic import TypeAdapter
 
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.cli.refusal import refusal_of
@@ -47,31 +47,7 @@ _KINDS = click.Choice(
 )
 
 
-class ChangesPageAnswer(BaseModel):
-    """A change-log page as the hub answered it: decoded against :class:`ConfigChangesPage`, its rows also kept as
-    sent so ``--json`` prints them unchanged."""
-
-    raw_changes: list[Any]
-    page: ConfigChangesPage
-
-    @model_validator(mode="before")
-    @classmethod
-    def _of_answer(cls, value: Any) -> Any:
-        if isinstance(value, dict):
-            answer = cast(dict[str, Any], value)
-            return {"raw_changes": answer.get("changes"), "page": answer}
-        return value
-
-    @property
-    def next_before(self) -> int | None:
-        return self.page.next_before
-
-    def rows(self) -> list[tuple[Any, ConfigChangeView]]:
-        """Each row as sent beside its decoded form."""
-        return list(zip(self.raw_changes, self.page.changes, strict=True))
-
-
-CHANGES_PAGE = TypeAdapter(ChangesPageAnswer)
+CHANGES_PAGE = TypeAdapter(ConfigChangesPage)
 _APPLIED = TypeAdapter(ConfigApplyResponse)
 #: The document model an export decodes against, by the version it asks for.
 _DOCUMENTS: dict[str, TypeAdapter[ConfigDocumentV2 | ConfigDocumentV3]] = {
@@ -155,7 +131,8 @@ def config_changes(cli: CliContext, kind: str | None, key: str | None, everythin
         "/api/config/changes",
         "GET /config/changes",
         page=CHANGES_PAGE,
-        rows_of=ChangesPageAnswer.rows,
+        rows=lambda p: p.changes,
+        key="changes",
         params=params,
         want=None,
         first_page_only=not everything,

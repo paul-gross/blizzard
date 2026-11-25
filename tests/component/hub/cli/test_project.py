@@ -118,6 +118,7 @@ def test_create_names_the_project_by_its_slug_unless_given_a_name_and_list_and_s
     listed = _said(_cli("list"))
     assert f"gears  Gear works  {named['color']}  {named['project_id']}  r1" in listed
     assert f"widgets  widgets  {widgets['color']}  {widgets['project_id']}  r1" in listed
+    assert _json(_cli("list", "--json")) == hub.client.get("/api/projects").json()["projects"]
     assert {row["slug"] for row in _json(_cli("list", "--json"))} == {"default", "gears", "widgets"}
     by_id = _said(_cli("get", named["project_id"]))
     assert by_id[:4] == [

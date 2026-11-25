@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import click
-from pydantic import BaseModel, TypeAdapter, model_validator
+from pydantic import TypeAdapter
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.foundation.toml_emit import toml_document
@@ -34,31 +34,7 @@ _APPLIED = TypeAdapter(ConfigApplyResponse)
 _EXPORT: TypeAdapter[SettingsExportDocument] = TypeAdapter(SettingsExportDocument)
 
 
-class ChangesAnswer(BaseModel):
-    """A settings change-log page as the hub answered it: decoded against :class:`HubSettingsChanges`, its rows also
-    kept as sent so ``--json`` prints them unchanged."""
-
-    raw_changes: list[Any]
-    page: HubSettingsChanges
-
-    @model_validator(mode="before")
-    @classmethod
-    def _of_answer(cls, value: Any) -> Any:
-        if isinstance(value, dict):
-            answer = cast(dict[str, Any], value)
-            return {"raw_changes": answer.get("changes"), "page": answer}
-        return value
-
-    @property
-    def next_before(self) -> int | None:
-        return self.page.next_before
-
-    def rows(self) -> list[tuple[Any, HubSettingsChange]]:
-        """Each row as sent beside its decoded form."""
-        return list(zip(self.raw_changes, self.page.changes, strict=True))
-
-
-_CHANGES = TypeAdapter(ChangesAnswer)
+_CHANGES = TypeAdapter(HubSettingsChanges)
 
 
 def _json_value(value: object, *, what: str) -> None:
@@ -103,14 +79,16 @@ def _show(cli: CliContext, raw: Any, view: HubSettingsView) -> None:
 @click.argument("key", required=False)
 def settings_get(cli: CliContext, key: str | None) -> None:
     """Show all settings, or the row for KEY."""
-    raw, view = cli.decode(cli.get(_PATH, "GET /admin/settings"), _SETTINGS, "GET /admin/settings")
+    raw, view, pairs = cli.decode_rows(
+        _PATH, "GET /admin/settings", page=_SETTINGS, rows=lambda p: p.settings, key="settings"
+    )
     if key is None:
         _show(cli, raw, view)
         return
-    index = next((i for i, row in enumerate(view.settings) if row.key == key), None)
-    if index is None:
+    match = next(((raw_row, row) for raw_row, row in pairs if row.key == key), None)
+    if match is None:
         raise click.ClickException(f"no setting named {key}")
-    cli.show(raw["settings"][index], SettingsListing([view.settings[index]]))
+    cli.show(match[0], SettingsListing([match[1]]))
 
 
 def _write(cli: CliContext, body: dict[str, object]) -> None:
@@ -148,7 +126,8 @@ def settings_changes(cli: CliContext, everything: bool) -> None:
         f"{_PATH}/changes",
         "GET /admin/settings/changes",
         page=_CHANGES,
-        rows_of=ChangesAnswer.rows,
+        rows=lambda p: p.changes,
+        key="changes",
         want=None,
         first_page_only=not everything,
     )

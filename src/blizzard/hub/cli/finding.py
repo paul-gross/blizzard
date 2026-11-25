@@ -13,7 +13,6 @@ from blizzard.cli.get_group import GetGroup
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.pages import read_pages
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
 from blizzard.wire.finding import FindingDetailView, FindingsPageView, FindingView
@@ -86,10 +85,15 @@ def finding_list(
         params["routine"] = routine
     if source is not None:
         params["source"] = source
-    raw, pages = read_pages(
-        cli, "/api/findings", "GET /findings", page=_PAGE, key="findings", params=params | project_query(project)
+    pairs = cli.get_all(
+        "/api/findings",
+        "GET /findings",
+        page=_PAGE,
+        rows=lambda p: p.findings,
+        key="findings",
+        params=params | project_query(project),
     )
-    cli.show(raw, FindingListing([row for page in pages for row in page.findings]))
+    cli.show([raw for raw, _ in pairs], FindingListing([row for _, row in pairs]))
 
 
 @finding_group.command("get", cls=FleetCommand)
