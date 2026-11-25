@@ -890,6 +890,7 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
             "chunk_restarts",
             "chunk_stopped",
             "chunks",
+            "config_changes",
             "decision_resolutions",
             "decisions",
             "escalations",
@@ -903,7 +904,6 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         ),
         _SIGNATURE_REASON,
     ),
-    IndexWalkAllowance(IReadWorkRefsCorpus, "work_source_changes_signature", ("config_changes",), _SIGNATURE_REASON),
     IndexWalkAllowance(
         IReadCadenceCorpus, "tenants_with_live_cadences", ("cadence_lifecycle_facts",), _CADENCE_CORPUS_REASON
     ),
