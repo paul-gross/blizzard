@@ -1,4 +1,5 @@
 import type { hubApi } from 'fleet';
+import { unlisted } from 'fleet';
 import type { EnvTimelineSegment, EnvTimelineStep, EnvTimelineView, InvocationKind, PlacedStep, StepExecutor } from './timeline.domain';
 
 export function fromStepExecutor(value: hubApi.Executor | null): StepExecutor | null {
@@ -6,7 +7,7 @@ export function fromStepExecutor(value: hubApi.Executor | null): StepExecutor | 
     case null: return null;
     case 'runner':
     case 'hub': return { kind: value };
-    default: return { kind: 'unknown', raw: value };
+    default: return { kind: 'unknown', raw: unlisted(value) };
   }
 }
 
@@ -15,7 +16,7 @@ export function fromInvocationKind(value: hubApi.UsageKind): InvocationKind {
     case 'spawn':
     case 'resume':
     case 'judge': return { kind: value };
-    default: return { kind: 'unknown', raw: value };
+    default: return { kind: 'unknown', raw: unlisted(value) };
   }
 }
 

@@ -69,6 +69,15 @@ describe('expandTimeline', () => {
 
 
 describe('open timeline vocabularies', () => {
+  it('translates every known executor and invocation value', () => {
+    expect(fromStepExecutor(null)).toBeNull();
+    expect(fromStepExecutor('runner')).toEqual({ kind: 'runner' });
+    expect(fromStepExecutor('hub')).toEqual({ kind: 'hub' });
+    expect(fromInvocationKind('spawn')).toEqual({ kind: 'spawn' });
+    expect(fromInvocationKind('resume')).toEqual({ kind: 'resume' });
+    expect(fromInvocationKind('judge')).toEqual({ kind: 'judge' });
+  });
+
   it('preserves unknown executor and invocation values', () => {
     expect(fromStepExecutor('future' as hubApi.Executor)).toEqual({ kind: 'unknown', raw: 'future' });
     expect(fromInvocationKind('future' as hubApi.UsageKind)).toEqual({ kind: 'unknown', raw: 'future' });

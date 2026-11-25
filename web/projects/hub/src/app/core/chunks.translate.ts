@@ -1,5 +1,5 @@
 import type { hubApi } from 'fleet';
-import { fromFlowState } from 'fleet';
+import { fromFlowState, unlisted } from 'fleet';
 import { laneStatus } from 'fleet/shell';
 import type { BoardPageMetadata, BoardSummary, GraphProgressNode, GraphProgressState, RunnerClaimChunk } from './chunks.domain';
 import { fromUrgencyRef } from './urgency.translate';
@@ -50,7 +50,7 @@ export function fromGraphProgressState(state: hubApi.GraphProgressState): GraphP
     case 'unvisited':
       return { kind: state };
     default:
-      return { kind: 'unknown', raw: state };
+      return { kind: 'unknown', raw: unlisted(state) };
   }
 }
 
