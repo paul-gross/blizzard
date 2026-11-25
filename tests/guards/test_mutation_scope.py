@@ -706,18 +706,36 @@ def test_budget_interrupt_reaches_a_waiting_mutation_loop() -> None:
     # Isolate the real SIGINT and bound the entire child, including its startup and cleanup.
     code = """
 import signal
+import threading
 from tests.guards.test_mutation_scope import m, _fake_mutmut
 
 signal.signal(signal.SIGINT, signal.default_int_handler)
+loop_entered = threading.Event()
+
+class Timer:
+    def __init__(self, interval, callback):
+        self.callback = callback
+        self.daemon = False
+    def start(self):
+        def fire():
+            loop_entered.wait()
+            self.callback()
+        threading.Thread(target=fire, daemon=True).start()
+    def cancel(self):
+        pass
+
+m.threading.Timer = Timer
 caught = False
 def run(_names, _max_children):
     global caught
-    try:
-        fake.get_mutant_runner(4).startup()
-        while True:
+    fake.get_mutant_runner(4).startup()
+    while True:
+        try:
+            loop_entered.set()
             signal.pause()
-    except KeyboardInterrupt:
-        caught = True
+        except KeyboardInterrupt:
+            caught = True
+            break
 
 fake = _fake_mutmut(run)
 assert m._run_with_budget(0.1, fake) is False
