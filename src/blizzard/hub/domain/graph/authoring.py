@@ -63,8 +63,8 @@ class UnreadableDefinitionHeld(Exception):
     def __init__(self, name: str) -> None:
         super().__init__(
             f"the newest stored definition of {name!r} no longer parses and every mint of the name is retired, "
-            f"so nothing was minted — re-enable a mint (`blizzard hub graph enable`) and sync again, "
-            f"or mint the definition by hand"
+            f"so nothing was minted — re-enable a mint (`blizzard hub graph enable <graph_id> --tenant <tenant_id>`) "
+            f"and sync again, or mint the definition by hand (`blizzard hub graph mint <path> --tenant <tenant_id>`)"
         )
         self.name = name
 

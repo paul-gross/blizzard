@@ -195,14 +195,14 @@ class Parser:
             raise GraphParseError(f"{self.where}: `{key}` must be a single value, got a {kind}")
         return str(value)
 
-    def only(self, known: frozenset[str], where: str) -> None:
+    def only(self, known: frozenset[str]) -> None:
         """Refuse every key outside ``known``, so a misspelled one fails rather than being ignored."""
         unknown = sorted(str(key) for key in self.body if key not in known)
         if unknown:
             # Pinned by
             # tests/unit/hub/domain/graph/test_sessions.py::test_an_unknown_session_key_is_rejected_naming_the_key
             raise GraphParseError(
-                f"{where}: unknown key(s) {', '.join(unknown)} — this hub "
+                f"{self.where}: unknown key(s) {', '.join(unknown)} — this hub "
                 f"(blizzard {HUB_VERSION}) recognizes only {sorted(known)}"
             )
 
@@ -474,9 +474,8 @@ class RotatePolicy:
 
     @classmethod
     def of(cls, raw: object, *, session: str) -> RotatePolicy:
-        where = f"session {session!r} `rotate`"
-        body = Parser.of(raw, where)
-        body.only(ROTATE_KNOWN_KEYS, where)
+        body = Parser.of(raw, f"session {session!r} `rotate`")
+        body.only(ROTATE_KNOWN_KEYS)
         return cls(
             max_context_tokens=body.number("max_context_tokens"),
             max_transcript_bytes=body.number("max_transcript_bytes"),
@@ -512,9 +511,9 @@ class SessionDecl:
 
     @classmethod
     def of(cls, key: object, raw: object) -> SessionDecl:
-        body = Parser.of(raw, f"session {key!r}")
         name = str(key)
-        body.only(SESSION_KNOWN_KEYS, f"session {name!r}")
+        body = Parser.of(raw, f"session {name!r}")
+        body.only(SESSION_KNOWN_KEYS)
         raw_model = body.get("model")
         # A single string is the one-entry spelling, normalized to the same one-entry list
         # the sequence form parses to, so readers see exactly one shape.

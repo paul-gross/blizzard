@@ -154,10 +154,8 @@ def graph_mint(cli: CliContext, path: str) -> None:
 def graph_sync(cli: CliContext) -> None:
     """Reconcile the hub's packaged graphs into every open tenant, minting only what changed, and report per tenant.
 
-    Idempotent. The **hub's own** packaged set is what is reconciled, not this CLI's.
-    Exits non-zero if some tenant could not reconcile a packaged graph: one that failed to load or validate,
-    or a held one, whose stored definition no longer parses while every mint of its name is retired.
-    When to run it:
+    Idempotent; reconciles the **hub's own** packaged set. Exits non-zero if a graph failed to load or validate in some
+    tenant, or was held: its stored definition unreadable, every mint of its name retired. When to run it:
     https://github.com/paul-gross/blizzard/blob/master/docs/deployment/install.md#graph-sync-after-a-deploy"""
     resp = cli.post("/api/admin/graphs/sync", "POST /admin/graphs/sync", json_body={})
     raw, body = cli.decode(resp, _ADMIN_GRAPH_SYNC, "POST /admin/graphs/sync")

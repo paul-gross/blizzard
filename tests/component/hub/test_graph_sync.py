@@ -11,12 +11,14 @@ from datetime import timedelta
 from pathlib import Path
 
 import yaml
+from structlog.contextvars import merge_contextvars
+from structlog.testing import capture_logs
 from typing_extensions import TypeIs
 
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.domain.graph.model import GraphArtifact, GraphDoc
-from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncOutcome, GraphSyncStatus
+from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncOutcome, GraphSyncStatus, reconcile_open_tenants
 from blizzard.hub.graphs import PACKAGED
 from tests.support.scaffolding import HubHarness, build_hub, default_tenant
 
@@ -410,6 +412,21 @@ def test_reconciling_a_fully_retired_name_whose_stored_definition_no_longer_pars
     assert "blizzard hub graph enable" in outcomes[0].detail
     assert [g["graph_id"] for g in hub.client.get("/api/graphs").json()] == [seeded]
     assert hub.services.graphs.get_enabled_by_name("braked") is None
+
+
+def test_the_hold_warning_names_the_tenant_a_cross_tenant_pass_was_reconciling(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    path = _packaged(tmp_path, "braked")
+    _seed_unreadable(hub, path)
+    _retire_all(hub, "braked")
+    tenant = default_tenant(hub.engine)
+    reconciliation = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, YAML_CODEC, [path])
+
+    with capture_logs(processors=[merge_contextvars]) as logs:
+        reconcile_open_tenants({tenant: "default"}, lambda _: reconciliation)
+
+    held = [e for e in logs if e["event"] == "retired graph held: its stored definition no longer parses"]
+    assert [e["tenant_id"] for e in held] == [tenant]
 
 
 def test_reconciling_an_enabled_name_whose_stored_definition_no_longer_parses_mints(tmp_path: Path) -> None:

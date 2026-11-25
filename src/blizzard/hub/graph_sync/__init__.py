@@ -1,10 +1,9 @@
 """Reconcile the packaged graph set against the store — ``blizzard hub graph sync``.
 
-The edge half: load and inline each packaged ``graph.yaml`` and hand it with the stored definition to
-the domain, which owns the mint-only-if-changed rule and when an unreadable stored definition holds
-instead. Per-graph isolated and additive: nothing re-pins a chunk. Every open tenant reconciles through
-its own stores (:func:`reconcile_open_tenants`); a new tenant is minted the set on its creation's
-transaction (:func:`packaged_minter`)."""
+The edge half: load and inline each packaged ``graph.yaml`` and hand it with the stored definition to the
+domain, which decides whether to mint or hold. Per-graph isolated and additive: nothing re-pins a chunk.
+Every open tenant reconciles through its own stores (:func:`reconcile_open_tenants`); a new tenant is
+minted the set on its creation's transaction (:func:`packaged_minter`)."""
 
 from __future__ import annotations
 
@@ -12,6 +11,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+
+from structlog.contextvars import bound_contextvars
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
@@ -106,12 +107,9 @@ class GraphReconciliation:
         return GraphSyncOutcome(name=doc.name, status=GraphSyncStatus.MINTED, graph_id=graph.graph_id, detail=reason)
 
     def parsed(self, stored: str | None, name: str) -> GraphDoc | None:
-        """A stored definition re-parsed into an authoring doc, or ``None``.
-
-        ``None`` is a never-minted name, or a stored definition that no longer parses
-        (:func:`~blizzard.hub.domain.graph.authoring.reconciliation_basis` decides the latter). A
-        stored ``run:`` reads as the action it named
-        (:func:`~blizzard.hub.domain.graph.legacy_run.translated`)."""
+        """A stored definition re-parsed, or ``None`` when never minted or no longer parsing
+        (:func:`~blizzard.hub.domain.graph.authoring.reconciliation_basis`). A stored ``run:`` reads as the
+        action it named (:func:`~blizzard.hub.domain.graph.legacy_run.translated`)."""
         if stored is None:
             return None
         try:
@@ -140,11 +138,12 @@ def reconcile_open_tenants(
     out of the answer; every later tenant still reconciles."""
     reports: list[TenantGraphOutcomes] = []
     for tenant, name in sorted(open_tenants.items()):
-        try:
-            outcomes = reconciliation_of(tenant).outcomes()
-        except (TenantClosed, UnknownTenant):
-            _log.info("tenant closed during its graph sync; passed over", tenant=tenant)
-            continue
+        with bound_contextvars(tenant_id=tenant):
+            try:
+                outcomes = reconciliation_of(tenant).outcomes()
+            except (TenantClosed, UnknownTenant):
+                _log.info("tenant closed during its graph sync; passed over")
+                continue
         reports.append(TenantGraphOutcomes(tenant=tenant, name=name, outcomes=outcomes))
     return reports
 
