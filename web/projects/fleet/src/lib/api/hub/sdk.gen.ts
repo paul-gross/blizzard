@@ -1244,7 +1244,7 @@ export const getChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCoun
  *
  * A worker's own routine-run read of ``GET /api/analytics/counts/files`` — the same
  * rows, over the window it names, gated on the chunk carrying a run context rather than
- * on operator credentials.
+ * on operator credentials. ``limit`` as on that route.
  */
 export const getChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetData, ThrowOnError>): RequestResult<GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetResponses, GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetResponses, GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/analytics/counts/files', ...options });
 

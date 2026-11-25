@@ -47308,7 +47308,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/analytics/counts/files": {
       "get": {
-        "description": "A worker's own routine-run read of ``GET /api/analytics/counts/files`` \u2014 the same\nrows, over the window it names, gated on the chunk carrying a run context rather than\non operator credentials.",
+        "description": "A worker's own routine-run read of ``GET /api/analytics/counts/files`` \u2014 the same\nrows, over the window it names, gated on the chunk carrying a run context rather than\non operator credentials. ``limit`` as on that route.",
         "operationId": "get_chunk_analytics_counts_files_api_fleet_chunks__chunk_id__analytics_counts_files_get",
         "parameters": [
           {
@@ -47318,6 +47318,23 @@
             "schema": {
               "title": "Chunk Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
             }
           },
           {

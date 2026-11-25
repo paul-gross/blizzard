@@ -210,6 +210,22 @@ def test_forwards_the_window_params_and_returns_the_hub_body(tmp_path: Path, suf
     assert resp.json() == body
 
 
+def test_forwards_counts_files_limit_to_the_hub_only_when_given(tmp_path: Path) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    seen: list[str] = []
+    _stub_hub(app, 200, _COUNTS_BODY, seen)
+    headers = {"X-Blizzard-Lease-Token": _TOKEN}
+    since = {"since": "2020-01-01T00:00:00Z"}
+    path = "/api/leases/lease_1/analytics/counts/files"
+    with runner_client(app) as client:
+        assert client.get(path, params={**since, "limit": "5"}, headers=headers).status_code == 200
+        assert client.get(path, params=since, headers=headers).status_code == 200
+        assert client.get(path, params={**since, "limit": "0"}, headers=headers).status_code == 422
+    upstream = f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/analytics/counts/files?since=2020-01-01T00%3A00%3A00Z"
+    assert seen == [f"{upstream}&limit=5", upstream]
+
+
 @pytest.mark.parametrize("suffix", ["counts/nodes", "spend/nodes", "spend/graphs"])
 def test_forwards_by_name_to_the_hub(tmp_path: Path, suffix: str) -> None:
     app, store = _app_with_store(tmp_path)

@@ -638,12 +638,13 @@ def get_chunk_analytics_counts_files(
     records: Records,
     run_contexts: RunContexts,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
+    limit: Annotated[int | None, Query(ge=1)] = None,
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/files`` — the same
     rows, over the window it names, gated on the chunk carrying a run context rather than
-    on operator credentials."""
+    on operator credentials. ``limit`` as on that route."""
     _routine_run_or_404(chunk_id, records, run_contexts)
-    return counts_response(queries.counts_by_file(window.event_scope.criteria))
+    return counts_response(queries.counts_by_file(window.event_scope.criteria, limit=limit))
 
 
 @router.get("/chunks/{chunk_id}/analytics/counts/skills", response_model=AnalyticsCountsResponse)
