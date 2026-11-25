@@ -360,6 +360,9 @@ Every write — create, edit, retire and enable — needs superuser authority an
 prompt routes, `GET`, `PUT` and `DELETE /api/host/workspaces/{workspace_id}/prompt`, do not: any signed-in panel user
 may set or clear a workspace's prompt, as before.
 
+Which panel controls a session is offered on the Settings tab is owned by
+[the Settings tab](./runner-settings.md#the-settings-tab).
+
 A runner bound to a workspace the host does not serve, or naming a subscription it does not hold, keeps running: it
 claims nothing through that binding, and declares no subscription. A runner settings write that names either is refused.
 

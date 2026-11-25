@@ -14,12 +14,30 @@ export const hostKey = ['host'] as const;
 export const hostRunnersKey = [...hostKey, 'runners'] as const;
 /** `GET /api/host/workspaces` — the workspaces the host declares. */
 export const hostWorkspacesKey = [...hostKey, 'workspaces'] as const;
+/** `GET /api/host/workspaces?retired=true` — every workspace record, the retired beside the active. Under
+ * {@link hostWorkspacesKey}, so a write invalidating that re-reads both. */
+export const hostWorkspaceRecordsKey = [...hostWorkspacesKey, 'records'] as const;
 /** `GET /api/host/environments` — the host's environments grouped by workspace. */
 export const hostEnvironmentsKey = [...hostKey, 'environments'] as const;
 /** `GET /api/host/subscriptions` — the host's subscriptions and who spends them. */
 export const hostSubscriptionsKey = [...hostKey, 'subscriptions'] as const;
+/** `GET /api/host/subscriptions?retired=true` — every subscription record, the retired beside the active. Under
+ * {@link hostSubscriptionsKey}, so a write invalidating that re-reads both. */
+export const hostSubscriptionRecordsKey = [...hostSubscriptionsKey, 'records'] as const;
 /** `GET /api/host/registration` — the host's registration at its hub. */
 export const hostRegistrationKey = [...hostKey, 'registration'] as const;
+
+/** `GET /api/host/settings` — the host's own settings record. Also the prefix of its change log, so a write
+ * invalidating it re-reads both. */
+export const hostSettingsKey = [...hostKey, 'settings'] as const;
+/** `GET /api/host/settings/changes` — the host's change log. Every filtered read of it — the host record's own rows,
+ * or one workspace's or subscription's — keys under this prefix. */
+export const hostSettingsChangesKey = [...hostSettingsKey, 'changes'] as const;
+
+/** The host's change log filtered to one record: `record_kind` and, for a workspace or a subscription, its key. */
+export function hostRecordChangesKey(recordKind: string, recordKey: string | null): readonly unknown[] {
+  return [...hostSettingsChangesKey, recordKind, recordKey];
+}
 
 /** `GET /api/auth/session` — whether the surface is gated, and the signed-in hub
  * username, behind the panel's username/logout control. The host's session, kept out of
@@ -63,3 +81,13 @@ export function runnerSelftestKey(runnerId: string, selftestId: string): readonl
 
 /** The host's flags read — `GET /api/flags` on the host root, read once at start and never refetched. */
 export const runnerFlagsKey = ['host', 'flags'] as const;
+
+/** One runner's settings record — `GET /runners/{runner_id}/api/settings`. Also the prefix of its change log. */
+export function runnerSettingsKey(runnerId: string): readonly unknown[] {
+  return [runnerId, 'settings'];
+}
+
+/** One runner's settings change log — `GET /runners/{runner_id}/api/settings/changes`. */
+export function runnerSettingsChangesKey(runnerId: string): readonly unknown[] {
+  return [...runnerSettingsKey(runnerId), 'changes'];
+}

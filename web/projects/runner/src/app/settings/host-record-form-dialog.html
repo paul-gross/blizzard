@@ -1,0 +1,23 @@
+<fleet-kit-dialog [open]="true" [ariaLabel]="heading()" testid="record-form" (closed)="onClosed()">
+  <h2 fleetKitDialogHeader class="hd" data-testid="record-form-title">{{ heading() }}</h2>
+  <div class="fields">
+    @for (f of fields(); track f.name) {
+      @let field = fieldOf(f.name);
+      <fleet-kit-field [label]="f.label" [field]="field">
+        <fleet-kit-text-input
+          [formField]="field"
+          [ariaLabel]="f.label"
+          [multiline]="f.type === 'multiline' || f.type === 'repos'"
+          [testid]="'record-form-' + f.name"
+        />
+      </fleet-kit-field>
+    }
+  </div>
+  <div fleetKitDialogFooter class="ft">
+    @for (message of messages(); track $index) {
+      <fleet-kit-error-line class="line" [message]="message" testid="record-form-line" />
+    }
+    <fleet-kit-button [disabled]="submitting()" testid="record-form-cancel" (click)="onClosed()">Cancel</fleet-kit-button>
+    <fleet-kit-button variant="primary" [disabled]="submitting()" testid="record-form-save" (click)="onSave()">Save</fleet-kit-button>
+  </div>
+</fleet-kit-dialog>

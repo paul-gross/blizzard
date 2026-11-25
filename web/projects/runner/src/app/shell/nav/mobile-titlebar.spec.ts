@@ -43,7 +43,7 @@ type RunnerRoutes = Parameters<typeof stubRunnerClient>[0];
 function titlebarRoutes(overrides: RunnerRoutes = {}): RunnerRoutes {
   return {
     'GET /api/host/runners': () => ({ items: [] }),
-    'GET /api/auth/session': () => ({ auth_enabled: false, username: null }),
+    'GET /api/auth/session': () => ({ auth_enabled: false, username: null, superuser: true }),
     ...overrides,
   };
 }
@@ -147,7 +147,7 @@ describe('MobileTitlebar (runner)', () => {
     };
 
     it('offers Log out as a real menu item the roving focus can reach', async () => {
-      withSession({ auth_enabled: true, username: 'alice' });
+      withSession({ auth_enabled: true, username: 'alice', superuser: false });
       const panel = await openMenu(await render());
 
       const logout = panel.querySelector('[data-testid="local-panel-mobile-logout"]');
@@ -161,7 +161,7 @@ describe('MobileTitlebar (runner)', () => {
     });
 
     it('owns only menu items and presentational rows, per the role="menu" content model', async () => {
-      withSession({ auth_enabled: true, username: 'alice' });
+      withSession({ auth_enabled: true, username: 'alice', superuser: false });
       const panel = await openMenu(await render());
 
       const allowed = ['menuitem', 'menuitemradio', 'menuitemcheckbox', 'group', 'separator', 'presentation'];
@@ -172,7 +172,7 @@ describe('MobileTitlebar (runner)', () => {
     });
 
     it('logs out through that item', async () => {
-      withSession({ auth_enabled: true, username: 'alice' });
+      withSession({ auth_enabled: true, username: 'alice', superuser: false });
       // Never actually navigate the jsdom window on logout — stubbed on the
       // prototype because the identity block lives inside the CDK overlay, out of
       // the fixture's own DebugElement tree.
@@ -195,7 +195,7 @@ describe('MobileTitlebar (runner)', () => {
     });
 
     it('offers no Log out at all under a none-mode hub, where the surface is authless', async () => {
-      withSession({ auth_enabled: false, username: null });
+      withSession({ auth_enabled: false, username: null, superuser: true });
       const panel = await openMenu(await render());
 
       expect(panel.querySelector('[data-testid="local-panel-mobile-logout"]')).toBeNull();

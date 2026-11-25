@@ -74,7 +74,7 @@ describe('runner App', () => {
     stub = stubRunnerClient({
       ...HOST,
       'GET /api/host/runners': () => RUNNERS,
-      'GET /api/auth/session': () => ({ auth_enabled: false, username: null }),
+      'GET /api/auth/session': () => ({ auth_enabled: false, username: null, superuser: true }),
       'GET /api/flags': () => ({ flags: {}, overridden: [] }),
       'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) =>
         runner_id === 'rn_1' ? DASHBOARD : stubError(404, { detail: 'unknown runner' }),

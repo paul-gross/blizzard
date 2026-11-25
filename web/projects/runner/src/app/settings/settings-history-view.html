@@ -1,0 +1,37 @@
+@let p = 'settings-history-' + recordId();
+<fleet-kit-panel class="hist" [label]="title()" [bodyScroll]="false" [attr.data-testid]="p">
+  @if (unserved(); as why) {
+    <fleet-kit-error-line [message]="why" [testid]="p + '-unserved'" />
+  } @else {
+    <fleet-kit-async-state
+      [state]="state()"
+      placement="inline"
+      loadingText="LOADING…"
+      errorText="HISTORY UNAVAILABLE"
+      emptyText="NO CHANGES"
+      [emptyTestid]="p + '-empty'"
+    >
+      <ol class="changes">
+        @for (change of changes(); track change.id) {
+          <li class="change" [attr.data-testid]="p + '-change'">
+            <div class="head">
+              <span class="rev">revision {{ change.revision }}</span>
+              <span>{{ change.op }}</span>
+              <span class="by">{{ change.actor }} via {{ change.door }} · <fleet-when [iso]="change.at" /></span>
+            </div>
+            <ul class="diff">
+              @for (d of change.diff; track d.key) {
+                <li><span class="k">{{ d.key }}</span> {{ d.old }} → <span class="new">{{ d.new }}</span></li>
+              }
+            </ul>
+          </li>
+        }
+      </ol>
+      @if (hasNext()) {
+        <div class="more">
+          <fleet-kit-button [disabled]="loadingNext()" [testid]="p + '-more'" (click)="loadMore.emit()">Load more</fleet-kit-button>
+        </div>
+      }
+    </fleet-kit-async-state>
+  }
+</fleet-kit-panel>

@@ -15,6 +15,7 @@ export { errorMessage, problemType } from '../error-message';
 export { harnessName } from '../harness-name';
 export { nodeStepKey, parseNodeStepKey } from '../node-step';
 export { openLookup, unlisted } from '../open-lookup';
+export { parseSettingText, settingValueText } from '../setting-value.domain';
 export { DONE_LANE, LANES, UNKNOWN_LANE, laneTone, chunkLane as domainChunkLane, unknownLane as domainUnknownLane, laneCounts as domainLaneCounts, STATUS_LANE as domainStatusLane, STATUS_TONE as domainStatusTone, type LaneStatus, type LaneCounts, type Lane } from '../chunk-lanes';
 export {
   formatWhen,

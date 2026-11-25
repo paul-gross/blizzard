@@ -47,7 +47,7 @@ describe('the panel\'s poll floors, idle and unselected', () => {
     stub = stubRunnerClient({
       'GET /runners/{runner_id}/api/dashboard': () => runnerDashboardView(),
       'GET /runners/{runner_id}/api/leases': () => ({ items: [] }),
-      'GET /api/auth/session': () => ({ auth_enabled: true, username: 'alice' }),
+      'GET /api/auth/session': () => ({ auth_enabled: true, username: 'alice', superuser: false }),
     });
     await TestBed.configureTestingModule({
       imports: [PollingHost],

@@ -1,8 +1,10 @@
-/** The identity the runner reports a request resolving to: whether its hub gates the panel, and the
- * signed-in hub username, `null` when no session rode along. */
+/** The identity the runner reports a request resolving to: whether its hub gates the panel, the
+ * signed-in hub username, `null` when no session rode along, and whether that identity holds
+ * superuser authority. */
 export interface RunnerSession {
   readonly auth_enabled: boolean;
   readonly username: string | null;
+  readonly superuser: boolean;
 }
 
 /**

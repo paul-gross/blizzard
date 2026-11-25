@@ -17,11 +17,17 @@
   white-space: nowrap;
 }
 /* Phone widths: the tracking that makes these labels legible on a monitor is
-   what pushes them past the viewport here, so the gutters give first — the
-   strip can still scroll if a fourth tab arrives, but three fit outright. */
+   what pushes them past the viewport here, so the gutters give first, and
+   give again at the narrowest phones, where a strip of four tabs and its
+   controls would otherwise overrun; past that the strip scrolls. */
 @media (max-width: 420px) {
   :host {
     padding: 0 10px;
+  }
+}
+@media (max-width: 360px) {
+  :host {
+    padding: 0 7px;
   }
 }
 :host(.active) {

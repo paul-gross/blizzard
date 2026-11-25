@@ -1,0 +1,26 @@
+@let p = prefix();
+@let r = record();
+<div class="detail" [attr.data-testid]="p + '-detail'">
+  @if (facts().length === 0) {
+    <p class="defaults" [attr.data-testid]="p + '-no-settings'">No keys stated; every one at its default.</p>
+  } @else {
+    <fleet-kit-fact-list [rows]="facts()" [testid]="p + '-settings'" />
+  }
+  @if (verbError(); as error) {
+    <fleet-kit-error-line [message]="error" [testid]="p + '-error'" />
+  }
+  @if (r.verbs.edit || r.verbs.retire || r.verbs.enable) {
+    <div class="verbs">
+      @if (r.verbs.edit) {
+        <fleet-kit-button [disabled]="editDisabled()" [testid]="p + '-edit'" [ariaLabel]="'Edit ' + r.key" (click)="edit.emit()">Edit</fleet-kit-button>
+      }
+      @if (r.verbs.retire) {
+        <fleet-kit-button variant="danger" [disabled]="retireDisabled()" [testid]="p + '-retire'" [ariaLabel]="'Retire ' + r.key" (click)="retire.emit()">Retire</fleet-kit-button>
+      }
+      @if (r.verbs.enable) {
+        <fleet-kit-button [disabled]="enableDisabled()" [testid]="p + '-enable'" [ariaLabel]="'Enable ' + r.key" (click)="enable.emit()">Enable</fleet-kit-button>
+      }
+    </div>
+  }
+  <ng-content />
+</div>

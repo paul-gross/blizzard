@@ -33,7 +33,7 @@ describe('resolvesUser and lacksSession', () => {
   });
 
   it('an authless surface neither resolves a user nor lacks a session', () => {
-    expect(resolvesUser(runnerSession({ auth_enabled: false, username: null }))).toBe(false);
-    expect(lacksSession(runnerSession({ auth_enabled: false, username: null }))).toBe(false);
+    expect(resolvesUser(runnerSession({ auth_enabled: false, username: null, superuser: true }))).toBe(false);
+    expect(lacksSession(runnerSession({ auth_enabled: false, username: null, superuser: true }))).toBe(false);
   });
 });

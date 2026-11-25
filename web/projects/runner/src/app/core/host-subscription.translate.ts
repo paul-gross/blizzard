@@ -1,9 +1,11 @@
-import type { RunnerSubscription } from 'fleet';
 import { sampleMiss, renewalResult, renewalFailure } from 'fleet/runner-shell';
 import type { runnerApi } from 'fleet/runner-shell';
 
-/** Copy the host's subscription facts at the runner read boundary. */
-export function runnerSubscription(row: runnerApi.HostSubscriptionView): RunnerSubscription {
+import { hostRecordFacts } from './host-record.translate';
+import type { HostSubscription } from './host-subscription.domain';
+
+/** Copy the host's subscription facts, and its record's, at the runner read boundary. */
+export function runnerSubscription(row: runnerApi.HostSubscriptionView): HostSubscription {
   return {
     slug: row.slug, name: row.name, provider: row.provider,
     condition: sampleMiss(row.condition), miss_reason: sampleMiss(row.miss_reason),
@@ -14,5 +16,6 @@ export function runnerSubscription(row: runnerApi.HostSubscriptionView): RunnerS
     spenders: [...(row.spenders ?? [])], renewal_result: renewalResult(row.renewal_result),
     renewal_failure_reason: renewalFailure(row.renewal_failure_reason),
     renewal_attempted_at: row.renewal_attempted_at ?? null,
+    ...hostRecordFacts(row),
   };
 }

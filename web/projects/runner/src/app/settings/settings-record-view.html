@@ -1,0 +1,48 @@
+@let p = 'settings-' + recordId();
+<fleet-kit-panel class="rec" [label]="title()" [bodyScroll]="false" [attr.data-testid]="p">
+  @if (unserved(); as why) {
+    <fleet-kit-error-line [message]="why" [testid]="p + '-unserved'" />
+  } @else {
+    <fleet-kit-async-state
+      [state]="state()"
+      placement="inline"
+      loadingText="LOADING…"
+      errorText="SETTINGS UNAVAILABLE"
+      emptyText="NO SETTINGS"
+      [emptyTestid]="p + '-empty'"
+    >
+      <div class="bd">
+        @if (line(); as l) {
+          <app-settings-in-force [line]="l" [testid]="p" />
+        }
+        @if (settingsError(); as error) {
+          <fleet-kit-error-line [message]="error" [testid]="p + '-error'" />
+        } @else {
+          @for (group of groups(); track group.table) {
+            @if (group.table !== '') {
+              <fleet-kit-section-head [label]="group.table" />
+            }
+            <ul class="keys">
+              @for (row of group.rows; track row.key) {
+                <li class="key" [attr.data-testid]="p + '-key-' + row.key">
+                  <span class="name">{{ row.name }}</span>
+                  <span class="val" [attr.data-testid]="p + '-value-' + row.key">{{ row.value }}</span>
+                  <span class="meta">
+                    <fleet-kit-badge [tone]="row.lifetime.tone" variant="soft" [attr.data-testid]="p + '-lifetime-' + row.key">{{ row.lifetime.label }}</fleet-kit-badge>
+                    <span class="src">{{ row.source }}</span>
+                    @if (row.writtenAt; as at) {
+                      <span class="src"><fleet-when [iso]="at" />@if (row.writtenBy; as by) { · {{ by }}}</span>
+                    }
+                    @if (row.editable) {
+                      <fleet-kit-button [disabled]="editDisabled()" [testid]="p + '-edit-' + row.key" [ariaLabel]="'Edit ' + row.key" (click)="edit.emit(row.key)">Edit</fleet-kit-button>
+                    }
+                  </span>
+                </li>
+              }
+            </ul>
+          }
+        }
+      </div>
+    </fleet-kit-async-state>
+  }
+</fleet-kit-panel>

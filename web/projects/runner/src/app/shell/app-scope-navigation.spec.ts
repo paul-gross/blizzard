@@ -120,7 +120,7 @@ describe('runner app scope across the board and the chunk page', () => {
       'GET /api/host/subscriptions': () => ({ items: [] }),
       'GET /api/host/registration': () =>
         hostRegistrationView({ host_id: 'hs_1', tenant_id: 'ten_1', host_name: 'xps', held_runner_ids: ['rn_1', 'rn_2'] }),
-      'GET /api/auth/session': () => ({ auth_enabled: false, username: null }),
+      'GET /api/auth/session': () => ({ auth_enabled: false, username: null, superuser: true }),
       'GET /api/flags': () => ({ flags: {}, overridden: [] }),
       'GET /runners/{runner_id}/api/leases': (_request, { runner_id }) => ({ items: LEASES[runner_id] ?? [] }),
       'GET /runners/{runner_id}/api/chunks/{chunk_id}': (_request, { chunk_id }) =>

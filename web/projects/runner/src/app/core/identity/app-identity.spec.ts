@@ -33,7 +33,7 @@ describe('LocalIdentity', () => {
   afterEach(() => stub.restore());
 
   it('renders the signed-in hub username and a logout control under an oauth-mode hub', async () => {
-    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice' });
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice', superuser: false });
     stub = s;
     const el = fixture.nativeElement as HTMLElement;
 
@@ -43,7 +43,7 @@ describe('LocalIdentity', () => {
   });
 
   it('renders nothing under a none-mode hub (authless surface)', async () => {
-    const { fixture, stub: s } = await render({ auth_enabled: false, username: null });
+    const { fixture, stub: s } = await render({ auth_enabled: false, username: null, superuser: true });
     stub = s;
     const el = fixture.nativeElement as HTMLElement;
 
@@ -52,7 +52,7 @@ describe('LocalIdentity', () => {
   });
 
   it('renders nothing under oauth when no session resolves (username null)', async () => {
-    const { fixture, stub: s } = await render({ auth_enabled: true, username: null });
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: null, superuser: false });
     stub = s;
     const el = fixture.nativeElement as HTMLElement;
 
@@ -63,7 +63,7 @@ describe('LocalIdentity', () => {
     // A `role="menu"` may own only menu items, so the block's actionable half
     // moves out to a real menu item the panel declares; what is left
     // here must be non-focusable and out of the accessibility tree.
-    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice' });
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice', superuser: false });
     stub = s;
     fixture.componentRef.setInput('variant', 'label');
     await settle(fixture);
@@ -77,7 +77,7 @@ describe('LocalIdentity', () => {
   });
 
   it('carries no role in the default control shape, where it is header chrome', async () => {
-    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice' });
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice', superuser: false });
     stub = s;
 
     expect(fixture.nativeElement.getAttribute('role')).toBeNull();
@@ -91,7 +91,7 @@ describe('LocalIdentity', () => {
     // above the narrow breakpoint. jsdom does no flex layout, so
     // this pins the declarations that make truncation possible; the widths
     // themselves are proven in a browser.
-    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'christopher-mcallister' });
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'christopher-mcallister', superuser: false });
     stub = s;
     const el = fixture.nativeElement as HTMLElement;
 
@@ -104,10 +104,10 @@ describe('LocalIdentity', () => {
   });
 
   it('renders a failed logout in the control shape only, never inside the label shape a menu hosts', async () => {
-    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice' });
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice', superuser: false });
     s.restore();
     stub = stubRunnerClient({
-      'GET /api/auth/session': () => ({ auth_enabled: true, username: 'alice' }),
+      'GET /api/auth/session': () => ({ auth_enabled: true, username: 'alice', superuser: false }),
       'POST /api/auth/logout': () => stubError(500, { detail: 'nope' }),
     });
     const el = fixture.nativeElement as HTMLElement;
@@ -122,7 +122,7 @@ describe('LocalIdentity', () => {
   });
 
   it('POSTs /api/auth/logout and reloads when the logout control is activated', async () => {
-    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice' });
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice', superuser: false });
     stub = s;
     const reloadSpy = vi.spyOn(TestBed.inject(RunnerLogout) as unknown as { reload: () => void }, 'reload');
     const el = fixture.nativeElement as HTMLElement;

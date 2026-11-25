@@ -1,0 +1,17 @@
+@let l = line();
+<p class="in-force" [attr.data-testid]="testid() + '-in-force'">
+  @if (l.running !== null) {
+    running revision {{ l.running }}@if (l.since; as since) { since <fleet-when [iso]="since" />}
+  } @else {
+    no revision in force yet
+  }
+  @if (l.pending !== null) {
+    <span [attr.data-testid]="testid() + '-in-force-pending'"> — revision {{ l.pending }} written, takes hold at the next tick</span>
+  }
+</p>
+@if (l.failed; as failed) {
+  <p class="failed" [attr.data-testid]="testid() + '-in-force-failed'">
+    <fleet-kit-badge tone="stale" variant="soft">FAILED</fleet-kit-badge>
+    revision {{ failed.revision }} failed to take hold <fleet-when [iso]="failed.since" />: <span class="err">{{ failed.error }}</span>
+  </p>
+}

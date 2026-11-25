@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
-import { errorMessage, asyncState, type HubSettingRow } from 'fleet';
+import { errorMessage, asyncState, type HubSettingRow, parseSettingText, settingValueText } from 'fleet';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { changesOf, display, parseSettingValue, revisionsOf } from './hub-settings.model';
+import { changesOf, revisionsOf } from './hub-settings.model';
 import { injectHubSettingsMutation } from './hub-settings.mutations';
 import { injectHubSettingsHistoryQuery, injectHubSettingsQuery } from './hub-settings.query';
 import { HubSettingsView } from './hub-settings-view';
@@ -25,14 +25,14 @@ export class HubSettingsPage {
   protected edit(row: HubSettingRow): void {
     const revision = this.settings.data()?.revision;
     if (this.busy() || revision === undefined) return;
-    this.editing.set({ row, revision }); this.value.set(display(row.value)); this.failure.set(null);
+    this.editing.set({ row, revision }); this.value.set(settingValueText(row.value)); this.failure.set(null);
   }
   protected cancel(): void { if (!this.busy()) this.editing.set(null); }
   protected save(unset = false): void {
     const edit = this.editing(); if (!edit || !this.allowed() || this.busy()) return;
     let value: unknown = this.value();
     if (!unset) {
-      const parsed = parseSettingValue(edit.row, this.value());
+      const parsed = parseSettingText(edit.row.value, this.value());
       if ('error' in parsed) { this.failure.set(parsed.error); return; }
       value = parsed.value;
     }

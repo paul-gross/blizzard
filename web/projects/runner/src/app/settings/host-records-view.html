@@ -1,0 +1,36 @@
+@let p = 'records-' + kind();
+<fleet-kit-panel class="recs" [label]="title()" [bodyScroll]="false" [attr.data-testid]="p">
+  <div class="bd">
+    @if (canCreate()) {
+      <div class="actions">
+        <fleet-kit-button [disabled]="createDisabled()" [testid]="p + '-create'" (click)="create.emit()">Create {{ kind() }}</fleet-kit-button>
+      </div>
+    }
+    <fleet-kit-async-state
+      [state]="state()"
+      placement="inline"
+      loadingText="LOADING…"
+      [errorText]="title().toUpperCase() + ' UNAVAILABLE'"
+      [emptyText]="'NO ' + title().toUpperCase()"
+      [emptyTestid]="p + '-empty'"
+    >
+      <ul class="rows">
+        @for (record of records(); track record.key) {
+          @let open = openKey() === record.key;
+          <li class="row" [class.retired]="record.retired" [attr.data-testid]="p + '-' + record.key">
+            <div class="head">
+              <span class="key">{{ record.key }}</span>
+              <span class="meta">
+                <fleet-kit-badge [tone]="record.state.tone" variant="soft" [attr.data-testid]="p + '-' + record.key + '-state'">{{ record.state.label }}</fleet-kit-badge>
+                <fleet-kit-button [testid]="p + '-' + record.key + '-open'" [ariaLabel]="(open ? 'Close ' : 'Open ') + record.key" (click)="openToggled.emit(record.key)">{{ open ? 'Close' : 'Open' }}</fleet-kit-button>
+              </span>
+            </div>
+            @if (open) {
+              <ng-content />
+            }
+          </li>
+        }
+      </ul>
+    </fleet-kit-async-state>
+  </div>
+</fleet-kit-panel>

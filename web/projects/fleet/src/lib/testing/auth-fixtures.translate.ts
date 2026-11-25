@@ -63,5 +63,5 @@ export function flagsResponse(overrides: Partial<FlagsResponse> = {}): FlagsResp
 
 /** A runner `GET /api/auth/session` answer — an oauth-mode hub with `alice` signed in — with `overrides` applied. */
 export function runnerAuthSessionView(overrides: Partial<RunnerAuthSessionView> = {}): RunnerAuthSessionView {
-  return { auth_enabled: true, username: 'alice', ...overrides };
+  return { auth_enabled: true, username: 'alice', superuser: false, ...overrides };
 }

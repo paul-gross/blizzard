@@ -38,7 +38,7 @@ function headerRoutes(overrides: RunnerRoutes = {}): RunnerRoutes {
   return {
     'GET /api/host/runners': () => ({ items: [] }),
     'GET /api/host/environments': () => ({ workspaces: [] }),
-    'GET /api/auth/session': () => ({ auth_enabled: false, username: null }),
+    'GET /api/auth/session': () => ({ auth_enabled: false, username: null, superuser: true }),
     'GET /api/flags': () => ({ flags: {}, overridden: [] }),
     ...overrides,
   };
@@ -90,7 +90,7 @@ describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
       window.addEventListener('unhandledrejection', onRejection);
 
       const session =
-        length === 0 ? { auth_enabled: false, username: null } : { auth_enabled: true, username: usernameOfLength(length) };
+        length === 0 ? { auth_enabled: false, username: null, superuser: true } : { auth_enabled: true, username: usernameOfLength(length), superuser: false };
       const stub = stubRunnerClient(headerRoutes({ 'GET /api/auth/session': () => session }));
 
       const fixture = await render();
@@ -148,7 +148,7 @@ describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
     window.addEventListener('unhandledrejection', onRejection);
 
     const stub = stubRunnerClient(
-      headerRoutes({ 'GET /api/auth/session': () => ({ auth_enabled: true, username: usernameOfLength(20) }) }),
+      headerRoutes({ 'GET /api/auth/session': () => ({ auth_enabled: true, username: usernameOfLength(20), superuser: false }) }),
     );
 
     // `degraded` is longer than every other string the connection cell ever
@@ -199,7 +199,7 @@ describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
   it('shows the overridden-flags marker in the connection cell, overflow-free, at every width', async () => {
     const stub = stubRunnerClient(
       headerRoutes({
-        'GET /api/auth/session': () => ({ auth_enabled: true, username: usernameOfLength(20) }),
+        'GET /api/auth/session': () => ({ auth_enabled: true, username: usernameOfLength(20), superuser: false }),
         'GET /api/flags': () => ({ flags: { alpha: true, beta: false }, overridden: ['alpha', 'beta'] }),
       }),
     );
@@ -243,7 +243,7 @@ describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
 
     const stub = stubRunnerClient(
       headerRoutes({
-        'GET /api/auth/session': () => ({ auth_enabled: true, username: usernameOfLength(38) }),
+        'GET /api/auth/session': () => ({ auth_enabled: true, username: usernameOfLength(38), superuser: false }),
         'POST /api/auth/logout': () => stubError(500, { detail: 'nope' }),
       }),
     );

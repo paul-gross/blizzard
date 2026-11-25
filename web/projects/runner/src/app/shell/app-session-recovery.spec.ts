@@ -46,7 +46,7 @@ function refusedReads(detail: string): RunnerRoutes {
  * every other read is a no-session 401. */
 const NO_SESSION: RunnerRoutes = {
   ...refusedReads('no session'),
-  'GET /api/auth/session': () => ({ auth_enabled: true, username: null }),
+  'GET /api/auth/session': () => ({ auth_enabled: true, username: null, superuser: false }),
   'GET /api/flags': () => ({ flags: {}, overridden: [] }),
 };
 
@@ -100,7 +100,7 @@ describe('runner App session-recovery fork', () => {
   it('renders app-panel through an upstream 401 whose session resolves a username', async () => {
     const { restore: r } = await setUp({
       ...refusedReads('upstream'),
-      'GET /api/auth/session': () => ({ auth_enabled: true, username: 'alice' }),
+      'GET /api/auth/session': () => ({ auth_enabled: true, username: 'alice', superuser: false }),
     });
     restore = r;
 
@@ -159,7 +159,7 @@ describe('runner App session-recovery fork', () => {
     const pendingSession = new Promise<Response>((resolve) => {
       resolveSession = () =>
         resolve(
-          new Response(JSON.stringify({ auth_enabled: true, username: null }), {
+          new Response(JSON.stringify({ auth_enabled: true, username: null, superuser: false }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           }),

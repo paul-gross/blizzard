@@ -120,6 +120,27 @@ Over HTTP a superuser sends `POST /api/host/settings/apply` with the document as
 preview it; the answer lists one outcome per host key, per stated record and per stated runner. Human clients read
 `GET /api/host/settings/export`.
 
+## The Settings tab
+
+The runner panel's Settings tab, at `/settings`, shows the host's settings and each hosted runner's, the host's
+workspaces and subscriptions, and a History. Each settings record lists its keys with their value, source and lifetime,
+and its `in_force` line: the revision in use and since when, a newer written revision as pending until a pass takes it
+up, and a failed rebuild with its revision and error while the last good revision stays in force (see
+[lifetimes and status](#lifetimes-and-status)). If the settings cannot be resolved, the record shows `settings_error` in
+place of its keys. A runner its host does not serve (starting, halted, failed to start, or retired) shows why in place
+of its settings and its History, and is read once its host serves it. Each workspace and subscription opens to its
+state, its settings and its own change history. History shows each settings record's change log, the host's only its own
+entries.
+
+Only a session the session read, `GET /api/auth/session`, reports as `superuser: true` sees edit controls; every session
+on an ungated host does. They are an edit of a `pass` or `session` key, reset to default, and a workspace's or
+subscription's create, edit, retire and enable. Every other signed-in user reads the same panels with none. A key's edit
+takes the value as typed for a text key, while a key with no value reads it as JSON when it parses and as text
+otherwise. An edit is sent with the revision read when it opened. If another writer changed it since, the edit is
+refused and the draft kept, but it is not retried against the newer revision: cancel and reopen the dialog, then reapply
+your changes. Any other refusal names its key and reason beside it. Apply and export stay with the
+[CLI](#apply-and-export-a-document).
+
 ## Retirement and recovery
 
 Retiring a runner can leave its identity alongside retained settings and history. An unconfigured retained identity

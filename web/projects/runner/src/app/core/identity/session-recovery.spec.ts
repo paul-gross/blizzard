@@ -62,7 +62,7 @@ describe('SessionRecovery', () => {
 
   it('navigates to /api/auth/login with the live pathname+search on a no-session 401', async () => {
     history.pushState({}, '', '/?chunk=ch_1');
-    const { navigateSpy, restore: r } = setUp(() => ({ auth_enabled: true, username: null }));
+    const { navigateSpy, restore: r } = setUp(() => ({ auth_enabled: true, username: null, superuser: false }));
     restore = r;
 
     await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
@@ -73,7 +73,7 @@ describe('SessionRecovery', () => {
 
   it('coalesces ten concurrent no-session 401s into one navigation', async () => {
     history.pushState({}, '', '/?chunk=ch_2');
-    const { navigateSpy, restore: r } = setUp(() => ({ auth_enabled: true, username: null }));
+    const { navigateSpy, restore: r } = setUp(() => ({ auth_enabled: true, username: null, superuser: false }));
     restore = r;
 
     await Promise.all(Array.from({ length: 10 }, () => runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false })));
@@ -83,7 +83,7 @@ describe('SessionRecovery', () => {
 
   it('navigates on a direct recoverFromUnauthenticated() call — the shape RunnerLiveUpdates drives on a stream 401 (D9)', async () => {
     history.pushState({}, '', '/?chunk=ch_live');
-    const { recovery, navigateSpy, restore: r } = setUp(() => ({ auth_enabled: true, username: null }));
+    const { recovery, navigateSpy, restore: r } = setUp(() => ({ auth_enabled: true, username: null, superuser: false }));
     restore = r;
 
     // No Response/Request at all — the stream's transport never produces either,
@@ -106,7 +106,7 @@ describe('SessionRecovery', () => {
   });
 
   it('leaves a 401 untouched when the session read still resolves a username — an upstream rejection, not an expiry', async () => {
-    const { navigateSpy, recovery, restore: r } = setUp(() => ({ auth_enabled: true, username: 'alice' }));
+    const { navigateSpy, recovery, restore: r } = setUp(() => ({ auth_enabled: true, username: 'alice', superuser: false }));
     restore = r;
 
     const result = await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
@@ -117,7 +117,7 @@ describe('SessionRecovery', () => {
   });
 
   it('leaves a 401 untouched on an authless surface (auth_enabled: false)', async () => {
-    const { navigateSpy, recovery, restore: r } = setUp(() => ({ auth_enabled: false, username: null }));
+    const { navigateSpy, recovery, restore: r } = setUp(() => ({ auth_enabled: false, username: null, superuser: true }));
     restore = r;
 
     const result = await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
@@ -129,7 +129,7 @@ describe('SessionRecovery', () => {
 
   it('acts on neither a 403 nor a success', async () => {
     const { navigateSpy, restore: r } = setUp(
-      () => ({ auth_enabled: true, username: null }),
+      () => ({ auth_enabled: true, username: null, superuser: false }),
       () => stubError(403, { detail: 'forbidden' }),
     );
     restore = r;
@@ -142,7 +142,7 @@ describe('SessionRecovery', () => {
 
   it('does not navigate again while the mark from a prior attempt still stands, and sets recovering instead', async () => {
     history.pushState({}, '', '/?chunk=ch_3');
-    const first = setUp(() => ({ auth_enabled: true, username: null }));
+    const first = setUp(() => ({ auth_enabled: true, username: null, superuser: false }));
 
     // The initial attempt: mark set, one navigation.
     await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
@@ -154,7 +154,7 @@ describe('SessionRecovery', () => {
     // (a document-wide store, not component state) survives across it, which is
     // the mark's whole point.
     TestBed.resetTestingModule();
-    const second = setUp(() => ({ auth_enabled: true, username: null }));
+    const second = setUp(() => ({ auth_enabled: true, username: null, superuser: false }));
     restore = second.restore;
 
     // An ordinary session poll resolving no username along the way must not clear
@@ -171,20 +171,20 @@ describe('SessionRecovery', () => {
 
   it('clears the mark and recovering state only on a session read that resolves a username', async () => {
     history.pushState({}, '', '/?chunk=ch_4');
-    let sessionBody: ReturnType<typeof runnerAuthSessionView> = { auth_enabled: true, username: null };
+    let sessionBody: ReturnType<typeof runnerAuthSessionView> = { auth_enabled: true, username: null, superuser: false };
     const { navigateSpy, recovery, restore: r } = setUp(() => sessionBody);
     restore = r;
 
     await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
     expect(navigateSpy).toHaveBeenCalledTimes(1);
 
-    sessionBody = { auth_enabled: true, username: 'alice' };
+    sessionBody = { auth_enabled: true, username: 'alice', superuser: false };
     await readRunnerSession();
     expect(recovery.recovering()).toBe(false);
 
     // The mark itself is now clear too — proven by a fresh no-session 401 firing a
     // second, independent navigation rather than setting `recovering`.
-    sessionBody = { auth_enabled: true, username: null };
+    sessionBody = { auth_enabled: true, username: null, superuser: false };
     await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
     expect(navigateSpy).toHaveBeenCalledTimes(2);
     expect(recovery.recovering()).toBe(false);
@@ -211,7 +211,7 @@ describe('SessionRecovery', () => {
         const path = new URL(input.url).pathname;
         if (path === '/api/auth/logout') return pendingLogout;
         if (path === '/api/auth/session') {
-          return new Response(JSON.stringify({ auth_enabled: true, username: null }), {
+          return new Response(JSON.stringify({ auth_enabled: true, username: null, superuser: false }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           });

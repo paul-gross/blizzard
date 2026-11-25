@@ -1,5 +1,5 @@
 import type { HostWorkspace } from './host-workspace.domain';
 
 export function hostWorkspace(overrides: Partial<HostWorkspace> = {}): HostWorkspace {
-  return { workspace_id: 'ws', max_environments: 1, ...overrides };
+  return { workspace_id: 'ws', max_environments: 1, revision: 1, state: 'active', settings: {}, ...overrides };
 }

@@ -10,7 +10,7 @@ import { AppNav } from './app-nav';
 /**
  * The panel's top tab strip with its filters — its own half of `web:shell-sweep`
  * (`blizzard-context:/verification/blizzard.md` bzh:web-shell-sweep). `KitTabStrip`/
- * `KitTab`'s chrome is unclamped flex, so this proves that the Board/Events/Host labels and
+ * `KitTab`'s chrome is unclamped flex, so this proves that the Board/Events/Host/Settings labels and
  * the Runner and Project filters over a host's worth of long-named, braked runners and
  * several projects never force the strip past the viewport — each filter's chips scroll
  * inside it instead — and that every tab stays on-screen, at every viewport from a wide
@@ -104,7 +104,7 @@ describe('runner app-nav shell sweep (web:shell-sweep)', () => {
           `${label}: the tab strip overflows horizontally (${nav!.scrollWidth} > ${window.innerWidth})`,
         ).toBeLessThanOrEqual(window.innerWidth);
 
-        for (const testid of ['nav-board', 'nav-events', 'nav-host']) {
+        for (const testid of ['nav-board', 'nav-events', 'nav-host', 'nav-settings']) {
           const tab = root.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
           expect(tab, `${label}: no ${testid} tab`).not.toBeNull();
           const rect = tab!.getBoundingClientRect();

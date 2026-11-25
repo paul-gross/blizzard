@@ -26,7 +26,7 @@ function headerRoutes(overrides: RunnerRoutes = {}): RunnerRoutes {
   return {
     'GET /api/host/runners': () => ({ items: [] }),
     'GET /api/host/environments': () => ({ workspaces: [] }),
-    'GET /api/auth/session': () => ({ auth_enabled: false, username: null }),
+    'GET /api/auth/session': () => ({ auth_enabled: false, username: null, superuser: true }),
     'GET /api/flags': () => ({ flags: {}, overridden: [] }),
     ...overrides,
   };
@@ -293,7 +293,7 @@ describe('AppHeader', () => {
     };
 
     it('carries Log out as a menu item, so it survives the header cell collapsing', async () => {
-      withSession({ auth_enabled: true, username: 'alice' });
+      withSession({ auth_enabled: true, username: 'alice', superuser: false });
       const fixture = await render();
 
       expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="identity-logout"]')).toBeNull();
@@ -306,7 +306,7 @@ describe('AppHeader', () => {
     });
 
     it('logs out through that item', async () => {
-      withSession({ auth_enabled: true, username: 'alice' });
+      withSession({ auth_enabled: true, username: 'alice', superuser: false });
       const reload = vi
         .spyOn(RunnerLogout.prototype as unknown as { reload: () => void }, 'reload')
         .mockImplementation(() => undefined);
@@ -326,7 +326,7 @@ describe('AppHeader', () => {
       stub.restore();
       stub = stubRunnerClient(
         headerRoutes({
-          'GET /api/auth/session': () => ({ auth_enabled: true, username: 'alice' }),
+          'GET /api/auth/session': () => ({ auth_enabled: true, username: 'alice', superuser: false }),
           'POST /api/auth/logout': () => stubError(500, { detail: 'nope' }),
         }),
       );
@@ -343,7 +343,7 @@ describe('AppHeader', () => {
     });
 
     it('offers no Log out under a none-mode hub, where the surface is authless', async () => {
-      withSession({ auth_enabled: false, username: null });
+      withSession({ auth_enabled: false, username: null, superuser: true });
       const panel = await openMenu(await render());
 
       expect(panel.querySelector('[data-testid="local-panel-logout"]')).toBeNull();
