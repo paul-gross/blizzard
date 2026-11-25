@@ -16,7 +16,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.invariants import Check, QueryCheck, Violation
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.node_steps import Executor
-from blizzard.foundation.roles import adapter_model
+from blizzard.foundation.roles import adapter_model, collaborator
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, RouteHistory
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
@@ -48,6 +48,7 @@ class HubQueryCheck(QueryCheck):
         return self.conn.execute(OPEN_TENANTS.confine(statement))
 
 
+@collaborator
 @dataclass(frozen=True)
 class FactsCheck(Check):
     """An invariant answerable only per chunk, over its loaded facts."""
