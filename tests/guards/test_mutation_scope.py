@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 import tomllib
 from collections.abc import Callable
@@ -699,6 +700,30 @@ def test_an_expired_budget_interrupts_the_mutation_loop(monkeypatch: pytest.Monk
     assert m._run_with_budget(0.05, fake) is False
     assert signals == [(m.os.getpid(), m.signal.SIGINT)]
     assert timers[0].cancelled
+
+
+def test_budget_interrupt_reaches_a_waiting_mutation_loop() -> None:
+    # Isolate the real SIGINT and bound the entire child, including its startup and cleanup.
+    code = """
+import signal
+from tests.guards.test_mutation_scope import m, _fake_mutmut
+
+signal.signal(signal.SIGINT, signal.default_int_handler)
+caught = False
+def run(_names, _max_children):
+    global caught
+    try:
+        fake.get_mutant_runner(4).startup()
+        while True:
+            signal.pause()
+    except KeyboardInterrupt:
+        caught = True
+
+fake = _fake_mutmut(run)
+assert m._run_with_budget(0.1, fake) is False
+assert caught, "the mutation loop did not catch the budget interrupt"
+"""
+    subprocess.run([sys.executable, "-c", code], check=True, timeout=30)
 
 
 def test_an_exit_after_the_budget_expires_is_the_budget_stop(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import select
 import signal
 import subprocess
 import sys
@@ -112,6 +113,7 @@ def test_interrupt_group_signals_a_real_process_group() -> None:
         os.close(write_fd)
         write_fd = -1
         try:
+            assert select.select([read_fd], [], [], 30)[0], "child did not signal readiness"
             assert os.read(read_fd, 1) == b"R"
             probe.interrupt_group(proc.pid)  # `start_new_session` makes pgid == pid
             assert proc.wait(timeout=30) == -signal.SIGINT
