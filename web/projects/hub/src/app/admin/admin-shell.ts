@@ -5,7 +5,7 @@ import { KitTab, KitTabStrip } from 'fleet';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { injectDomainUrgenciesQuery } from '../core/urgencies.query';
 import { injectProjectDomainsQuery } from '../core/projects.query';
-import { changesTotal, liveUrgencyCount, tabCount } from './admin-shell.model';
+import { changesTotal, linkedTabCount, liveUrgencyCount, tabCount } from './admin-shell.model';
 import { injectConfigChangesQuery } from './changes/changes.query';
 import { injectCredentialsQuery } from './credentials/credentials.query';
 import { injectForgeListQuery } from './forges/forges.query';
@@ -14,6 +14,7 @@ import { injectLensLinks } from './projects/lens-links';
 import { injectRepositoriesQuery } from './repositories/repositories.query';
 import { injectSecretsQuery } from './secrets/secrets.query';
 import { injectWorkSourcesQuery } from './work-sources/work-sources.query';
+import { workSourceKey } from './work-sources/work-sources.model';
 
 /**
  * The `/admin` route — its own second strip over the hub's administration surfaces,
@@ -51,8 +52,8 @@ export class AdminShell {
     members: tabCount(this.membersQuery.data()),
     projects: tabCount(this.projectsQuery.data()),
     urgencies: liveUrgencyCount(this.urgenciesQuery.data()),
-    sources: tabCount(this.sourcesQuery.data(), this.sourceLinks.names()),
-    repositories: tabCount(this.repositoriesQuery.data(), this.repositoryLinks.names()),
+    sources: linkedTabCount(this.sourcesQuery.data(), workSourceKey, this.sourceLinks.names()),
+    repositories: linkedTabCount(this.repositoriesQuery.data(), (repository) => repository.repository_id, this.repositoryLinks.names()),
     forges: tabCount(this.forgesQuery.data()),
     credentials: tabCount(this.credentialsQuery.data()?.credentials),
     secrets: tabCount(this.secretsQuery.data()),

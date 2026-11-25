@@ -34,12 +34,14 @@ const SOURCES = {
     workSourceSummary({ name: 'hub', slug: 'hub', work_source_id: null, built_in: true }),
     workSourceSummary({ name: 'jira', slug: 'jira', work_source_id: 'wsrc_j' }),
     workSourceSummary({ name: 'gh', slug: 'gh', work_source_id: 'wsrc_g' }),
+    workSourceSummary({ name: 'Unlinked', slug: 'other', work_source_id: 'wsrc_other' }),
   ],
 };
 const REPOSITORIES = {
   repositories: [
     repositorySummary({ name: 'core', slug: 'core', repository_id: 'repo_c' }),
-    repositorySummary({ name: 'web', slug: 'web', repository_id: 'web' }),
+    repositorySummary({ name: 'web', slug: 'web', repository_id: 'repo_w' }),
+    repositorySummary({ name: 'Unlinked', slug: 'other', repository_id: 'repo_other' }),
   ],
 };
 const SECRETS = [secretView({ name: 'gh-token' })];
@@ -70,10 +72,21 @@ describe('AdminShell', () => {
       'GET /api/credentials': () => ({ credentials: [credentialSummary(), credentialSummary({ credential_id: 'cred_b' })], bindings: [], forge_bindings: [] }),
       'GET /api/config/changes': () => configChangesPage({ total: slug === null ? 42 : 7 }),
       'GET /api/projects/{project}/source-links': () => ({
-        source_links: [sourceLinkView({ project_id: 'proj_w', name: 'hub', slug: 'hub', linked: true, built_in: true, revision: null })],
+        source_links: [
+          sourceLinkView({ project_id: 'proj_w', name: 'hub', slug: 'hub', built_in: true, revision: null }),
+          sourceLinkView({ project_id: 'proj_w', name: 'wsrc_j', slug: 'jira' }),
+          sourceLinkView({ project_id: 'proj_w', name: 'wsrc_g', slug: 'gh' }),
+          sourceLinkView({ project_id: 'proj_w', name: 'wsrc_other', slug: 'other', linked: false }),
+          sourceLinkView({ project_id: 'proj_w', name: 'wsrc_retired', slug: 'retired' }),
+        ],
       }),
       'GET /api/projects/{project}/repository-links': () => ({
-        repository_links: [repositoryLinkView({ project_id: 'proj_w', name: 'web', slug: 'web', repository_id: 'web', linked: true, revision: 1 })],
+        repository_links: [
+          repositoryLinkView({ project_id: 'proj_w', name: 'core', repository_id: 'repo_c' }),
+          repositoryLinkView({ project_id: 'proj_w', name: 'web', repository_id: 'repo_w' }),
+          repositoryLinkView({ project_id: 'proj_w', name: 'Unlinked', repository_id: 'repo_other', linked: false }),
+          repositoryLinkView({ project_id: 'proj_w', name: 'Retired', repository_id: 'repo_retired' }),
+        ],
       }),
     });
     TestBed.configureTestingModule({
@@ -97,8 +110,8 @@ describe('AdminShell', () => {
     const el = await open(null, [...OPERATOR_ME_RESPONSE.permissions, 'user:manage']);
     expect(count(el, 'members')).toBe('3');
     expect(count(el, 'projects')).toBe('2');
-    expect(count(el, 'work-sources')).toBe('3');
-    expect(count(el, 'repositories')).toBe('2');
+    expect(count(el, 'work-sources')).toBe('4');
+    expect(count(el, 'repositories')).toBe('3');
     expect(count(el, 'credentials')).toBe('2');
     expect(count(el, 'secrets')).toBe('1');
     expect(count(el, 'changes')).toBe('42');
@@ -109,8 +122,10 @@ describe('AdminShell', () => {
       'winter',
       OPERATOR_ME_RESPONSE.permissions.filter((permission) => permission !== 'user:manage'),
     );
-    expect(count(el, 'work-sources')).toBe('1');
-    expect(count(el, 'repositories')).toBe('1');
+    expect(count(el, 'work-sources')).toBe('3');
+    expect(count(el, 'repositories')).toBe('2');
+    expect(new URLSearchParams(stub.forRoute('/api/work-sources')[0].search).get('include_retired')).toBe('false');
+    expect(new URLSearchParams(stub.forRoute('/api/repositories')[0].search).get('include_retired')).toBe('false');
     expect(count(el, 'projects')).toBe('2');
     expect(count(el, 'members')).toBeNull();
     expect(stub.forRoute('/api/members')).toHaveLength(0);
