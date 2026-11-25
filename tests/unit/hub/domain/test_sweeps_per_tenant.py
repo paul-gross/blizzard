@@ -192,7 +192,7 @@ class _WorkRefs:
             counts[row.tenant] = counts.get(row.tenant, 0) + 1
         return {
             tenant: WorkRefsSignature(
-                marks=(("refs", counts.get(tenant, 0), counts.get(tenant, 0)),),
+                marks=(("refs", counts[tenant], counts[tenant]),) if tenant in counts else (),
                 source_change=self.changes.get(tenant),
             )
             for tenant in counts.keys() | self.changes.keys()
