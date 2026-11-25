@@ -7,6 +7,7 @@ a warning, not an error: cycles are intentional and retries escape to escalation
 
 from __future__ import annotations
 
+import posixpath
 import re
 from collections.abc import Collection
 from dataclasses import dataclass, field
@@ -22,6 +23,7 @@ from blizzard.hub.domain.graph.model import (
     RESERVED_ESCALATE,
     RESERVED_TERMINAL,
     SESSION_LEGAL_FORMS,
+    ChoiceDoc,
     ChoiceTarget,
     Graph,
     GraphDoc,
@@ -44,6 +46,13 @@ def _is_uninlined_file_reference(content: str) -> bool:
     if content.split() != [content] or "://" in content:
         return False
     return "/" in content or bool(_FILE_EXTENSION.search(content))
+
+
+def _escapes_workdir(path: str) -> bool:
+    """Whether ``path``, joined onto a workdir, names somewhere outside it — judged by path syntax alone."""
+    if posixpath.isabs(path):
+        return True
+    return posixpath.normpath(path).split("/")[0] == ".."
 
 
 class GraphValidationError(Exception):
@@ -348,6 +357,10 @@ class NodeCheck:
                 self.errors.append(
                     f"node `{node.name}`: `checks_timeout` is only legal on a node that declares `checks:`"
                 )
+        if node.checks_cwd is not None and _escapes_workdir(node.checks_cwd):
+            self.errors.append(
+                f"node `{node.name}`: `checks_cwd` must be a relative path inside the workdir, got `{node.checks_cwd}`"
+            )
         if node.checks_timeout is not None and node.checks_timeout <= 0:
             self.errors.append(f"node `{node.name}`: `checks_timeout` must be a positive number of seconds")
         if node.judgement is None:
@@ -381,6 +394,7 @@ class NodeCheck:
                 self.errors.append(f"node `{node.name}` choice `{choice.name}`: missing `to`")
                 continue
             target = ChoiceTarget.of(choice.to)
+            self._check_target_carriage(choice, target)
             if target.malformed:
                 self.errors.append(
                     f"node `{node.name}` choice `{choice.name}`: malformed cross-graph target "
@@ -398,6 +412,17 @@ class NodeCheck:
                     f"(and is not the reserved terminal `{RESERVED_TERMINAL}` or the reserved "
                     f"escalation `{RESERVED_ESCALATE}`)"
                 )
+
+    def _check_target_carriage(self, choice: ChoiceDoc, target: ChoiceTarget) -> None:
+        """What a choice may carry along its target: a migration's ``model`` is one non-empty name, and
+        only a same-graph edge carries arrival context."""
+        where = f"node `{self.node.name}` choice `{choice.name}`"
+        if target.graph is not None and choice.model is not None and not choice.model.strip():
+            self.errors.append(f"{where}: `model` must be a non-empty string")
+        if choice.prompt_addendum is not None and (target.graph is not None or target.node == RESERVED_ESCALATE):
+            self.errors.append(
+                f"{where}: `prompt_addendum` is not legal on `to: {choice.to}` — nothing arrives along it to carry it"
+            )
 
     def _check_session_ref(self) -> None:
         """``resume:<name>`` resolves declared-session-first, node-second; ``fresh:<name>``

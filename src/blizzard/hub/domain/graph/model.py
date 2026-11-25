@@ -166,13 +166,15 @@ class Parser:
     :class:`GraphParseError`; whether a readable value is *legal* is the validator's."""
 
     body: dict[object, object]
+    #: Names the map in a refusal, so an author can find the key in a large graph.
+    where: str
 
     @classmethod
-    def of(cls, value: object, where: object) -> Parser:
+    def of(cls, value: object, where: str) -> Parser:
         if not _is_mapping(value):
-            raise GraphParseError(f"expected a map at {where!r}, got {type(value).__name__}")
+            raise GraphParseError(f"expected a map at {where}, got {type(value).__name__}")
         body: dict[object, object] = value
-        return cls(body)
+        return cls(body, where)
 
     def get(self, key: str, default: object = None) -> object:
         return self.body.get(key, default)
@@ -184,8 +186,25 @@ class Parser:
             raise GraphParseError(message) from exc
 
     def text(self, key: str) -> str | None:
+        """One text value; a number reads as its text, a list, map, or boolean is refused."""
         value = self.body.get(key)
-        return str(value) if value is not None else None
+        if value is None:
+            return None
+        if isinstance(value, (bool, list, dict)):
+            kind = "boolean" if isinstance(value, bool) else "list" if isinstance(value, list) else "map"
+            raise GraphParseError(f"{self.where}: `{key}` must be a single value, got a {kind}")
+        return str(value)
+
+    def only(self, known: frozenset[str], where: str) -> None:
+        """Refuse every key outside ``known``, so a misspelled one fails rather than being ignored."""
+        unknown = sorted(str(key) for key in self.body if key not in known)
+        if unknown:
+            # Pinned by
+            # tests/unit/hub/domain/graph/test_sessions.py::test_an_unknown_session_key_is_rejected_naming_the_key
+            raise GraphParseError(
+                f"{where}: unknown key(s) {', '.join(unknown)} — this hub "
+                f"(blizzard {HUB_VERSION}) recognizes only {sorted(known)}"
+            )
 
     def number(self, key: str) -> int | None:
         value = self.body.get(key)
@@ -222,9 +241,9 @@ class ChoiceDoc:
     requires_checks: bool = False
 
     @classmethod
-    def of(cls, key: object, raw: object) -> ChoiceDoc:
-        body = Parser.of(raw, key)
+    def of(cls, key: object, raw: object, *, node: str) -> ChoiceDoc:
         name = str(key)
+        body = Parser.of(raw, f"node {node!r} choice {name!r}")
         to = body.text("to")
         return cls(
             name=name,
@@ -245,13 +264,13 @@ class JudgementDoc:
     choices: list[ChoiceDoc]
 
     @classmethod
-    def of(cls, raw: object) -> JudgementDoc | None:
+    def of(cls, raw: object, *, node: str) -> JudgementDoc | None:
         if raw is None:
             return None
         if not _is_mapping(raw):
             raise GraphParseError("`judgement` must be a map")
         mapping: dict[object, object] = raw
-        body = Parser(mapping)
+        body = Parser(mapping, f"node {node!r} `judgement`")
         by = JudgedBy(str(body.get("by", JudgedBy.WORKER.value)))
         choices_raw = body.get("choices", {})
         if not _is_mapping(choices_raw):
@@ -260,7 +279,7 @@ class JudgementDoc:
         return cls(
             prompt=body.text("prompt"),
             by=by,
-            choices=[ChoiceDoc.of(name, entry) for name, entry in choices.items()],
+            choices=[ChoiceDoc.of(name, entry, node=node) for name, entry in choices.items()],
         )
 
 
@@ -277,10 +296,10 @@ class RunStepDoc:
     produces: str | None = None
 
     @classmethod
-    def of(cls, raw: object) -> RunStepDoc:
+    def of(cls, raw: object, *, node: str) -> RunStepDoc:
         if isinstance(raw, str):
             return cls(command=raw)
-        body = Parser.of(raw, "run entry")
+        body = Parser.of(raw, f"node {node!r} `run` entry")
         return cls(
             command=str(body.require("command", "a `run` entry must declare `command`")),
             name=body.text("name"),
@@ -369,8 +388,8 @@ class NodeDoc(NodeShape):
 
     @classmethod
     def of(cls, key: object, raw: object) -> NodeDoc:
-        body = Parser.of(raw, key)
         name = str(key)
+        body = Parser.of(raw, f"node {name!r}")
         executor = Executor(str(body.get("executor", Executor.RUNNER.value)))
         session = SessionRef.of(str(body.get("session", SessionMode.RESUME.value)))
         checks = [str(c) for c in body.items("checks")]
@@ -381,7 +400,7 @@ class NodeDoc(NodeShape):
         poll_timeout_seconds = body.number("poll_timeout")
         checks_cwd = body.text("checks_cwd")
         checks_timeout = body.number("checks_timeout")
-        run = [RunStepDoc.of(r) for r in body.items("run")]
+        run = [RunStepDoc.of(r, node=name) for r in body.items("run")]
         action_args, malformed_action_args = cls._action_args(body.get("with"), node=name)
         return cls(
             name=name,
@@ -393,7 +412,7 @@ class NodeDoc(NodeShape):
             retries_max=retries_max,
             retries_exhausted=retries_exhausted,
             bounce_cap=bounce_cap,
-            judgement=JudgementDoc.of(body.get("judgement")),
+            judgement=JudgementDoc.of(body.get("judgement"), node=name),
             run=run,
             names_run="run" in body.body,
             action=body.text("action"),
@@ -455,7 +474,9 @@ class RotatePolicy:
 
     @classmethod
     def of(cls, raw: object, *, session: str) -> RotatePolicy:
-        body = Parser.of(raw, f"session {session!r} `rotate`")
+        where = f"session {session!r} `rotate`"
+        body = Parser.of(raw, where)
+        body.only(ROTATE_KNOWN_KEYS, where)
         return cls(
             max_context_tokens=body.number("max_context_tokens"),
             max_transcript_bytes=body.number("max_transcript_bytes"),
@@ -469,6 +490,9 @@ RETIRED_NODE_KEYS = frozenset({"proposes_work_items"})
 
 # Every key this hub's session parser reads by name.
 SESSION_KNOWN_KEYS = frozenset({"model", "effort", "rotate", "compaction_window", "harnesses"})
+
+# Every key a session's ``rotate:`` block is read by.
+ROTATE_KNOWN_KEYS = frozenset({"max_context_tokens", "max_transcript_bytes", "max_invocations"})
 
 
 @domain_model
@@ -490,14 +514,7 @@ class SessionDecl:
     def of(cls, key: object, raw: object) -> SessionDecl:
         body = Parser.of(raw, f"session {key!r}")
         name = str(key)
-        unknown = sorted(str(key) for key in body.body if key not in SESSION_KNOWN_KEYS)
-        if unknown:
-            # Pinned by
-            # tests/unit/hub/domain/graph/test_sessions.py::test_an_unknown_session_key_is_rejected_naming_the_key
-            raise GraphParseError(
-                f"session {name!r}: unknown key(s) {', '.join(unknown)} — this hub "
-                f"(blizzard {HUB_VERSION}) recognizes only {sorted(SESSION_KNOWN_KEYS)}"
-            )
+        body.only(SESSION_KNOWN_KEYS, f"session {name!r}")
         raw_model = body.get("model")
         # A single string is the one-entry spelling, normalized to the same one-entry list
         # the sequence form parses to, so readers see exactly one shape.

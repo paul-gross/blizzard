@@ -395,3 +395,52 @@ def test_the_same_graph_without_the_retired_key_mints() -> None:
     result = Validator.of(GraphDoc.of(_min_build_deliver()), TEST_CATALOGUE).result
     assert result.ok, result.errors
     assert result.warnings == []
+
+
+def _build_pass(doc: dict[str, Any]) -> dict[str, Any]:
+    return doc["nodes"]["build"]["judgement"]["choices"]["pass"]
+
+
+@pytest.mark.parametrize("model", [["a", "b"], True])
+def test_a_choice_model_that_is_not_a_single_value_is_refused_naming_the_node_and_choice(model: object) -> None:
+    doc = _min_build_deliver()
+    _build_pass(doc).update(to="graph:other", model=model)
+    with pytest.raises(GraphParseError, match="node 'build' choice 'pass': `model` must be a single value"):
+        GraphDoc.of(doc)
+
+
+@pytest.mark.parametrize("model", ["", "  "])
+def test_an_empty_migration_choice_model_is_an_error(model: str) -> None:
+    doc = _min_build_deliver()
+    _build_pass(doc).update(to="graph:other", model=model)
+    errors = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result.errors
+    assert errors == ["node `build` choice `pass`: `model` must be a non-empty string"]
+
+
+@pytest.mark.parametrize("cwd", ["/abs", "..", "../..", "a/../../b"])
+def test_a_checks_cwd_outside_the_workdir_is_an_error(cwd: str) -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["build"].update(checks=["true"], checks_cwd=cwd)
+    errors = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result.errors
+    assert len(errors) == 1 and "`checks_cwd` must be a relative path inside the workdir" in errors[0]
+
+
+@pytest.mark.parametrize("cwd", ["repo", "a/../b", "..foo", "."])
+def test_a_checks_cwd_inside_the_workdir_is_accepted(cwd: str) -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["build"].update(checks=["true"], checks_cwd=cwd)
+    assert Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result.errors == []
+
+
+@pytest.mark.parametrize("to", ["graph:other", "escalate"])
+def test_a_prompt_addendum_on_a_target_nothing_arrives_along_is_an_error(to: str) -> None:
+    doc = _min_build_deliver()
+    _build_pass(doc).update(to=to, prompt_addendum="mind the gap")
+    errors = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result.errors
+    assert len(errors) == 1 and f"`prompt_addendum` is not legal on `to: {to}`" in errors[0]
+
+
+def test_a_prompt_addendum_on_a_same_graph_edge_is_accepted() -> None:
+    doc = _min_build_deliver()
+    _build_pass(doc)["prompt_addendum"] = "mind the gap"
+    assert Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result.errors == []
