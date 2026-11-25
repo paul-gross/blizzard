@@ -16,8 +16,8 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.invariants import Check, QueryCheck, Violation
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.node_steps import Executor
-from blizzard.foundation.roles import adapter_model
-from blizzard.hub.domain.chunk.model import ChunkFacts, RouteHistory
+from blizzard.foundation.roles import adapter_model, collaborator
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, RouteHistory
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.credential_bindings import CREDENTIAL_BINDINGS
@@ -48,18 +48,18 @@ class HubQueryCheck(QueryCheck):
         return self.conn.execute(OPEN_TENANTS.confine(statement))
 
 
+@collaborator
 @dataclass(frozen=True)
 class FactsCheck(Check):
     """An invariant answerable only per chunk, over its loaded facts."""
 
-    facts: IReadChunkFactsRepository
-    record: IReadChunkRecordRepository
+    chunks: list[Chunk]
+    facts_by_id: dict[str, ChunkFacts]
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
-        facts_by_id = self.facts.load_all_facts()
-        for chunk in self.record.list_all():
-            violations.extend(self.for_chunk(chunk.chunk_id, facts_by_id.get(chunk.chunk_id)))
+        for chunk in self.chunks:
+            violations.extend(self.for_chunk(chunk.chunk_id, self.facts_by_id.get(chunk.chunk_id)))
         return violations
 
     def for_chunk(self, chunk_id: str, facts: ChunkFacts | None) -> list[Violation]:
@@ -570,11 +570,14 @@ class MigrationsAtomic(HubQueryCheck):
         }
         # The latest route release per chunk — a runner-landing migration's ``recorded_at``
         # is never above the chunk's newest release.
-        latest_release: dict[str, datetime] = {}
-        for r in self.rows(select(hub.route_released.c.chunk_id, hub.route_released.c.released_at)):
-            cur = latest_release.get(r.chunk_id)
-            if cur is None or r.released_at > cur:
-                latest_release[r.chunk_id] = r.released_at
+        latest_release = {
+            row[0]: row[1]
+            for row in self.rows(
+                select(hub.route_released.c.chunk_id, func.max(hub.route_released.c.released_at)).group_by(
+                    hub.route_released.c.chunk_id
+                )
+            )
+        }
         for chunk_id, m in newest.items():
             chunk = chunks.get(chunk_id)
             if chunk is None:
@@ -1684,9 +1687,11 @@ class HubInvariants:
             for tenant in open_tenants:
                 # The facts checks load chunks through the tenant's own adapters, one tenant at a time.
                 reads = self.tenant_reads(borrowed.scoped(StoreScope(tenant)))
+                facts_by_id = reads.facts.load_all_facts()
+                chunks = reads.record.list_all()
                 for facts_check in (
-                    DerivationAndDelivery(reads.facts, reads.record),
-                    LiveRouteHasToken(reads.facts, reads.record),
+                    DerivationAndDelivery(chunks, facts_by_id),
+                    LiveRouteHasToken(chunks, facts_by_id),
                 ):
                     violations.extend(
                         Violation(found.invariant, f"tenant {tenant}: {found.detail}") for found in facts_check.run()
