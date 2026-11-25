@@ -63,6 +63,7 @@ from blizzard.hub.domain.config.credential_resolution import (
     OLD_FIELD_BINDING,
     CredentialChoice,
     CredentialDecision,
+    available_credential,
     credential_offers,
     decide_credential,
     old_field_authority,
@@ -495,9 +496,7 @@ class ConfigAuthoring:
                 raise _Reresolve(old.planned if first is None else first.credential_id) from None
         if held.credential_id != old.planned:
             raise _Reresolve(held.credential_id)
-        if held.retired:
-            raise CredentialUnavailable(held.slug, retired=True)
-        return held
+        return available_credential(held.slug, held)
 
     def _planned_credential(self, forge_id: ForgeId, secret_name: str) -> CredentialId:
         """The credential an old field naming ``secret_name`` on ``forge_id`` is expected to resolve to, read before
