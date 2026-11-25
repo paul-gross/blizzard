@@ -1,18 +1,8 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import {
-  provideTanStackQuery,
-  QueryClient,
-} from '@tanstack/angular-query-experimental';
+import { provideTanStackQuery, QueryClient } from '@tanstack/angular-query-experimental';
 import { runnerApi, runnerClient } from 'fleet';
-import {
-  runnerAuthSessionView,
-  runnerLeaseView,
-  type StubDetailBody,
-  type StubHttpError,
-  stubError,
-  stubRunnerClient,
-} from 'fleet/testing';
+import { runnerAuthSessionView, runnerLeaseView, type StubDetailBody, type StubHttpError, stubError, stubRunnerClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { injectRunnerLogoutMutation, readRunnerSession } from './auth.query';
@@ -35,30 +25,18 @@ function unauthorized() {
  * registers (and the matching `afterEach` ejects) its own, and clears the
  * `sessionStorage` mark, to keep specs isolated.
  */
-type SessionResult =
-  | ReturnType<typeof runnerAuthSessionView>
-  | StubHttpError<number, StubDetailBody>;
-type LeasesResult =
-  | { items: ReturnType<typeof runnerLeaseView>[] }
-  | StubHttpError<number, StubDetailBody>;
+type SessionResult = ReturnType<typeof runnerAuthSessionView> | StubHttpError<number, StubDetailBody>;
+type LeasesResult = { items: ReturnType<typeof runnerLeaseView>[] } | StubHttpError<number, StubDetailBody>;
 
-function setUp(
-  session: () => SessionResult,
-  leases: () => LeasesResult = unauthorized,
-) {
+function setUp(session: () => SessionResult, leases: () => LeasesResult = unauthorized) {
   TestBed.configureTestingModule({
-    providers: [
-      provideZonelessChangeDetection(),
-      provideTanStackQuery(new QueryClient()),
-    ],
+    providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
   });
   const recovery = TestBed.inject(SessionRecovery);
   const navigateSpy = vi
     .spyOn(recovery as unknown as { navigate(url: string): void }, 'navigate')
     .mockImplementation(() => undefined);
-  const interceptorId = runnerClient.interceptors.response.use(
-    (response, request) => recovery.handle(response, request),
-  );
+  const interceptorId = runnerClient.interceptors.response.use((response, request) => recovery.handle(response, request));
   const stub = stubRunnerClient({
     'GET /api/auth/session': () => session(),
     'GET /runners/{runner_id}/api/leases': () => leases(),
@@ -84,52 +62,28 @@ describe('SessionRecovery', () => {
 
   it('navigates to /api/auth/login with the live pathname+search on a no-session 401', async () => {
     history.pushState({}, '', '/?chunk=ch_1');
-    const { navigateSpy, restore: r } = setUp(() => ({
-      auth_enabled: true,
-      username: null,
-      superuser: false,
-    }));
+    const { navigateSpy, restore: r } = setUp(() => ({ auth_enabled: true, username: null, superuser: false }));
     restore = r;
 
-    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
-      path: { runner_id: 'rn_1' },
-      throwOnError: false,
-    });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
 
     expect(navigateSpy).toHaveBeenCalledTimes(1);
-    expect(navigateSpy).toHaveBeenCalledWith(
-      `/api/auth/login?return_to=${encodeURIComponent('/?chunk=ch_1')}`,
-    );
+    expect(navigateSpy).toHaveBeenCalledWith(`/api/auth/login?return_to=${encodeURIComponent('/?chunk=ch_1')}`);
   });
 
   it('coalesces ten concurrent no-session 401s into one navigation', async () => {
     history.pushState({}, '', '/?chunk=ch_2');
-    const { navigateSpy, restore: r } = setUp(() => ({
-      auth_enabled: true,
-      username: null,
-      superuser: false,
-    }));
+    const { navigateSpy, restore: r } = setUp(() => ({ auth_enabled: true, username: null, superuser: false }));
     restore = r;
 
-    await Promise.all(
-      Array.from({ length: 10 }, () =>
-        runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
-          path: { runner_id: 'rn_1' },
-          throwOnError: false,
-        }),
-      ),
-    );
+    await Promise.all(Array.from({ length: 10 }, () => runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false })));
 
     expect(navigateSpy).toHaveBeenCalledTimes(1);
   });
 
   it('navigates on a direct recoverFromUnauthenticated() call — the shape RunnerLiveUpdates drives on a stream 401 (D9)', async () => {
     history.pushState({}, '', '/?chunk=ch_live');
-    const {
-      recovery,
-      navigateSpy,
-      restore: r,
-    } = setUp(() => ({ auth_enabled: true, username: null, superuser: false }));
+    const { recovery, navigateSpy, restore: r } = setUp(() => ({ auth_enabled: true, username: null, superuser: false }));
     restore = r;
 
     // No Response/Request at all — the stream's transport never produces either,
@@ -137,17 +91,11 @@ describe('SessionRecovery', () => {
     await recovery.recoverFromUnauthenticated();
 
     expect(navigateSpy).toHaveBeenCalledTimes(1);
-    expect(navigateSpy).toHaveBeenCalledWith(
-      `/api/auth/login?return_to=${encodeURIComponent('/?chunk=ch_live')}`,
-    );
+    expect(navigateSpy).toHaveBeenCalledWith(`/api/auth/login?return_to=${encodeURIComponent('/?chunk=ch_live')}`);
   });
 
   it('reports read-failed, and does not navigate, when the session read itself errors', async () => {
-    const {
-      navigateSpy,
-      recovery,
-      restore: r,
-    } = setUp(() => stubError(503, { detail: 'upstream unavailable' }));
+    const { navigateSpy, recovery, restore: r } = setUp(() => stubError(503, { detail: 'upstream unavailable' }));
     restore = r;
 
     const outcome = await recovery.recoverFromUnauthenticated();
@@ -158,21 +106,10 @@ describe('SessionRecovery', () => {
   });
 
   it('leaves a 401 untouched when the session read still resolves a username — an upstream rejection, not an expiry', async () => {
-    const {
-      navigateSpy,
-      recovery,
-      restore: r,
-    } = setUp(() => ({
-      auth_enabled: true,
-      username: 'alice',
-      superuser: false,
-    }));
+    const { navigateSpy, recovery, restore: r } = setUp(() => ({ auth_enabled: true, username: 'alice', superuser: false }));
     restore = r;
 
-    const result = await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
-      path: { runner_id: 'rn_1' },
-      throwOnError: false,
-    });
+    const result = await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
 
     expect(navigateSpy).not.toHaveBeenCalled();
     expect(recovery.recovering()).toBe(false);
@@ -180,17 +117,10 @@ describe('SessionRecovery', () => {
   });
 
   it('leaves a 401 untouched on an authless surface (auth_enabled: false)', async () => {
-    const {
-      navigateSpy,
-      recovery,
-      restore: r,
-    } = setUp(() => ({ auth_enabled: false, username: null, superuser: true }));
+    const { navigateSpy, recovery, restore: r } = setUp(() => ({ auth_enabled: false, username: null, superuser: true }));
     restore = r;
 
-    const result = await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
-      path: { runner_id: 'rn_1' },
-      throwOnError: false,
-    });
+    const result = await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
 
     expect(navigateSpy).not.toHaveBeenCalled();
     expect(recovery.recovering()).toBe(false);
@@ -204,10 +134,7 @@ describe('SessionRecovery', () => {
     );
     restore = r;
 
-    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
-      path: { runner_id: 'rn_1' },
-      throwOnError: false,
-    });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
     await readRunnerSession();
 
     expect(navigateSpy).not.toHaveBeenCalled();
@@ -215,17 +142,10 @@ describe('SessionRecovery', () => {
 
   it('does not navigate again while the mark from a prior attempt still stands, and sets recovering instead', async () => {
     history.pushState({}, '', '/?chunk=ch_3');
-    const first = setUp(() => ({
-      auth_enabled: true,
-      username: null,
-      superuser: false,
-    }));
+    const first = setUp(() => ({ auth_enabled: true, username: null, superuser: false }));
 
     // The initial attempt: mark set, one navigation.
-    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
-      path: { runner_id: 'rn_1' },
-      throwOnError: false,
-    });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
     expect(first.navigateSpy).toHaveBeenCalledTimes(1);
     first.restore();
 
@@ -234,11 +154,7 @@ describe('SessionRecovery', () => {
     // (a document-wide store, not component state) survives across it, which is
     // the mark's whole point.
     TestBed.resetTestingModule();
-    const second = setUp(() => ({
-      auth_enabled: true,
-      username: null,
-      superuser: false,
-    }));
+    const second = setUp(() => ({ auth_enabled: true, username: null, superuser: false }));
     restore = second.restore;
 
     // An ordinary session poll resolving no username along the way must not clear
@@ -247,10 +163,7 @@ describe('SessionRecovery', () => {
 
     // A further no-session 401: the mark still stands, so this sets `recovering`
     // rather than firing a second navigation.
-    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
-      path: { runner_id: 'rn_1' },
-      throwOnError: false,
-    });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
 
     expect(second.navigateSpy).not.toHaveBeenCalled();
     expect(second.recovery.recovering()).toBe(true);
@@ -258,18 +171,11 @@ describe('SessionRecovery', () => {
 
   it('clears the mark and recovering state only on a session read that resolves a username', async () => {
     history.pushState({}, '', '/?chunk=ch_4');
-    let sessionBody: ReturnType<typeof runnerAuthSessionView> = {
-      auth_enabled: true,
-      username: null,
-      superuser: false,
-    };
+    let sessionBody: ReturnType<typeof runnerAuthSessionView> = { auth_enabled: true, username: null, superuser: false };
     const { navigateSpy, recovery, restore: r } = setUp(() => sessionBody);
     restore = r;
 
-    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
-      path: { runner_id: 'rn_1' },
-      throwOnError: false,
-    });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
     expect(navigateSpy).toHaveBeenCalledTimes(1);
 
     sessionBody = { auth_enabled: true, username: 'alice', superuser: false };
@@ -279,28 +185,20 @@ describe('SessionRecovery', () => {
     // The mark itself is now clear too — proven by a fresh no-session 401 firing a
     // second, independent navigation rather than setting `recovering`.
     sessionBody = { auth_enabled: true, username: null, superuser: false };
-    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
-      path: { runner_id: 'rn_1' },
-      throwOnError: false,
-    });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
     expect(navigateSpy).toHaveBeenCalledTimes(2);
     expect(recovery.recovering()).toBe(false);
   });
 
   it('does not navigate on a 401 while a logout is in flight', async () => {
     TestBed.configureTestingModule({
-      providers: [
-        provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient()),
-      ],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
     });
     const recovery = TestBed.inject(SessionRecovery);
     const navigateSpy = vi
       .spyOn(recovery as unknown as { navigate(url: string): void }, 'navigate')
       .mockImplementation(() => undefined);
-    const interceptorId = runnerClient.interceptors.response.use(
-      (response, request) => recovery.handle(response, request),
-    );
+    const interceptorId = runnerClient.interceptors.response.use((response, request) => recovery.handle(response, request));
 
     let resolveLogout!: () => void;
     const pendingLogout = new Promise<Response>((resolve) => {
@@ -313,17 +211,10 @@ describe('SessionRecovery', () => {
         const path = new URL(input.url).pathname;
         if (path === '/api/auth/logout') return pendingLogout;
         if (path === '/api/auth/session') {
-          return new Response(
-            JSON.stringify({
-              auth_enabled: true,
-              username: null,
-              superuser: false,
-            }),
-            {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            },
-          );
+          return new Response(JSON.stringify({ auth_enabled: true, username: null, superuser: false }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
         return new Response(JSON.stringify({ detail: 'not authenticated' }), {
           status: 401,
@@ -336,18 +227,13 @@ describe('SessionRecovery', () => {
       runnerClient.setConfig(previousConfig);
     };
 
-    const logout = TestBed.runInInjectionContext(() =>
-      injectRunnerLogoutMutation(),
-    );
+    const logout = TestBed.runInInjectionContext(() => injectRunnerLogoutMutation());
     const logoutPromise = logout.mutateAsync();
     // Let `onMutate`'s synchronous flag flip land before probing — `mutate` itself
     // does not await it.
     await Promise.resolve();
 
-    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
-      path: { runner_id: 'rn_1' },
-      throwOnError: false,
-    });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
     expect(navigateSpy).not.toHaveBeenCalled();
 
     resolveLogout();

@@ -1,16 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import {
-  QueryClient,
-  provideTanStackQuery,
-} from '@tanstack/angular-query-experimental';
-import {
-  type RequestClientStub,
-  runnerAuthSessionView,
-  settle,
-  stubError,
-  stubRunnerClient,
-} from 'fleet/testing';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { type RequestClientStub, runnerAuthSessionView, settle, stubError, stubRunnerClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { RunnerLogout } from './runner-logout';
@@ -27,17 +18,12 @@ async function render(session: ReturnType<typeof runnerAuthSessionView>) {
     imports: [LocalIdentity],
     providers: [
       provideZonelessChangeDetection(),
-      provideTanStackQuery(
-        new QueryClient({ defaultOptions: { queries: { retry: false } } }),
-      ),
+      provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(LocalIdentity);
   // Never actually navigate the jsdom window on logout.
-  vi.spyOn(
-    TestBed.inject(RunnerLogout) as unknown as { reload: () => void },
-    'reload',
-  ).mockImplementation(() => undefined);
+  vi.spyOn(TestBed.inject(RunnerLogout) as unknown as { reload: () => void }, 'reload').mockImplementation(() => undefined);
   await settle(fixture);
   return { fixture, stub };
 }
@@ -47,27 +33,17 @@ describe('LocalIdentity', () => {
   afterEach(() => stub.restore());
 
   it('renders the signed-in hub username and a logout control under an oauth-mode hub', async () => {
-    const { fixture, stub: s } = await render({
-      auth_enabled: true,
-      username: 'alice',
-      superuser: false,
-    });
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice', superuser: false });
     stub = s;
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="local-identity"]')).not.toBeNull();
-    expect(
-      el.querySelector('[data-testid="identity-username"]')?.textContent,
-    ).toContain('alice');
+    expect(el.querySelector('[data-testid="identity-username"]')?.textContent).toContain('alice');
     expect(el.querySelector('[data-testid="identity-logout"]')).not.toBeNull();
   });
 
   it('renders nothing under a none-mode hub (authless surface)', async () => {
-    const { fixture, stub: s } = await render({
-      auth_enabled: false,
-      username: null,
-      superuser: true,
-    });
+    const { fixture, stub: s } = await render({ auth_enabled: false, username: null, superuser: true });
     stub = s;
     const el = fixture.nativeElement as HTMLElement;
 
@@ -76,11 +52,7 @@ describe('LocalIdentity', () => {
   });
 
   it('renders nothing under oauth when no session resolves (username null)', async () => {
-    const { fixture, stub: s } = await render({
-      auth_enabled: true,
-      username: null,
-      superuser: false,
-    });
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: null, superuser: false });
     stub = s;
     const el = fixture.nativeElement as HTMLElement;
 
@@ -91,19 +63,13 @@ describe('LocalIdentity', () => {
     // A `role="menu"` may own only menu items, so the block's actionable half
     // moves out to a real menu item the panel declares; what is left
     // here must be non-focusable and out of the accessibility tree.
-    const { fixture, stub: s } = await render({
-      auth_enabled: true,
-      username: 'alice',
-      superuser: false,
-    });
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice', superuser: false });
     stub = s;
     fixture.componentRef.setInput('variant', 'label');
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(
-      el.querySelector('[data-testid="identity-username"]')?.textContent,
-    ).toContain('alice');
+    expect(el.querySelector('[data-testid="identity-username"]')?.textContent).toContain('alice');
     expect(el.querySelector('[data-testid="identity-logout"]')).toBeNull();
     expect(el.querySelectorAll('button')).toHaveLength(0);
     expect(fixture.nativeElement.getAttribute('role')).toBe('presentation');
@@ -111,19 +77,11 @@ describe('LocalIdentity', () => {
   });
 
   it('carries no role in the default control shape, where it is header chrome', async () => {
-    const { fixture, stub: s } = await render({
-      auth_enabled: true,
-      username: 'alice',
-      superuser: false,
-    });
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice', superuser: false });
     stub = s;
 
     expect(fixture.nativeElement.getAttribute('role')).toBeNull();
-    expect(
-      (fixture.nativeElement as HTMLElement).querySelector(
-        '[data-testid="identity-logout"]',
-      ),
-    ).not.toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="identity-logout"]')).not.toBeNull();
   });
 
   it('truncates the username instead of setting a floor the header cannot shrink past', async () => {
@@ -133,74 +91,43 @@ describe('LocalIdentity', () => {
     // above the narrow breakpoint. jsdom does no flex layout, so
     // this pins the declarations that make truncation possible; the widths
     // themselves are proven in a browser.
-    const { fixture, stub: s } = await render({
-      auth_enabled: true,
-      username: 'christopher-mcallister',
-      superuser: false,
-    });
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'christopher-mcallister', superuser: false });
     stub = s;
     const el = fixture.nativeElement as HTMLElement;
 
-    for (const node of [
-      fixture.nativeElement,
-      el.querySelector('.identity'),
-      el.querySelector('.who'),
-    ]) {
+    for (const node of [fixture.nativeElement, el.querySelector('.identity'), el.querySelector('.who')]) {
       expect(getComputedStyle(node as HTMLElement).minWidth).toBe('0px');
     }
-    const user = el.querySelector<HTMLElement>(
-      '[data-testid="identity-username"]',
-    )!;
+    const user = el.querySelector<HTMLElement>('[data-testid="identity-username"]')!;
     expect(getComputedStyle(user).overflow).toBe('hidden');
     expect(getComputedStyle(user).textOverflow).toBe('ellipsis');
   });
 
   it('renders a failed logout in the control shape only, never inside the label shape a menu hosts', async () => {
-    const { fixture, stub: s } = await render({
-      auth_enabled: true,
-      username: 'alice',
-      superuser: false,
-    });
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice', superuser: false });
     s.restore();
     stub = stubRunnerClient({
-      'GET /api/auth/session': () => ({
-        auth_enabled: true,
-        username: 'alice',
-        superuser: false,
-      }),
+      'GET /api/auth/session': () => ({ auth_enabled: true, username: 'alice', superuser: false }),
       'POST /api/auth/logout': () => stubError(500, { detail: 'nope' }),
     });
     const el = fixture.nativeElement as HTMLElement;
     await TestBed.inject(RunnerLogout).logout();
     await settle(fixture);
 
-    expect(
-      el.querySelector('[data-testid="identity-logout-error"]'),
-    ).not.toBeNull();
+    expect(el.querySelector('[data-testid="identity-logout-error"]')).not.toBeNull();
 
     fixture.componentRef.setInput('variant', 'label');
     await settle(fixture);
-    expect(
-      el.querySelector('[data-testid="identity-logout-error"]'),
-    ).toBeNull();
+    expect(el.querySelector('[data-testid="identity-logout-error"]')).toBeNull();
   });
 
   it('POSTs /api/auth/logout and reloads when the logout control is activated', async () => {
-    const { fixture, stub: s } = await render({
-      auth_enabled: true,
-      username: 'alice',
-      superuser: false,
-    });
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice', superuser: false });
     stub = s;
-    const reloadSpy = vi.spyOn(
-      TestBed.inject(RunnerLogout) as unknown as { reload: () => void },
-      'reload',
-    );
+    const reloadSpy = vi.spyOn(TestBed.inject(RunnerLogout) as unknown as { reload: () => void }, 'reload');
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>(
-      '[data-testid="identity-logout"]',
-    )?.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="identity-logout"]')?.click();
     await settle(fixture);
 
     expect(stub.forRoute('/api/auth/logout', 'POST')).toHaveLength(1);

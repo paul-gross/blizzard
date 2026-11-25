@@ -57,11 +57,7 @@ describe('runner appConfig wires session recovery', () => {
       .mockImplementation(() => undefined);
 
     stub = stubRunnerClient({
-      'GET /api/auth/session': () => ({
-        auth_enabled: true,
-        username: null,
-        superuser: false,
-      }),
+      'GET /api/auth/session': () => ({ auth_enabled: true, username: null, superuser: false }),
       'GET /runners/{runner_id}/api/leases': () =>
         stubError(401, { detail: 'not authenticated' }),
     });

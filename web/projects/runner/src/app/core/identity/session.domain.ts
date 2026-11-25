@@ -1,6 +1,6 @@
 /** The identity the runner reports a request resolving to: whether its hub gates the panel, the
- * signed-in hub username, `null` when no session rode along, and whether the runner judges that
- * identity a superuser. */
+ * signed-in hub username, `null` when no session rode along, and whether that identity holds
+ * superuser authority. */
 export interface RunnerSession {
   readonly auth_enabled: boolean;
   readonly username: string | null;
@@ -21,9 +21,7 @@ export interface RunnerSession {
  * focus. The shell reads the same query itself, long resolved by the time a menu
  * opens; this keeps the two answers from drifting.
  */
-export function signedInUsername(
-  session: RunnerSession | undefined,
-): string | null {
+export function signedInUsername(session: RunnerSession | undefined): string | null {
   return session?.auth_enabled ? (session.username ?? null) : null;
 }
 

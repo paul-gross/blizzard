@@ -396,8 +396,7 @@ def test_session_read_reports_the_signed_in_username_under_oauth(tmp_path: Path)
 
 
 def test_session_read_reports_a_superuser_session_under_oauth(tmp_path: Path) -> None:
-    """A signed-in session whose resolved role is superuser reads `superuser` true — the
-    same judgment the superuser gate makes."""
+    """A signed-in session whose resolved role is superuser reads `superuser` true."""
     private_key, jwk = _keypair()
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
     _bounce_in(client, private_key, jti="jti-session-su", role="superuser")

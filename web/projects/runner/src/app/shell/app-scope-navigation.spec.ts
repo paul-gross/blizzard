@@ -2,17 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import {
-  QueryClient,
-  provideTanStackQuery,
-} from '@tanstack/angular-query-experimental';
-import {
-  EVENT_SOURCE_FACTORY,
-  type EventSourceFactory,
-  type FleetEventSource,
-  runnerClient,
-  ViewportService,
-} from 'fleet';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource, runnerClient, ViewportService } from 'fleet';
 import {
   chunkDetail,
   chunkNeighborView,
@@ -79,18 +70,8 @@ function lease(runnerChunk: string, projectId: string, leaseId: string) {
 /** The host's two runners: `r1` (`rn_1`) leasing {@link CHUNK} in project `p`, `r2` (`rn_2`) leasing its neighbor in `q`. */
 const RUNNERS = {
   items: [
-    hostRunnerView({
-      runner_id: 'rn_1',
-      name: 'r1',
-      bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
-      max_agents: 4,
-    }),
-    hostRunnerView({
-      runner_id: 'rn_2',
-      name: 'r2',
-      bindings: [{ project: 'q', workspace_id: 'ws', agents: 4 }],
-      max_agents: 4,
-    }),
+    hostRunnerView({ runner_id: 'rn_1', name: 'r1', bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }], max_agents: 4 }),
+    hostRunnerView({ runner_id: 'rn_2', name: 'r2', bindings: [{ project: 'q', workspace_id: 'ws', agents: 4 }], max_agents: 4 }),
   ],
 };
 const LEASES: Record<string, ReturnType<typeof runnerLeaseView>[]> = {
@@ -101,9 +82,7 @@ const LEASES: Record<string, ReturnType<typeof runnerLeaseView>[]> = {
 /** {@link CHUNK}'s detail, blocking {@link NEIGHBOR} — the General tab's dependency edge to hop along. */
 const DETAIL = chunkDetail({
   chunk_id: CHUNK,
-  neighborhood: chunkNeighborhoodView({
-    dependents: [chunkNeighborView({ chunk_id: NEIGHBOR, status: 'running' })],
-  }),
+  neighborhood: chunkNeighborhoodView({ dependents: [chunkNeighborView({ chunk_id: NEIGHBOR, status: 'running' })] }),
 });
 
 /** The filter sets the walk runs under — each kept, exactly, back on the Board. */
@@ -140,42 +119,24 @@ describe('runner app scope across the board and the chunk page', () => {
       'GET /api/host/workspaces': () => ({ items: [] }),
       'GET /api/host/subscriptions': () => ({ items: [] }),
       'GET /api/host/registration': () =>
-        hostRegistrationView({
-          host_id: 'hs_1',
-          tenant_id: 'ten_1',
-          host_name: 'xps',
-          held_runner_ids: ['rn_1', 'rn_2'],
-        }),
-      'GET /api/auth/session': () => ({
-        auth_enabled: false,
-        username: null,
-        superuser: true,
-      }),
+        hostRegistrationView({ host_id: 'hs_1', tenant_id: 'ten_1', host_name: 'xps', held_runner_ids: ['rn_1', 'rn_2'] }),
+      'GET /api/auth/session': () => ({ auth_enabled: false, username: null, superuser: true }),
       'GET /api/flags': () => ({ flags: {}, overridden: [] }),
-      'GET /runners/{runner_id}/api/leases': (_request, { runner_id }) => ({
-        items: LEASES[runner_id] ?? [],
-      }),
-      'GET /runners/{runner_id}/api/chunks/{chunk_id}': (
-        _request,
-        { chunk_id },
-      ) => (chunk_id === CHUNK ? DETAIL : chunkDetail({ chunk_id })),
-      'GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items': () => ({
-        items: [],
-      }),
+      'GET /runners/{runner_id}/api/leases': (_request, { runner_id }) => ({ items: LEASES[runner_id] ?? [] }),
+      'GET /runners/{runner_id}/api/chunks/{chunk_id}': (_request, { chunk_id }) =>
+        chunk_id === CHUNK ? DETAIL : chunkDetail({ chunk_id }),
+      'GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items': () => ({ items: [] }),
       'GET /runners/{runner_id}/api/facts': () => ({ items: [] }),
       'GET /runners/{runner_id}/api/asks': () => ({ items: [] }),
       'GET /runners/{runner_id}/api/escalations': () => ({ items: [] }),
       'GET /runners/{runner_id}/api/takeovers': () => ({ items: [] }),
     });
-    const factory: EventSourceFactory = () =>
-      new FakeEventSource() as unknown as FleetEventSource;
+    const factory: EventSourceFactory = () => new FakeEventSource() as unknown as FleetEventSource;
     TestBed.configureTestingModule({
       providers: [
         ...appConfig.providers,
         provideZonelessChangeDetection(),
-        provideTanStackQuery(
-          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
-        ),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         provideRouter(routes),
         { provide: EVENT_SOURCE_FACTORY, useValue: factory },
       ],
@@ -213,42 +174,25 @@ describe('runner app scope across the board and the chunk page', () => {
     it.each([
       ['the default layout', {}],
       ['the list layout', { layout: 'list' }],
-    ] as const)(
-      'walks row → dock → full page → Board in %s, keeping exactly the filters set',
-      async (_layout, layout) => {
-        await open(`/board?${new URLSearchParams({ ...filters, ...layout })}`);
+    ] as const)('walks row → dock → full page → Board in %s, keeping exactly the filters set', async (_layout, layout) => {
+      await open(`/board?${new URLSearchParams({ ...filters, ...layout })}`);
 
-        // A card opens on its own click; a list row through its stretched open control.
-        await click(
-          `[data-chunk="${CHUNK}"]${'layout' in layout ? ' [data-testid="list-row-open"]' : ''}`,
-        );
-        expect(currentQuery()).toEqual({ ...filters, ...layout, chunk: CHUNK });
+      // A card opens on its own click; a list row through its stretched open control.
+      await click(`[data-chunk="${CHUNK}"]${'layout' in layout ? ' [data-testid="list-row-open"]' : ''}`);
+      expect(currentQuery()).toEqual({ ...filters, ...layout, chunk: CHUNK });
 
-        await click('[data-testid="detail-chunk-ref"]');
-        expect(currentPath()).toBe(`/board/chunk/${CHUNK}`);
-        expect(
-          el().querySelector('[data-testid="board-chunk-detail"]'),
-        ).toBeTruthy();
+      await click('[data-testid="detail-chunk-ref"]');
+      expect(currentPath()).toBe(`/board/chunk/${CHUNK}`);
+      expect(el().querySelector('[data-testid="board-chunk-detail"]')).toBeTruthy();
 
-        await click('[data-testid="mobile-chunk-back"]');
-        expect(currentPath()).toBe('/board');
-        expect(currentQuery()).toEqual({ ...filters, ...layout, chunk: CHUNK });
-      },
-    );
+      await click('[data-testid="mobile-chunk-back"]');
+      expect(currentPath()).toBe('/board');
+      expect(currentQuery()).toEqual({ ...filters, ...layout, chunk: CHUNK });
+    });
 
     it('hops to a neighbor from a full page with only the filters in its query', async () => {
-      const drillDown = {
-        tab: 'general',
-        artifact: 'a.1',
-        step: 's1',
-        segment: 'seg',
-        sidechain: 'side',
-        chunk: CHUNK,
-        from: 'sess-1',
-      };
-      await open(
-        `/board/chunk/${CHUNK}?${new URLSearchParams({ ...filters, ...drillDown })}`,
-      );
+      const drillDown = { tab: 'general', artifact: 'a.1', step: 's1', segment: 'seg', sidechain: 'side', chunk: CHUNK, from: 'sess-1' };
+      await open(`/board/chunk/${CHUNK}?${new URLSearchParams({ ...filters, ...drillDown })}`);
 
       await click('[data-testid="blocks-neighbor"]');
 
@@ -257,14 +201,10 @@ describe('runner app scope across the board and the chunk page', () => {
     });
 
     it('returns to the Board from backToBoard keeping the filters', async () => {
-      await open(
-        `/board/chunk/${CHUNK}?${new URLSearchParams({ ...filters, chunk: CHUNK })}`,
-      );
+      await open(`/board/chunk/${CHUNK}?${new URLSearchParams({ ...filters, chunk: CHUNK })}`);
 
       // `backToBoard` is the page's after-delete navigation; reached here through the routed instance.
-      const page = harness.fixture.debugElement.query(
-        (node) => node.name === 'fleet-chunk-page',
-      ).componentInstance as {
+      const page = harness.fixture.debugElement.query((node) => node.name === 'fleet-chunk-page').componentInstance as {
         backToBoard: () => void;
       };
       page.backToBoard();
@@ -275,17 +215,13 @@ describe('runner app scope across the board and the chunk page', () => {
     });
   });
 
-  it('reads a hopped-to neighbor under its own leased runner, even when ?runner= names another', async () => {
+  it("reads a hopped-to neighbor under its own leased runner, even when ?runner= names another", async () => {
     await open(`/board/chunk/${CHUNK}?runner=r1`);
 
     await click('[data-testid="blocks-neighbor"]');
 
     expect(currentPath()).toBe(`/board/chunk/${NEIGHBOR}`);
-    expect(
-      stub.forRoute(`/runners/rn_2/api/chunks/${NEIGHBOR}`, 'GET').length,
-    ).toBeGreaterThan(0);
-    expect(
-      stub.forRoute(`/runners/rn_1/api/chunks/${NEIGHBOR}`, 'GET'),
-    ).toHaveLength(0);
+    expect(stub.forRoute(`/runners/rn_2/api/chunks/${NEIGHBOR}`, 'GET').length).toBeGreaterThan(0);
+    expect(stub.forRoute(`/runners/rn_1/api/chunks/${NEIGHBOR}`, 'GET')).toHaveLength(0);
   });
 });

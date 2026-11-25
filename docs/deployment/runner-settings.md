@@ -130,11 +130,12 @@ up, and a failed rebuild with its revision and error while the last good revisio
 place of its keys. Each workspace and subscription opens to its state, its settings and its own change history. History
 shows each settings record's change log, the host's only its own entries.
 
-Only the host's superuser sees edit controls: an edit of a `pass` or `session` key, reset to default, and a workspace's
-or subscription's create, edit, retire and enable. Every other signed-in user reads the same panels with none. An edit
-is sent with the revision read when it opened; if another writer won, the edit is refused and the draft kept to retry,
-and any other refusal names its key and reason beside it. Apply and export stay with the
-[CLI](#apply-and-export-a-document).
+Only a session the session read, `GET /api/auth/session`, reports as `superuser: true` sees edit controls; every session
+on an ungated host does. They are an edit of a `pass` or `session` key, reset to default, and a workspace's or
+subscription's create, edit, retire and enable. Every other signed-in user reads the same panels with none. An edit is
+sent with the revision read when it opened. If another writer changed it since, the edit is refused and the draft kept,
+but it is not retried against the newer revision: cancel and reopen the dialog, then reapply your changes. Any other
+refusal names its key and reason beside it. Apply and export stay with the [CLI](#apply-and-export-a-document).
 
 ## Retirement and recovery
 

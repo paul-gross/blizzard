@@ -1,10 +1,7 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import {
-  QueryClient,
-  provideTanStackQuery,
-} from '@tanstack/angular-query-experimental';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { stubError, stubRunnerClient } from 'fleet/testing';
 import { RunnerLogout } from '../../core/identity/runner-logout';
 import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';
@@ -41,11 +38,7 @@ function headerRoutes(overrides: RunnerRoutes = {}): RunnerRoutes {
   return {
     'GET /api/host/runners': () => ({ items: [] }),
     'GET /api/host/environments': () => ({ workspaces: [] }),
-    'GET /api/auth/session': () => ({
-      auth_enabled: false,
-      username: null,
-      superuser: true,
-    }),
+    'GET /api/auth/session': () => ({ auth_enabled: false, username: null, superuser: true }),
     'GET /api/flags': () => ({ flags: {}, overridden: [] }),
     ...overrides,
   };
@@ -56,9 +49,7 @@ async function render(degradedConnection = false) {
     imports: [AppHeader],
     providers: [
       provideZonelessChangeDetection(),
-      provideTanStackQuery(
-        new QueryClient({ defaultOptions: { queries: { retry: false } } }),
-      ),
+      provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       provideFlags(runnerFlagsRead),
       // The Runner filter narrowing the stat cells reads the router.
       provideRouter([]),
@@ -66,12 +57,7 @@ async function render(degradedConnection = false) {
       // stand-in, not `RunnerLiveUpdates.start()`'d, since this sweep proves layout,
       // never the stream itself.
       ...(degradedConnection
-        ? [
-            {
-              provide: RunnerLiveUpdates,
-              useValue: { status: signal('closed'), authFailed: signal(true) },
-            },
-          ]
+        ? [{ provide: RunnerLiveUpdates, useValue: { status: signal('closed'), authFailed: signal(true) } }]
         : []),
     ],
   }).compileComponents();
@@ -88,10 +74,7 @@ const IDENTITY_LENGTHS = [0, 5, 20, 38, 64];
 // 1400 down to 320 — spans a wide monitor to the narrowest common phone,
 // straddling every breakpoint this shell and BoardHeader declare (1150px,
 // 700px/699px).
-const WIDTHS = [
-  1400, 1366, 1280, 1150, 1149, 1100, 1050, 1000, 900, 800, 768, 700, 699, 640,
-  600, 480, 390, 320,
-];
+const WIDTHS = [1400, 1366, 1280, 1150, 1149, 1100, 1050, 1000, 900, 800, 768, 700, 699, 640, 600, 480, 390, 320];
 
 function usernameOfLength(length: number): string {
   return 'a'.repeat(length);
@@ -102,22 +85,13 @@ describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
     it(`keeps the profile menu on-screen, hit-testable, and overflow-free at every width (username length ${length})`, async () => {
       const pageErrors: string[] = [];
       const onError = (e: ErrorEvent) => pageErrors.push(e.message);
-      const onRejection = (e: PromiseRejectionEvent) =>
-        pageErrors.push(String(e.reason));
+      const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
       window.addEventListener('error', onError);
       window.addEventListener('unhandledrejection', onRejection);
 
       const session =
-        length === 0
-          ? { auth_enabled: false, username: null, superuser: true }
-          : {
-              auth_enabled: true,
-              username: usernameOfLength(length),
-              superuser: false,
-            };
-      const stub = stubRunnerClient(
-        headerRoutes({ 'GET /api/auth/session': () => session }),
-      );
+        length === 0 ? { auth_enabled: false, username: null, superuser: true } : { auth_enabled: true, username: usernameOfLength(length), superuser: false };
+      const stub = stubRunnerClient(headerRoutes({ 'GET /api/auth/session': () => session }));
 
       const fixture = await render();
       const root = fixture.nativeElement as HTMLElement;
@@ -130,47 +104,26 @@ describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
           await new Promise((resolve) => requestAnimationFrame(resolve));
 
           const label = `username length=${length}, width=${width}`;
-          const menu = root.querySelector<HTMLElement>(
-            '[data-testid="local-panel-menu"]',
-          );
-          expect(
-            menu,
-            `${label}: no profile menu trigger in the DOM`,
-          ).not.toBeNull();
+          const menu = root.querySelector<HTMLElement>('[data-testid="local-panel-menu"]');
+          expect(menu, `${label}: no profile menu trigger in the DOM`).not.toBeNull();
           const rect = menu!.getBoundingClientRect();
 
-          expect(rect.width, `${label}: menu has zero width`).toBeGreaterThan(
-            0,
-          );
-          expect(
-            rect.left,
-            `${label}: menu's left edge is off-viewport (${rect.left})`,
-          ).toBeGreaterThanOrEqual(0);
+          expect(rect.width, `${label}: menu has zero width`).toBeGreaterThan(0);
+          expect(rect.left, `${label}: menu's left edge is off-viewport (${rect.left})`).toBeGreaterThanOrEqual(0);
           expect(
             rect.right,
             `${label}: menu's right edge is past the viewport (${rect.right} > ${window.innerWidth})`,
           ).toBeLessThanOrEqual(window.innerWidth);
 
-          const hit = document.elementFromPoint(
-            rect.left + rect.width / 2,
-            rect.top + rect.height / 2,
-          );
-          expect(
-            hit,
-            `${label}: nothing hit-tests at the menu's own center`,
-          ).not.toBeNull();
-          expect(
-            menu!.contains(hit),
-            `${label}: the menu's center hit-tests to something outside it`,
-          ).toBe(true);
+          const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          expect(hit, `${label}: nothing hit-tests at the menu's own center`).not.toBeNull();
+          expect(menu!.contains(hit), `${label}: the menu's center hit-tests to something outside it`).toBe(true);
 
           // Scoped to the header itself, not a whole page: this header's
           // consumer (the app root) also renders a nav strip and routed
           // content beside it, out of this sweep's scope — what must never
           // overflow is the header chrome the escape hatch lives in.
-          const header = root.querySelector<HTMLElement>(
-            '[data-testid="board-header"]',
-          )!;
+          const header = root.querySelector<HTMLElement>('[data-testid="board-header"]')!;
           expect(
             header.scrollWidth,
             `${label}: the header overflows horizontally (${header.scrollWidth} > ${window.innerWidth})`,
@@ -183,29 +136,19 @@ describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
         window.removeEventListener('unhandledrejection', onRejection);
       }
 
-      expect(
-        pageErrors,
-        `page errors fired during the sweep: ${pageErrors.join('; ')}`,
-      ).toEqual([]);
+      expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
     });
   }
 
   it('keeps the profile menu on-screen and the header overflow-free with the degraded connection cell', async () => {
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);
-    const onRejection = (e: PromiseRejectionEvent) =>
-      pageErrors.push(String(e.reason));
+    const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
 
     const stub = stubRunnerClient(
-      headerRoutes({
-        'GET /api/auth/session': () => ({
-          auth_enabled: true,
-          username: usernameOfLength(20),
-          superuser: false,
-        }),
-      }),
+      headerRoutes({ 'GET /api/auth/session': () => ({ auth_enabled: true, username: usernameOfLength(20), superuser: false }) }),
     );
 
     // `degraded` is longer than every other string the connection cell ever
@@ -222,33 +165,22 @@ describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
         await new Promise((resolve) => requestAnimationFrame(resolve));
 
         const label = `degraded connection, width=${width}`;
-        expect(
-          root.querySelector('[data-testid="conn"]')?.textContent,
-          `${label}: wrong cell text`,
-        ).toContain('degraded');
-
-        const menu = root.querySelector<HTMLElement>(
-          '[data-testid="local-panel-menu"]',
+        expect(root.querySelector('[data-testid="conn"]')?.textContent, `${label}: wrong cell text`).toContain(
+          'degraded',
         );
-        expect(
-          menu,
-          `${label}: no profile menu trigger in the DOM`,
-        ).not.toBeNull();
+
+        const menu = root.querySelector<HTMLElement>('[data-testid="local-panel-menu"]');
+        expect(menu, `${label}: no profile menu trigger in the DOM`).not.toBeNull();
         const rect = menu!.getBoundingClientRect();
 
         expect(rect.width, `${label}: menu has zero width`).toBeGreaterThan(0);
-        expect(
-          rect.left,
-          `${label}: menu's left edge is off-viewport (${rect.left})`,
-        ).toBeGreaterThanOrEqual(0);
+        expect(rect.left, `${label}: menu's left edge is off-viewport (${rect.left})`).toBeGreaterThanOrEqual(0);
         expect(
           rect.right,
           `${label}: menu's right edge is past the viewport (${rect.right} > ${window.innerWidth})`,
         ).toBeLessThanOrEqual(window.innerWidth);
 
-        const header = root.querySelector<HTMLElement>(
-          '[data-testid="board-header"]',
-        )!;
+        const header = root.querySelector<HTMLElement>('[data-testid="board-header"]')!;
         expect(
           header.scrollWidth,
           `${label}: the header overflows horizontally (${header.scrollWidth} > ${window.innerWidth})`,
@@ -261,24 +193,14 @@ describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
       window.removeEventListener('unhandledrejection', onRejection);
     }
 
-    expect(
-      pageErrors,
-      `page errors fired during the sweep: ${pageErrors.join('; ')}`,
-    ).toEqual([]);
+    expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
   });
 
   it('shows the overridden-flags marker in the connection cell, overflow-free, at every width', async () => {
     const stub = stubRunnerClient(
       headerRoutes({
-        'GET /api/auth/session': () => ({
-          auth_enabled: true,
-          username: usernameOfLength(20),
-          superuser: false,
-        }),
-        'GET /api/flags': () => ({
-          flags: { alpha: true, beta: false },
-          overridden: ['alpha', 'beta'],
-        }),
+        'GET /api/auth/session': () => ({ auth_enabled: true, username: usernameOfLength(20), superuser: false }),
+        'GET /api/flags': () => ({ flags: { alpha: true, beta: false }, overridden: ['alpha', 'beta'] }),
       }),
     );
     const fixture = await render();
@@ -293,29 +215,14 @@ describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
 
         const label = `overridden flags, width=${width}`;
         const conn = root.querySelector<HTMLElement>('[data-testid="conn"]')!;
-        const marker = conn.querySelector<HTMLElement>(
-          '[data-testid="flags-overridden"]',
-        );
-        expect(
-          marker,
-          `${label}: no marker in the connection cell`,
-        ).not.toBeNull();
+        const marker = conn.querySelector<HTMLElement>('[data-testid="flags-overridden"]');
+        expect(marker, `${label}: no marker in the connection cell`).not.toBeNull();
         const rect = marker!.getBoundingClientRect();
-        expect(rect.width, `${label}: marker has zero width`).toBeGreaterThan(
-          0,
-        );
-        expect(
-          rect.right,
-          `${label}: marker is past the viewport`,
-        ).toBeLessThanOrEqual(window.innerWidth);
-        expect(
-          marker!.getAttribute('title'),
-          `${label}: tooltip names the flags`,
-        ).toContain('alpha, beta');
+        expect(rect.width, `${label}: marker has zero width`).toBeGreaterThan(0);
+        expect(rect.right, `${label}: marker is past the viewport`).toBeLessThanOrEqual(window.innerWidth);
+        expect(marker!.getAttribute('title'), `${label}: tooltip names the flags`).toContain('alpha, beta');
 
-        const header = root.querySelector<HTMLElement>(
-          '[data-testid="board-header"]',
-        )!;
+        const header = root.querySelector<HTMLElement>('[data-testid="board-header"]')!;
         expect(
           header.scrollWidth,
           `${label}: the header overflows horizontally (${header.scrollWidth} > ${window.innerWidth})`,
@@ -330,18 +237,13 @@ describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
   it('shows a failed logout in the header without pushing the profile menu off-viewport or overflowing it', async () => {
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);
-    const onRejection = (e: PromiseRejectionEvent) =>
-      pageErrors.push(String(e.reason));
+    const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
 
     const stub = stubRunnerClient(
       headerRoutes({
-        'GET /api/auth/session': () => ({
-          auth_enabled: true,
-          username: usernameOfLength(38),
-          superuser: false,
-        }),
+        'GET /api/auth/session': () => ({ auth_enabled: true, username: usernameOfLength(38), superuser: false }),
         'POST /api/auth/logout': () => stubError(500, { detail: 'nope' }),
       }),
     );
@@ -359,31 +261,19 @@ describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
         await new Promise((resolve) => requestAnimationFrame(resolve));
 
         const label = `failed logout, width=${width}`;
-        const alert = root.querySelector<HTMLElement>(
-          '[data-testid="local-panel-logout-error"]',
-        );
+        const alert = root.querySelector<HTMLElement>('[data-testid="local-panel-logout-error"]');
         expect(alert, `${label}: no logout error in the header`).not.toBeNull();
-        expect(
-          alert!.getBoundingClientRect().width,
-          `${label}: the logout error has zero width`,
-        ).toBeGreaterThan(0);
+        expect(alert!.getBoundingClientRect().width, `${label}: the logout error has zero width`).toBeGreaterThan(0);
 
-        const menu = root.querySelector<HTMLElement>(
-          '[data-testid="local-panel-menu"]',
-        )!;
+        const menu = root.querySelector<HTMLElement>('[data-testid="local-panel-menu"]')!;
         const rect = menu.getBoundingClientRect();
-        expect(
-          rect.left,
-          `${label}: menu's left edge is off-viewport (${rect.left})`,
-        ).toBeGreaterThanOrEqual(0);
+        expect(rect.left, `${label}: menu's left edge is off-viewport (${rect.left})`).toBeGreaterThanOrEqual(0);
         expect(
           rect.right,
           `${label}: menu's right edge is past the viewport (${rect.right} > ${window.innerWidth})`,
         ).toBeLessThanOrEqual(window.innerWidth);
 
-        const header = root.querySelector<HTMLElement>(
-          '[data-testid="board-header"]',
-        )!;
+        const header = root.querySelector<HTMLElement>('[data-testid="board-header"]')!;
         expect(
           header.scrollWidth,
           `${label}: the header overflows horizontally (${header.scrollWidth} > ${window.innerWidth})`,
@@ -396,9 +286,6 @@ describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
       window.removeEventListener('unhandledrejection', onRejection);
     }
 
-    expect(
-      pageErrors,
-      `page errors fired during the sweep: ${pageErrors.join('; ')}`,
-    ).toEqual([]);
+    expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
   });
 });

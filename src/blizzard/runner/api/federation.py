@@ -371,8 +371,8 @@ class RunnerAuthSessionView(BaseModel):
     """An own-identity read (``GET /api/auth/session``): whether the human surface is gated
     at all, and if so the signed-in hub username. ``auth_enabled`` false is a ``none``-mode hub, whose
     surface is authless; ``username`` is ``None`` when gated but no valid session is presented.
-    ``superuser`` is whether the resolved identity holds superuser authority — the same judgment the
-    superuser gate makes, so the page never re-derives it from a role."""
+    ``superuser`` is whether the resolved identity holds superuser authority; an authless surface's
+    implicit identity does."""
 
     auth_enabled: bool
     username: str | None
