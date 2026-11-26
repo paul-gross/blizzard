@@ -558,9 +558,6 @@ class _TogglingRegistry(WorkSourceRegistry):
     def annotator(self, source: str) -> IWorkAnnotator | None:
         return super().annotator(source) if self.active else None
 
-    def label_clearer(self, source: str) -> IWorkAnnotator | None:
-        return super().annotator(source)
-
     def annotating_ids(self) -> list[str]:
         return super().annotating_ids() if self.active else []
 

@@ -70,7 +70,7 @@ def _row_for(store: ChunkStores, cause: str, *, since: datetime = _T0, limit: in
     return rows[0]
 
 
-# --- one seeder per fact the feed reads, each writing through the store's own writers -------------------------
+# --- seeders writing through the store's own writers ----------------------------------------------------------
 
 
 def _seed_claim(store: ChunkStores, engine: sa.Engine) -> None:
@@ -500,7 +500,8 @@ _DELETABLE_FACTS: dict[str, Callable[[ChunkStores, sa.Engine], object]] = {
 
 
 def test_every_source_that_filters_deleted_chunks_has_a_deletion_case() -> None:
-    """Grouping and deletion rows are the two sources a deletion does not suppress."""
+    """Grouping needs no deletion case, since a grouped chunk cannot be deleted, and the deletion row is the one a
+    deletion keeps."""
     unfiltered = {"chunk_grouped", "chunk_deleted"}
     assert set(_DELETABLE_FACTS) == {table.name for table in EVENT_SOURCES} - unfiltered
 
