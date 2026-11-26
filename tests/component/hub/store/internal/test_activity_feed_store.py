@@ -413,10 +413,11 @@ def test_a_detach_a_retirement_and_an_uncaused_release_read_detached(
     tmp_path: Path, cause: RouteReleaseCause | None
 ) -> None:
     store, engine = _store(tmp_path)
-    _route_and_release(store, engine, runner_id="rn_first", at=1, cause=RouteReleaseCause.DETACH)
-    # A row written before the cause was recorded is reachable only by writing the column directly.
-    with hub_store_connections(engine).write("seed") as conn:
-        conn.execute(hub_scoped(sa.update(s.route_released).values(cause=None if cause is None else cause.value)))
+    _route_and_release(store, engine, runner_id="rn_first", at=1, cause=cause or RouteReleaseCause.DETACH)
+    if cause is None:
+        # A row written before the cause was recorded is reachable only by writing the column directly.
+        with hub_store_connections(engine).write("seed") as conn:
+            conn.execute(hub_scoped(sa.update(s.route_released).values(cause=None)))
     row = _row_for(store, "detached")
     assert row.runner_id is None
     assert row.reason is None
@@ -437,7 +438,7 @@ def test_a_release_written_as_part_of_another_fact_gets_no_row_and_takes_no_page
     assert [(r.cause, r.at) for r in rows if r.key.startswith("route_released:")] == [("detached", _at(2))]
 
 
-def test_a_delivery_finalized_on_a_routed_chunk_records_delivery_and_gets_no_row(tmp_path: Path) -> None:
+def test_a_finalized_delivery_has_no_row(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
     _seed_claim(store, engine)
     with chunk_unit(hub_store_connections(engine), "ch_1") as tx:

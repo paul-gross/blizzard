@@ -279,8 +279,7 @@ _SCENARIOS: dict[str, _Scenario] = {
     "deletion": _Scenario(s.chunk_deleted, _drive_deletion),
 }
 
-#: Causes with no live path to drive: ``finalize_delivery`` has no production caller, delivery running as a hub step.
-#: ``tests/component/hub/store/internal/test_activity_feed_store.py`` pins its cause and its absent row.
+#: No live path; pinned by tests/component/hub/store/internal/test_activity_feed_store.py::test_a_finalized_delivery_has_no_row
 _NO_LIVE_PATH = frozenset({RouteReleaseCause.DELIVERY})
 
 
