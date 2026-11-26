@@ -1,5 +1,5 @@
-"""The fleet registrations as the hub container holds them: within a tenant each fleet port, service and retained bag
-field is one instance, and the execution services hold the container's retired-runner guard, detach path and fleet
+"""The fleet registrations as the hub container holds them: within a tenant each fleet port and service is one
+instance, and the execution services hold the container's retired-runner guard, detach path and fleet
 service; across tenants the instances differ, except the version window, which every tenant shares (component
 tier)."""
 

@@ -16,32 +16,12 @@ from typing import Any
 import pytest
 import sqlalchemy as sa
 
+from blizzard.foundation.registry.interface import Lifetime
+from blizzard.foundation.registry.internal.recording import OWNING
 from blizzard.foundation.registry.scopes import Resolver
-from blizzard.hub.domain.chunk.ports.stores import ChunkStores
-from blizzard.hub.domain.work_items.editing import WorkItemEditService
+from blizzard.hub.process_root import registered
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.cadence_store import CadenceStore
-from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
-from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
-from blizzard.hub.store.internal.config_import_store import ConfigImportStore
-from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
-from blizzard.hub.store.internal.credential_referrers import CredentialReferrersStore
-from blizzard.hub.store.internal.finding_store import FindingStore
-from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
-from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
-from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
-from blizzard.hub.store.internal.invitation_store import InvitationStore
-from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
-from blizzard.hub.store.internal.project_store import ProjectStore
-from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
-from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
-from blizzard.hub.store.internal.secret_store import SecretStore
-from blizzard.hub.store.internal.urgency_store import UrgencyOrderStore, UrgencyStore
-from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
-from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import StoreScope
 from tests.support.scaffolding import build_hub, hub_scoped, scoped_connections, second_core
 from tests.support.tenant_isolation_world import Two, seeded
@@ -90,37 +70,26 @@ def _reads_of(adapter: object) -> Iterator[tuple[str, object]]:
         yield name, method()
 
 
-#: Each adapter a tenant's stores are built from, by name.
-_ADAPTERS: tuple[tuple[str, type[Any]], ...] = (
-    ("connections", ScopedConnections),
-    ("transactions", HubTransactions),
-    ("registry", RunnerRegistryStore),
-    ("hosts", HostRegistryStore),
-    ("work_item_store", WorkItemStore),
-    ("chunk_stores", ChunkStores),
-    ("finding_store", FindingStore),
-    ("secrets", SecretStore),
-    ("work_source_records", WorkSourceRecordStore),
-    ("repository_records", RepositoryRecordStore),
-    ("forge_records", ForgeRecordStore),
-    ("credential_records", CredentialRecordStore),
-    ("secret_referrers", SecretReferrersStore),
-    ("forge_referrers", ForgeReferrersStore),
-    ("credential_referrers", CredentialReferrersStore),
-    ("config_changes", ConfigChangeStore),
-    ("projects", ProjectStore),
-    ("project_links", ProjectLinkStore),
-    ("config_apply", ConfigApplyStore),
-    ("config_import", ConfigImportStore),
-    ("invitations", InvitationStore),
-    ("urgencies", UrgencyStore),
-    ("urgency_order", UrgencyOrderStore),
-    ("work_item_edits", WorkItemEditService),
-)
+#: Where every adapter over the hub's tables is built.
+_STORE_PACKAGE = "blizzard.hub.store"
+
+
+def _store_adapter_keys() -> list[tuple[str, type[Any]]]:
+    """Each tenant-lifetime registration the hub graph records whose builder lives in the store package, by name."""
+    keys = [
+        (entry.key.__qualname__, entry.key)
+        for entry in registered(store_backed=True).entries
+        if entry.lifetime is Lifetime.TENANT
+        and entry.kind in OWNING
+        and isinstance(entry.key, type)
+        and getattr(entry.source, "__module__", "").startswith(f"{_STORE_PACKAGE}.")
+    ]
+    assert keys, "the hub graph records no tenant-lifetime store registration"
+    return keys
 
 
 def _adapters(tenant: Resolver) -> Iterator[tuple[str, object]]:
-    for name, adapter_type in _ADAPTERS:
+    for name, adapter_type in _store_adapter_keys():
         value = tenant.get(adapter_type)
         yield name, value
         if dataclasses.is_dataclass(value) and not isinstance(value, type):

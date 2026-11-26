@@ -1,6 +1,6 @@
 """A tenant route resolves through the hub's container: its admission opens the tenant's scope off the event loop, its
 request scope never closes the tenant, a failed open answers the unknown tenant's ``404``, and a deletion evicts the
-tenant's scope and its legacy entry together (component tier)."""
+tenant's scope and closes its configured clients once (component tier)."""
 
 from __future__ import annotations
 

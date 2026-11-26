@@ -1,7 +1,7 @@
 """The tenant's configured adapters as the hub container holds them: an edited forge record rebuilds its adapter and
-the replacement keeps its forge key's budget; one adapter's ports and the bag field it fills are one instance within a
-tenant and differ across tenants; and evicting a tenant or shutting the hub down closes the clients the tenant's records
-built on the running action loop, while a borrowed adapter and the tracing handle stay open (component tier).
+the replacement keeps its forge key's budget; one adapter's ports are one instance within a tenant and differ across
+tenants; and evicting a tenant or shutting the hub down closes the clients the tenant's records built on the running
+action loop, while a borrowed adapter and the tracing handle stay open (component tier).
 
 The forge adapters are real ``GitHubLanding``s over a recorded ``httpx2`` transport that notes the thread it closes on."""
 
@@ -196,33 +196,22 @@ def test_editing_a_forge_record_rebuilds_its_adapter_and_the_replacement_keeps_i
 
 
 def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
-    """Each configured adapter of ``tenant``, as its every port resolves in its scope and as a harness read of the
-    tenant resolves it."""
+    """Each configured adapter of ``tenant``, as its every port resolves in its scope."""
     scope = hub.process.tenants.open(tenant).resolver
-    t = tenant.tenant
-    objects = hub.process.tenants.resolve(tenant, ConfigObjectCache)
     return {
-        "forge records": [
-            scope.get(IReadForgeRepository),
-            scope.get(IWriteForgeRepository),
-            hub.resolve(t, IReadForgeRepository),
-        ],
-        "landed commit links": [
-            scope.get(LandedCommitLinks),
-            scope.get(IReadLandedCommitLinks),
-            hub.resolve(t, IReadLandedCommitLinks),
-        ],
-        "forge registry": [scope.get(ForgeRegistry), hub.resolve(t, ForgeRegistry)],
-        "forge budgets": [scope.get(ForgeBudgets), hub.resolve(t, ForgeBudgets)],
-        "work sources": [scope.get(IWorkSourceRegistry), hub.resolve(t, IWorkSourceRegistry)],
+        "forge records": [scope.get(IReadForgeRepository), scope.get(IWriteForgeRepository)],
+        "landed commit links": [scope.get(LandedCommitLinks), scope.get(IReadLandedCommitLinks)],
+        "forge registry": [scope.get(ForgeRegistry)],
+        "forge budgets": [scope.get(ForgeBudgets)],
+        "work sources": [scope.get(IWorkSourceRegistry)],
         "credential readiness": [scope.get(CredentialReadiness)],
-        "config authoring": [scope.get(ConfigAuthoring), hub.resolve(t, ConfigAuthoring)],
+        "config authoring": [scope.get(ConfigAuthoring)],
         "config application": [scope.get(ConfigApplication)],
-        "config objects": [scope.get(ConfigObjectCache), objects],
+        "config objects": [scope.get(ConfigObjectCache)],
     }
 
 
-def test_one_adapters_aliases_and_harness_read_share_identity_within_a_tenant_and_differ_across_tenants(
+def test_one_adapters_aliases_share_identity_within_a_tenant_and_differ_across_tenants(
     tmp_path: Path,
 ) -> None:
     hub = build_hub(tmp_path)
@@ -238,7 +227,6 @@ def test_one_adapters_aliases_and_harness_read_share_identity_within_a_tenant_an
         assert mine[name][0] is not theirs[name][0], name
     scope = hub.process.tenants.open(first).resolver
     label: WorkRefLabel = scope.get(WorkRefLabel)
-    assert label == hub.process.tenants.open(first).resolver.get(WorkRefLabel)
     assert label(WorkRef("hub", "w1")) == hub.default_adapter(IWorkSourceRegistry).label(WorkRef("hub", "w1"))
 
 

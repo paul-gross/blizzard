@@ -1,5 +1,5 @@
-"""The chunk operations registrations as the hub container holds them: within a tenant each chunk port, work-item port,
-operation and retained bag field is one instance, the operations hold the container's chunk ports, event log and
+"""The chunk operations registrations as the hub container holds them: within a tenant each chunk port, work-item port and
+operation is one instance, the operations hold the container's chunk ports, event log and
 delete, and the event log publishes on its tenant's broker; across tenants the instances differ (component tier)."""
 
 from __future__ import annotations

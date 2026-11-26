@@ -1,5 +1,5 @@
-"""The projects area's registrations as the hub container holds them: within a tenant each project port, service and
-retained bag field is one instance; across tenants the instances differ, except the color draw, which every tenant
+"""The projects area's registrations as the hub container holds them: within a tenant each project port and service is
+one instance; across tenants the instances differ, except the color draw, which every tenant
 shares (component tier)."""
 
 from __future__ import annotations

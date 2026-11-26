@@ -1,7 +1,7 @@
 """The finding routes resolve their services through the admitted tenant's request scope (component tier).
 
-Every refusal the tenant chain answers before a finding route runs keeps the payload an unmigrated route on the same
-chain answers; a tenant deleted between its admission and a finding service's lazy resolution answers as a closed
+Every refusal the tenant chain answers before a finding route runs keeps the payload a garden-proposal route on the
+same chain answers; a tenant deleted between its admission and a finding service's lazy resolution answers as a closed
 tenant, never as a server fault; concurrent requests share only their own tenant's services; and an async route's
 first construction runs off the event loop, as a sync route's does."""
 
@@ -44,8 +44,8 @@ from tests.support.scaffolding import (
     seed_user,
 )
 
-#: An unmigrated route on the finding routes' own chain — the people guards and ``FLEET_VIEW`` over ``Services``.
-_UNMIGRATED = "/api/garden-proposals"
+#: A garden-proposal route on the finding routes' own chain — the people guards and ``FLEET_VIEW``.
+_SIBLING = "/api/garden-proposals"
 _UNKNOWN = TenantId("ten_00000000000000000000000000")
 
 
@@ -170,9 +170,7 @@ def _refusal_headers(hub: HubHarness, refusal: str) -> dict[str, str]:
         "route admission",
     ],
 )
-def test_a_finding_route_keeps_the_refusal_an_unmigrated_route_on_its_chain_answers(
-    hub: HubHarness, refusal: str
-) -> None:
+def test_a_finding_route_keeps_the_refusal_a_sibling_route_on_its_chain_answers(hub: HubHarness, refusal: str) -> None:
     headers = _refusal_headers(hub, refusal)
     client = _client(hub)
 
@@ -180,15 +178,15 @@ def test_a_finding_route_keeps_the_refusal_an_unmigrated_route_on_its_chain_answ
         # A guest views findings but may not exit one: the write's own permission refuses it.
         assert _answer(client, "GET", "/api/findings", headers)[0] == 200
         status, body = _answer(client, "POST", "/api/findings/resolve", headers)
-        _, unmigrated = _answer(client, "POST", "/api/garden-proposals/gpr_x/pass", headers)
+        _, sibling = _answer(client, "POST", "/api/garden-proposals/gpr_x/pass", headers)
         assert status == 403
-        assert body == unmigrated
+        assert body == sibling
         return
-    migrated = _answer(client, "GET", "/api/findings", headers)
-    unmigrated = _answer(client, "GET", _UNMIGRATED, headers)
+    finding = _answer(client, "GET", "/api/findings", headers)
+    sibling = _answer(client, "GET", _SIBLING, headers)
 
-    assert migrated == unmigrated
-    assert migrated[0] in {401, 403, 404}
+    assert finding == sibling
+    assert finding[0] in {401, 403, 404}
 
 
 def _deleting_after_admission(hub: HubHarness, monkeypatch: pytest.MonkeyPatch, tenant: TenantId) -> None:

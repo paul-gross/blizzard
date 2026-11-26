@@ -279,7 +279,7 @@ _SINGLE_SIDE_KERNEL_ALLOWLIST: dict[str, str] = {
         "the one door to a child scope; only the hub's tenant cache reaches it until the host opens runner scopes"
     ),
     "blizzard.foundation.registry.legacy": (
-        "the legacy bridge vocabulary the runner and host bridge their state through; no daemon reaches it until they do"
+        "the leaf-and-bag vocabulary for legacy-built state; no daemon's wiring declares through it"
     ),
     "blizzard.foundation.platform_tracing.wiring": (
         "the platform tracing registration; only the hub reaches it until the runner registers its own handle"

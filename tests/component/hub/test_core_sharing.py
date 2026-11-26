@@ -151,8 +151,7 @@ def test_a_background_resolution_and_a_request_share_one_finding_service(tmp_pat
     exits = hub.process.tenants.resolve(StoreScope(tenant), FindingExitService)
     every = dict(hub.process.tenants.every_open(IReadFindingRepository))
 
-    assert hub.resolve(tenant, IReadFindingRepository) is findings
-    assert hub.resolve(tenant, FindingBucketReader) is hub.default_adapter(FindingBucketReader)
+    assert hub.default_adapter(FindingBucketReader).findings is findings
     assert every[tenant] is findings
     assert exits.repo is findings
     assert hub.resolve(add_tenant(hub.engine, "other"), IReadFindingRepository) is not findings
@@ -190,6 +189,5 @@ def test_the_urgency_ports_and_services_are_one_instance_within_a_tenant_and_apa
     adapter = hub.resolve(first, UrgencyStore)
     assert hub.resolve(first, IReadUrgencyRepository) is adapter
     assert hub.resolve(first, IWriteUrgencyRepository) is adapter
-    assert hub.default_adapter(UrgencyReading) is hub.resolve(first, UrgencyReading)
     for key in (UrgencyStore, UrgencyReading, TenantDefault, UrgencyLifecycle):
         assert hub.resolve(second, key) is not hub.resolve(first, key)

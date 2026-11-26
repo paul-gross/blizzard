@@ -46,6 +46,7 @@ from tests.support.scaffolding import (
     tenant_adapter_of,
 )
 from tests.support.work_source_registry_ops import (
+    _id,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.work_source_registry_ops
     _ingest,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.work_source_registry_ops
     create,
     forge,
@@ -73,12 +74,6 @@ def hub(tmp_path: Path) -> Iterator[tuple[TestClient, FastAPI]]:
 
 def _sources(app: FastAPI) -> IWorkSourceRegistry:
     return tenant_adapter_of(app, IWorkSourceRegistry)
-
-
-def _id(app: FastAPI, slug: str) -> str:
-    record = tenant_adapter_of(app, IReadWorkSourceRepository).resolve(slug)
-    assert record is not None
-    return record.work_source_id
 
 
 def _rename(app: FastAPI, source_id: str, slug: str) -> None:

@@ -1,7 +1,7 @@
 """A test root's replacements over the hub's registered graph, through the registry's test override seam.
 
-A root swaps a configured adapter by replacing the one registration that owns its key, so every alias and every bag
-field the registration fills resolves to the stand-in, and no production parameter carries it. A replacing factory's
+A root swaps a configured adapter by replacing the one registration that owns its key, so every alias of the
+registration resolves to the stand-in, and no production parameter carries it. A replacing factory's
 parameters are resolved by their annotations, as the registration's own are."""
 
 from __future__ import annotations
