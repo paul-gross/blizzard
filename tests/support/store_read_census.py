@@ -80,7 +80,7 @@ from blizzard.hub.domain.chunk.ports.flow_submissions import IReadChunkFlowSubmi
 from blizzard.hub.domain.chunk.ports.lifecycle import IReadChunkLifecycleRepository
 from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository
 from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository
-from blizzard.hub.domain.chunk.ports.queue import READY_RANKING_LOCK, IReadChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.queue import READY_RANKING_LOCK, IReadChunkQueueRepository, QueueList
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
@@ -3035,6 +3035,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadChunkRecordRepository, "list_not_ready"): lambda w: w.read.record.list_not_ready(
         statuses=w.read.facts.load_live_statuses()
+    ),
+    (IReadChunkRecordRepository, "queue_keys"): lambda w: (
+        w.read.record.queue_keys(QueueList.READY, statuses=w.read.facts.load_live_statuses()),
+        w.read.record.queue_keys(QueueList.NOT_READY, statuses=w.read.facts.load_live_statuses()),
     ),
     (IReadChunkRecordRepository, "list_all"): lambda w: w.read.record.list_all(),
     (IReadChunkRecordRepository, "pinned_to_actionless_hub_nodes"): lambda w: (

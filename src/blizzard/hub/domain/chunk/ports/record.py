@@ -11,6 +11,7 @@ from typing import Protocol
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration
+from blizzard.hub.domain.chunk.ports.queue import QueueList
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.urgency.model import UrgencyId
@@ -24,6 +25,16 @@ class ChunkPage:
 
     chunks: list[Chunk]
     next_cursor: str | None
+
+
+@domain_model
+@dataclass(frozen=True)
+class QueueKey:
+    """What ranking a queue or backlog member reads of its chunk — :meth:`IReadChunkRecordRepository.queue_keys`."""
+
+    chunk_id: str
+    project_id: ProjectId | None
+    minted_at: datetime
 
 
 class IReadChunkRecordRepository(Protocol):
@@ -54,6 +65,11 @@ class IReadChunkRecordRepository(Protocol):
     ) -> list[Chunk]:
         """The backlog's own candidate set (``bzh:ranking-is-per-list``). See
         `list_ready` for ``statuses`` and ``transaction``."""
+        ...
+
+    def queue_keys(self, list_: QueueList, *, statuses: Mapping[str, ChunkStatus]) -> list[QueueKey]:
+        """The ranking keys of ``list_``'s members, in no particular order — the members :meth:`list_ready` /
+        :meth:`list_not_ready` names, without reconstituting a chunk. See `list_ready` for ``statuses``."""
         ...
 
     def list_all(self) -> list[Chunk]: ...

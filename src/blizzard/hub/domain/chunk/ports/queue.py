@@ -5,10 +5,20 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
+from enum import Enum
 from typing import Protocol
 
 from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
+
+
+class QueueList(Enum):
+    """Which of the two independently-ranked lists a queue op targets
+    (``bzh:ranking-is-per-list``) — never mixed into one order."""
+
+    READY = "ready"
+    NOT_READY = "not_ready"
+
 
 #: The keyed lock (``bzh:transaction-graduation``) every unit deciding the ``ready`` queue's order
 #: declares — the authority :meth:`IWriteChunkQueueRepository.record_queue_positions` and

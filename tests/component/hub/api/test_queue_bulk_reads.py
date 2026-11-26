@@ -29,6 +29,7 @@ from tests.support.scaffolding import (
     build_hub,
     capture_statements,
     count_queries,
+    count_rows_read,
     hub_store_connections,
     ingest,
     resolve_default_tenant_with,
@@ -289,3 +290,108 @@ def test_whole_order_replace_writes_every_position_in_one_transaction_regardless
     large_count = count_queries(large.engine, lambda: call(large, large_ids))
 
     assert small_count == large_count
+
+
+@pytest.mark.parametrize(("path", "promote"), _PEEKS)
+def test_page_statement_count_is_independent_of_fleet_size_at_a_fixed_limit(
+    tmp_path: Path, path: str, promote: bool
+) -> None:
+    counts: dict[int, int] = {}
+    for fleet_size in (3, 12):
+        (tmp_path / str(fleet_size)).mkdir()
+        hub = build_hub(tmp_path / str(fleet_size))
+        _seed(hub, fleet_size, promote=promote)
+
+        def call(hub: HubHarness = hub) -> None:
+            resp = hub.client.get(path, params={"limit": 2})
+            assert resp.status_code == 200, resp.text
+            assert len(resp.json()["entries"]) == 2
+
+        counts[fleet_size] = count_queries(hub.engine, call)
+
+    assert counts[3] == counts[12]
+
+
+def _seed_ordered(tmp_path: Path, path: str, promote: bool, *, off_page_refs: int) -> tuple[HubHarness, list[str]]:
+    """Five chunks in a fixed list order; the three past a two-long page hold ``off_page_refs`` work refs each."""
+    tmp_path.mkdir()
+    hub = build_hub(tmp_path)
+    ids = [
+        ingest(
+            hub,
+            [{"source": "default", "ref": f"{i}-{j}"} for j in range(1 if i < 2 else off_page_refs)],
+            promote=promote,
+        )
+        for i in range(5)
+    ]
+    assert hub.client.put(path, json={"chunk_ids": ids}).status_code == 200
+    return hub, ids
+
+
+@pytest.mark.parametrize(("path", "promote"), _PEEKS)
+def test_page_reconstitutes_only_its_own_chunks(tmp_path: Path, path: str, promote: bool) -> None:
+    rows: dict[int, int] = {}
+    for off_page_refs in (1, 6):
+        hub, ids = _seed_ordered(tmp_path / str(off_page_refs), path, promote, off_page_refs=off_page_refs)
+
+        def call(hub: HubHarness = hub, ids: list[str] = ids) -> None:
+            resp = hub.client.get(path, params={"limit": 2})
+            assert resp.status_code == 200, resp.text
+            assert [e["chunk_id"] for e in resp.json()["entries"]] == ids[:2]
+
+        rows[off_page_refs] = count_rows_read(hub.engine, call)
+        with capture_statements(hub.engine) as statements:
+            call()
+        reconstituting = [
+            parameters
+            for sql, parameters in statements
+            if "FROM chunk_work_refs" in sql or "chunks.default_model" in sql
+        ]
+        assert len(reconstituting) == 2
+        for parameters in reconstituting:
+            assert {p for p in parameters if p in ids} == set(ids[:2])
+
+    assert rows[1] == rows[6]
+
+
+_RENDERINGS = [
+    ("GET", "/api/fleet/queue/peek", True),
+    ("PUT", "/api/queue", True),
+    ("POST", "/api/queue/position", True),
+    ("PUT", "/api/backlog", False),
+    ("POST", "/api/backlog/position", False),
+]
+
+
+@pytest.mark.parametrize(("method", "path", "ready"), _RENDERINGS)
+def test_whole_list_renderings_read_edges_only_for_the_chunks_they_render(
+    tmp_path: Path, method: str, path: str, ready: bool
+) -> None:
+    rows: dict[bool, int] = {}
+    for off_list_edges in (False, True):
+        (tmp_path / str(off_list_edges)).mkdir()
+        hub = build_hub(tmp_path / str(off_list_edges))
+        prerequisite = ingest(hub, [{"source": "default", "ref": "prerequisite"}], promote=False)
+        rendered = [ingest(hub, [{"source": "default", "ref": f"in-{i}"}], promote=ready) for i in range(2)]
+        outside = [ingest(hub, [{"source": "default", "ref": f"out-{i}"}], promote=not ready) for i in range(2)]
+        for dependent in [rendered[0], *(outside if off_list_edges else [])]:
+            declared = hub.client.post(
+                f"/api/chunks/{dependent}/dependencies", json={"prerequisite_chunk_id": prerequisite}
+            )
+            assert declared.status_code == 202, declared.text
+        body = {
+            "GET": None,
+            "PUT": {"chunk_ids": [rendered[1]]},
+            "POST": {"chunk_id": rendered[1], "after_chunk_id": None},
+        }[method]
+
+        def call(hub: HubHarness = hub, body: object = body, dependent: str = rendered[0]) -> None:
+            resp = hub.client.request(method, path, json=body)
+            assert resp.status_code == 200, resp.text
+            marked = {e["chunk_id"]: e["blocked"] for e in resp.json()["entries"] if e["blocked"] is not None}
+            assert marked.keys() == {dependent}
+            assert marked[dependent]["unmet_count"] == 1
+
+        rows[off_list_edges] = count_rows_read(hub.engine, call)
+
+    assert rows[False] == rows[True]

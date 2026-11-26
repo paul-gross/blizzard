@@ -34,6 +34,7 @@ from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import PRE_CLAIM_STATUSES, Chunk, ChunkFacts
 from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.queue import QueueList
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
@@ -50,7 +51,6 @@ from blizzard.hub.domain.operations.queue import (
     PassedEntry,
     PassedReason,
     QueueEntry,
-    QueueList,
     QueuePage,
     QueueService,
     RankedOrder,
@@ -118,13 +118,12 @@ class QueueReads:
 
 
 def _blocked_markings(
-    reads: QueueReads, statuses: Mapping[str, ChunkStatus], dependent_ids: Sequence[str] | None = None
+    reads: QueueReads, statuses: Mapping[str, ChunkStatus], dependent_ids: Sequence[str]
 ) -> dict[str, list[str]]:
-    """Mark only the displayed dependents (or the whole live order for peeks and writes).
+    """Mark only the displayed dependents.
     The live status map still resolves on-page and off-page prerequisites; a finished
     prerequisite absent from it is resolved by id (``bzh:bulk-reconstitution``)."""
-    candidates = dependent_ids if dependent_ids is not None else statuses
-    pre_claim = [chunk_id for chunk_id in candidates if statuses[chunk_id] in PRE_CLAIM_STATUSES]
+    pre_claim = [chunk_id for chunk_id in dependent_ids if statuses[chunk_id] in PRE_CLAIM_STATUSES]
     edges = reads.dependencies.standing_edges_for_dependents(pre_claim)
     absent = sorted({e.prerequisite_chunk_id for e in edges} - statuses.keys())
     resolved = {chunk_id: facts.status() for chunk_id, facts in reads.facts.status_facts_for(absent).items()}
@@ -255,7 +254,7 @@ class ReadyQueue:
         entries = entries_of(ordered, None if project is None else {project})
         return cls(
             entries,
-            _blocked_markings(reads, statuses),
+            _blocked_markings(reads, statuses, [entry.chunk.chunk_id for entry in entries]),
             _projects_of(reads.projects, entries),
             reads.urgencies.by_id(),
         )
@@ -623,7 +622,7 @@ class Backlog:
         entries = entries_of(ordered)
         return cls(
             entries,
-            _blocked_markings(reads, statuses),
+            _blocked_markings(reads, statuses, [entry.chunk.chunk_id for entry in entries]),
             _projects_of(reads.projects, entries),
             reads.urgencies.by_id(),
         )

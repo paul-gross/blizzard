@@ -747,6 +747,20 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         _TENANT_SNAPSHOT_REASON,
     ),
     IndexWalkAllowance(
+        IReadChunkRecordRepository,
+        "queue_keys",
+        (
+            "chunk_migrations",
+            "chunk_restarts",
+            "chunks",
+            "decision_resolutions",
+            "decisions",
+            "escalations",
+            "transitions",
+        ),
+        _TENANT_SNAPSHOT_REASON,
+    ),
+    IndexWalkAllowance(
         IReadChunkRouteRepository, "load_all_routes", ("route_created", "route_released"), _TENANT_SNAPSHOT_REASON
     ),
     IndexWalkAllowance(IReadChunkWorkRefsRepository, "live_holders", ("chunks",), _TENANT_SNAPSHOT_REASON),

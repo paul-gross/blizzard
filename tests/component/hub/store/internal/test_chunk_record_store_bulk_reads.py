@@ -16,12 +16,16 @@ from sqlalchemy import Engine
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
+from blizzard.hub.domain.chunk.ports.queue import QueueList
+from blizzard.hub.domain.chunk.ports.record import QueueKey
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from tests.support.chunk_units import chunk_unit
 from tests.support.scaffolding import (
+    capture_statements,
     chunk_stores,
     count_queries,
+    explain_query_plan,
     hub_store_connections,
     migrate_to,
     seed_chunk_record,
@@ -161,3 +165,52 @@ def test_list_ready_with_statuses_issues_no_statement_against_the_facts_seam(tmp
     with_statuses = count_queries(engine, lambda: store.record.list_ready(statuses=statuses))
 
     assert with_statuses == baseline
+
+
+@pytest.mark.parametrize("list_", [QueueList.READY, QueueList.NOT_READY])
+def test_queue_keys_matches_the_listed_members_across_ephemeral_ids_and_a_batch_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, list_: QueueList
+) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    store, engine = _store(tmp_path)
+    ids = [f"ch_batch_{i}" for i in range(7)]
+    for chunk_id in [*ids, "ch_other_list"]:
+        _mint(store, chunk_id, work_refs=[WorkRef(source="default", ref=chunk_id)])
+    for chunk_id in ids if list_ is QueueList.READY else ["ch_other_list"]:
+        seed_promote(store, engine, chunk_id, at=_T0)
+    statuses = store.facts.load_live_statuses()
+    # Gone after the caller derived `statuses`, so the keys read is what has to exclude them.
+    with hub_store_connections(engine).write("seed") as conn:
+        record_grouped_row_conn(conn, "ch_batch_1", grouped_into="ch_batch_0", at=_T0)
+        record_deleted_row(conn, "ch_batch_4", by="op", at=_T0)
+
+    keys = store.record.queue_keys(list_, statuses=statuses)
+
+    listed = store.record.list_ready if list_ is QueueList.READY else store.record.list_not_ready
+    members = listed(statuses=statuses)
+    assert {m.chunk_id for m in members} == set(ids) - {"ch_batch_1", "ch_batch_4"}
+    assert sorted(keys, key=lambda k: k.chunk_id) == [
+        QueueKey(chunk_id=m.chunk_id, project_id=m.project_id, minted_at=m.minted_at)
+        for m in sorted(members, key=lambda m: m.chunk_id)
+    ]
+
+
+def test_queue_keys_of_an_empty_list_is_empty(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+
+    assert store.record.queue_keys(QueueList.READY, statuses={}) == []
+
+
+def test_queue_keys_reads_the_ephemeral_set_once_per_statement_not_once_per_member(tmp_path: Path) -> None:
+    # Neither ephemeral table is indexed by chunk id, so a correlated probe walks the tenant's whole grouped and
+    # deleted history for every member; row and statement counts cannot see that walk.
+    store, engine = _store(tmp_path)
+    _mint(store, "ch_live")
+    statuses = store.facts.load_live_statuses()
+
+    with capture_statements(engine) as statements:
+        store.record.queue_keys(QueueList.NOT_READY, statuses=statuses)
+
+    plan = [row.detail for sql, parameters in statements for row in explain_query_plan(engine, sql, parameters)]
+    assert any("chunk_deleted" in detail for detail in plan)
+    assert not [detail for detail in plan if "CORRELATED" in detail]
