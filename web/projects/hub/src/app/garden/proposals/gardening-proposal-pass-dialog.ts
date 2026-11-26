@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
-import { form } from '@angular/forms/signals';
-import { submitForm } from 'fleet';
+import { apply, form } from '@angular/forms/signals';
+import { createRefusalState, submitForm } from 'fleet';
 
-import { emptyPassDraft } from './proposal-pass.domain';
+import { emptyPassDraft, type ProposalPassDraft } from './proposal-pass.domain';
 import { proposalPassRules } from './proposal-pass.form';
 import { injectProposalPassService } from './proposal-pass.service';
 import { GardeningProposalPassDialogView } from './gardening-proposal-pass-dialog-view';
@@ -31,10 +31,17 @@ export class GardeningProposalPassDialog {
 
   private readonly draft = signal(emptyPassDraft());
 
-  protected readonly passForm = form(this.draft, proposalPassRules);
+  private readonly refusal = createRefusalState<ProposalPassDraft>();
+
+  protected readonly passForm = form(this.draft, (path) => {
+    apply(path, proposalPassRules);
+    apply(path, this.refusal.schema);
+  });
 
   protected async onSave(): Promise<void> {
-    const ok = await submitForm(this.passForm, (draft) => this.service.pass(this.proposalId(), draft));
+    const ok = await submitForm(this.passForm, (draft) => this.service.pass(this.proposalId(), draft), {
+      refusalState: this.refusal,
+    });
     if (ok) this.closed.emit();
   }
 }

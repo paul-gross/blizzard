@@ -1,5 +1,5 @@
 import type { Urgency } from 'fleet';
-import { urgencyOptions } from './urgency-options.model';
+import { defaultUrgencyName, urgencyOptions } from './urgency-options.model';
 
 const live = { id: 'u1', slug: 'live', name: 'Live', retired: false } as Urgency;
 const old = { id: 'u2', slug: 'old', name: 'Old', retired: true } as Urgency;
@@ -31,5 +31,9 @@ describe('urgencyOptions', () => {
       .toEqual({ value: '', label: 'Tenant default (Live)' });
     expect(urgencyOptions([live], { key: 'slug', retired: 'exclude', inherit: { label: 'Routine default', name: null } }))
       .toEqual([{ value: '', label: 'Routine default' }, { value: 'live', label: 'Live' }]);
+  });
+  it('names the tenant default urgency, or null when none is default', () => {
+    expect(defaultUrgencyName([live, { ...live, slug: 'other', name: 'Other', default: true }])).toBe('Other');
+    expect(defaultUrgencyName([{ ...live, default: false }])).toBeNull();
   });
 });

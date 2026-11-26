@@ -1,0 +1,7 @@
+<app-proposal-accept-dialog-view
+  [proposalTitle]="proposalTitle()"
+  [form]="acceptForm"
+  [urgencyOptions]="urgencyOptions()"
+  (closed)="closed.emit()"
+  (save)="onSave()"
+/>

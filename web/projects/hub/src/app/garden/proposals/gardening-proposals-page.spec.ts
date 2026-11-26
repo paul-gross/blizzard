@@ -18,6 +18,7 @@ import {
 } from 'fleet/testing';
 import { vi } from 'vitest';
 
+import { GardeningProposalDetail } from './gardening-proposal-detail';
 import { GardeningProposalsPage } from './gardening-proposals-page';
 
 /** A read-only identity — every permission `OPERATOR_ME_RESPONSE` carries except
@@ -126,6 +127,7 @@ describe('GardeningProposalsPage', () => {
     url = '/gardening/proposals',
     mobile = false,
     extraRoutes: Parameters<typeof stubHubClient>[0] = {},
+    routeTable: Routes = routes,
   ) {
     stub = stubHubClient({
       'GET /api/garden-proposals': () => gardenProposalsPageView({ proposals }),
@@ -143,7 +145,7 @@ describe('GardeningProposalsPage', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        provideRouter(routes),
+        provideRouter(routeTable),
       ],
     }).compileComponents();
     TestBed.inject(ViewportService).setOverride(mobile ? 'mobile' : 'desktop');
@@ -341,6 +343,65 @@ describe('GardeningProposalsPage', () => {
     expect(router.url).toBe('/gardening/proposals/gp_4?routine=architecture');
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeNull();
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_4"]')?.classList).toContain('selected');
+  });
+
+  describe('a closing dialog open over the routed proposal', () => {
+    const withDetail: Routes = [
+      {
+        path: 'gardening/proposals',
+        component: GardeningProposalsPage,
+        children: [
+          { path: '', component: GardeningProposalDetail },
+          { path: ':proposalId', component: GardeningProposalDetail },
+        ],
+      },
+    ];
+
+    // The routed proposal is the only waiting row, so losing it moves to the bare route, whose detail is another
+    // component instance: an unheld selection takes the dialog and its draft with it.
+    for (const { verb, trigger, textbox } of [
+      { verb: 'accept', trigger: 'gardening-proposal-accept', textbox: 'proposal-accept-body-input' },
+      { verb: 'pass', trigger: 'gardening-proposal-pass', textbox: 'proposal-pass-reason-input' },
+    ]) {
+      it(`keeps the ${verb} dialog and its typed text through a raced closure, moving on only once it closes`, async () => {
+        let closedElsewhere = false;
+        const closed = gardenProposalView({ ...WAITING_A, closure: gardenProposalClosureView() });
+        const { fixture, router, el } = await render(
+          undefined,
+          OPERATOR_ME_RESPONSE,
+          '/gardening/proposals/gp_1',
+          false,
+          {
+            'GET /api/garden-proposals': () =>
+              gardenProposalsPageView({ proposals: [closedElsewhere ? closed : WAITING_A] }),
+            [`POST /api/garden-proposals/{proposal_id}/${verb}`]: () => {
+              closedElsewhere = true;
+              return stubError(409, { detail: 'garden proposal gp_1 already carries a closure' });
+            },
+          },
+          withDetail,
+        );
+        el.querySelector<HTMLElement>(`[data-testid="${trigger}"]`)!.click();
+        await settle(fixture);
+        const input = inOverlay(textbox) as HTMLTextAreaElement;
+        input.value = 'typed by the operator';
+        input.dispatchEvent(new Event('input'));
+        await settle(fixture);
+
+        inOverlay('kit-form-save')!.click();
+        await settle(fixture, 8);
+
+        expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeNull();
+        expect(router.url).toBe('/gardening/proposals/gp_1');
+        expect(inOverlay('kit-form-line')?.textContent).toContain('already carries a closure');
+        expect((inOverlay(textbox) as HTMLTextAreaElement).value).toBe('typed by the operator');
+
+        inOverlay('kit-form-cancel')!.click();
+        await settle(fixture, 8);
+
+        expect(router.url).toBe('/gardening/proposals');
+      });
+    }
   });
 
   describe('a proposal with a pending Pass/Accept drops from the waiting docket (Part B)', () => {

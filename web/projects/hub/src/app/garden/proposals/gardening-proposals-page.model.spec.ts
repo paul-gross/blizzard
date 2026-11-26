@@ -211,6 +211,12 @@ describe('proposalSelectionTarget', () => {
     expect(proposalSelectionTarget(true, null, [], false)).toBeNull();
   });
 
+  it('keeps a routed proposal an open closing dialog holds, though the filters exclude it', () => {
+    expect(proposalSelectionTarget(true, 'gone', ROWS, false, 'gone')).toBeNull();
+    expect(proposalSelectionTarget(true, 'gone', [], true, 'gone')).toBeNull();
+    expect(proposalSelectionTarget(true, 'gone', ROWS, false, 'p2')).toEqual({ proposalId: 'p1' });
+  });
+
   it('returns an excluded proposal to the docket on mobile and leaves a bare route there', () => {
     expect(proposalSelectionTarget(true, 'gone', ROWS, true)).toEqual({ proposalId: null });
     expect(proposalSelectionTarget(true, null, ROWS, true)).toBeNull();

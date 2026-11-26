@@ -214,10 +214,10 @@
  *     the Pass dialog's footer: Cancel/Pass genuinely sit side by side with
  *     neither overflowing the panel, at phone and desktop widths.
  *   - projects/hub/src/app/garden/proposals/gardening-proposal-accept-dialog.shell-sweep.spec.ts —
- *     the Accept dialog: the mint/decline radiogroup genuinely stacks its two
- *     options, the decline reason field genuinely renders below them once
- *     chosen, and the footer's Cancel/Accept sit side by side with neither
- *     overflowing the panel, at phone and desktop widths.
+ *     the Accept dialog: the mint/decline option group genuinely stacks its
+ *     two options, the reason field genuinely renders below them in both
+ *     modes, and the form's Cancel/Accept action row sits side by side inside
+ *     the panel, at 320, 390, and 1024px.
  *   - projects/hub/src/app/garden/findings/gardening-findings-triage.shell-sweep.spec.ts —
  *     the findings triage list (`FleetFindingList`): with
  *     every row selected through the real select-all checkbox, the bulk bar's own
@@ -310,6 +310,10 @@
  *     model in real Chromium: one Tab stop, arrow keys between text cells and native controls
  *     skipping disabled cells, exactly one click per Enter or Space on a button, and a select
  *     popup that opens once, owns its keys, and returns focus to its trigger.
+ *   - projects/fleet/src/lib/kit/kit-combobox.shell-sweep.spec.ts — the kit combobox's
+ *     keyboard model in real Chromium, as the zone picker uses it: typing filters, arrows
+ *     highlight, Enter picks, Escape closes, a stored unlisted value is kept, and an
+ *     unmatched edit restores the current text.
  *   - projects/fleet/src/lib/kit/kit-select-list.shell-sweep.spec.ts — a 40-row kit
  *     select list in a height-capped scroller in real Chromium: one Tab stop landing on
  *     the selected row, arrows, Home, End and type-ahead moving focus without opening,
@@ -414,6 +418,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-grid.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-select-list.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-select-row.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-combobox.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/runs/gardening-run-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/proposals/gardening-proposals-page.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/proposals/gardening-proposal-pass-dialog.shell-sweep.spec.ts' },

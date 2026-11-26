@@ -5,6 +5,7 @@ import { asyncState, injectPendingMutationVariables, KitMasterDetail, KitChips, 
 import { FleetProposalList, type ProposalListRowVm } from './proposal-list';
 import { type GardenProposalAcceptVars, type GardenProposalPassVars } from './garden-proposal.mutations';
 import { injectHubGardenProposalsQuery } from './garden-proposals.query';
+import { GardeningProposalsState } from './gardening-proposals-state';
 import { injectHubRoutinesQuery } from '../core/routines.query';
 import type { Proposal } from '../core/proposal.domain';
 import {
@@ -50,6 +51,7 @@ import { ProjectLens } from '../../core/project-lens';
   imports: [FleetProposalList, KitMasterDetail, KitChips, KitSelect, RouterOutlet],
   templateUrl: './gardening-proposals-page.html',
   styleUrl: './gardening-proposals-page.css',
+  providers: [GardeningProposalsState],
   host: {
     '[class.mobile]': 'mobile()',
     '[class.detail-open]': 'proposalId() !== null',
@@ -57,6 +59,7 @@ import { ProjectLens } from '../../core/project-lens';
 })
 export class GardeningProposalsPage {
   private readonly lens = inject(ProjectLens);
+  private readonly state = inject(GardeningProposalsState);
 
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
@@ -178,6 +181,8 @@ export class GardeningProposalsPage {
    * the selection is left alone: a failed read is not evidence the proposal was
    * filtered out.
    *
+   * A proposal an open closing dialog is for stays selected until that dialog closes.
+   *
    * Converges in one step: the row it navigates to is by construction in the
    * filtered set, so the next pass stays. `replaceUrl: true`
    * so a filter change never pushes a history entry the operator has to click back
@@ -189,6 +194,7 @@ export class GardeningProposalsPage {
       this.proposalId(),
       this.filteredProposals().map((p) => p.id),
       this.mobile(),
+      this.state.dialogProposalId(),
     );
     if (target === null) return;
     void this.router.navigate(

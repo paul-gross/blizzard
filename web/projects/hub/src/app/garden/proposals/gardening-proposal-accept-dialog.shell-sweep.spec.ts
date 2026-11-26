@@ -1,32 +1,45 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Component, input, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { form } from '@angular/forms/signals';
 import { page, userEvent } from 'vitest/browser';
 
 import { GardeningProposalAcceptDialogView } from './gardening-proposal-accept-dialog-view';
+import { acceptanceDraftFor } from './proposal-acceptance.domain';
+import { proposalAcceptanceRules } from './proposal-acceptance.form';
+
+/** Mounts the view over a real `form()`, as the container does. */
+@Component({
+  selector: 'app-accept-sweep-host',
+  imports: [GardeningProposalAcceptDialogView],
+  template: `<app-gardening-proposal-accept-dialog-view
+    [proposalTitle]="title()"
+    [form]="f"
+    [urgencyOptions]="[{ value: '', label: 'Tenant default (Normal)' }, { value: 'urgent', label: 'Urgent' }]"
+  />`,
+})
+class Host {
+  readonly title = input.required<string>();
+  readonly f = form(signal(acceptanceDraftFor('Seventeen modules narrate their own change history.')), proposalAcceptanceRules);
+}
 
 /**
- * The Accept dialog's own half of `web:shell-sweep` — the
- * mint/decline radiogroup genuinely stacks its two options, the footer's
- * Cancel/Accept buttons genuinely sit side by side, and neither overflows the panel,
- * at the phone and desktop widths the dialog is reachable at — real CSS layout claims
- * jsdom cannot make.
+ * The Accept dialog's own half of `web:shell-sweep` — the mint/decline option group genuinely stacks its two options,
+ * the `KitForm` action row stays inside the panel, and the reason field sits below the options in both modes, at the
+ * phone and desktop widths the dialog is reachable at — real CSS layout claims jsdom cannot make.
  *
- * Mounts `GardeningProposalAcceptDialogView` directly with plain inputs — no query
- * double, matching how the container actually feeds it
- * (`bzh:frontend-container-presentational`).
+ * Mounts `GardeningProposalAcceptDialogView` over a real `form()` — no query double, matching how the container
+ * actually feeds it (`bzh:frontend-container-presentational`).
  *
- * Excluded from the default `ng test hub` run — run it via `npm run shell-sweep`
- * (`web/scripts/shell-sweep.js`).
+ * Excluded from the default `ng test hub` run — run it via `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
  */
 async function mount(width: number) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
-    imports: [GardeningProposalAcceptDialogView],
+    imports: [Host],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
-  const fixture = TestBed.createComponent(GardeningProposalAcceptDialogView);
-  fixture.componentRef.setInput('proposalTitle', 'Author a docstring standard covering change-history narration');
-  fixture.componentRef.setInput('proposalBody', 'Seventeen modules narrate their own change history.');
+  const fixture = TestBed.createComponent(Host);
+  fixture.componentRef.setInput('title', 'Author a docstring standard covering change-history narration');
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;
   document.body.appendChild(root);
@@ -35,82 +48,41 @@ async function mount(width: number) {
   return { fixture, root };
 }
 
+const rect = (root: HTMLElement, testid: string) =>
+  root.querySelector<HTMLElement>(`[data-testid="${testid}"]`)!.getBoundingClientRect();
+
 describe('GardeningProposalAcceptDialogView shell sweep (web:shell-sweep)', () => {
   for (const width of [320, 390, 1024]) {
-    it(`stacks the mode options and sits Cancel/Accept side by side at ${width}px`, async () => {
-      const { root } = await mount(width);
-      try {
-        expect(root.querySelector('[data-testid="proposal-accept-urgency"]')).not.toBeNull();
-        const mint = root.querySelector<HTMLElement>('[data-testid="proposal-accept-mode-mint"]')!;
-        const decline = root.querySelector<HTMLElement>('[data-testid="proposal-accept-mode-decline"]')!;
-        expect(decline.getBoundingClientRect().top, 'decline option did not land below mint').toBeGreaterThanOrEqual(
-          mint.getBoundingClientRect().bottom,
-        );
-
-        const cancel = root.querySelector<HTMLElement>('[data-testid="proposal-accept-dialog-cancel"]')!;
-        const submit = root.querySelector<HTMLElement>('[data-testid="proposal-accept-dialog-submit"]')!;
-        const cancelRect = cancel.getBoundingClientRect();
-        const submitRect = submit.getBoundingClientRect();
-        expect(
-          Math.abs(cancelRect.top - submitRect.top),
-          'Cancel and Accept must sit on the same row, not stacked',
-        ).toBeLessThan(2);
-        expect(submitRect.left, 'Accept must not overlap Cancel').toBeGreaterThanOrEqual(cancelRect.right);
-
-        const panel = root.querySelector<HTMLElement>('[data-testid="gardening-proposal-accept-dialog"]')!;
-        const panelRect = panel.getBoundingClientRect();
-        expect(submitRect.right, 'Accept must not overflow the dialog panel').toBeLessThanOrEqual(
-          panelRect.right + 1,
-        );
-      } finally {
-        root.remove();
-      }
-    });
-  }
-
-  for (const width of [320, 390]) {
-    it(`keeps the submit error readable and actions inside the dialog at ${width}px`, async () => {
+    it(`stacks the options, keeps the action row inside the panel, and the reason below the options at ${width}px`, async () => {
       const { root, fixture } = await mount(width);
       try {
-        fixture.componentRef.setInput('submitError', 'The proposal could not be accepted. Please try again.');
-        await fixture.whenStable();
+        for (const mode of ['mint', 'decline'] as const) {
+          await userEvent.click(root.querySelector(`[data-testid="proposal-accept-mode-${mode}"]`)!);
+          await fixture.whenStable();
 
-        const error = root.querySelector<HTMLElement>('[data-testid="proposal-accept-submit-error"]')!;
-        const cancel = root.querySelector<HTMLElement>('[data-testid="proposal-accept-dialog-cancel"]')!;
-        const submit = root.querySelector<HTMLElement>('[data-testid="proposal-accept-dialog-submit"]')!;
-        const panel = root.querySelector<HTMLElement>('[data-testid="gardening-proposal-accept-dialog"]')!;
-        const errorRect = error.getBoundingClientRect();
-        const cancelRect = cancel.getBoundingClientRect();
-        const submitRect = submit.getBoundingClientRect();
-        const panelRect = panel.getBoundingClientRect();
+          const mint = rect(root, 'proposal-accept-mode-mint');
+          const decline = rect(root, 'proposal-accept-mode-decline');
+          expect(decline.top, 'decline option did not land below mint').toBeGreaterThanOrEqual(mint.bottom);
 
-        expect(error.textContent).toContain('The proposal could not be accepted. Please try again.');
-        expect(errorRect.width, 'error text needs room to wrap readably').toBeGreaterThan(200);
-        expect(errorRect.bottom).toBeLessThanOrEqual(cancelRect.top);
-        expect(Math.abs(cancelRect.top - submitRect.top)).toBeLessThan(2);
-        expect(submitRect.left).toBeGreaterThanOrEqual(cancelRect.right);
-        expect(cancelRect.left).toBeGreaterThanOrEqual(panelRect.left);
-        expect(submitRect.right).toBeLessThanOrEqual(panelRect.right + 1);
+          const modeField = rect(root, 'proposal-accept-mode-field');
+          const reasonField = rect(root, 'proposal-accept-reason-field');
+          expect(reasonField.top, `the reason field did not land below the options (${mode})`).toBeGreaterThanOrEqual(
+            modeField.bottom,
+          );
+
+          const cancel = rect(root, 'kit-form-cancel');
+          const submit = rect(root, 'kit-form-save');
+          expect(Math.abs(cancel.top - submit.top), 'Cancel and Accept must sit on the same row').toBeLessThan(2);
+          const [first, second] = cancel.left < submit.left ? [cancel, submit] : [submit, cancel];
+          expect(second.left, 'the action buttons must not overlap').toBeGreaterThanOrEqual(first.right);
+
+          const panel = rect(root, 'gardening-proposal-accept-dialog');
+          expect(first.left, 'the action row must not overflow the panel').toBeGreaterThanOrEqual(panel.left - 1);
+          expect(second.right, 'the action row must not overflow the panel').toBeLessThanOrEqual(panel.right + 1);
+        }
       } finally {
         root.remove();
       }
     });
   }
-
-  it('shows the decline reason field below the mode options once decline is selected', async () => {
-    const { root, fixture } = await mount(1024);
-    try {
-      await userEvent.click(root.querySelector('[data-testid="proposal-accept-mode-decline"]')!);
-      await fixture.whenStable();
-
-      const modeField = root.querySelector<HTMLElement>('[data-testid="proposal-accept-mode-field"]')!;
-      const reasonField = root.querySelector<HTMLElement>('[data-testid="proposal-accept-decline-reason-field"]')!;
-      expect(
-        reasonField.getBoundingClientRect().top,
-        'the decline reason field did not land below the mode field',
-      ).toBeGreaterThanOrEqual(modeField.getBoundingClientRect().bottom);
-    } finally {
-      root.remove();
-    }
-  });
 });

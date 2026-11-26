@@ -23,3 +23,8 @@ export function urgencyOptions(urgencies: readonly Urgency[], config: UrgencyOpt
   if (!inherit) return options;
   return [{ value: '', label: inherit.name === null ? inherit.label : `${inherit.label} (${inherit.name})` }, ...options];
 }
+
+/** The name of the tenant's default urgency, or null when none is marked default. */
+export function defaultUrgencyName(urgencies: readonly Urgency[]): string | null {
+  return urgencies.find((u) => u.default)?.name ?? null;
+}

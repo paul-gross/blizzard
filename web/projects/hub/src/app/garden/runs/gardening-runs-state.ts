@@ -11,9 +11,8 @@ import { type RunListRowVm } from './run-list';
  * delta pane nested under it. Provided on `GardeningRunsPage`, so both halves of
  * the tab resolve the same instance and it is torn down when the tab is left.
  *
- * The other four gardening tabs need no state object like this: their two halves
- * each inject the cache-keyed queries they need and land on the same cached data.
- * This read cannot, because its key carries a window cut from the wall clock — two
+ * A cache-keyed read normally needs no shared object: each half injects it and lands
+ * on the same cached data. This one cannot, because its key carries a window cut from the wall clock — two
  * independent constructions would key on two different instants and fetch the same
  * endpoint twice, to subtly different answers. The window is therefore computed
  * once, here, off `FLEET_CLOCK`, and a page reload is what refreshes it.

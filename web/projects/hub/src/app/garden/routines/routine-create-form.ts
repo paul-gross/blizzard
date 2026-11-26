@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { type FieldTree, FormField } from '@angular/forms/signals';
 import { KitField, KitForm, KitSelect, KitTextInput, type Urgency } from 'fleet';
 
-import { urgencyOptions } from '../../core/urgency-options.model';
+import { defaultUrgencyName, urgencyOptions } from '../../core/urgency-options.model';
 import type { RoutineCreateDraft } from '../core/routine.domain';
 
 /**
@@ -31,7 +31,7 @@ export class RoutineCreateForm {
     urgencyOptions(this.urgencies(), {
       key: 'slug',
       retired: 'exclude',
-      inherit: { label: 'Tenant default', name: this.urgencies().find((u) => u.default)?.name ?? null },
+      inherit: { label: 'Tenant default', name: defaultUrgencyName(this.urgencies()) },
     }),
   );
 }
