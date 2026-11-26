@@ -60,7 +60,6 @@ def _init_workspace_or_skip(workspace: Path) -> None:
     """Workspace-level init (source checkouts off the file:// origins) via the vendored CLI."""
     cli = SubprocessWinterCli(children=CHILDREN, env=tool_env())
     try:
-        cli.ensure_ready(workspace)
         cli.run(workspace, ["ws", "init"])
     except WinterCliError as exc:  # environment-specific winter failure
         pytest.skip(f"winter ws init failed in this environment: {exc}")

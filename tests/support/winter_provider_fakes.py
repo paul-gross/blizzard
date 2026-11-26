@@ -11,15 +11,11 @@ class FakeWinter:
     def __init__(self, *, service_bound: bool = False, fail_on: list[str] | None = None) -> None:
         self.runs: list[list[str]] = []
         self.captures: list[list[str]] = []
-        self.ready = 0
         self.service_bound = service_bound
         self.fail_on = fail_on  # arg-list prefix that raises, simulating a failed winter step
         # What `winter ws worktrees --json` reports; the last two shapes exist to be
         # filtered out.
         self.worktrees: list[dict[str, object]] = []
-
-    def ensure_ready(self, workspace_root: Path) -> None:
-        self.ready += 1
 
     def run(self, workspace_root: Path, args: Sequence[str]) -> None:
         args = list(args)

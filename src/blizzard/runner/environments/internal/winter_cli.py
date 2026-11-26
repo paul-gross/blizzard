@@ -1,7 +1,7 @@
 """Drive the real winter CLI against a workspace root (package-private).
 
 Two invocation shapes, tried in order: the workspace's **own** ``tools/winter-cli`` via
-``mise exec -- uv run`` with cwd pinned to it, so winter's cwd-walk-up root resolution
+``uv run`` with cwd pinned to it, so winter's cwd-walk-up root resolution
 lands on this workspace; then a global ``winter`` binary. Each launch goes through the injected seam under the tool
 profile (``bzh:dependency-inversion``); a failure is wrapped once and logged."""
 
@@ -32,12 +32,6 @@ class SubprocessWinterCli:
         self._children = children
         self._env = env
 
-    def ensure_ready(self, workspace_root: Path) -> None:
-        """One-time prep so ``run`` works against a vendored, freshly-cloned CLI."""
-        cli = workspace_root / "tools" / "winter-cli"
-        if cli.is_dir():
-            self._run(["mise", "trust", "--quiet", str(cli / "mise.toml")], cwd=cli, what="mise trust")
-
     def run(self, workspace_root: Path, args: Sequence[str]) -> None:
         self._invoke(workspace_root, args)
         _log.info("winter run", workspace_root=str(workspace_root), args=list(args))
@@ -49,7 +43,7 @@ class SubprocessWinterCli:
     def _invoke(self, workspace_root: Path, args: Sequence[str]) -> str:
         cli = workspace_root / "tools" / "winter-cli"
         if cli.is_dir():
-            cmd = ["mise", "-C", str(cli), "exec", "--", "uv", "run", "--project", str(cli), "winter", *args]
+            cmd = ["uv", "run", "--project", str(cli), "winter", *args]
             return self._run(cmd, cwd=cli, what=f"winter {' '.join(args)}")
         return self._run(["winter", *args], cwd=workspace_root, what=f"winter {' '.join(args)}")
 
