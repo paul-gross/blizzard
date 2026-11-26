@@ -72,7 +72,7 @@
       }
       <ng-content />
       @if (record.links; as group) {
-        <h3 class="section">{{ group.heading }}</h3>
+        <fleet-kit-section-head class="section" [label]="group.heading" [level]="3" />
         @if (group.links.length > 0) {
           <ul class="links" [attr.data-testid]="testidPrefix() + '-links'">
             @for (link of group.links; track link.kind + link.name) {
@@ -91,7 +91,7 @@
         }
       }
       @if (record.hasHistory) {
-        <h3 class="section">Revisions</h3>
+        <fleet-kit-section-head label="Revisions" [level]="3" class="section" />
         <app-config-revisions [rows]="revisions()" [state]="revisionsState()" [testidPrefix]="testidPrefix()" />
       }
     </article>

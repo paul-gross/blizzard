@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { FleetWhen, KitAsyncState, type KitAsyncStateValue } from 'fleet';
+import { FleetWhen, KitAsyncState, type KitAsyncStateValue, KitSectionHead } from 'fleet';
 
 import { ConfigFieldDiff } from '../config-field-diff';
 import type { ChangeEntryVm } from './changes.model';
@@ -14,7 +14,7 @@ import { AppLink } from 'fleet/shell';
 @Component({
   selector: 'app-change-entry-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFieldDiff, FleetWhen, KitAsyncState, RouterLink, AppLink],
+  imports: [ConfigFieldDiff, FleetWhen, KitAsyncState, KitSectionHead, RouterLink, AppLink],
   templateUrl: './change-entry-panel.html',
   styleUrl: './change-entry-panel.css',
 })

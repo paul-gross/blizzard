@@ -5,6 +5,7 @@ import {
   KitButton,
   type KitFact,
   KitFactList,
+  KitSectionHead,
   KitSwatch,
   type KitTabOption,
   KitTabContent,
@@ -43,7 +44,7 @@ export interface ProjectUnlinkEvent {
 @Component({
   selector: 'app-project-record-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigRevisions, FleetWhen, KitButton, KitFactList, KitSwatch, KitTabContent, KitTabGroup, KitTabPanel, KitTabs, ProjectLinkPanel, ProjectOverviewCard],
+  imports: [ConfigRevisions, FleetWhen, KitButton, KitFactList, KitSectionHead, KitSwatch, KitTabContent, KitTabGroup, KitTabPanel, KitTabs, ProjectLinkPanel, ProjectOverviewCard],
   templateUrl: './project-record-panel.html',
   styleUrl: './project-record-panel.css',
 })

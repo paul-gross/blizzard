@@ -88,13 +88,7 @@
   border-right: 1px solid var(--line);
 }
 .h {
-  margin: 0 0 4px;
-  padding: 0 10px;
-  color: var(--label);
-  font-size: var(--fs-label);
-  font-weight: normal;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  --kit-section-head-pad: 0 10px;
 }
 .repo {
   display: flex;
@@ -180,7 +174,7 @@
   border-bottom: 1px solid var(--line);
 }
 :host(.mobile) .h {
-  padding-inline: 8px;
+  --kit-section-head-pad: 0 8px;
 }
 /* The detail also appears without the mobile host class in the Delivery drawer. */
 @media (max-width: 900px) {

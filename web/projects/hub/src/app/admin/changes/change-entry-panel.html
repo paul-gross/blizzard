@@ -15,7 +15,7 @@
           <fleet-when [iso]="entry.at" /> · {{ entry.actor }} via <span class="door">{{ entry.door }}</span>
         </span>
       </header>
-      <h3 class="section">What changed</h3>
+      <fleet-kit-section-head label="What changed" [level]="3" class="section" />
       <ul class="changes">
         @for (row of entry.rows; track row.id) {
           <li class="change" [attr.data-testid]="'admin-change-row-' + row.id">

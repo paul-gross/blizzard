@@ -7,7 +7,7 @@ import { KitSectionHead } from './kit-section-head';
   selector: 'fleet-test-host',
   imports: [KitSectionHead],
   template: `
-    <fleet-kit-section-head [label]="label()" [labelId]="labelId()" [count]="count()">
+    <fleet-kit-section-head [label]="label()" [labelId]="labelId()" [count]="count()" [level]="level()">
       <a class="trail" href="#">graph</a>
     </fleet-kit-section-head>
   `,
@@ -16,6 +16,7 @@ class TestHost {
   readonly label = signal('Messages');
   readonly labelId = signal<string | null>(null);
   readonly count = signal<number | null>(null);
+  readonly level = signal<2 | 3 | 4 | null>(null);
 }
 
 describe('KitSectionHead', () => {
@@ -64,4 +65,30 @@ describe('KitSectionHead', () => {
     expect(el.querySelector('.s-head > a.trail')?.textContent).toBe('graph');
     expect(el.querySelector('.tag a.trail')).toBeNull();
   });
+
+  it('renders a non-heading span tag by default', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('.tag')?.tagName).toBe('SPAN');
+    expect(el.querySelector('h1, h2, h3, h4, h5, h6')).toBeNull();
+  });
+
+  for (const level of [2, 3, 4] as const) {
+    it(`renders the tag as an h${level} at level ${level}, with the labelId and projection outside it`, async () => {
+      const fixture = TestBed.createComponent(TestHost);
+      fixture.componentInstance.level.set(level);
+      fixture.componentInstance.labelId.set('section-heading');
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+      const tag = el.querySelector(`.s-head > h${level}.tag`);
+
+      expect(tag?.id).toBe('section-heading');
+      expect(tag?.textContent?.trim()).toBe('Messages');
+      expect(el.querySelectorAll('.tag').length).toBe(1);
+      expect(el.querySelector('.s-head > a.trail')?.textContent).toBe('graph');
+      expect(tag?.querySelector('a.trail')).toBeNull();
+    });
+  }
 });

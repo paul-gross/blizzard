@@ -117,7 +117,7 @@
       <p class="form-note" [attr.data-testid]="testidPrefix() + '-hint'">{{ note }}</p>
     }
     @if (mode() === 'edit') {
-      <h3 class="section">Will change</h3>
+      <fleet-kit-section-head label="Will change" [level]="3" />
       @if (changes().length > 0) {
         <app-config-field-diff [diff]="changes()" [testid]="testidPrefix() + '-diff'" />
       } @else {
