@@ -40,7 +40,7 @@ from tests.support.hub_command_graphs import (
     submit_build_pass,
     to_merge_node,
 )
-from tests.support.hub_node_artifacts import record_hub_asset
+from tests.support.hub_node_artifacts import record_hub_asset, record_no_code
 from tests.support.scaffolding import (
     TEST_HUB_ACTIONS,
     FakeWorkSource,
@@ -445,6 +445,40 @@ nodes:
     assert detail["current_node_name"] == "verify"
     assert detail["bounces"] == []
     assert detail["landed"] is True
+
+
+@pytest.mark.parametrize(
+    ("proven_commit", "bounced"),
+    [("a" * 40, False), ("b" * 40, True)],
+    ids=["current-declaration", "declaration-changed-since"],
+)
+def test_a_non_terminal_route_bounces_unless_a_no_code_marker_matches_the_declaration(
+    tmp_path: Path, proven_commit: str, bounced: bool
+) -> None:
+    """A repo resolved without code is finished, but only for the declaration its marker was written for."""
+    hub = build_hub(tmp_path)
+    chunk_id, build_node_id, graph = to_merge_node(hub, graph_yaml=_answering("failure"))
+    merge_node = graph.node_by_name("merge")
+    assert merge_node is not None
+    record_no_code(
+        hub,
+        chunk_id,
+        node_id=merge_node.node_id,
+        node_name="merge",
+        repo="acme/widget",
+        branch="b",
+        commit=proven_commit,
+    )
+
+    apply = _submit_build_pass_with_commit(hub, chunk_id, build_node_id, 1, repo="acme/widget")
+    assert apply.json()["outcome"] == "hub_node_taken"
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["current_node_name"] == "build"
+    assert [bounce["cause"] for bounce in detail["bounces"]] == (["failure"] if bounced else [])
+    assert [a["name"] for a in detail["artifacts"] if a["name"] == "bounce-envelope"] == (
+        ["bounce-envelope"] if bounced else []
+    )
 
 
 def test_hub_advance_endpoint_no_ops_off_a_non_hub_command_node(tmp_path: Path) -> None:

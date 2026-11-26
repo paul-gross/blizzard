@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, decide_close_enqueue
+from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.terminal import terminal_under_lock
@@ -41,6 +42,24 @@ def record_hub_asset(
             close_decision=close_decision,
             transaction=unit,
         ).wrote
+
+
+def record_no_code(
+    hub: HubHarness, chunk_id: str, *, node_id: str, node_name: str, repo: str, branch: str, commit: str
+) -> None:
+    """Record on the visit at epoch 1 the ``no-code/`` marker bound to ``repo``'s declaration of ``branch`` at
+    ``commit``, resolved to the hub's one repository record."""
+    (record,) = hub.services.repository_records.list_all(include_retired=False)
+    name, content = no_code_marker(
+        {
+            "repo": repo,
+            "record": str(record.repository_id),
+            "base_branch": record.fields.base_branch,
+            "branch": branch,
+            "commit": commit,
+        }
+    )
+    assert record_hub_asset(hub, chunk_id, node_id=node_id, node_name=node_name, epoch=1, name=name, content=content)
 
 
 def record_landing(
