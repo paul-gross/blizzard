@@ -1060,8 +1060,8 @@ def _apply_routine(hub: HubHarness, **stated: object) -> dict[str, Any]:
 def test_an_applied_model_preference_is_stored_in_order_on_create_and_edit(hub: HubHarness) -> None:
     _mint_graph(hub)
 
-    assert _apply_routine(hub, default_model=["opus", "sonnet"])["default_model"] == ["opus", "sonnet"]
     assert _apply_routine(hub, default_model=["sonnet", "opus"])["default_model"] == ["sonnet", "opus"]
+    assert _apply_routine(hub, default_model=["sonnet", "haiku"])["default_model"] == ["sonnet", "haiku"]
 
 
 def test_an_applied_effort_is_stored_on_create_edit_and_explicit_clear(hub: HubHarness) -> None:
