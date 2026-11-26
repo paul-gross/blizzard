@@ -23,6 +23,9 @@
  * `transcripts/` sub-barrels and `@angular/cdk`'s `menu`/`overlay`/`listbox` bundles in either app, and
  * for the hub also its `garden/`, `graphs/`, or `board/chunk-dock/` folders and `@dagrejs/*`.
  *
+ * It also prints, per app, every lazy entry's static closure beyond the initial chunk with their median, and each
+ * `fleet` entry file's source closure (`bundle-closure.js`).
+ *
  * Run from `web/`: `npm run bundle-check` (`node scripts/bundle-check.js`).
  */
 
@@ -30,6 +33,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
+const { entryFileCosts, lazyEntries, median, sourceClosure, staticOutputs } = require('./bundle-closure');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -79,47 +83,12 @@ const REPORT_AREAS = [
   { name: 'fleet transcripts/', test: (f) => f.startsWith('projects/fleet/src/lib/transcripts/') },
 ];
 
-/** Every output reachable from the output whose `entryPoint` is `main`, over static
- * (`import-statement`) edges only — the initial chunk, at output granularity.
+/** The initial chunk at output granularity: every output the app's `main.ts` output reaches statically.
  * @param {{ outputs: Record<string, any> }} meta */
 function computeInitialOutputs(meta, main) {
-  const outputs = meta.outputs;
-  const mainKey = Object.keys(outputs).find((k) => outputs[k].entryPoint === main);
+  const mainKey = Object.keys(meta.outputs).find((k) => meta.outputs[k].entryPoint === main);
   if (!mainKey) throw new Error(`bundle-check: no output in browser-stats.json has entryPoint ${main}`);
-
-  const visited = new Set();
-  const stack = [mainKey];
-  while (stack.length > 0) {
-    const cur = stack.pop();
-    if (visited.has(cur)) continue;
-    visited.add(cur);
-    for (const imp of outputs[cur]?.imports ?? []) {
-      if (imp.kind === 'import-statement' && !visited.has(imp.path)) stack.push(imp.path);
-    }
-  }
-  return visited;
-}
-
-/** Every source file reachable from `main` over static (`import-statement`) edges
- * only, at source-file granularity — the same initial-chunk walk `computeInitialOutputs`
- * does, but over the full module graph, so each forbidden hit still names its importer.
- * @param {{ inputs: Record<string, any> }} meta */
-function computeEagerFiles(meta, main) {
-  const inputs = meta.inputs;
-  const visited = new Set();
-  const parent = new Map();
-  const stack = [main];
-  while (stack.length > 0) {
-    const cur = stack.pop();
-    if (visited.has(cur)) continue;
-    visited.add(cur);
-    for (const imp of inputs[cur]?.imports ?? []) {
-      if (imp.kind !== 'import-statement' || imp.external) continue;
-      if (!parent.has(imp.path)) parent.set(imp.path, cur);
-      if (!visited.has(imp.path)) stack.push(imp.path);
-    }
-  }
-  return { visited, parent };
+  return staticOutputs(meta, mainKey);
 }
 
 /** The forbidden files among `eagerFiles`, each with the file that statically imports it.
@@ -148,6 +117,25 @@ function areaBreakdown(meta, initialOutputs) {
     }
   }
   return totals;
+}
+
+/** Every lazy entry's closure and the median, then each `fleet` entry file's. Informational only.
+ * @param {{ inputs: Record<string, any>, outputs: Record<string, any> }} meta
+ * @param {string} app
+ * @param {Set<string>} initialOutputs */
+function reportClosures(meta, app, initialOutputs) {
+  const entries = lazyEntries(meta, initialOutputs);
+  console.log(`bundle-check: ${app} lazy entries, static closure beyond the initial chunk —`);
+  for (const e of entries) {
+    console.log(`  ${e.entry}: ${e.bytes} B`);
+    if (e.heavy.length > 0) console.log(`    packages: ${e.heavy.join(', ')}`);
+    if (e.areas.length > 0) console.log(`    fleet: ${e.areas.join(', ')}`);
+  }
+  console.log(`bundle-check: ${app} median of ${entries.length} lazy entries: ${median(entries.map((e) => e.bytes))} B`);
+  console.log(`bundle-check: ${app} fleet entry files, closure beyond the initial chunk —`);
+  for (const f of entryFileCosts(meta, initialOutputs)) {
+    console.log(`  ${f.file}: ${f.bytes} B${f.heavy.length > 0 ? ` (${f.heavy.join(', ')})` : ''}`);
+  }
 }
 
 /** @param {number} bytes */
@@ -185,7 +173,7 @@ function assertBundleCompositionDetectorWorks() {
     },
   };
 
-  const { visited, parent } = computeEagerFiles(fixture, APPS[0].main);
+  const { visited, parent } = sourceClosure(fixture, APPS[0].main);
   const violations = findViolations(visited, parent, APPS[0].forbidden);
   const files = violations.map((v) => v.file);
 
@@ -201,6 +189,70 @@ function assertBundleCompositionDetectorWorks() {
   const hit = violations.find((v) => v.file === 'projects/hub/src/app/garden/garden-page.ts');
   if (hit?.importer !== 'projects/hub/src/app/shell/app.ts') {
     throw new Error(`bundle-composition detector attributed the wrong importer: ${hit?.importer}`);
+  }
+}
+
+/**
+ * Prove the lazy-closure walk: a lazy entry counts every output it reaches statically beyond the initial
+ * ones, routes and `@defer` blocks alike, never an initial output nor one behind a further dynamic import.
+ */
+function assertLazyClosureReportWorks() {
+  const meta = {
+    inputs: {
+      'projects/fleet/src/entries/kit.ts': {
+        bytes: 1,
+        imports: [
+          { path: 'projects/fleet/src/lib/kit/kit-button.ts', kind: 'import-statement' },
+          { path: 'node_modules/@angular/forms/x.mjs', kind: 'import-statement', external: true },
+        ],
+      },
+      'projects/fleet/src/lib/kit/kit-button.ts': { bytes: 5, imports: [] },
+    },
+    outputs: {
+      'main.js': {
+        bytes: 100,
+        imports: [
+          { path: 'route.js', kind: 'dynamic-import' },
+          { path: 'shared-initial.js', kind: 'import-statement' },
+        ],
+      },
+      'shared-initial.js': { bytes: 50, imports: [] },
+      'route.js': {
+        bytes: 10,
+        entryPoint: 'projects/hub/src/app/route.ts',
+        inputs: { 'projects/hub/src/app/route.ts': {}, 'projects/fleet/src/lib/kit/kit-button.ts': { bytesInOutput: 4 } },
+        imports: [
+          { path: 'shared-initial.js', kind: 'import-statement' },
+          { path: 'shared-lazy.js', kind: 'import-statement' },
+          { path: 'deferred.js', kind: 'dynamic-import' },
+        ],
+      },
+      'shared-lazy.js': {
+        bytes: 20,
+        inputs: { 'projects/fleet/src/lib/chunk/chunk-detail/a.ts': {}, 'node_modules/@angular/cdk/a.mjs': {} },
+        imports: [],
+      },
+      'deferred.js': { bytes: 7, entryPoint: 'projects/hub/src/app/deferred.ts', imports: [] },
+    },
+  };
+  const initial = computeInitialOutputs(
+    { outputs: { ...meta.outputs, 'main.js': { ...meta.outputs['main.js'], entryPoint: 'm' } } },
+    'm',
+  );
+  const found = lazyEntries(meta, initial).map((e) => `${e.entry}=${e.bytes}:${e.areas}:${e.heavy}`);
+  const expected = [
+    'projects/hub/src/app/route.ts=30:chunk/chunk-detail,kit:@angular/cdk',
+    'projects/hub/src/app/deferred.ts=7::',
+  ];
+  if (found.join('|') !== expected.join('|')) {
+    throw new Error(`bundle-composition lazy-closure walk read ${JSON.stringify(found)}`);
+  }
+  if (median([1, 9, 3]) !== 3 || median([1, 2, 3, 10]) !== 2.5) {
+    throw new Error('bundle-composition median is wrong');
+  }
+  const [kit] = entryFileCosts(meta, initial);
+  if (kit?.bytes !== 4 || kit.heavy.length !== 0) {
+    throw new Error(`bundle-composition entry-file cost counted a type-only edge or missed a file: ${JSON.stringify(kit)}`);
   }
 }
 
@@ -227,13 +279,15 @@ function checkApp(app) {
     const meta = JSON.parse(fs.readFileSync(statsPath, 'utf8'));
 
     const initialOutputs = computeInitialOutputs(meta, app.main);
-    const { visited: eagerFiles, parent } = computeEagerFiles(meta, app.main);
+    const { visited: eagerFiles, parent } = sourceClosure(meta, app.main);
     const violations = findViolations(eagerFiles, parent, app.forbidden);
     const initialTotal = [...initialOutputs]
       .filter((o) => o.endsWith('.js'))
       .reduce((sum, o) => sum + (meta.outputs[o]?.bytes ?? 0), 0);
 
     console.log(`bundle-check: ${app.name} initial JS total ${formatBytes(initialTotal)} across ${initialOutputs.size} output(s).`);
+    console.log(`bundle-check: ${app.name} initial JS exactly ${initialTotal} B.`);
+    reportClosures(meta, app.name, initialOutputs);
     console.log(`bundle-check: ${app.name} per-area breakdown of the initial chunk —`);
     for (const { name, bytes } of areaBreakdown(meta, initialOutputs)) {
       if (bytes > 0) console.log(`  ${name}: ${formatBytes(bytes)}`);
@@ -263,6 +317,7 @@ function checkApp(app) {
 
 function main() {
   assertBundleCompositionDetectorWorks();
+  assertLazyClosureReportWorks();
 
   // Every app is checked before the verdict, so one run reports all the failures.
   const results = APPS.map(checkApp);
