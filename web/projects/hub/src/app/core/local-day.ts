@@ -2,7 +2,7 @@
  * "spend today" is the operator's own calendar day, not UTC's.
  * Shared by the desktop titlebar ({@link App}) and the mobile glance board
  * ({@link GlanceBoard}), so both read the same local-midnight window and share
- * one `injectHubFleetSpendQuery` cache entry rather than opening two. */
+ * one `injectHubFleetSpendDomainQuery` cache entry rather than opening two. */
 export function startOfLocalDayIso(nowMs: number): string {
   const now = new Date(nowMs);
   return new Date(

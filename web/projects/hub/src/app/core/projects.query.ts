@@ -29,7 +29,7 @@ export async function readProjects(): Promise<readonly ProjectView[]> {
 
 /** The tenant's projects as one query, shared by the lens control, the lens guard and every view that names a
  * project — keyed by `hubProjectsKey`, so a config write refreshes it. */
-export function projectsQueryOptions() {
+function projectsQueryOptions() {
   return {
     queryKey: hubProjectsKey,
     queryFn: readProjects,
@@ -37,12 +37,7 @@ export function projectsQueryOptions() {
   };
 }
 
-/** The tenant's projects, read through {@link projectsQueryOptions} while `enabled()` holds. */
-export function injectProjectsQuery(enabled: () => boolean = () => true) {
-  return injectQuery(() => ({ ...projectsQueryOptions(), enabled: enabled() }));
-}
-
-/** Domain projection over the same cached wire read as {@link injectProjectsQuery}. */
+/** Domain projection over the tenant's cached projects. */
 export function projectDomainsQueryOptions() {
   return { ...projectsQueryOptions(), select: (projects: readonly ProjectView[]) => projects.map(fromProjectView) };
 }

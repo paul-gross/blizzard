@@ -1,9 +1,11 @@
-import type { ProjectView, Urgency } from 'fleet';
+import type { Urgency } from 'fleet';
+import type { Project } from '../../core/project.domain';
 import { projectOptions, urgencyOptions } from './new-hub-item.model';
 
 describe('new hub item options', () => {
   it('maps projects by their stable id and name', () => {
-    const projects = [{ project_id: 'p1', name: 'First' }, { project_id: 'p2', name: 'Second' }] as ProjectView[];
+    const base: Project = { project_id: 'p1', slug: 'first', name: 'First', description: '', color: '#123456', revision: 1, created_at: '2026-01-01T00:00:00Z' };
+    const projects: Project[] = [base, { ...base, project_id: 'p2', name: 'Second' }];
     expect(projectOptions(projects)).toEqual([{ value: 'p1', label: 'First' }, { value: 'p2', label: 'Second' }]);
     expect(projectOptions([])).toEqual([]);
   });

@@ -30,11 +30,6 @@ function decisionsQueryOptions(project: string | null) {
   };
 }
 
-export function injectHubDecisionsQuery() {
-  const projectFilter = injectProjectFilter();
-  return injectQuery(() => decisionsQueryOptions(projectFilter()));
-}
-
 export function injectBoardDecisionsQuery() {
   const projectFilter = injectProjectFilter();
   return injectQuery(() => ({

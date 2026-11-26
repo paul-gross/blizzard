@@ -1,11 +1,11 @@
-import { toConfigChange } from './config-history.translate';
+import { toConfigChange, toWireRecordKind } from './config-history.translate';
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import {
   type ConfigChangeView,
   listChangesApiConfigChangesGet,
-  type RecordKind,
 } from 'fleet';
+import type { ConfigRecordKind } from './config-history.domain';
 import { hubConfigHistoryKey } from '../core/query-keys';
 
 /** The page size each history request asks for. */
@@ -17,7 +17,7 @@ const HISTORY_PAGE = 100;
  * while `recordKey()` is `null`.
  */
 function ConfigHistoryQueryOptions(
-  recordKind: RecordKind,
+  recordKind: ConfigRecordKind,
   recordKey: () => string | null,
 ) {
   const key = recordKey();
@@ -30,7 +30,7 @@ function ConfigHistoryQueryOptions(
       for (;;) {
         const { data, error } = await listChangesApiConfigChangesGet({
           query: {
-            record_kind: recordKind,
+            record_kind: toWireRecordKind(recordKind),
             record_key: key,
             limit: HISTORY_PAGE,
             before,
@@ -47,7 +47,7 @@ function ConfigHistoryQueryOptions(
 }
 
 export function injectConfigHistoryQuery(
-  recordKind: RecordKind,
+  recordKind: ConfigRecordKind,
   recordKey: () => string | null,
 ) {
   return injectQuery(() => ({

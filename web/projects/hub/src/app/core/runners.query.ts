@@ -40,12 +40,6 @@ export function injectGlanceRunnersQuery() {
   }));
 }
 
-export function injectHubRunnersQuery(
-  includeRetired: () => boolean = () => false,
-) {
-  return injectQuery(() => HubRunnersQueryOptions(includeRetired));
-}
-
 /** Domain projection over the same cached wire read. */
 export function injectProjectRunnersQuery(
   includeRetired: () => boolean = () => false,

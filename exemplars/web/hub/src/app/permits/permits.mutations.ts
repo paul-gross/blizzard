@@ -4,18 +4,15 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import {
-  type PermitVerb,
   type PermitView,
   grantPermitApiPermitsPermitIdGrantPost,
   resumePermitApiPermitsPermitIdResumePost,
   revokePermitApiPermitsPermitIdRevokePost,
   suspendPermitApiPermitsPermitIdSuspendPost,
 } from 'fleet';
+import type { PermitMove } from './permits.domain';
 import { hubPermitKey, hubPermitsKey } from '../core/query-keys';
 import { permitMoveMutationKey, permitRevokeMutationKey } from '../core/mutation-keys';
-
-/** A verb that moves a permit without a body. */
-export type PermitMove = Exclude<PermitVerb, 'revoke'>;
 
 /** A move's variables: the permit and the verb applied to it. */
 export interface PermitMoveVars {

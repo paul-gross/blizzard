@@ -3,9 +3,8 @@
 # unit-test builder, `structural-gate` runs `scripts/structural-gate.js`. Each lays the exemplar tree over a scratch copy
 # of `projects/`: a file new to the tree is copied in, a file that already exists there (a key registry) has the
 # exemplar's lines appended, and the hub client is regenerated with the exemplar router mounted. `fleet` resolves to the
-# exemplar's barrel. The gate's layer table gains the exemplar's `permits` and `cadence-edit` units, as production's would. Only
-# `permits` joins the domain-boundary exemption list, since it still reads wire types through `fleet`; `cadence-edit`
-# reads them only behind the boundary.
+# exemplar's barrel. The gate's layer table gains the exemplar's `permits` and `cadence-edit` units, as production's would.
+# Both units read wire types only behind the domain boundary.
 set -euo pipefail
 
 web="$(cd "$(dirname "$0")/.." && pwd)"
@@ -65,8 +64,6 @@ JSON
     grep -q "^  permits: \[\],$" "$scratch/scripts/structural-gate.js"
     sed -i "s|^const HUB_LAYERS = {$|&\n  'cadence-edit': [],|" "$scratch/scripts/structural-gate.js"
     grep -q "^  'cadence-edit': \[\],$" "$scratch/scripts/structural-gate.js"
-    sed -i "s|^const DOMAIN_BOUNDARY_EXEMPT = \[$|&\n  'hub/src/app/permits',|" "$scratch/scripts/structural-gate.js"
-    grep -q "^  'hub/src/app/permits',$" "$scratch/scripts/structural-gate.js"
     cd "$scratch" && node scripts/structural-gate.js
     ;;
   *)

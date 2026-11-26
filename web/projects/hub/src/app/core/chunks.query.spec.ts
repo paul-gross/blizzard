@@ -17,7 +17,7 @@ import {
   stubError,
   stubHubClient,
 } from 'fleet/testing';
-import { boardChunksQueryOptions, domainBoardChunksQueryOptions, injectHubBoardChunksQuery, runnerChunksQueryOptions, type BoardChunksRead } from './chunks.query';
+import { boardChunksReadOptions, domainBoardChunksQueryOptions, injectDomainBoardChunksQuery, type BoardChunksRead } from './chunks.query';
 
 @Component({
   selector: 'app-test-chunks-query-host',
@@ -25,7 +25,7 @@ import { boardChunksQueryOptions, domainBoardChunksQueryOptions, injectHubBoardC
   template: '',
 })
 class TestChunksQueryHost {
-  readonly query = injectHubBoardChunksQuery();
+  readonly query = injectDomainBoardChunksQuery();
 }
 
 function chunk(id: string): ChunkSummary {
@@ -45,7 +45,7 @@ function mount() {
   return TestBed.createComponent(TestChunksQueryHost);
 }
 
-describe('injectHubBoardChunksQuery', () => {
+describe('injectDomainBoardChunksQuery', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
@@ -70,7 +70,7 @@ describe('injectHubBoardChunksQuery', () => {
     await settle(fixture);
     expect(fixture.componentInstance.query.data()?.chunks[0].laneStatus).toEqual({ kind: 'ready' });
     const client = TestBed.inject(QueryClient);
-    const cached = client.getQueryData<BoardChunksRead>(boardChunksQueryOptions(null).queryKey);
+    const cached = client.getQueryData<BoardChunksRead>(boardChunksReadOptions(null).queryKey);
     expect(cached?.chunks[0]).not.toHaveProperty('laneStatus');
   });
 
@@ -97,28 +97,9 @@ describe('injectHubBoardChunksQuery', () => {
       name: 'build',
       state: { kind: 'unknown', raw: 'future' },
     }]);
-    const cached = TestBed.inject(QueryClient).getQueryData<BoardChunksRead>(boardChunksQueryOptions(null).queryKey);
+    const cached = TestBed.inject(QueryClient).getQueryData<BoardChunksRead>(boardChunksReadOptions(null).queryKey);
     expect(cached?.chunks[0]).toEqual(future);
     expect(cached?.pages[0].chunks[0]).toEqual(future);
-  });
-
-  it('projects runner claims from the same tenant-wide raw cache', async () => {
-    const held = { ...chunk('ch_held'), runner_id: 'rn_1', workspace_id: 'ws_1', environment_count: 2 };
-    stub = stubHubClient({
-      'GET /api/chunks': () => ({ chunks: [held], next_cursor: null, board_done_policy: null }),
-    });
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const runner = runnerChunksQueryOptions();
-    const board = boardChunksQueryOptions(null);
-    const raw = await client.fetchQuery(board);
-    expect(runner.queryKey).toEqual(board.queryKey);
-    expect(runner.select(raw).chunks[0]).toEqual({
-      chunk_id: 'ch_held', runner_id: 'rn_1', workspace_id: 'ws_1', environment_count: 2,
-      current_node_id: null, current_node_name: null, project_id: null, project_slug: null,
-      laneStatus: { kind: 'ready' },
-    });
-    expect(client.getQueryData(board.queryKey)).toEqual(raw);
-    expect(stub.forRoute('/api/chunks', 'GET')).toHaveLength(1);
   });
 
   it('projects board summaries and metadata without changing the lensed raw cache', async () => {
@@ -128,16 +109,16 @@ describe('injectHubBoardChunksQuery', () => {
       'GET /api/chunks': () => ({ chunks: [row], next_cursor: null, board_done_policy: policy }),
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const legacy = boardChunksQueryOptions('alpha');
+    const shared = boardChunksReadOptions('alpha');
     const domain = domainBoardChunksQueryOptions('alpha');
-    const raw = await client.fetchQuery(legacy);
-    expect(domain.queryKey).toEqual(legacy.queryKey);
+    const raw = await client.fetchQuery(shared);
+    expect(domain.queryKey).toEqual(shared.queryKey);
     expect(domain.select(raw)).toMatchObject({
       chunks: [{ chunk_id: 'ch_1', terminal: true, promotable: false, laneStatus: { kind: 'ready' } }],
       pages: [{ next_cursor: null, board_done_policy: policy }],
     });
     expect(domain.select(raw).pages[0]).not.toHaveProperty('chunks');
-    expect(client.getQueryData(legacy.queryKey)).toEqual(raw);
+    expect(client.getQueryData(shared.queryKey)).toEqual(raw);
   });
 
   it('drains every page of a multi-page response and concatenates them in order', async () => {
@@ -158,7 +139,7 @@ describe('injectHubBoardChunksQuery', () => {
     ).toEqual(['ch_1', 'ch_2', 'ch_3']);
     expect(fixture.componentInstance.query.data()?.pages.map((p) => p.next_cursor)).toEqual(['cursor-1', null]);
     expect(fixture.componentInstance.query.data()?.pages[0]).not.toHaveProperty('chunks');
-    const cached = TestBed.inject(QueryClient).getQueryData<BoardChunksRead>(boardChunksQueryOptions(null).queryKey);
+    const cached = TestBed.inject(QueryClient).getQueryData<BoardChunksRead>(boardChunksReadOptions(null).queryKey);
     expect(cached?.pages.map((page) => page.chunks.length)).toEqual([2, 1]);
     expect(stub.forRoute('/api/chunks', 'GET')).toHaveLength(2);
   });
@@ -194,7 +175,7 @@ describe('injectHubBoardChunksQuery', () => {
       },
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const options = boardChunksQueryOptions(null);
+    const options = boardChunksReadOptions(null);
     const previous = await client.fetchQuery(options);
     refreshing = true;
 
@@ -214,9 +195,9 @@ describe('injectHubBoardChunksQuery', () => {
       },
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const tenant = boardChunksQueryOptions(null);
-    const alpha = boardChunksQueryOptions('alpha');
-    const beta = boardChunksQueryOptions('beta');
+    const tenant = boardChunksReadOptions(null);
+    const alpha = boardChunksReadOptions('alpha');
+    const beta = boardChunksReadOptions('beta');
     await Promise.all([client.fetchQuery(tenant), client.fetchQuery(alpha), client.fetchQuery(beta)]);
 
     expect(client.getQueryData<BoardChunksRead>(tenant.queryKey)?.chunks.map((c) => c.chunk_id)).toEqual(['tenant']);
@@ -234,7 +215,7 @@ describe('injectHubBoardChunksQuery', () => {
       },
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const options = boardChunksQueryOptions(null);
+    const options = boardChunksReadOptions(null);
     await client.fetchQuery(options);
 
     const cached = client.getQueryData<Awaited<ReturnType<typeof options.queryFn>>>(options.queryKey);

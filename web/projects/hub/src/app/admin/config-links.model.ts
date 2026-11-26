@@ -1,26 +1,27 @@
-import { openLookup, RecordKind, type RecordRefView } from 'fleet';
+import { openLookup } from 'fleet';
+import type { ConfigRecordKind, ConfigRecordRef } from './config-history.domain';
 
 import type { ConfigLinkVm } from './config-record-panel';
 
 /** The route each record kind's surface lives at — the fleet's records under admin, the
  * gardening records under gardening. A kind the board has no surface for — a link kind, or one
  * the client does not know — reads `null`. */
-const SURFACE_SEGMENT = openLookup<RecordKind, readonly string[] | null>(
+const SURFACE_SEGMENT = openLookup<ConfigRecordKind, readonly string[] | null>(
   {
-    [RecordKind.WORK_SOURCE]: ['/admin', 'work-sources'],
-    [RecordKind.REPOSITORY]: ['/admin', 'repositories'],
-    [RecordKind.FORGE]: ['/admin', 'forges'],
-    [RecordKind.CREDENTIAL]: ['/admin', 'credentials'],
-    [RecordKind.SECRET]: ['/admin', 'secrets'],
-    [RecordKind.PROJECT]: ['/admin', 'projects'],
-    [RecordKind.SCOPE]: ['/gardening', 'scopes'],
-    [RecordKind.ROUTINE]: ['/gardening', 'routines'],
-    [RecordKind.CADENCE]: ['/gardening', 'cadences'],
-    [RecordKind.PROJECT_SOURCE_LINK]: null,
-    [RecordKind.PROJECT_REPOSITORY_LINK]: null,
-    [RecordKind.URGENCY]: null,
-    [RecordKind.URGENCY_ORDER]: null,
-    [RecordKind.TENANT_SETTINGS]: null,
+    work_source: ['/admin', 'work-sources'],
+    repository: ['/admin', 'repositories'],
+    forge: ['/admin', 'forges'],
+    credential: ['/admin', 'credentials'],
+    secret: ['/admin', 'secrets'],
+    project: ['/admin', 'projects'],
+    scope: ['/gardening', 'scopes'],
+    routine: ['/gardening', 'routines'],
+    cadence: ['/gardening', 'cadences'],
+    project_source_link: null,
+    project_repository_link: null,
+    urgency: null,
+    urgency_order: null,
+    tenant_settings: null,
   },
   () => null,
 );
@@ -38,13 +39,13 @@ export function recordRoute(kind: string, key: string): readonly string[] | null
 }
 
 /** A link to the record `ref` names, shown by its label — a repository's or work source's current slug — when it has one. */
-export function recordLink(ref: RecordRefView): ConfigLinkVm {
+export function recordLink(ref: ConfigRecordRef): ConfigLinkVm {
   return { kind: recordKindLabel(ref.kind), name: ref.label ?? ref.key, route: recordRoute(ref.kind, ref.key) };
 }
 
 /** A link to the credential `id`, shown by its slug, or none when the record names no credential. */
 export function credentialLinks(id: string | null | undefined, slug: string | null | undefined): readonly ConfigLinkVm[] {
-  return id ? [recordLink({ kind: RecordKind.CREDENTIAL, key: id, label: slug ?? null })] : [];
+  return id ? [recordLink({ kind: 'credential', key: id, label: slug ?? null })] : [];
 }
 
 /** A nullable field as text — `—` when unset. */

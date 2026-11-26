@@ -104,4 +104,31 @@ describe('membership mutations', () => {
 
     await expect(mutation.mutateAsync({ userId: 'usr_2' })).rejects.toBeTruthy();
   });
+
+  it.each(['role', 'revoke'] as const)('awaits listing invalidation before settling a refused %s mutation', async (kind) => {
+    stub = stubHubClient({
+      'PUT /api/members/{user_id}': () => stubError(409, { detail: 'refused role' }),
+      'DELETE /api/members/{user_id}': () => stubError(403, { detail: 'refused revoke' }),
+    });
+    let finish!: () => void;
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(
+      () => new Promise<void>((resolve) => { finish = resolve; }),
+    );
+    const role = TestBed.runInInjectionContext(() => injectMemberRoleMutation());
+    const revoke = TestBed.runInInjectionContext(() => injectRevokeMemberMutation());
+    let settled = false;
+    const request = kind === 'role'
+      ? role.mutateAsync({ userId: 'usr_2', role: 'guest' })
+      : revoke.mutateAsync({ userId: 'usr_2' });
+    const outcome = request.then(
+      () => { settled = true; return null; },
+      (error: unknown) => { settled = true; return error; },
+    );
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    expect(invalidatedKeys(invalidate)).toContainEqual(['hub', 'members']);
+    expect(settled).toBe(false);
+    finish();
+    expect(await outcome).toMatchObject({ detail: kind === 'role' ? 'refused role' : 'refused revoke' });
+    expect(settled).toBe(true);
+  });
 });

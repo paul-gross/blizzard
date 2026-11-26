@@ -3,8 +3,9 @@
 import { ChangeDetectionStrategy, Component, type TemplateRef, computed, input, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { type KitAsyncStateValue, type KitFact, type PermitView, FleetWhen, KitAsyncState, KitFactList, KitPanel } from 'fleet';
+import { type KitAsyncStateValue, type KitFact, FleetWhen, KitAsyncState, KitFactList, KitPanel } from 'fleet';
 import { AppLink } from 'fleet/shell';
+import { permitStateLabel, type Permit } from './permits.domain';
 import { permitProjectLabel } from './permits-page.model';
 
 /** A panel of one permit's facts, linking back to the listing. */
@@ -16,7 +17,7 @@ import { permitProjectLabel } from './permits-page.model';
 })
 export class PermitDetailView {
   /** The permit to show; `null` until there is one. */
-  readonly permit = input<PermitView | null>(null);
+  readonly permit = input<Permit | null>(null);
   /** Whether the permit is resting, loading, failed or ready. */
   readonly state = input.required<KitAsyncStateValue>();
 
@@ -29,7 +30,7 @@ export class PermitDetailView {
       { label: 'Project', value: permitProjectLabel(permit) },
       { label: 'Holder', value: permit.holder },
       { label: 'Capability', value: permit.capability },
-      { label: 'State', value: permit.state, testid: 'permit-detail-state' },
+      { label: 'State', value: permitStateLabel(permit.state), testid: 'permit-detail-state' },
       { label: 'Requested', template: this.requestedAt() },
       { label: 'Requested by', value: permit.requested_by },
       ...(permit.changed_by ? [{ label: 'Changed by', value: permit.changed_by }] : []),

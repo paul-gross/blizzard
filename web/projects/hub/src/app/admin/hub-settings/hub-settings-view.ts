@@ -1,5 +1,7 @@
+import type { HubSettingRow } from './hub-settings.domain';
+import { hubSettingValueText } from './hub-settings.domain';
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitAsyncState, KitButton, KitSectionHead, type KitAsyncStateValue, type HubSettingRow } from 'fleet';
+import { KitAsyncState, KitButton, KitSectionHead, type KitAsyncStateValue } from 'fleet';
 import { ConfigRecordPanel } from '../config-record-panel';
 import { ConfigRevisions } from '../config-revisions';
 import { ChangeEntryPanel } from '../changes/change-entry-panel';
@@ -23,4 +25,5 @@ export class HubSettingsView {
   readonly edit = output<HubSettingRow>();
   readonly loadMore = output<void>();
   protected readonly record = recordOf;
+  protected readonly valueText = hubSettingValueText;
 }

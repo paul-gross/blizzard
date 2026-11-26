@@ -26,7 +26,7 @@ import { ProjectLens } from '../../core/project-lens';
 import { credentialOptions } from '../credentials/credentials.model';
 import { injectCredentialChoicesQuery } from '../credentials/credentials.query';
 import { forgeOptions } from '../forges/forges.model';
-import { injectForgesQuery } from '../forges/forges.query';
+import { injectForgeListQuery } from '../forges/forges.query';
 
 /**
  * `/admin/work-sources` — the work source list beside a `<router-outlet>` holding the
@@ -90,7 +90,7 @@ export class WorkSourcesPage {
 
   private readonly meQuery = injectMeQuery();
   private readonly workSourceService = injectWorkSourceService();
-  private readonly forgesQuery = injectForgesQuery(() => false);
+  private readonly forgesQuery = injectForgeListQuery(() => false);
   private readonly credentialsQuery = injectCredentialChoicesQuery(() => false);
   protected readonly fields = computed(() =>
     workSourceFieldViews(

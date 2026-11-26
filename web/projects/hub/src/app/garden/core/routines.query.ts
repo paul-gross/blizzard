@@ -73,7 +73,7 @@ export function injectHubRoutinesAsScopeRoutinesQuery() {
 /**
  * Hub `GET /api/routines/trend` read — one routine's finding inflow against outflow
  * over `[since, until)`, as a {@link RoutineTrend}. Every argument is an accessor so the caller can recompute the
- * window without re-wiring the query (`injectHubFleetSpendQuery`'s own shape). A routine's slug is unique only inside
+ * window without re-wiring the query (`injectHubFleetSpendDomainQuery`'s own shape). A routine's slug is unique only inside
  * its project, so under a lens the read names it (`?project=`); disabled while `routineSlug()` is `null` — the
  * panel's own "nothing selected" rest state.
  */

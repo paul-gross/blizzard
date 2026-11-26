@@ -1,13 +1,13 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 
-import type { WorkRefView } from '../../api/hub';
-import { workRefView } from '../../testing/builders/chunk.translate';
+import type { ChunkWorkRef } from '../chunk-page/chunk-detail.model';
+import { domainWorkRef } from '../../testing/builders/chunk';
 import { WorkRefLink } from './work-ref-link';
 
-const LINKED: WorkRefView = { source: 'github', ref: '42', label: 'Fix the thing', web_url: 'https://example.test/42' };
+const LINKED = domainWorkRef({ source: 'github', ref: '42', label: 'Fix the thing', web_url: 'https://example.test/42' });
 
-async function mount(ref: WorkRefView, inputs: { appearance?: string; testid?: string } = {}) {
+async function mount(ref: ChunkWorkRef, inputs: { appearance?: string; testid?: string } = {}) {
   const fixture: ComponentFixture<WorkRefLink> = TestBed.createComponent(WorkRefLink);
   fixture.componentRef.setInput('workRef', ref);
   for (const [name, value] of Object.entries(inputs)) fixture.componentRef.setInput(name, value);
@@ -36,7 +36,7 @@ describe('WorkRefLink', () => {
 
   it('falls back to source#ref when there is no label', async () => {
     const withUrl = (await mount({ ...LINKED, label: null })).nativeElement as HTMLElement;
-    const without = (await mount(workRefView({ source: 'github', ref: '42', label: null, web_url: null }))).nativeElement as HTMLElement;
+    const without = (await mount(domainWorkRef({ source: 'github', ref: '42', label: null, web_url: null }))).nativeElement as HTMLElement;
 
     expect(withUrl.querySelector('a')?.textContent).toBe('github#42');
     expect(without.querySelector('span')?.textContent).toBe('github#42');

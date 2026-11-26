@@ -1,6 +1,13 @@
 import type { QuestionView } from 'fleet';
-import type { BoardQuestion } from './questions.domain';
+import type { BoardQuestionPresentation } from './questions.domain';
 
-export function fromBoardQuestion(question: QuestionView): BoardQuestion {
-  return { chunk_id: question.chunk_id, question: question.question };
+export function fromBoardQuestion(question: QuestionView): BoardQuestionPresentation {
+  return {
+    chunk_id: question.chunk_id,
+    question: question.question,
+    question_id: question.question_id,
+    runner_id: question.runner_id,
+    runner_name: question.runner_name,
+    options: question.options ?? [],
+  };
 }

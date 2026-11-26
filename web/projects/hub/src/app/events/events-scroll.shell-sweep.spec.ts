@@ -92,7 +92,11 @@ describe('events feed scroll shell sweep (web:shell-sweep)', () => {
       document.body.appendChild(root);
       const router = TestBed.inject(Router);
       await router.navigateByUrl('/p/blizzard/events?severity=critical&runner=rn_01&chunk=ch_01');
-      await pumpUntil(fixture, () => !!element.querySelector('[data-testid="events-open"]'));
+      // The row renders before its asynchronously computed fingerprint is ready.
+      await pumpUntil(fixture, () => {
+        const link = element.querySelector<HTMLAnchorElement>('[data-testid="events-open"]');
+        return !!link && /^[a-f0-9]{64}$/.test(new URL(link.href).searchParams.get('fingerprint') ?? '');
+      });
 
       const link = root.querySelector<HTMLAnchorElement>('[data-testid="events-open"]')!;
       expect(link).not.toBeNull();

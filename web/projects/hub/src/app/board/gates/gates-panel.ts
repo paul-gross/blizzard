@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, output } from '@angular/c
 
 import { type KitAsyncStateValue, asyncState, injectRunnerHostNames } from 'fleet';
 import { GatesPanelView } from './gates-view';
-import { injectHubDecisionsQuery } from './gates.query';
+import { injectBoardDecisionsQuery } from './gates.query';
 
 /**
  * The open-gates panel — every decision awaiting a person across the fleet.
@@ -18,7 +18,7 @@ import { injectHubDecisionsQuery } from './gates.query';
   host: { '[style.display]': "state() === 'empty' ? 'none' : null" },
 })
 export class GatesPanel {
-  private readonly query = injectHubDecisionsQuery();
+  private readonly query = injectBoardDecisionsQuery();
   protected readonly runnerHosts = injectRunnerHostNames();
 
   /** Emitted with the gate's chunk id when a gate is activated. */

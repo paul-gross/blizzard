@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type DecisionView, compactRef, runnerDisplayName, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectList, KitSelectRow } from 'fleet';
+import { compactRef, runnerDisplayName, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectList, KitSelectRow } from 'fleet';
+import type { BoardDecisionPresentation } from './gates.domain';
 
 /**
  * The open-gates rail's presentational half — one row per open decision,
@@ -23,7 +24,7 @@ export class GatesPanelView {
   readonly runnerHosts = input<ReadonlyMap<string, string>>(new Map());
 
   /** Every open gate across the fleet. */
-  readonly gates = input.required<readonly DecisionView[]>();
+  readonly gates = input.required<readonly BoardDecisionPresentation[]>();
 
   /** The decisions query's async state. */
   readonly state = input.required<KitAsyncStateValue>();
@@ -45,13 +46,13 @@ export class GatesPanelView {
   }
 
   /** Who imposed the gate: the chunk's graph, or the runner that added it. */
-  protected origin(gate: DecisionView): string {
+  protected origin(gate: BoardDecisionPresentation): string {
     return gate.imposed_by_runner_id
       ? `runner ${runnerDisplayName(gate.imposed_by_runner_id, gate.imposed_by_runner_name, this.runnerHosts().get(gate.imposed_by_runner_id))}`
       : 'graph';
   }
 
-  protected choices(gate: DecisionView): string {
-    return (gate.choices ?? []).map((choice) => choice.name).join(' · ');
+  protected choices(gate: BoardDecisionPresentation): string {
+    return gate.choices.join(' · ');
   }
 }

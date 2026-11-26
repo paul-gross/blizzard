@@ -2,6 +2,10 @@ import { expect, test } from '../harness/fixtures';
 
 test.use({ isolation: 'fresh-tenant' });
 
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'wait' });
+});
+
 test('exhausted merge methods remain readable on a narrow chunk page', async ({ issue, page }) => {
   const { chunk } = await issue('merge methods exhausted');
   const detail = 'repo#42: allowed methods: merge, rebase, squash. ' +

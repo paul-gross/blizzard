@@ -7,12 +7,12 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type MeResponse, type PermitState, type PermitVerb, type PermitView } from 'fleet';
 import { HUB_PROJECT_FILTER } from '../core/project-filter';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
+import { permitWire } from './permits.fixtures.translate';
 import { PermitsPage } from './permits-page';
 
-const REQUESTED: PermitView = {
+const REQUESTED: ReturnType<typeof permitWire> = {
   permit_id: 'pmt_1',
   project_id: 'prj_core',
   project_slug: 'core',
@@ -28,9 +28,9 @@ const REQUESTED: PermitView = {
   revocation_note: null,
 };
 
-const SUSPENDED: PermitView = { ...REQUESTED, permit_id: 'pmt_2', capability: 'release', state: 'suspended', verbs: ['resume', 'revoke'] };
+const SUSPENDED: ReturnType<typeof permitWire> = { ...REQUESTED, permit_id: 'pmt_2', capability: 'release', state: 'suspended', verbs: ['resume', 'revoke'] };
 
-const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
+const EDITOR: typeof OPERATOR_ME_RESPONSE = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
 
 type Routes = Parameters<typeof stubHubClient>[0];
 
@@ -40,7 +40,7 @@ describe('PermitsPage', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
-  async function mount(url: string, routes: Routes = listing, lens: string | null = null, me: MeResponse = EDITOR) {
+  async function mount(url: string, routes: Routes = listing, lens: string | null = null, me: typeof OPERATOR_ME_RESPONSE = EDITOR) {
     stub = stubHubClient({ 'GET /api/me': () => me, ...routes });
     TestBed.configureTestingModule({
       providers: [
@@ -108,7 +108,7 @@ describe('PermitsPage', () => {
   });
 
   it('shows a state a newer hub sends raw, and offers no control for a verb this build does not know', async () => {
-    const lapsed: PermitView = { ...REQUESTED, state: 'lapsed' as PermitState, verbs: ['renew' as PermitVerb, 'grant', 'revoke'] };
+    const lapsed: ReturnType<typeof permitWire> = { ...REQUESTED, state: 'lapsed' as never, verbs: ['renew' as never, 'grant', 'revoke'] };
     const { el } = await mount('/permits', { 'GET /api/permits': () => ({ permits: [lapsed], next_cursor: null }) });
 
     expect(row(el, 'pmt_1').querySelector('[data-testid="permits-state"]')?.textContent).toContain('lapsed');
@@ -121,7 +121,7 @@ describe('PermitsPage', () => {
     const { harness, el } = await mount('/permits', {
       ...listing,
       'POST /api/permits/{permit_id}/grant': () =>
-        new Promise<PermitView>((resolve) => (answerGrant = () => resolve({ ...REQUESTED, state: 'granted' }))),
+        new Promise<ReturnType<typeof permitWire>>((resolve) => (answerGrant = () => resolve({ ...REQUESTED, state: 'granted' }))),
     });
 
     row(el, 'pmt_1').querySelector<HTMLElement>('[data-testid="permits-grant"]')!.click();

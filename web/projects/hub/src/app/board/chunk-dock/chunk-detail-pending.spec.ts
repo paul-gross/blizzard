@@ -4,7 +4,6 @@ import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type ChunkDetail as ChunkDetailModel } from 'fleet';
 import {
   settle,
   OPERATOR_ME_RESPONSE,
@@ -16,7 +15,7 @@ import {
 } from 'fleet/testing';
 import { ChunkDetail } from './chunk-detail';
 
-const BASE: ChunkDetailModel = chunkDetail({
+const BASE = chunkDetail({
   graph_name: null,
   current_node_name: null,
   chunk_id: 'ch_routed',
@@ -32,7 +31,7 @@ const BASE: ChunkDetailModel = chunkDetail({
   artifacts: [],
   route: { runner_id: 'rn_01', runner_name: null, workspace_id: 'ws_01', environment_ids: [] },
 });
-const DETAILS: Record<string, ChunkDetailModel> = {
+const DETAILS: Record<string, ReturnType<typeof chunkDetail>> = {
   ch_routed: BASE,
   ch_routed_b: { ...BASE, chunk_id: 'ch_routed_b' },
   ch_gate: { ...BASE, chunk_id: 'ch_gate', status: 'waiting_on_human', status_if_paused: 'waiting_on_human' },

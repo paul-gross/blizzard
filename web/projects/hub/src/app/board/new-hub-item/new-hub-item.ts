@@ -3,7 +3,7 @@ import { apply, form } from '@angular/forms/signals';
 import { createRefusalState, submitForm } from 'fleet';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { ProjectLens } from '../../core/project-lens';
-import { injectProjectsQuery } from '../../core/projects.query';
+import { injectProjectDomainsQuery } from '../../core/projects.query';
 import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
 import { EMPTY_NEW_HUB_ITEM_DRAFT, type NewHubItemDraft, startingDraft } from './new-hub-item.domain';
 import { newHubItemRules } from './new-hub-item.form';
@@ -21,7 +21,7 @@ export class NewHubItem {
   readonly created = output<string>();
   private readonly me = injectMeQuery();
   protected readonly lens = inject(ProjectLens);
-  private readonly projects = injectProjectsQuery();
+  private readonly projects = injectProjectDomainsQuery();
   private readonly urgencies = injectDomainUrgenciesQuery();
   private readonly service = injectNewHubItemService();
   protected readonly allowed = computed(() => hasPermission(this.me.data(), 'chunk:control'));

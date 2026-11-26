@@ -2,13 +2,13 @@
 import {
   type EditBaseline,
   RecordKind,
-  type RecordRefView,
   type RefusalMap,
   type WorkSourceCreateRequest,
   type WorkSourcePatchRequest,
   type WorkSourceSummary,
 } from 'fleet';
 
+import type { ConfigRecordRef } from '../config-history.domain';
 import type { WorkSource, WorkSourceDraft } from './work-source.domain';
 
 /** A served work source as the domain holds it. */
@@ -35,10 +35,10 @@ export function fromWorkSourceSummary(wire: WorkSourceSummary): WorkSource {
 }
 
 /** The record kind the change history and the CLI change verb name a work source by. */
-export const WORK_SOURCE_RECORD_KIND = RecordKind.WORK_SOURCE;
+export const WORK_SOURCE_RECORD_KIND = 'work_source';
 
 /** The link a work source's forge is shown as; only called for a source that names one. */
-export function workSourceForgeRef(source: WorkSource): RecordRefView {
+export function workSourceForgeRef(source: WorkSource): ConfigRecordRef {
   return { kind: RecordKind.FORGE, key: source.forgeId!, label: source.forgeSlug };
 }
 

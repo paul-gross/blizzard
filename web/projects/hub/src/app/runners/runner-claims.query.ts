@@ -1,7 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
-import { boardChunksQueryOptions, type BoardChunksRead } from '../core/chunks.query';
+import { boardChunksReadOptions, type BoardChunksRead } from '../core/chunks.query';
 import type { RunnerClaimChunk } from './runner-claims.domain';
 import { toRunnerClaimChunk } from './runner-claims.translate';
 
@@ -11,7 +11,7 @@ import { toRunnerClaimChunk } from './runner-claims.translate';
  */
 export function injectRunnerClaimsQuery() {
   return injectQuery(() => ({
-    ...boardChunksQueryOptions(null),
+    ...boardChunksReadOptions(null),
     refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
     select: (read: BoardChunksRead): readonly RunnerClaimChunk[] => read.chunks.map(toRunnerClaimChunk),
   }));

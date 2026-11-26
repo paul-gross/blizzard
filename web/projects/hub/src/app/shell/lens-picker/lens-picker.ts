@@ -7,7 +7,7 @@ import { asyncState } from 'fleet';
 import { AppScope } from 'fleet/shell';
 
 import { LENS_PICKER_FROM, ProjectLens, lensSource } from '../../core/project-lens';
-import { injectProjectsQuery } from '../../core/projects.query';
+import { injectProjectDomainsQuery } from '../../core/projects.query';
 import { lensChoices } from '../nav/project-lens.model';
 import { LensPickerView } from './lens-picker-view';
 
@@ -26,7 +26,7 @@ import { LensPickerView } from './lens-picker-view';
 export class LensPicker {
   private readonly lens = inject(ProjectLens);
   private readonly appScope = inject(AppScope);
-  private readonly projects = injectProjectsQuery();
+  private readonly projects = injectProjectDomainsQuery();
 
   /** The unlensed location the picker was opened from. */
   private readonly source = toSignal(

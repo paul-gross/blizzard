@@ -187,6 +187,27 @@ def test_proxy_transport_trace_and_changed_forwarding(tmp_path: Path) -> None:
     assert any("proxy instance escapes" in item for item in unknown)
 
 
+def test_proxy_hub_url_read_does_not_allow_config_or_client_escape(tmp_path: Path) -> None:
+    api = tmp_path / "api"
+    api.mkdir()
+    runner = repo_root() / "src/blizzard/runner"
+    (api / "hub_proxy.py").write_text((runner / "api/hub_proxy.py").read_text())
+    caller = api / "caller.py"
+    prefix = (
+        "from blizzard.runner.api.hub_proxy import HubProxy\n"
+        'def endpoint(request):\n proxy = HubProxy.of(request, "test")\n'
+    )
+    caller.write_text(prefix + ' url = proxy.config.hub_url\n return proxy.get("/api/fleet/chunks")\n')
+    reaches, unknown = proxy_forwarding(tmp_path)
+    assert ("GET", "/api/fleet/chunks") in reaches
+    assert not unknown
+
+    for unsafe in ("other(proxy.config)", "other(proxy.client)", "proxy.config.hub_url = '/changed'"):
+        caller.write_text(prefix + f" {unsafe}\n return proxy.get('/api/fleet/chunks')\n")
+        _, unknown = proxy_forwarding(tmp_path)
+        assert any("proxy instance escapes or is reassigned" in item for item in unknown), unsafe
+
+
 def test_planted_explicit_producer_is_missing_coverage() -> None:
     found = producers('def handler():\n raise HTTPException(status_code=409, detail="no")\n')
     assert len(missing_coverage(found, set())) == 1

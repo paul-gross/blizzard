@@ -32,7 +32,7 @@ import { injectWorkSourceQuery } from './work-sources.query';
 import { credentialCheckTarget, credentialOptions } from '../credentials/credentials.model';
 import { injectCredentialChoicesQuery } from '../credentials/credentials.query';
 import { forgeOptions } from '../forges/forges.model';
-import { injectForgesQuery } from '../forges/forges.query';
+import { injectForgeListQuery } from '../forges/forges.query';
 
 /**
  * The selected work source's detail — the right-hand child of `/admin/work-sources`,
@@ -77,7 +77,7 @@ export class WorkSourceDetail {
   private readonly workSourceService = injectWorkSourceService();
   private readonly lifecycleMutation = injectWorkSourceLifecycleMutation();
 
-  private readonly forgesQuery = injectForgesQuery(() => false);
+  private readonly forgesQuery = injectForgeListQuery(() => false);
   private readonly credentialsQuery = injectCredentialChoicesQuery(() => false);
   protected readonly fields = computed(() =>
     workSourceFieldViews(

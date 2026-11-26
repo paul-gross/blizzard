@@ -6,6 +6,8 @@ import { commands, page } from 'vitest/browser';
 
 import type { RunnerRow } from './runner-rows.model';
 import { RunnerPanelView } from './runner-view';
+import { RunnerNextClaimView } from './runner-next-claim-view';
+import type { NextClaim, NextClaimCandidate, NextClaimPassed } from './runner-next-claim.domain';
 
 const REGISTRY: HubRunner = {
   agents: null,
@@ -150,6 +152,35 @@ async function render(rows: readonly RunnerRow[] = ROWS, canPause = false, mobil
 }
 
 describe('compact runner rail layout shell sweep (web:shell-sweep)', () => {
+  it.each([1280, 390, 320])('wraps long next-claim project names at %ipx', async (width) => {
+    const projectName = 'x'.repeat(200);
+    const candidate: NextClaimCandidate = { chunk_id: 'ch_next', graph_id: 'gr_1', position: 1, project_id: 'p', project_name: projectName, project_slug: 'p', urgency: null };
+    const passed: NextClaimPassed = { ...candidate, chunk_id: 'ch_passed', reason: 'blocked', prerequisite: 'ch_prereq', prerequisite_count: 1 };
+    const data: NextClaim = { next: candidate, passed: [passed], passed_total: 1, if_holding: null, held_at: [passed], unserved: 0, without_repository_targets: null };
+    await TestBed.configureTestingModule({
+      imports: [RunnerNextClaimView],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RunnerNextClaimView);
+    fixture.componentRef.setInput('runnerId', 'rn_1');
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('data', data);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    try {
+      await page.viewport(width, 800);
+      await fixture.whenStable();
+      await page.elementLocator(root.querySelector('button')!).click();
+      await fixture.whenStable();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const section = root.querySelector<HTMLElement>('[data-testid="runner-next-claim"]')!;
+      expect(section.textContent!.split(projectName)).toHaveLength(4);
+      expect(section.scrollWidth).toBeLessThanOrEqual(section.clientWidth);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+    } finally {
+      root.remove();
+    }
+  });
   it.each([390, 1280])('stacks each row\'s lines inside the rail with no horizontal overflow at %ipx', async (width) => {
     await loadDesignTokens();
     const fixture = await render();

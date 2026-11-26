@@ -1,5 +1,5 @@
 import { changeEntriesOf, changesOf, HUB_SETTING_FIELD_VIEWS, recordOf, revisionsOf } from './hub-settings.model';
-import type { HubSettingsChange, HubSettingRow } from 'fleet';
+import type { HubSettingsChange, HubSettingRow } from './hub-settings.domain';
 
 it('derives records, revisions and field values', () => {
   const row: HubSettingRow = { key: 'sweep', value: 60, lifetime: 'pass', source: 'default', revision: null, written_at: null, written_by: null };
@@ -19,4 +19,12 @@ it('maps each change to a change entry with its one row, and offers the default 
       rows: [{ id: 4, title: 'hub settings', route: null, diff, revisionStep: null }] },
   ]);
   expect(HUB_SETTING_FIELD_VIEWS).toEqual([{ key: 'value', kind: 'text', label: 'Value', orDefault: { key: 'useDefault', label: 'Default' } }]);
+});
+
+it('renders unknown vocabulary as its raw spelling', () => {
+  const row: HubSettingRow = { key: 'k', value: 1, lifetime: { kind: 'unknown', raw: 'later' }, source: { kind: 'unknown', raw: 'remote' }, revision: null, written_at: null, written_by: null };
+  const change: HubSettingsChange = { id: 1, revision: 1, op: { kind: 'unknown', raw: 'replace' }, door: { kind: 'unknown', raw: 'console' }, actor: 'a', recorded_at: 'now', apply_id: null, diff: [] };
+  expect(recordOf(row).facts).toEqual([{ label: 'Value', value: '1' }, { label: 'Source', value: 'remote' }, { label: 'Lifetime', value: 'later' }]);
+  expect(revisionsOf([change])[0]).toMatchObject({ op: 'replace', door: 'console' });
+  expect(changeEntriesOf([change])[0]).toMatchObject({ title: 'Revision 1 · replace', door: 'console' });
 });

@@ -17,16 +17,6 @@ import { fromFleetSpendView } from './fleet-spend.translate';
  * own spend. `enabled` holds the read back while it is false — the app root reads it before the tenant it is
  * scoped to may be settled.
  */
-export function injectHubFleetSpendQuery(
-  since: () => string,
-  until: () => string | undefined = () => undefined,
-  enabled: () => boolean = () => true,
-) {
-  const options = fleetSpendQueryOptions(since, until, enabled);
-  return injectQuery(() => options());
-}
-
-/** Domain projection over the same cached read as {@link injectHubFleetSpendQuery} — the shell header's spend. */
 export function injectHubFleetSpendDomainQuery(
   since: () => string,
   until: () => string | undefined = () => undefined,

@@ -31,12 +31,7 @@ function forgeOptionsFor(forge: string | null) {
   };
 }
 
-/** The forges as the wire serves them — for the callers that still read the wire. */
-export function injectForgesQuery(includeRetired: () => boolean) {
-  return injectQuery(() => forgesOptions(includeRetired()));
-}
-
-/** The forges as the domain holds them, on the same cache entry as {@link injectForgesQuery}. */
+/** The forges as the domain holds them, sharing the list cache with forge choices. */
 export function injectForgeListQuery(includeRetired: () => boolean) {
   return injectQuery(() => ({
     ...forgesOptions(includeRetired()),
@@ -44,12 +39,7 @@ export function injectForgeListQuery(includeRetired: () => boolean) {
   }));
 }
 
-/** One forge as the wire serves it — for the callers that still read the wire. */
-export function injectForgeQuery(key: () => string | null) {
-  return injectQuery(() => forgeOptionsFor(key()));
-}
-
-/** One forge as the domain holds it, on the same cache entry as {@link injectForgeQuery}. */
+/** One forge as the domain holds it, sharing the record cache with landing-policy honour. */
 export function injectForgeRecordQuery(key: () => string | null) {
   return injectQuery(() => ({
     ...forgeOptionsFor(key()),
@@ -57,7 +47,7 @@ export function injectForgeRecordQuery(key: () => string | null) {
   }));
 }
 
-/** {@link injectForgesQuery}'s read, on the same cache key, as the forges a repository form may offer. */
+/** The shared list read as the forges a repository form may offer. */
 export function injectForgeChoicesQuery(includeRetired: () => boolean) {
   return injectQuery(() => ({
     ...forgesOptions(includeRetired()),
@@ -65,7 +55,7 @@ export function injectForgeChoicesQuery(includeRetired: () => boolean) {
   }));
 }
 
-/** {@link injectForgeQuery}'s read, on the same cache key, as which landing policies the forge can honour. */
+/** The shared record read as which landing policies the forge can honour. */
 export function injectForgeHonourQuery(key: () => string | null) {
   return injectQuery(() => ({
     ...forgeOptionsFor(key()),

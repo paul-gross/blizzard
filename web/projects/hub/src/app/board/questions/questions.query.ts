@@ -31,11 +31,6 @@ function questionsQueryOptions(project: string | null) {
   };
 }
 
-export function injectHubQuestionsQuery() {
-  const projectFilter = injectProjectFilter();
-  return injectQuery(() => questionsQueryOptions(projectFilter()));
-}
-
 export function injectBoardQuestionsQuery() {
   const projectFilter = injectProjectFilter();
   return injectQuery(() => ({

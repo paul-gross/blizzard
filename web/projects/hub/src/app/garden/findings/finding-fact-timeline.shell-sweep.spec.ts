@@ -31,7 +31,7 @@ import { FleetFindingPanel, type FindingPanelVm } from './finding-panel';
  * `overflow-wrap: anywhere` on `.note`/`.actor` in `finding-fact-timeline.css`
  * fails this spec; restoring it passes again (`chunk-page-layout.shell-sweep.spec.ts`'s
  * own "proven able to fail" convention,
- * `blizzard-context:verification/blizzard/commands/web/shell-sweep.md`).
+ * `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md`).
  */
 const LONG_UNBROKEN_NOTE = '4ba7ef06d9'.repeat(8) + 'abcdef0123456789';
 

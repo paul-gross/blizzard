@@ -4,7 +4,7 @@ test.use({ isolation: 'fresh-tenant' });
 
 test('tracks shows real chunk graph progress while switching layouts', async ({ api, issue, repository, runnerHosts, page, wideViewport, clock }) => {
   test.setTimeout(240_000);
-  const repo = await repository('tracks-progress');
+  const repo = await repository();
   const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
   const graph = { name: 'default-delivery', entry: 'build', nodes: {
     build: { executor: 'runner', prompt: 'ask("Choose a direction", ["one", "two"])\n', judgement: {
@@ -99,14 +99,18 @@ test('tracks shows real chunk graph progress while switching layouts', async ({ 
   let resolutions = 0;
   let release!: () => void;
   const held = new Promise<void>((resolve) => { release = resolve; });
+  let intercepted!: () => void;
+  const requestHeld = new Promise<void>((resolve) => { intercepted = resolve; });
   await page.route('**/api/decisions/*/resolutions', async (route) => {
     resolutions++;
+    intercepted();
     await held;
     await route.continue();
   });
   const resolved = page.waitForResponse((r) => r.request().method() === 'POST' && /\/api\/decisions\/[^/]+\/resolutions$/.test(new URL(r.url()).pathname));
   try {
     await page.keyboard.press('Enter');
+    await requestHeld;
     await expect(approve).toHaveAttribute('aria-disabled', 'true');
     await page.keyboard.press('Enter');
     await page.keyboard.press('Space');

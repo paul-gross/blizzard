@@ -1,16 +1,15 @@
-import { RecordKind } from 'fleet';
 import type { ViewportMode } from 'fleet';
 
 /** The record kinds the admin surfaces own — the ones a detail here shows a command for. */
-export type AdminRecordKind = typeof RecordKind.WORK_SOURCE | typeof RecordKind.REPOSITORY | typeof RecordKind.FORGE | typeof RecordKind.CREDENTIAL | typeof RecordKind.SECRET;
+export type AdminRecordKind = 'work_source' | 'repository' | 'forge' | 'credential' | 'secret';
 
 /** The CLI verb that changes a record of each admin kind (`contracts/cli/hub.json`). */
 const CLI_CHANGE_PATH: Record<AdminRecordKind, string> = {
-  [RecordKind.WORK_SOURCE]: 'blizzard hub source edit',
-  [RecordKind.REPOSITORY]: 'blizzard hub repo edit',
-  [RecordKind.FORGE]: 'blizzard hub forge edit',
-  [RecordKind.CREDENTIAL]: 'blizzard hub credential edit',
-  [RecordKind.SECRET]: 'blizzard hub secret set',
+  work_source: 'blizzard hub source edit',
+  repository: 'blizzard hub repo edit',
+  forge: 'blizzard hub forge edit',
+  credential: 'blizzard hub credential edit',
+  secret: 'blizzard hub secret set',
 };
 
 /** The command that changes the record `kind` + `name` names — `name` is what the verb takes: a

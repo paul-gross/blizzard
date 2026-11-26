@@ -1,4 +1,4 @@
-import { ProjectColor, RecordKind, type EditBaseline, type RefusalMap, type Urgency, type UrgencyCreateRequest, type UrgencyPatchRequest, type SettingsView } from 'fleet';
+import { ProjectColor, type EditBaseline, type RefusalMap, type Urgency, type UrgencyCreateRequest, type UrgencyPatchRequest, type SettingsView } from 'fleet';
 import { markIsImage as isImage } from '../config-edit.model';
 import type { UrgencyDraft, UrgencySettings } from './urgency.domain';
 
@@ -44,7 +44,7 @@ export function toEditRequest(before: UrgencyDraft, after: UrgencyDraft): Urgenc
 }
 
 export const URGENCY_COLORS = Object.values(ProjectColor);
-export const URGENCY_RECORD_KIND = RecordKind.URGENCY;
+export const URGENCY_RECORD_KIND = 'urgency';
 
 export function fromSettingsView(settings: SettingsView): UrgencySettings {
   return { defaultId: settings.default_urgency.urgency_id, revision: settings.revision };

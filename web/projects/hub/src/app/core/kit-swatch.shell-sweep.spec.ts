@@ -1,9 +1,10 @@
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import { KitSwatch, ProjectColor } from 'fleet';
+import { KitSwatch } from 'fleet';
+import { PROJECT_COLORS } from './project-color.translate';
 
-const COLORS: readonly string[] = Object.values(ProjectColor);
+const COLORS: readonly string[] = PROJECT_COLORS;
 
 /** Custom colors: a hue spread of dark inputs, including black and a dark blue, and one light one. */
 const CUSTOM: readonly string[] = [

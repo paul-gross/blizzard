@@ -1,4 +1,4 @@
-import type { HubSettingRow } from 'fleet';
+import type { HubSettingRow } from './hub-settings.domain';
 
 import { hubSettingRefusal, toHubSettingBaseline } from './hub-settings.translate';
 
@@ -32,4 +32,36 @@ describe('hubSettingRefusal', () => {
     });
     expect(hubSettingRefusal(new Error('network'))).toEqual({ ok: false, fields: {}, form: 'Save failed.' });
   });
+});
+
+import { toHubSettings, toHubSettingsHistoryPage } from './hub-settings.translate';
+import type { hubApi, HubSettingRow as WireHubSettingRow, HubSettingsChange } from 'fleet';
+
+it('preserves settings and history fields including cursors and field values', () => {
+  const settings = { revision: 7, settings: [{ key: 'key', value: { a: 1 }, lifetime: 'pass' as const, source: 'default' as const, revision: null, written_at: null, written_by: null }] };
+  expect(toHubSettings(settings)).toEqual(settings);
+  const page = { changes: [{ id: 2, revision: 7, op: 'edit' as const, door: 'api' as const, actor: 'a', recorded_at: 'now', apply_id: null,
+    diff: [{ field: 'key', old: null, new: { a: 1 }, old_label: null, new_label: 'new' }] }], next_before: 2 };
+  expect(toHubSettingsHistoryPage(page)).toEqual(page);
+});
+
+it('translates every known vocabulary and retains unforeseen spellings', () => {
+  const row: WireHubSettingRow = { key: 'key', value: 1, lifetime: 'pass', source: 'default', revision: null, written_at: null, written_by: null };
+  const change: HubSettingsChange = { id: 1, revision: 1, op: 'edit', door: 'api', actor: 'a', recorded_at: 'now', apply_id: null, diff: [] };
+  for (const lifetime of ['pass', 'session', 'boot', 'immutable'] satisfies hubApi.Lifetime[]) {
+    expect(toHubSettings({ revision: 1, settings: [{ ...row, lifetime }] }).settings[0].lifetime).toBe(lifetime);
+  }
+  for (const source of ['entry', 'default'] satisfies WireHubSettingRow['source'][]) {
+    expect(toHubSettings({ revision: 1, settings: [{ ...row, source }] }).settings[0].source).toBe(source);
+  }
+  for (const op of ['seed', 'edit', 'create', 'retire', 'enable'] satisfies hubApi.Op[]) {
+    expect(toHubSettingsHistoryPage({ changes: [{ ...change, op }], next_before: null }).changes[0].op).toBe(op);
+  }
+  for (const door of ['seed', 'cli', 'page', 'api', 'apply'] satisfies hubApi.Door[]) {
+    expect(toHubSettingsHistoryPage({ changes: [{ ...change, door }], next_before: null }).changes[0].door).toBe(door);
+  }
+  const settings = toHubSettings({ revision: 1, settings: [{ ...row, lifetime: 'future-lifetime' as hubApi.Lifetime, source: 'future-source' as WireHubSettingRow['source'] }] });
+  expect(settings.settings[0]).toMatchObject({ lifetime: { kind: 'unknown', raw: 'future-lifetime' }, source: { kind: 'unknown', raw: 'future-source' } });
+  const history = toHubSettingsHistoryPage({ changes: [{ ...change, op: 'future-op' as hubApi.Op, door: 'future-door' as hubApi.Door }], next_before: null });
+  expect(history.changes[0]).toMatchObject({ op: { kind: 'unknown', raw: 'future-op' }, door: { kind: 'unknown', raw: 'future-door' } });
 });

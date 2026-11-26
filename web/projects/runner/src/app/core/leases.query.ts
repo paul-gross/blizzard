@@ -8,8 +8,7 @@ import { runnerLeasesKey } from './query-keys';
  * One runner's `GET /runners/{runner_id}/api/leases` read — the hub-free local surface: every
  * active lease with its joined binding facts and read-time-derived state
  * (`running`/`stale`/`parked`/`spawning`/`exited`), through TanStack Query and the
- * generated runner client (bzh:generated-client). Modeled on `fleet`'s
- * `injectHubRunnersQuery`. Covered by `lease-changed` (`runner-live-updates.ts`'s
+ * generated runner client (bzh:generated-client). Covered by `lease-changed` (`runner-live-updates.ts`'s
  * `RUNNER_EVENT_INVALIDATION_REGISTRY`); lease staleness is
  * also *derived from elapsed heartbeat time*, which no event marks, so a lease
  * that goes quiet without a further transition needs a real re-read to flip

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
 import { KitCheckbox, KitDialog, KitField, KitForm, KitNumberInput, KitOrDefault, KitSectionHead, KitSelect, KitTextInput } from 'fleet';
-import type { FieldChangeView } from 'fleet';
+import type { ConfigFieldChange } from './config-history.domain';
 
 import { ConfigFieldDiff } from './config-field-diff';
 import {
@@ -50,7 +50,7 @@ export class ConfigFieldTreeDialog<D> {
   /** The draft an edit started from — the container's captured baseline; `null` for a create or replace. */
   readonly baseline = input<NoInfer<D> | null>(null);
   /** Complete presentation diff for an edit, including projected fields; when supplied it also governs the no-change save hold. Null uses the built-in field diff. Project controls with the `additional-fields` attribute into the form. */
-  readonly presentationDiff = input<readonly FieldChangeView[] | null>(null);
+  readonly presentationDiff = input<readonly ConfigFieldChange[] | null>(null);
   readonly submitLabel = input.required<string>();
   /** A standing note under the fields — what a value means or what changing it does. */
   readonly hint = input<string | null>(null);
@@ -71,7 +71,7 @@ export class ConfigFieldTreeDialog<D> {
   protected readonly draft = computed(() => this.form()().value());
   protected readonly visibleFields = computed(() => shownFieldViews(this.fields(), this.mode(), this.draft()));
 
-  protected readonly changes = computed<readonly FieldChangeView[]>(() => {
+  protected readonly changes = computed<readonly ConfigFieldChange[]>(() => {
     const supplied = this.presentationDiff();
     if (supplied !== null) return supplied;
     const baseline = this.baseline();
