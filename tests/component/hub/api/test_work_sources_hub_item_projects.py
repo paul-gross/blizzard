@@ -11,6 +11,7 @@ from typing import Any
 import sqlalchemy as sa
 
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -50,7 +51,7 @@ def _projects_of(hub: HubHarness, source: str, ref: str, chunk_id: str) -> tuple
                 items.c.tenant_id == default_tenant(hub.engine), items.c.source == source, items.c.ref == ref
             )
         ).scalar_one()
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     return item_project, chunk.project_id
 

@@ -20,6 +20,9 @@ from blizzard.hub.domain.chunk.dependencies import (
 )
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import DependencyEdge
+from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.operations.complete import CompleteService
 from blizzard.hub.domain.operations.delete import DeleteService
 from blizzard.hub.domain.operations.queue import GroupService
@@ -29,7 +32,7 @@ from tests.support.scaffolding import HubHarness, build_hub, claim_route, hub_sc
 
 
 def _resolve(hub: HubHarness, chunk_id: str):
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     return chunk
 
@@ -42,7 +45,7 @@ def test_an_edge_onto_a_done_prerequisite_is_accepted_with_no_satisfaction_state
     dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
     prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)
     hub.default_adapter(CompleteService).complete(_resolve(hub, prerequisite_id), by="user:alice")
-    prerequisite_facts = hub.services.chunks.facts.load_facts(prerequisite_id)
+    prerequisite_facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(prerequisite_id)
     assert prerequisite_facts is not None
     assert prerequisite_facts.status().value == "done"
 
@@ -72,7 +75,7 @@ def test_declaring_against_a_stopped_prerequisite_is_accepted(tmp_path: Path) ->
     dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
     prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)
     hub.default_adapter(StopService).stop(_resolve(hub, prerequisite_id), by="operator")
-    prerequisite_facts = hub.services.chunks.facts.load_facts(prerequisite_id)
+    prerequisite_facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(prerequisite_id)
     assert prerequisite_facts is not None
     assert prerequisite_facts.status().value == "stopped"
 
@@ -81,7 +84,9 @@ def test_declaring_against_a_stopped_prerequisite_is_accepted(tmp_path: Path) ->
     )
 
     assert edge.standing is True
-    assert [e.dependency_id for e in hub.services.chunks.dependencies.list_standing_edges()] == [edge.dependency_id]
+    assert [e.dependency_id for e in hub.default_adapter(IReadChunkDependenciesRepository).list_standing_edges()] == [
+        edge.dependency_id
+    ]
 
 
 def _claimed_dependent_with_a_standing_edge(hub: HubHarness) -> tuple[str, DependencyEdge]:
@@ -102,14 +107,14 @@ def test_releasing_an_edge_has_no_status_window_on_the_dependent(tmp_path: Path,
     dependent_id, edge = _claimed_dependent_with_a_standing_edge(hub)
     if paused:
         assert hub.client.post(f"/api/fleet/chunks/{dependent_id}/pause").status_code == 202
-    facts = hub.services.chunks.facts.load_facts(dependent_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(dependent_id)
     assert facts is not None
     assert facts.status().value == ("paused" if paused else "running")
 
     released = hub.default_adapter(DependencyService).release(edge, by="operator")
 
     assert released.released_by == "operator"
-    assert hub.services.chunks.dependencies.list_standing_edges() == []
+    assert hub.default_adapter(IReadChunkDependenciesRepository).list_standing_edges() == []
 
 
 def test_a_second_release_of_the_same_pair_is_refused_and_the_first_release_stands(tmp_path: Path) -> None:
@@ -153,7 +158,7 @@ def test_declaring_against_a_dependent_deleted_after_resolution_is_refused(tmp_p
             dependent, PrerequisiteScope(prerequisite.chunk_id), by="user:alice"
         )
 
-    assert hub.services.chunks.dependencies.list_standing_edges() == []
+    assert hub.default_adapter(IReadChunkDependenciesRepository).list_standing_edges() == []
 
 
 def test_declaring_against_a_prerequisite_deleted_after_resolution_is_refused(tmp_path: Path) -> None:
@@ -174,7 +179,7 @@ def test_declaring_against_a_prerequisite_deleted_after_resolution_is_refused(tm
         )
 
     assert exc_info.value.chunk_id == prerequisite_id
-    assert hub.services.chunks.dependencies.list_standing_edges() == []
+    assert hub.default_adapter(IReadChunkDependenciesRepository).list_standing_edges() == []
 
 
 def test_declaring_against_a_prerequisite_grouped_away_after_resolution_is_refused(tmp_path: Path) -> None:
@@ -196,4 +201,4 @@ def test_declaring_against_a_prerequisite_grouped_away_after_resolution_is_refus
         )
 
     assert exc_info.value.chunk_id == prerequisite_id
-    assert hub.services.chunks.dependencies.list_standing_edges() == []
+    assert hub.default_adapter(IReadChunkDependenciesRepository).list_standing_edges() == []

@@ -32,17 +32,24 @@ from blizzard.hub.domain.actions.effects import (
 )
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, decide_close_enqueue
 from blizzard.hub.domain.chunk.no_code import no_code_marker
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.terminal import terminal_under_lock
+from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.credential_naming import CredentialId
 from blizzard.hub.domain.config.credentials import CredentialDraft
-from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, ConfiguredForge, ForgeId
+from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, ConfiguredForge, ForgeId, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import (
+    IReadRepositoryRecordRepository,
     RepositoryId,
     ResolvedRepository,
 )
 from blizzard.hub.domain.config.secrets import SecretName
+from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
 from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.forge.auth import ForgeAuthorization
@@ -75,7 +82,7 @@ from blizzard.hub.forge.landing import (
     UpdateOutcome,
 )
 from blizzard.hub.forge.rates import rate_dialect
-from blizzard.hub.forge.registry import ForgeBinding
+from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
@@ -1291,11 +1298,14 @@ def _landed_rows(hub: HubHarness, chunk_id: str) -> list[tuple[str, str, str | N
 
 
 def _artifact(hub: HubHarness, chunk_id: str, name: str) -> str | None:
-    return next((a.data for a in hub.services.chunks.artifacts.load_artifacts(chunk_id) if a.name == name), None)
+    return next(
+        (a.data for a in hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(chunk_id) if a.name == name),
+        None,
+    )
 
 
 def _record_id(hub: HubHarness, repo: str) -> str:
-    rows = hub.services.repository_records.list_all(include_retired=True)
+    rows = hub.default_adapter(IReadRepositoryRecordRepository).list_all(include_retired=True)
     return next(str(r.repository_id) for r in rows if r.fields.repo == repo)
 
 
@@ -1328,7 +1338,9 @@ def test_pending_landing_resumes_across_landing_policy_migration(tmp_path: Path)
     double.repos[_WIDGET].checks[_SUBMITTED] = GREEN
     reopened = _hub(tmp_path, double)
     assert (
-        reopened.services.repository_records.list_all(include_retired=False)[0].fields.landing_policy
+        reopened.default_adapter(IReadRepositoryRecordRepository)
+        .list_all(include_retired=False)[0]
+        .fields.landing_policy
         == "merge-on-checks"
     )
     reopened.clock.advance(timedelta(seconds=3601))
@@ -1345,7 +1357,7 @@ def test_a_chunk_stopped_while_land_merges_its_first_repository_keeps_that_landi
     chunk_id = _chunk(hub, _WIDGET, _GADGET)
 
     def stop(_number: int) -> None:
-        chunk = hub.services.chunks.record.get(chunk_id)
+        chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
         assert chunk is not None
         hub.default_adapter(StopService).stop(chunk, by="operator")
 
@@ -1410,11 +1422,11 @@ def test_a_forge_lacking_what_land_requires_escalates_once_before_the_pass(tmp_p
     # A second visit finds the chunk escalated and takes nothing.
     assert _take(hub, chunk_id) is None
     # One that raced the first past its read records the escalation as already written, and nothing beside it.
-    chunk = hub.services.chunks.record.get(chunk_id)
-    graph = hub.services.graphs.get(chunk.graph_id) if chunk is not None else None
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
+    graph = hub.default_adapter(IReadGraphRepository).get(chunk.graph_id) if chunk is not None else None
     node = graph.node_by_name("deliver") if graph is not None else None
     assert chunk is not None and node is not None
-    target = hub.services.repository_records.list_all(include_retired=True)[0]
+    target = hub.default_adapter(IReadRepositoryRecordRepository).list_all(include_retired=True)[0]
     resolved = ResolvedRepository(
         forge_id=target.fields.forge_id,
         owner=target.fields.owner,
@@ -1422,7 +1434,7 @@ def test_a_forge_lacking_what_land_requires_escalates_once_before_the_pass(tmp_p
         secret_name=target.fields.secret_name,
         record=str(target.repository_id),
     )
-    forge = hub.services.forge_records.get(target.fields.forge_id)
+    forge = hub.default_adapter(IReadForgeRepository).get(target.fields.forge_id)
     assert forge is not None
     hub.default_adapter(HubNodeRouter).escalate_capability_missing(
         chunk,
@@ -1434,16 +1446,16 @@ def test_a_forge_lacking_what_land_requires_escalates_once_before_the_pass(tmp_p
         epoch=1,
     )
     assert _event_kinds(hub).count("forge-capability-missing") == 1
-    names = [a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)]
+    names = [a.name for a in hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(chunk_id)]
     assert names.count("hub-log.forge-capability-missing") == 1
 
 
 def _act_with_fine_grained_credential(hub: HubHarness) -> None:
     """Point every repository at credential ``deploy``, a ``github.token`` over a fine-grained token declaring no
     variant; no verb writes ``credential_id`` yet."""
-    authoring = hub.services.config_authoring
+    authoring = hub.default_adapter(ConfigAuthoring)
     authoring.create_secret(SecretName.parse("deploy"), "github_pat_fine", OP)
-    forge_id = hub.services.repository_records.list_all(include_retired=False)[0].fields.forge_id
+    forge_id = hub.default_adapter(IReadRepositoryRecordRepository).list_all(include_retired=False)[0].fields.forge_id
     draft = CredentialDraft(
         slug="deploy", name=None, forge_id=forge_id, binding="github.token", secret_name="deploy", settings={}
     )
@@ -1480,7 +1492,9 @@ def test_a_refused_credential_records_one_forge_auth_event_and_none_for_a_duplic
     assert len(rows) == 1
     detail = json.loads(rows[0].detail)
     record = next(
-        r for r in hub.services.repository_records.list_all(include_retired=True) if r.fields.repo == "widget"
+        r
+        for r in hub.default_adapter(IReadRepositoryRecordRepository).list_all(include_retired=True)
+        if r.fields.repo == "widget"
     )
     assert detail["chunk_id"] == chunk_id
     assert detail["repository_id"] == str(record.repository_id)
@@ -1491,8 +1505,8 @@ def test_a_refused_credential_records_one_forge_auth_event_and_none_for_a_duplic
     assert "Bad credentials" in rows[0].message
 
     # An escalation of the same visit, raced past the first, takes nothing and records nothing beside it.
-    chunk = hub.services.chunks.record.get(chunk_id)
-    graph = hub.services.graphs.get(chunk.graph_id) if chunk is not None else None
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
+    graph = hub.default_adapter(IReadGraphRepository).get(chunk.graph_id) if chunk is not None else None
     node = graph.node_by_name("deliver") if graph is not None else None
     assert chunk is not None and node is not None
     reason = ForgeAuthReason(
@@ -1596,8 +1610,8 @@ def test_a_diverged_fast_forward_missing_several_capabilities_announces_the_firs
 
 
 def _deliver_node_id(hub: HubHarness, chunk_id: str) -> str:
-    chunk = hub.services.chunks.record.get(chunk_id)
-    graph = hub.services.graphs.get(chunk.graph_id) if chunk is not None else None
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
+    graph = hub.default_adapter(IReadGraphRepository).get(chunk.graph_id) if chunk is not None else None
     node = graph.node_by_name("deliver") if graph is not None else None
     assert node is not None
     return node.node_id
@@ -1644,7 +1658,12 @@ def test_a_parked_watch_visit_reveals_and_checks_only_the_watched_repository(
     offered = frozenset(Capability) - {Capability.REFS_ADVANCE}
     hub = build_hub(tmp_path, repositories=seeds, forges=double.forges_offering({"github": offered}))
     revealed: list[str] = []
-    retire_secrets(monkeypatch, hub.services.forges.authorizations, lambda name: name == "other-forge-token", revealed)
+    retire_secrets(
+        monkeypatch,
+        hub.default_adapter(ForgeRegistry).authorizations,
+        lambda name: name == "other-forge-token",
+        revealed,
+    )
     chunk_id = _chunk(hub, _WIDGET, _GADGET)
     record_hub_asset(
         hub,
@@ -1673,9 +1692,9 @@ def test_a_landing_record_is_written_past_the_fence_once_and_answers_whether_it_
 ) -> None:
     hub = _hub(tmp_path, GitHubDouble())
     chunk_id = _chunk(hub, _WIDGET)
-    artifacts = hub.services.chunks.artifacts
+    artifacts = hub.default_adapter(IReadChunkArtifactsRepository)
     assert isinstance(artifacts, ChunkArtifactsStore)
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     assert len(chunk.work_refs) == 1
     work_ref = chunk.work_refs[0]
@@ -1689,7 +1708,9 @@ def test_a_landing_record_is_written_past_the_fence_once_and_answers_whether_it_
                 node_name="deliver",
                 epoch=1,
                 admission=EpochAdmission.AT_OR_ABOVE,
-                terminal=terminal_under_lock(hub.services.chunks.facts, chunk_id, transaction=unit),
+                terminal=terminal_under_lock(
+                    hub.default_adapter(IReadChunkFactsRepository), chunk_id, transaction=unit
+                ),
                 repo=_WIDGET,
                 revision="m1",
                 repository_id="re_widget",
@@ -1704,7 +1725,9 @@ def test_a_landing_record_is_written_past_the_fence_once_and_answers_whether_it_
     assert record() is True
     assert _landed_rows(hub, chunk_id) == [(_WIDGET, "m1", "re_widget")]
     assert [a.data for a in artifacts.load_artifacts(chunk_id) if a.name == f"merged/{_WIDGET}"] == ["m1"]
-    intents = [i for i in hub.services.chunks.delivery.pending_close_intents() if i.chunk_id == chunk_id]
+    intents = [
+        i for i in hub.default_adapter(IReadChunkDeliveryRepository).pending_close_intents() if i.chunk_id == chunk_id
+    ]
     assert [i.ref for i in intents] == [work_ref]
 
 
@@ -1887,8 +1910,8 @@ def test_an_app_installation_withholding_checks_read_escalates_naming_its_creden
     def authorized(repository: RepositoryId) -> ForgeAuthorization:
         return authorization
 
-    monkeypatch.setattr(hub.services.forges, "offered", offered)
-    monkeypatch.setattr(hub.services.forges, "authorization", authorized)
+    monkeypatch.setattr(hub.default_adapter(ForgeRegistry), "offered", offered)
+    monkeypatch.setattr(hub.default_adapter(ForgeRegistry), "authorization", authorized)
 
     assert _take(hub, chunk_id) == "escalated"
     with hub.engine.begin() as conn:

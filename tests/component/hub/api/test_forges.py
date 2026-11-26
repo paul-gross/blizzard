@@ -12,7 +12,7 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.cli import hub as hub_group
-from blizzard.hub.forge.budget import BudgetKey, BudgetReading
+from blizzard.hub.forge.budget import BudgetKey, BudgetReading, ForgeBudgets
 from tests.support.scaffolding import (
     FIXTURE_FORGE_SECRET,
     HubHarness,
@@ -108,7 +108,7 @@ def test_coded_fields_collisions_and_retirement_refs(hub: HubHarness) -> None:
     assert referrers[1:] == detail["repositories"] + detail["work_sources"]
     assert hub.client.post("/api/repositories/demo/retire").status_code == 200
     assert hub.client.post("/api/work-sources/issues/retire").status_code == 200
-    retire_credential(hub.services, FIXTURE_FORGE_SECRET)
+    retire_credential(hub, FIXTURE_FORGE_SECRET)
     assert hub.client.post("/api/forges/ghe/retire").json()["retired"] is True
     assert hub.client.get("/api/forges").json()["forges"] == []
     assert (
@@ -180,7 +180,7 @@ def test_forge_reads_and_writes_require_their_permissions(tmp_path: Path) -> Non
 def test_the_route_and_the_cli_show_each_budgets_last_reading(hub: HubHarness) -> None:
     forge_id = _create(hub)["forge_id"]
     assert hub.client.get("/api/forges/ghe").json()["budgets"] == []
-    budgets = hub.services.forge_budgets
+    budgets = hub.default_adapter(ForgeBudgets)
     reset = hub.clock.now().replace(microsecond=0) + timedelta(minutes=5)
     budgets.learn(BudgetKey(forge_id, "secret/gh-token"), BudgetReading("core", 5000, 1200, reset))
     budgets.learn(BudgetKey(forge_id, None), BudgetReading("core", 60, 7, reset))

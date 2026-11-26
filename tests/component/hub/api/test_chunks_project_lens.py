@@ -12,7 +12,7 @@ import pytest
 
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
-from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectEdit, ProjectId
 from blizzard.hub.store.internal.chunk_usage_store import ChunkUsageStore
 from tests.support.scaffolding import (
     HubHarness,
@@ -77,7 +77,7 @@ def test_the_chunk_list_narrows_to_a_project_by_id_slug_or_former_slug_in_the_sa
     assert _listed(hub, project="beta") == [b2, b1]
     assert _listed(hub, project="default") == [d2, d1]
 
-    [project] = [p for p in hub.services.projects.list_all() if p.project_id == beta]
+    [project] = [p for p in hub.default_adapter(IReadProjectRepository).list_all() if p.project_id == beta]
     hub.default_adapter(ProjectAuthoring).edit(
         project, ProjectEdit(slug="gamma"), ChangeContext(actor="operator", door=Door.API)
     )

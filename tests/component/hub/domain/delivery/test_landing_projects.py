@@ -10,7 +10,8 @@ import pytest
 
 from blizzard.hub.domain.actions.visit import LandingProject
 from blizzard.hub.domain.delivery.landing_projects import read_landing_project, read_landing_projects
-from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.projects.links import IReadProjectLinks
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
 from tests.support.linked_projects_world import N, build_links_hub, project_id, repository_id
 from tests.support.position_facts import record_fact
 from tests.support.scaffolding import HubHarness, count_queries
@@ -22,7 +23,9 @@ def links_hub(tmp_path: Path) -> HubHarness:
 
 
 def _read(hub: HubHarness, ids: list[ProjectId | None]) -> dict[ProjectId | None, LandingProject]:
-    return read_landing_projects(ids, projects=hub.services.projects, links=hub.services.project_links)
+    return read_landing_projects(
+        ids, projects=hub.default_adapter(IReadProjectRepository), links=hub.default_adapter(IReadProjectLinks)
+    )
 
 
 def test_read_many_matches_read_per_project(links_hub: HubHarness) -> None:
@@ -35,7 +38,9 @@ def test_read_many_matches_read_per_project(links_hub: HubHarness) -> None:
 
     for pid in ids:
         assert many[pid] == read_landing_project(
-            pid, projects=links_hub.services.projects, links=links_hub.services.project_links
+            pid,
+            projects=links_hub.default_adapter(IReadProjectRepository),
+            links=links_hub.default_adapter(IReadProjectLinks),
         )
     assert many[None] == LandingProject()
     assert many[missing] == LandingProject(project_id=missing, slug=missing)

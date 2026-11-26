@@ -25,8 +25,11 @@ from blizzard.hub.domain.chunk.model import (
     WorkRef,
     decide_close_enqueue,
 )
-from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository
+from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.graph.model import Graph
@@ -95,9 +98,9 @@ def test_a_restart_mid_hub_node_run_fences_out_a_stale_marker_write(tmp_path: Pa
     )
 
     assert recorded is False
-    names = {a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)}
+    names = {a.name for a in hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(chunk_id)}
     assert "merged/acme-widget" not in names
-    assert hub.services.chunks.delivery.count_landed_since("acme-widget", before) == 0
+    assert hub.default_adapter(IReadChunkDeliveryRepository).count_landed_since("acme-widget", before) == 0
 
 
 def test_a_blank_landing_marker_is_stored_but_owes_no_close_intent(tmp_path: Path) -> None:
@@ -107,7 +110,11 @@ def test_a_blank_landing_marker_is_stored_but_owes_no_close_intent(tmp_path: Pat
     assert merge_node is not None
 
     def intents() -> list[int]:
-        return [i.intent_id for i in hub.services.chunks.delivery.pending_close_intents() if i.chunk_id == chunk_id]
+        return [
+            i.intent_id
+            for i in hub.default_adapter(IReadChunkDeliveryRepository).pending_close_intents()
+            if i.chunk_id == chunk_id
+        ]
 
     intents_before = intents()
 
@@ -117,11 +124,13 @@ def test_a_blank_landing_marker_is_stored_but_owes_no_close_intent(tmp_path: Pat
         )
 
     assert record("merged/acme-blank", "  ") is True
-    names = {a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)}
+    names = {a.name for a in hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(chunk_id)}
     assert "merged/acme-blank" in names
     assert intents() == intents_before
     assert not [
-        e for e in hub.services.chunks.events.list_events(chunk_id=chunk_id) if e.kind == "work-item-close-skipped"
+        e
+        for e in hub.default_adapter(IReadChunkEventsRepository).list_events(chunk_id=chunk_id)
+        if e.kind == "work-item-close-skipped"
     ]
 
     assert record("merged/acme-widget", "sha:abc123") is True
@@ -130,7 +139,7 @@ def test_a_blank_landing_marker_is_stored_but_owes_no_close_intent(tmp_path: Pat
         len(
             [
                 e
-                for e in hub.services.chunks.events.list_events(chunk_id=chunk_id)
+                for e in hub.default_adapter(IReadChunkEventsRepository).list_events(chunk_id=chunk_id)
                 if e.kind == "work-item-close-skipped"
             ]
         )
@@ -160,10 +169,12 @@ def test_a_stopped_chunk_fences_out_a_still_running_marker_write(tmp_path: Path)
     )
 
     assert recorded is False
-    names = {a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)}
+    names = {a.name for a in hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(chunk_id)}
     assert "merged/acme-widget" not in names
-    assert hub.services.chunks.delivery.count_landed_since("acme-widget", before) == 0
-    assert [i for i in hub.services.chunks.delivery.pending_close_intents() if i.chunk_id == chunk_id] == []
+    assert hub.default_adapter(IReadChunkDeliveryRepository).count_landed_since("acme-widget", before) == 0
+    assert [
+        i for i in hub.default_adapter(IReadChunkDeliveryRepository).pending_close_intents() if i.chunk_id == chunk_id
+    ] == []
 
 
 def test_a_stopped_chunk_fences_out_a_still_running_step_transition(tmp_path: Path) -> None:
@@ -272,7 +283,7 @@ def _gated(choice_action: str = "test.gate") -> str:
 
 def _passes(hub: HubHarness, chunk_id: str) -> int:
     """How many ``test.sequence`` passes the chunk's node took — one marker each."""
-    names = [a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)]
+    names = [a.name for a in hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(chunk_id)]
     return sum(1 for name in names if name.startswith("test-sequence/"))
 
 
@@ -299,7 +310,7 @@ def test_a_hub_node_landing_done_releases_the_route(tmp_path: Path) -> None:
     assert submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
 
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
-    assert hub.services.chunks.route.route_of(chunk_id) is None
+    assert hub.default_adapter(IReadChunkRouteRepository).route_of(chunk_id) is None
 
 
 def test_a_failed_work_item_fetch_degrades_the_feature_title_to_absent(tmp_path: Path) -> None:
@@ -424,7 +435,7 @@ nodes:
     assert merge_node is not None
     # The repo already landed — pre-record the marker as an earlier pass would have.
     with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
-        cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
+        cast(IWriteChunkArtifactsRepository, hub.default_adapter(IReadChunkArtifactsRepository)).record_hub_artifact(
             chunk_id,
             node_id=merge_node.node_id,
             node_name="merge",

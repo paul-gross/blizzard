@@ -10,14 +10,14 @@ from typing import cast
 import sqlalchemy as sa
 
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
-from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store.schema import artifacts
 from tests.support.scaffolding import HubHarness, build_hub, chunk_unit, hub_store_connections, ingest, stamp
 
 
 def _writable(hub: HubHarness) -> IWriteChunkArtifactsRepository:
-    return cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
+    return cast(IWriteChunkArtifactsRepository, hub.default_adapter(IReadChunkArtifactsRepository))
 
 
 def test_an_exact_epoch_and_produced_at_tie_resolves_to_the_same_artifact_every_time(tmp_path: Path) -> None:
@@ -56,11 +56,11 @@ def test_an_exact_epoch_and_produced_at_tie_resolves_to_the_same_artifact_every_
             transaction=unit,
         )
 
-    winner = hub.services.chunks.artifacts.latest_artifact(chunk_id, "tied")
+    winner = hub.default_adapter(IReadChunkArtifactsRepository).latest_artifact(chunk_id, "tied")
     assert winner is not None
     # Deterministic across repeated calls — not just "some" row each time.
     for _ in range(5):
-        repeat = hub.services.chunks.artifacts.latest_artifact(chunk_id, "tied")
+        repeat = hub.default_adapter(IReadChunkArtifactsRepository).latest_artifact(chunk_id, "tied")
         assert repeat is not None
         assert repeat.artifact_id == winner.artifact_id
 
@@ -98,7 +98,7 @@ def test_an_exact_tie_resolves_to_the_highest_artifact_id_not_to_insertion_order
                 )
             )
 
-    winner = hub.services.chunks.artifacts.latest_artifact(chunk_id, "seeded-tie")
+    winner = hub.default_adapter(IReadChunkArtifactsRepository).latest_artifact(chunk_id, "seeded-tie")
 
     assert winner is not None
     assert winner.artifact_id == "art_zzzzzzzzzzzzzzzzzzzzzzzzzz"
@@ -135,7 +135,7 @@ def test_latest_artifacts_matches_latest_artifact_per_name_and_drops_an_unknown_
                 )
             )
 
-    repo = hub.services.chunks.artifacts
+    repo = hub.default_adapter(IReadChunkArtifactsRepository)
     names = ["multi", "tied", "single", "unknown"]
     result = repo.latest_artifacts(chunk_id, names)
 

@@ -279,7 +279,7 @@ _SINGLE_SIDE_KERNEL_ALLOWLIST: dict[str, str] = {
         "the one door to a child scope; only the hub's tenant cache reaches it until the host opens runner scopes"
     ),
     "blizzard.foundation.registry.legacy": (
-        "the legacy bridge vocabulary; only the hub's bridge wiring reaches it until the runner bridges its own state"
+        "the leaf-and-bag vocabulary for legacy-built state; no daemon's wiring declares through it"
     ),
     "blizzard.foundation.platform_tracing.wiring": (
         "the platform tracing registration; only the hub reaches it until the runner registers its own handle"
@@ -3912,11 +3912,9 @@ def test_the_constructed_once_gate_counts_a_registered_class_constructed_in_a_ro
 def _hub_registry_owned() -> frozenset[str]:
     """Every class the store-backed hub registry constructs, by its canonical name."""
     from blizzard.foundation.registry.internal.recording import Kind
-    from blizzard.foundation.registry.legacy import LegacyRegistry
-    from blizzard.hub.process_root import register_hub
+    from blizzard.hub.process_root import registered
 
-    registry = LegacyRegistry()
-    register_hub(registry, store_backed=True)
+    registry = registered(store_backed=True)
     return frozenset(
         f"{entry.source.__module__}.{entry.source.__qualname__}"
         for entry in registry.entries
@@ -4033,17 +4031,6 @@ def _hub_store_wiring_breaches(src_root: Path) -> list[str]:
                 "blizzard.hub.composition.connections_for_engine",
             } and (relative == "hub/cli/runtime.py" or (relative == "hub/app.py" and function == "build_hosted_app")):
                 breaches.append(f"{where} bypasses the shared store opener")
-            if (
-                target
-                in {
-                    "blizzard.hub.composition.connections_for_engine",
-                    "blizzard.hub.composition.open_hub_engine",
-                    "blizzard.hub.composition.open_hub_store",
-                }
-                and relative == "hub/composition.py"
-                and function in {"build_hub_core", "build_process_core"}
-            ):
-                breaches.append(f"{where} acquires store resources inside the core")
             if target == "blizzard.hub.composition.open_hub_store":
                 if relative == "hub/cli/runtime.py":
                     hosted_acquisitions.append(where)
@@ -4057,7 +4044,7 @@ def _hub_store_wiring_breaches(src_root: Path) -> list[str]:
 
 
 #: The registry calls whose first argument is a function the container calls to build a value.
-_REGISTERED_BUILDERS = frozenset({"factory", "resource", "leaf", "bag"})
+_REGISTERED_BUILDERS = frozenset({"factory", "resource"})
 _STORE_ACQUISITIONS = frozenset(
     {
         _HUB_CONNECTIONS_TARGET,
@@ -4239,8 +4226,8 @@ def test_hub_store_wiring_goes_through_composition() -> None:
         (
             "hub/composition.py",
             "from blizzard.hub.store.errors import HubStoreConnections\n"
-            "def leaf(engine: Engine) -> HubStoreConnections:\n    return HubStoreConnections(engine, errors)\n"
-            "def register(registry):\n    registry.leaf(leaf, lifetime=PROCESS)\n",
+            "def built(engine: Engine) -> HubStoreConnections:\n    return HubStoreConnections(engine, errors)\n"
+            "def register(registry):\n    registry.factory(built, lifetime=PROCESS)\n",
         ),
         (
             "hub/process_root.py",
@@ -4265,8 +4252,8 @@ def test_hub_store_wiring_passes_a_registered_builder_over_borrowed_connections(
     path.parent.mkdir(parents=True)
     path.write_text(
         "from blizzard.hub.composition import open_hub_store\n"
-        "def leaf(connections: C) -> Reads:\n    return Reads(connections)\n"
-        "def register(registry):\n    registry.leaf(leaf, lifetime=PROCESS)\n"
+        "def reads(connections: C) -> Reads:\n    return Reads(connections)\n"
+        "def register(registry):\n    registry.factory(reads, lifetime=PROCESS)\n"
         "def offline(url):\n    return open_hub_store(url)\n"
     )
     assert _registered_store_acquisitions(src) == []
@@ -4317,32 +4304,6 @@ def test_hub_store_wiring_catches_duplicate_connections_with_aliases(tmp_path: P
     assert _hub_store_wiring_breaches(src)
 
 
-def test_hub_store_wiring_catches_core_rebuilding_borrowed_connections(tmp_path: Path) -> None:
-    src = tmp_path / "blizzard"
-    path = src / "hub/composition.py"
-    path.parent.mkdir(parents=True)
-    path.write_text("def connections_for_engine(e): ...\ndef build_hub_core(e):\n    connections_for_engine(e)\n")
-    assert _hub_store_wiring_breaches(src)
-
-
-@pytest.mark.parametrize("builder", ["build_hub_core", "build_process_core"])
-@pytest.mark.parametrize(
-    ("imports", "call"),
-    [
-        ("def open_hub_store(url): ...\n", "open_hub_store(url)"),
-        ("from .composition import open_hub_store as acquire\n", "acquire(url)"),
-        ("import blizzard.hub.composition as composition\n", "composition.open_hub_store(url)"),
-        ("from .composition import open_hub_engine as acquire\n", "acquire(url)"),
-    ],
-)
-def test_hub_store_wiring_catches_core_acquisition(tmp_path: Path, builder: str, imports: str, call: str) -> None:
-    src = tmp_path / "blizzard"
-    path = src / "hub/composition.py"
-    path.parent.mkdir(parents=True)
-    path.write_text(f"{imports}def {builder}():\n    {call}\n")
-    assert any("acquires store resources inside the core" in breach for breach in _hub_store_wiring_breaches(src))
-
-
 def test_blizzard_constructions_resolve_aliases_and_qualified_names(tmp_path: Path) -> None:
     src = tmp_path / "blizzard"
     path = src / "hub/composition.py"
@@ -4360,8 +4321,7 @@ def test_hub_store_wiring_admits_independent_roots(tmp_path: Path) -> None:
         "hub/composition.py": "from .store.errors import HubStoreConnections\n"
         "from blizzard.foundation.store.engine import create_engine_from_url\n"
         "e = create_engine_from_url(url)\nconnections = HubStoreConnections(e, errors)\n"
-        "def open_hub_store(url): ...\ndef build_hub_core(connections): ...\n"
-        "def build_process_core(connections): ...\nopen_hub_store(url)\n",
+        "def open_hub_store(url): ...\nopen_hub_store(url)\n",
         "hub/cli/runtime.py": "from blizzard.hub.composition import open_hub_store\nopen_hub_store(url)\n",
         "hub/event_log_opener.py": "from blizzard.hub.composition import open_hub_store\nopen_hub_store(url)\n",
         "tools/invariants.py": "from blizzard.foundation.store.engine import create_engine_from_url\n"

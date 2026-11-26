@@ -16,7 +16,10 @@ from typing import Any
 import pytest
 import sqlalchemy as sa
 
-from blizzard.hub.composition import TenantStores
+from blizzard.foundation.registry.interface import Lifetime
+from blizzard.foundation.registry.internal.recording import OWNING
+from blizzard.foundation.registry.scopes import Resolver
+from blizzard.hub.process_root import registered
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.cadence_store import CadenceStore
 from blizzard.hub.tenancy import StoreScope
@@ -67,21 +70,39 @@ def _reads_of(adapter: object) -> Iterator[tuple[str, object]]:
         yield name, method()
 
 
-def _adapters(stores: TenantStores) -> Iterator[tuple[str, object]]:
-    for field in dataclasses.fields(stores):
-        value = getattr(stores, field.name)
-        yield field.name, value
+#: Where every adapter over the hub's tables is built.
+_STORE_PACKAGE = "blizzard.hub.store"
+
+
+def _store_adapter_keys() -> list[tuple[str, type[Any]]]:
+    """Each tenant-lifetime registration the hub graph records whose builder lives in the store package, by name."""
+    keys = [
+        (entry.key.__qualname__, entry.key)
+        for entry in registered(store_backed=True).entries
+        if entry.lifetime is Lifetime.TENANT
+        and entry.kind in OWNING
+        and isinstance(entry.key, type)
+        and getattr(entry.source, "__module__", "").startswith(f"{_STORE_PACKAGE}.")
+    ]
+    assert keys, "the hub graph records no tenant-lifetime store registration"
+    return keys
+
+
+def _adapters(tenant: Resolver) -> Iterator[tuple[str, object]]:
+    for name, adapter_type in _store_adapter_keys():
+        value = tenant.get(adapter_type)
+        yield name, value
         if dataclasses.is_dataclass(value) and not isinstance(value, type):
             for inner in dataclasses.fields(value):
-                yield f"{field.name}.{inner.name}", getattr(value, inner.name)
+                yield f"{name}.{inner.name}", getattr(value, inner.name)
 
 
 def test_each_tenants_adapters_read_back_none_of_the_others_records(two: Two) -> None:
-    core = second_core(two.hub)
+    process = second_core(two.hub)
     called: set[str] = set()
     for reader, other in ((two.first, two.second), (two.second, two.first)):
-        stores = core.open(StoreScope(reader.harness.tenant))
-        for adapter_name, adapter in _adapters(stores):
+        tenant = process.tenants.open(StoreScope(reader.harness.tenant)).resolver
+        for adapter_name, adapter in _adapters(tenant):
             for read, answer in _reads_of(adapter):
                 text = repr(answer)
                 called.add(f"{adapter_name}.{read}")

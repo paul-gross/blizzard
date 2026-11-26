@@ -11,13 +11,17 @@ import sqlalchemy as sa
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import WorkRef
-from blizzard.hub.domain.graph.model import Graph, Node
+from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, Node
 from blizzard.hub.domain.observability.tracing.repository import StepHydration
+from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
 from blizzard.hub.tenancy import StoreScope, TenantId
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from tests.support.hub_event_rows import hub_events_of
 from tests.support.scaffolding import (
     HubHarness,
@@ -71,16 +75,15 @@ def label(ref: WorkRef) -> str | None:
 
 def trace_store(hub: HubHarness, *, hydration: Callable[[TenantId], StepHydration] | None = None) -> TraceStore:
     """A trace store over ``hub`` that completes each chunk's facts in the chunk's own tenant, through
-    that tenant's services, rendering every work ref with :func:`label` — or through ``hydration`` when given."""
+    that tenant's container scope, rendering every work ref with :func:`label` — or through ``hydration`` when given."""
 
     def services_hydration(tenant: TenantId) -> StepHydration:
-        services = hub.open_services(tenant)
         return StepHydration(
-            graphs=services.graphs,
-            names=services.registry,
-            projects=ProjectLabels(services.projects),
+            graphs=hub.resolve(tenant, IReadGraphRepository),
+            names=hub.resolve(tenant, IReadRunnerRegistry),
+            projects=ProjectLabels(hub.resolve(tenant, IReadProjectRepository)),
             label=label,
-            source_label=services.work_sources.source_label,
+            source_label=hub.resolve(tenant, IWorkSourceRegistry).source_label,
         )
 
     return TraceStore(
@@ -88,14 +91,14 @@ def trace_store(hub: HubHarness, *, hydration: Callable[[TenantId], StepHydratio
         hub_events=hub_events_of(hub.engine),
         corpus=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
         hydration=hydration or services_hydration,
-        tenant_name=hub.hub_services.tenants.open_tenants.name,
+        tenant_name=hub.resolve_hub(OpenTenants).name,
     )
 
 
 def trace_hub(tmp_path: Path, **build: Any) -> tuple[HubHarness, Graph]:
     hub = build_hub(tmp_path, **build)
     assert hub.client.post("/api/graphs", json={"definition_yaml": GRAPH_YAML}).status_code == 201
-    graph = hub.services.graphs.get_enabled_by_name("default-delivery")
+    graph = hub.default_adapter(IReadGraphRepository).get_enabled_by_name("default-delivery")
     assert graph is not None
     return hub, graph
 

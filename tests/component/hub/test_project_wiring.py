@@ -1,5 +1,5 @@
-"""The projects area's registrations as the hub container holds them: within a tenant each project port, service and
-retained bag field is one instance; across tenants the instances differ, except the color draw, which every tenant
+"""The projects area's registrations as the hub container holds them: within a tenant each project port and service is
+one instance; across tenants the instances differ, except the color draw, which every tenant
 shares (component tier)."""
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from blizzard.hub.domain.projects.links import IReadProjectLinks, IWriteProjectL
 from blizzard.hub.domain.projects.model import IReadProjectRepository, IWriteProjectRepository
 from blizzard.hub.domain.projects.order import IReadProjectPositions, IWriteProjectPositions
 from blizzard.hub.domain.projects.targets import ChunkTargetCapture, ChunkTargets, IReadChunkTargets, IWriteChunkTargets
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store.internal.chunk_targets_store import ChunkTargetsStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
@@ -24,20 +25,17 @@ from tests.support.scaffolding import HubHarness, add_tenant, build_hub, default
 def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
     """Every holder of each project-area instance in ``tenant``, by what the instance is."""
     scope = hub.process.tenants.open(tenant).resolver
-    services = hub.hub_services.tenants.open_services(tenant)
     return {
         "project records": [
             scope.get(ProjectStore),
             scope.get(IReadProjectRepository),
             scope.get(IWriteProjectRepository),
             scope.get(IBulkProjectLookup),
-            services.projects,
         ],
         "project links": [
             scope.get(ProjectLinkStore),
             scope.get(IReadProjectLinks),
             scope.get(IWriteProjectLinks),
-            services.project_links,
         ],
         "project positions": [
             scope.get(ProjectPositionStore),
@@ -51,7 +49,7 @@ def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
         ],
         "project authoring": [scope.get(ProjectAuthoring)],
         "bulk project resolver": [scope.get(BulkProjectResolver)],
-        "chunk targets": [scope.get(ChunkTargets), services.chunk_targets],
+        "chunk targets": [scope.get(ChunkTargets)],
         "chunk target capture": [scope.get(ChunkTargetCapture)],
     }
 
@@ -60,7 +58,7 @@ def test_the_project_areas_keys_share_identity_within_a_tenant_and_differ_across
     hub = build_hub(tmp_path)
     first = StoreScope(default_tenant(hub.engine))
     second = StoreScope(add_tenant(hub.engine, "second"))
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
 
     mine, theirs = _shared(hub, first), _shared(hub, second)
 
@@ -74,7 +72,7 @@ def test_every_tenant_shares_the_one_color_draw(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     first = StoreScope(default_tenant(hub.engine))
     second = StoreScope(add_tenant(hub.engine, "second"))
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
     tenants = hub.process.tenants
 
     process_draw = hub.process.resolver.get(ColorPick)

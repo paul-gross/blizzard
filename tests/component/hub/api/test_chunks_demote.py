@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 from sqlalchemy import Connection
 
+from blizzard.hub.domain.chunk.ports.queue import IReadChunkQueueRepository
 from blizzard.hub.store.internal import chunk_queue_store as chunk_queue_store_module
 from tests.support.scaffolding import HubHarness, build_hub, ingest, report_lease
 
@@ -94,17 +95,17 @@ def test_demote_is_a_no_op_on_a_chunk_not_promoted(tmp_path: Path) -> None:
 
     assert resp.status_code == 202
     assert resp.json()["status"] == "not_ready"
-    assert hub.services.chunks.queue.queue_positions([resting]) == {}
+    assert hub.default_adapter(IReadChunkQueueRepository).queue_positions([resting]) == {}
 
 
 def test_demote_twice_is_a_replay(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     ready = _chunk(hub, "1", promote=True)
     assert hub.client.post(f"/api/chunks/{ready}/demote").status_code == 202
-    position = hub.services.chunks.queue.queue_positions([ready])
+    position = hub.default_adapter(IReadChunkQueueRepository).queue_positions([ready])
 
     assert hub.client.post(f"/api/chunks/{ready}/demote").status_code == 202
-    assert hub.services.chunks.queue.queue_positions([ready]) == position
+    assert hub.default_adapter(IReadChunkQueueRepository).queue_positions([ready]) == position
 
 
 def test_demote_refuses_a_claimed_chunk_naming_its_status(tmp_path: Path) -> None:

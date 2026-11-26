@@ -12,6 +12,7 @@ from typing import TypedDict, Unpack
 from fastapi.testclient import TestClient
 from httpx2 import Response
 
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from tests.support.scaffolding import HubHarness, build_hub, seed_runner
 
 
@@ -32,7 +33,7 @@ def test_registration_persists_url_and_redirect_uris(tmp_path: Path) -> None:
     resp = _register(hub, url="https://runner-a.example", redirect_uris=["https://runner-a.example/api/auth/callback"])
     assert resp.status_code == 201, resp.text
 
-    registration = hub.services.registry.get_runner("runner-a")
+    registration = hub.default_adapter(IReadRunnerRegistry).get_runner("runner-a")
     assert registration is not None
     assert registration.public_url == "https://runner-a.example"
     assert registration.redirect_uris == ("https://runner-a.example/api/auth/callback",)
@@ -43,7 +44,7 @@ def test_registration_without_url_leaves_it_null(tmp_path: Path) -> None:
     resp = _register(hub)
     assert resp.status_code == 201, resp.text
 
-    registration = hub.services.registry.get_runner("runner-a")
+    registration = hub.default_adapter(IReadRunnerRegistry).get_runner("runner-a")
     assert registration is not None
     assert registration.public_url is None
     assert registration.redirect_uris == ()
@@ -54,7 +55,7 @@ def test_reregistration_converges_a_changed_redirect_uri(tmp_path: Path) -> None
     _register(hub, url="https://old.example", redirect_uris=["https://old.example/api/auth/callback"])
     _register(hub, url="https://new.example", redirect_uris=["https://new.example/api/auth/callback"])
 
-    registration = hub.services.registry.get_runner("runner-a")
+    registration = hub.default_adapter(IReadRunnerRegistry).get_runner("runner-a")
     assert registration is not None
     assert registration.public_url == "https://new.example"
     assert registration.redirect_uris == ("https://new.example/api/auth/callback",)
@@ -73,7 +74,7 @@ def test_unauthenticated_registration_with_redirect_uris_is_rejected(tmp_path: P
     resp = TestClient(hub.app).post("/api/fleet/runners", json=body)
     assert resp.status_code == 401
 
-    registration = hub.services.registry.get_runner("runner-a")
+    registration = hub.default_adapter(IReadRunnerRegistry).get_runner("runner-a")
     assert registration is not None
     assert registration.never_connected()
     assert registration.redirect_uris == ()
@@ -93,7 +94,7 @@ def test_registration_persists_the_capability_snapshot(tmp_path: Path) -> None:
     resp = _register(hub, capabilities=capabilities)
     assert resp.status_code == 201, resp.text
 
-    registration = hub.services.registry.get_runner("runner-a")
+    registration = hub.default_adapter(IReadRunnerRegistry).get_runner("runner-a")
     assert registration is not None
     assert len(registration.capabilities) == 1
     capability = registration.capabilities[0]
@@ -109,7 +110,7 @@ def test_registration_without_capabilities_leaves_it_empty(tmp_path: Path) -> No
     resp = _register(hub)
     assert resp.status_code == 201, resp.text
 
-    registration = hub.services.registry.get_runner("runner-a")
+    registration = hub.default_adapter(IReadRunnerRegistry).get_runner("runner-a")
     assert registration is not None
     assert registration.capabilities == ()
 
@@ -123,6 +124,6 @@ def test_reregistration_drops_a_removed_binding_from_the_snapshot(tmp_path: Path
 
     _register(hub)
 
-    registration = hub.services.registry.get_runner("runner-a")
+    registration = hub.default_adapter(IReadRunnerRegistry).get_runner("runner-a")
     assert registration is not None
     assert registration.capabilities == ()

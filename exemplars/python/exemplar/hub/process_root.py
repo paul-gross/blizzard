@@ -10,7 +10,6 @@ from collections.abc import Mapping
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing
-from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.hub import process_root as hub
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.action_registry import HubActions
@@ -29,8 +28,7 @@ def open_store_backed(
     actions: HubActions,
 ) -> hub.HubProcess:
     """The hub's store-backed process with the permits area, registered and opened over the borrowed values."""
-    registry = LegacyRegistry()
-    hub.register_hub(registry, store_backed=True)
+    registry = hub.registered(store_backed=True)
     permits.register(registry, store.register_permits(registry))
     return hub.build_store_backed(
         registry,

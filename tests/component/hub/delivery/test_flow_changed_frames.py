@@ -22,10 +22,13 @@ from blizzard.hub.delivery.flow_changes import publish_flow_facts
 from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores
 from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.delivery.ports.flows import IFlowChangePublisher
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
+from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import chunk_lifecycle_store
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
@@ -188,7 +191,7 @@ _LEVER_STATUS = {"stop": ChunkStatus.STOPPED, "restart": ChunkStatus.DELIVERING,
 
 
 def _standing_of(hub: HubHarness, chunk_id: str) -> tuple[ChunkStatus, int]:
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     return facts.status(), facts.latest_epoch() or 0
 
@@ -216,7 +219,7 @@ def test_a_lever_committed_after_the_reconcile_selected_a_visit_leaves_it_unsubm
 
     monkeypatch.setattr(FlowLineReconciler, "submit", lever_then_submit)
     result = hub.default_adapter(FlowLineReconciler).reconcile(0)
-    publish_flow_facts(hub.services.events, result.written)
+    publish_flow_facts(hub.default_adapter(EventBroker), result.written)
 
     assert pulled == [202]
     assert outcomes == [None], "the submit wrote nothing and raised nothing"
@@ -336,7 +339,7 @@ def test_the_sweep_publishes_the_facts_of_a_turn_it_ends_interrupted(tmp_path: P
     since, after = hub.events.latest_id(), _newest_fact_id(hub)
     stores = FlowLineStores(
         corpus=hub.resolve_hub(HubScopedReads).corpus,
-        tenants=lambda: hub.hub_services.tenants.open_tenants.every().keys(),
+        tenants=lambda: hub.resolve_hub(OpenTenants).every().keys(),
         lines=lambda tenant: hub.resolve(tenant, FlowLineReconciler),
         turns=lambda tenant: hub.resolve(tenant, TurnRunner),
         publishers=lambda tenant: hub.resolve(tenant, IFlowChangePublisher),

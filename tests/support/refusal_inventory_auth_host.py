@@ -5,14 +5,7 @@ dependencies and applicable app handlers are included per operation; framework
 validation and unhandled failures are recorded separately, not coverage proof.
 """
 
-_HUB = {
-    "hub_level.hub_services": {
-        "ProblemHTTPException(problems.hub_store_unavailable_problem)",
-    },
-}
-
 _HOST_AUTH = {
-    **_HUB,
     "auth.HostAuth.demand": {
         "ProblemHTTPException(problems.authentication_revoked_problem)",
         "ProblemHTTPException(problem)",
@@ -50,14 +43,12 @@ _HELD_HOST = {
 
 DIRECT_PRODUCERS = {
     ("GET", "/api/auth/jwks.json"): {
-        **_HUB,
         "idp.jwks": {"problem_response(problems.idp_disabled_problem(instance=request.url.path))"},
         "idp.IdpSurface._absent": {
             'HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="the IdP surface is not enabled")',
         },
     },
     ("GET", "/api/auth/authorize"): {
-        **_HUB,
         "idp.IdpSurface._absent": {
             'HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="the IdP surface is not enabled")',
         },
@@ -81,19 +72,16 @@ DIRECT_PRODUCERS = {
         },
     },
     ("GET", "/api/fleet/identity"): {
-        **_HUB,
         "fleet_identity.get_runner_identity": {
             "problem_response(runner_identity_problem(exc, instance=request.url.path))",
         },
     },
     ("GET", "/api/me"): {
-        **_HUB,
         "me.me": {
             "problem_response(authentication_required_problem(instance=request.url.path, detail='not authenticated'))"
         },
     },
     ("POST", "/api/hosts"): {
-        **_HUB,
         **_TENANT,
         "auth.RunnerAuth.refuse_runner": {
             "ProblemHTTPException(partial(problems.runner_credential_forbidden_problem, principal.runner_id))",

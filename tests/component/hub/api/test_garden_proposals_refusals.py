@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
@@ -160,7 +161,7 @@ def test_attach_or_detach_naming_no_finding_on_a_closed_proposal_is_409(tmp_path
 def test_accepting_with_the_default_graph_retired_is_503_and_closes_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed(hub)
-    graph = hub.services.default_graph.ensure_default(
+    graph = hub.default_adapter(DefaultGraphService).ensure_default(
         PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     hub.resolve(default_tenant(hub.engine), GraphLifecycleService).retire(graph, by="operator")

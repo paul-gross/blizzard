@@ -16,6 +16,7 @@ from typing import Any, cast
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.api.chunk_events import new_keyed_frames
 from blizzard.hub.domain.chunk.model import ChunkFacts, EscalationFact, MigrationFact
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
@@ -580,7 +581,7 @@ def test_loaded_escalation_id_keys_the_same_row_the_backfill_reads(tmp_path: Pat
     hub = build_hub(tmp_path)
     chunk_id, _node_id = _claimed(hub)
     report_escalation(hub, chunk_id, epoch=1, seq=2, takeover_command="cd wd && claude --resume")
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     (escalation,) = facts.escalations
     assert escalation.id is not None

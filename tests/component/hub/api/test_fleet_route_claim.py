@@ -7,6 +7,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.store import schema as s
 from blizzard.wire.chunk import CHUNK_NOT_FOUND
 from blizzard.wire.route import CLAIM_CONFLICT, CLAIM_PAUSED, CLAIM_RUNNER_UNREGISTERED, CLAIM_TERMINAL
@@ -147,7 +148,7 @@ def test_summary_reports_a_finished_chunk_as_unrouted(tmp_path: Path) -> None:
     assert resp.status_code == 200 and resp.json()["outcome"] == "done", resp.text
     # The premise, asserted rather than asserted-about: apply landed the terminal and left
     # the route live. If that ever changes, this line fails and the fix's rationale is stale.
-    assert hub.services.chunks.route.route_of(finished) is not None
+    assert hub.default_adapter(IReadChunkRouteRepository).route_of(finished) is not None
     assert hub.client.post(f"/api/chunks/{stopped}/stop", json={"by": "operator"}).status_code == 202
 
     summaries = {c["chunk_id"]: c for c in hub.client.get("/api/chunks").json()["chunks"]}
@@ -186,7 +187,7 @@ def test_a_claim_on_a_finished_chunk_is_denied_as_terminal_not_as_held(tmp_path:
         json={"choice": "pass", "epoch": 1, "runner_id": "r1", "from_node_id": node_id, "artifacts": []},
     )
     assert resp.status_code == 200 and resp.json()["outcome"] == "done", resp.text
-    assert hub.services.chunks.route.route_of(chunk_id) is not None
+    assert hub.default_adapter(IReadChunkRouteRepository).route_of(chunk_id) is not None
 
     resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, runner="r2"))
 

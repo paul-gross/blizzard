@@ -10,6 +10,7 @@ import pytest
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.runners.registration import (
     DuplicateCapabilityHarness,
+    IReadRunnerRegistry,
     IWriteRunnerRegistry,
     RunnerCapability,
     RunnerRegistration,
@@ -26,7 +27,7 @@ _PRIOR = (RunnerCapability("claude", default=True), RunnerCapability("opencode")
 
 
 def _held(hub: HubHarness) -> RunnerRegistration:
-    registration = hub.services.registry.get_runner(_RUNNER)
+    registration = hub.default_adapter(IReadRunnerRegistry).get_runner(_RUNNER)
     assert registration is not None
     return registration
 
@@ -59,7 +60,7 @@ def test_a_duplicate_snapshot_is_refused_and_changes_nothing(
 
 def test_a_retired_runner_with_duplicates_is_refused_as_retired(tmp_path: Path) -> None:
     hub = _hub(tmp_path, prior=True)
-    writer = cast(IWriteRunnerRegistry, hub.services.registry)
+    writer = cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry))
     writer.record_lifecycle(_RUNNER, retired=True, at=hub.clock.now(), by="op", expected_lifecycle=0)
 
     with pytest.raises(RunnerRetired):

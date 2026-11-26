@@ -6,9 +6,6 @@ Shared dependency and framework producers apply in addition to each entry.
 
 # The fleet router's runner-principal and tenant dependencies, plus the app handlers.
 SHARED_PRODUCERS = {
-    "hub_level.hub_services": {
-        "ProblemHTTPException(problems.hub_store_unavailable_problem)",
-    },
     "auth.RunnerAuth.demand": {
         "ProblemHTTPException(problems.authentication_revoked_problem)",
         "ProblemHTTPException(problem)",

@@ -18,9 +18,15 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.models import User
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH
 from blizzard.hub.domain.execution.fleet import FleetService
-from blizzard.hub.domain.runners.host import HostAddition, HostLifecycleFact, HostReport, IWriteHostRegistry
+from blizzard.hub.domain.runners.host import (
+    HostAddition,
+    HostLifecycleFact,
+    HostReport,
+    IReadHostRegistry,
+    IWriteHostRegistry,
+)
 from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
-from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, IWriteRunnerRegistry
 from blizzard.wire import auth as auth_wire
 from tests.support.scaffolding import (
     HubHarness,
@@ -244,7 +250,7 @@ def test_authorize_refuses_a_retired_runner_distinctly_only_past_the_redirect_ma
         return resp.status_code, resp.json() if resp.status_code in (400, 403) else {}
 
     assert authorize("runner-a")[0] not in (400, 403)
-    writer = cast(IWriteRunnerRegistry, hub.services.registry)
+    writer = cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry))
     retired = writer.record_lifecycle("runner-a", retired=True, at=hub.clock.now(), by="op", expected_lifecycle=0)
 
     status_code, body = authorize("runner-a")
@@ -265,9 +271,9 @@ _BRAVO_REDIRECT = "https://bravo-runner.example/api/auth/callback"
 def _bravo(hub: HubHarness) -> TenantHarness:
     """A second tenant, ``bravo``, holding the registered runner ``_BRAVO_RUNNER``."""
     bravo = hub.add_tenant("bravo")
-    seed_runner(bravo.services, _BRAVO_RUNNER, register=False)
+    seed_runner(bravo, _BRAVO_RUNNER, register=False)
     bravo.fleet.register(
-        added_runner(bravo.services, _BRAVO_RUNNER),
+        added_runner(bravo, _BRAVO_RUNNER),
         "workspace-1",
         public_url="https://bravo-runner.example",
         redirect_uris=(_BRAVO_REDIRECT,),
@@ -343,7 +349,7 @@ def test_a_retired_runner_is_told_apart_only_to_a_member_of_its_tenant(tmp_path:
     member = seed_user(hub, username="member", role=Role.GUEST, email="member@example.com")
     seed_membership(hub.engine, bravo.tenant, member.user_id, Role.GUEST)
     stranger = seed_user(hub, username="stranger", role=Role.ADMIN, email="stranger@example.com")
-    writer = cast(IWriteRunnerRegistry, bravo.services.registry)
+    writer = cast(IWriteRunnerRegistry, bravo.default_adapter(IReadRunnerRegistry))
     writer.record_lifecycle(_BRAVO_RUNNER, retired=True, at=hub.clock.now(), by="op", expected_lifecycle=0)
 
     assert _sign_in(hub, member, _BRAVO_RUNNER, _BRAVO_REDIRECT).status_code == 403
@@ -356,7 +362,7 @@ _HOST_REDIRECT = "https://host.example/api/auth/callback"
 
 def _bravo_host(hub: HubHarness, bravo: TenantHarness) -> IWriteHostRegistry:
     """The host ``_HOST_ID`` in ``bravo``, having reported ``_HOST_REDIRECT``."""
-    hosts = cast(IWriteHostRegistry, bravo.services.hosts)
+    hosts = cast(IWriteHostRegistry, bravo.default_adapter(IReadHostRegistry))
     hosts.add(HostAddition(_HOST_ID, "host-bravo", "host-hash", at=hub.clock.now(), by="op"))
     report = HostReport(
         name=None, url="https://host.example", redirect_uris=(_HOST_REDIRECT,), workspaces=(), subscriptions=()

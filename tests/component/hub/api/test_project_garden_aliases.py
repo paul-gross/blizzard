@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
 from tests.support.scaffolding import HubHarness, build_hub
@@ -27,9 +28,11 @@ def _calls(graph_name: str) -> list[tuple[str, str, dict[str, object] | None]]:
 
 
 def _graph_name(hub: HubHarness) -> str:
-    return hub.services.default_graph.ensure_default(
-        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
-    ).name
+    return (
+        hub.default_adapter(DefaultGraphService)
+        .ensure_default(PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml())
+        .name
+    )
 
 
 @pytest.fixture

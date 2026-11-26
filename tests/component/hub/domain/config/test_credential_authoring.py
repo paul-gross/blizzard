@@ -37,7 +37,7 @@ from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
 from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
 from blizzard.hub.store.schema import credentials
-from blizzard.hub.tenancy import StoreScope, TenantId
+from blizzard.hub.tenancy import TenantId
 from tests.support.scaffolding import (
     OP,
     build_hub,
@@ -237,10 +237,7 @@ class _Tenant:
 def test_two_tenants_hold_a_credential_alike_and_each_reads_and_writes_only_its_own(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     tenants = [hub.add_tenant(label) for label in ("alpha", "beta")]
-    first, second = (
-        _Tenant(hub.engine, t.tenant, hub.hub_services.tenants.open_services(StoreScope(t.tenant)).config_authoring)
-        for t in tenants
-    )
+    first, second = (_Tenant(hub.engine, t.tenant, hub.resolve(t.tenant, ConfigAuthoring)) for t in tenants)
     assert first.credential.authority == second.credential.authority == "secret/gh"
     assert first.credential.credential_id != second.credential.credential_id
 

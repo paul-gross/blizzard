@@ -79,10 +79,6 @@ REVIEWED = {
             "ProblemHTTPException(partial(problems.authentication_required_problem, detail='authentication required'))",
         ),
         (
-            "blizzard.hub.api.hub_level.hub_services",
-            "ProblemHTTPException(problems.hub_store_unavailable_problem)",
-        ),
-        (
             "blizzard.hub.api.hosts.add_host",
             "problem_response(host_name_taken_problem(exc, instance=http_request.url.path))",
         ),

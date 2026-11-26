@@ -16,6 +16,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.leases.model import NewLease
@@ -158,7 +159,7 @@ def _deliver(
     log = next(
         (
             a.data
-            for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)
+            for a in hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(chunk_id)
             if a.name.startswith("hub-log.repository")
         ),
         "",

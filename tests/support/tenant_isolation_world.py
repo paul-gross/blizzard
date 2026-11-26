@@ -13,7 +13,7 @@ from blizzard.hub.domain.cadence.model import CadenceShape, ChoreShape
 from blizzard.hub.domain.cadence.services import CadenceAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.delivery.flows import FlowResource
-from blizzard.hub.domain.projects.model import Project, ProjectId
+from blizzard.hub.domain.projects.model import IReadProjectRepository, Project, ProjectId
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support.scaffolding import (
@@ -83,7 +83,7 @@ def _ok(response: httpx2.Response, status: int) -> dict[str, Any]:
 
 def _project(harness: TenantHarness, project_id: str) -> Project:
     """The stored ``Project`` ``project_id`` names in ``harness``'s tenant."""
-    project = harness.services.projects.get(ProjectId(project_id))
+    project = harness.default_adapter(IReadProjectRepository).get(ProjectId(project_id))
     assert project is not None, f"{project_id} is not stored"
     return project
 

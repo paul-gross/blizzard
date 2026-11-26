@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from blizzard.hub.api.auth import RunnerAuth
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
-from blizzard.hub.api.hub_level import Hub
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
     AuthenticationRevokedProblem,
@@ -66,10 +66,10 @@ def test_fleet_read_problem_variants(tmp_path: Path, path: str) -> None:
     with store_free(hub.app):
         observe(client.get(url, headers=bearer(live), params=params), 503, HubStoreUnavailableProblem)
 
-    def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
+    def close_before_resolution(request: Request) -> AdmittedTenant:
         principal = RunnerAuth.of(request).demand()
         close_tenant(hub.engine, principal.tenant_id)
-        services.tenants.open_tenants.refresh()
+        hub.resolve_hub(OpenTenants).refresh()
         return resolve_tenant(request)
 
     hub.app.dependency_overrides[resolve_tenant] = close_before_resolution

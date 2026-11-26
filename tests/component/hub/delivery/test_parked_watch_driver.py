@@ -15,12 +15,17 @@ from sqlalchemy import insert, select
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.chunk.no_code import no_code_marker
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.forges import ConfiguredForge
-from blizzard.hub.domain.config.repositories import RepositoryEdit, RepositoryId
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryEdit, RepositoryId
+from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
-from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
 from blizzard.hub.forge.landing import ChangeState
+from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.store import schema as s
 from tests.support.forge_auth import retire_secrets
 from tests.support.github_double import GitHubDouble, change, forge_holding
@@ -78,16 +83,16 @@ class _World:
         self.capability_asked_c: list[str] = []
         records = {f"{r.fields.owner}/{r.fields.repo}": r for r in self.repositories()}
         self.ids = {name: str(record.repository_id) for name, record in records.items()}
-        authoring = self.hub.services.config_authoring
+        authoring = self.hub.default_adapter(ConfigAuthoring)
         authoring.edit_repository(records[_B], RepositoryEdit(landing_policy=LandingPolicy.PARK), OP)
-        project = self.hub.services.projects.get(ProjectId(default_project(self.hub.engine)))
+        project = self.hub.default_adapter(IReadProjectRepository).get(ProjectId(default_project(self.hub.engine)))
         assert project is not None
         self.hub.default_adapter(ProjectAuthoring).order_repositories(project, [records[n] for n in (_A, _B, _C)], OP)
         self.chunk_id = self._chunk()
         self.deliver_node = self._deliver_node()
 
     def repositories(self):
-        return self.hub.services.repository_records.list_all(include_retired=False)
+        return self.hub.default_adapter(IReadRepositoryRecordRepository).list_all(include_retired=False)
 
     def _chunk(self) -> str:
         minted = self.hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH})
@@ -124,9 +129,9 @@ class _World:
         return chunk_id
 
     def _deliver_node(self) -> str:
-        chunk = self.hub.services.chunks.record.get(self.chunk_id)
+        chunk = self.hub.default_adapter(IReadChunkRecordRepository).get(self.chunk_id)
         assert chunk is not None
-        graph = self.hub.services.graphs.get(chunk.graph_id)
+        graph = self.hub.default_adapter(IReadGraphRepository).get(chunk.graph_id)
         assert graph is not None
         node = graph.node_by_name("deliver")
         assert node is not None
@@ -156,7 +161,7 @@ class _World:
 
     def c_unavailable(self) -> None:
         """C's credential raises when revealed, and C's forge offers nothing."""
-        forges = self.hub.services.forges
+        forges = self.hub.default_adapter(ForgeRegistry)
         offered = forges.offered
 
         def retired(name: str) -> bool:
@@ -183,7 +188,7 @@ class _World:
         return outcome
 
     def artifact(self, name: str) -> str | None:
-        rows = self.hub.services.chunks.artifacts.load_artifacts(self.chunk_id)
+        rows = self.hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(self.chunk_id)
         return next((a.data for a in rows if a.name == name), None)
 
     def landed(self) -> list[tuple[str, str]]:

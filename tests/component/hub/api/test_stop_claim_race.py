@@ -15,7 +15,8 @@ from typing import cast
 from sqlalchemy import Connection
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository, IWriteChunkRouteRepository
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store.internal import chunk_lifecycle_store as chunk_lifecycle_store_module
@@ -100,7 +101,7 @@ def test_a_stop_still_releases_the_route_a_claim_won_the_lock_to_create(tmp_path
 
     entered_record = threading.Event()
     release_record = threading.Event()
-    writable_route = cast(IWriteChunkRouteRepository, hub.services.chunks.route)
+    writable_route = cast(IWriteChunkRouteRepository, hub.default_adapter(IReadChunkRouteRepository))
     real_record_route = writable_route.record_route
 
     def _blocking_record_route(route: Route, *, token_hash: str, at: datetime, transaction: LockedTransaction) -> str:
@@ -149,7 +150,7 @@ def test_a_stop_still_releases_the_route_a_claim_won_the_lock_to_create(tmp_path
     # a stale pre-wait one — a stale `at` would equal the route's own `created_at` instead
     # (this test's single un-advanced instant before the `advance()` above) and would sort
     # no later than it, which is exactly the ordering `RouteHistory.newest` tie-breaks on.
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     assert len(facts.routes_created) == 1
     assert len(facts.routes_released) == 1

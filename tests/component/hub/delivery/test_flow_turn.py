@@ -24,16 +24,21 @@ from blizzard.hub.domain.actions.check_observations import missing_checks
 from blizzard.hub.domain.actions.effects import ActionEscalation, IEffectSink, Marker, Pass
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.credentials import CredentialDraft, CredentialUnavailable
-from blizzard.hub.domain.config.repositories import RepositoryEdit, ResolvedRepository
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryEdit, ResolvedRepository
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.delivery.flows import Submission
+from blizzard.hub.domain.delivery.ports.flows import IReadFlows
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.graph.actions import ActionSpec
+from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
-from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgets, ForgePriority
 from blizzard.hub.forge.landing import (
     CommitEvidence,
@@ -45,7 +50,7 @@ from blizzard.hub.forge.landing import (
     VisitForges,
 )
 from blizzard.hub.forge.rates import rate_dialect
-from blizzard.hub.forge.registry import BudgetGate, ForgeCallRefused, RefsHandle, TurnCutOff
+from blizzard.hub.forge.registry import BudgetGate, ForgeCallRefused, ForgeRegistry, RefsHandle, TurnCutOff
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.tools.invariants import hub_invariants
@@ -255,11 +260,11 @@ class _World:
             )
 
     def submission(self, chunk_id: str, *, epoch: int = 1) -> Submission:
-        graph = self.hub.services.graphs.get(self.detail(chunk_id)["graph_id"])
+        graph = self.hub.default_adapter(IReadGraphRepository).get(self.detail(chunk_id)["graph_id"])
         assert graph is not None
         step = graph.node_by_name("step")
         assert step is not None
-        sub = self.hub.services.flows.submission_for_visit(chunk_id, node_id=step.node_id, epoch=epoch)
+        sub = self.hub.default_adapter(IReadFlows).submission_for_visit(chunk_id, node_id=step.node_id, epoch=epoch)
         assert sub is not None
         return sub
 
@@ -338,7 +343,9 @@ def test_an_effect_handed_over_after_the_deadline_raises_into_the_pass_and_write
     asyncio.run(asyncio.sleep(1.0))  # the loop's thread comes back and hands its marker to a closed sink
 
     assert world.outcomes(chunk_id) == ["cut-off"]
-    assert "late" not in {a.name for a in world.hub.services.chunks.artifacts.load_artifacts(chunk_id)}
+    assert "late" not in {
+        a.name for a in world.hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(chunk_id)
+    }
 
 
 def test_an_effect_write_in_flight_at_the_deadline_commits_before_the_turns_end(
@@ -359,7 +366,7 @@ def test_an_effect_write_in_flight_at_the_deadline_commits_before_the_turns_end(
 
     def observed(self: FlowStore, turn_id: str, **kwargs: Any) -> tuple[FlowFactWritten, ...] | None:
         seen.append(
-            world.hub.services.chunks.artifacts.has_hub_artifact(
+            world.hub.default_adapter(IReadChunkArtifactsRepository).has_hub_artifact(
                 chunk_id, node_id=world.submission(chunk_id).node_id, epoch=1, name="in-flight"
             )
         )
@@ -436,7 +443,9 @@ def test_a_build_that_raises_routes_failure_with_its_traceback(world: _World, mo
     assert world.outcomes(chunk_id) == ["failure"]
     assert world.detail(chunk_id)["current_node_name"] == "build"
     (log,) = [
-        a for a in world.hub.services.chunks.artifacts.load_artifacts(chunk_id) if a.name == "hub-log.test.answer"
+        a
+        for a in world.hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(chunk_id)
+        if a.name == "hub-log.test.answer"
     ]
     assert "a malformed artifact" in log.data
 
@@ -574,8 +583,8 @@ def _captured(world: _World, chunk_id: str) -> list[tuple[str, bool]]:
 def test_a_base_branch_edited_while_waiting_moves_neither_the_submission_nor_its_branch(world: _World) -> None:
     chunk_id = world.at_step("test.hooked")
     world.tick()  # pending: it waits in the line of `main`
-    record = world.hub.services.repository_records.list_all(include_retired=False)[0]
-    world.hub.services.config_authoring.edit_repository(record, RepositoryEdit(base_branch="trunk"), OP)
+    record = world.hub.default_adapter(IReadRepositoryRecordRepository).list_all(include_retired=False)[0]
+    world.hub.default_adapter(ConfigAuthoring).edit_repository(record, RepositoryEdit(base_branch="trunk"), OP)
     world.hub.clock.advance(timedelta(seconds=31))
 
     world.tick()
@@ -591,8 +600,8 @@ def test_a_chunk_with_no_captured_target_captures_the_live_branch_when_it_resubm
     chunk_id = world.at_step("test.hooked")
     world.tick()  # pending: it waits in the line of `main`
     _forget_targets(world, chunk_id)
-    record = world.hub.services.repository_records.list_all(include_retired=False)[0]
-    world.hub.services.config_authoring.edit_repository(record, RepositoryEdit(base_branch="trunk"), OP)
+    record = world.hub.default_adapter(IReadRepositoryRecordRepository).list_all(include_retired=False)[0]
+    world.hub.default_adapter(ConfigAuthoring).edit_repository(record, RepositoryEdit(base_branch="trunk"), OP)
     world.hub.clock.advance(timedelta(seconds=31))
     passes = world.hooked.passes
 
@@ -601,7 +610,9 @@ def test_a_chunk_with_no_captured_target_captures_the_live_branch_when_it_resubm
     world.tick()
 
     assert world.hooked.passes == passes + 1  # no pass on the old submission; one on the new
-    old = world.hub.services.flows.submission_for_visit(chunk_id, node_id=world.submission(chunk_id).node_id, epoch=1)
+    old = world.hub.default_adapter(IReadFlows).submission_for_visit(
+        chunk_id, node_id=world.submission(chunk_id).node_id, epoch=1
+    )
     assert old is not None and old.generation == 1
     assert [f.branch for f in old.flows] == ["trunk"]
     assert world.outcomes(chunk_id) == ["pending", "superseded", "pending"]
@@ -615,8 +626,8 @@ def test_a_resubmitted_visit_keeps_the_moment_its_first_turn_started(world: _Wor
     first_started = world.hub.clock.now()
     world.tick()
     _forget_targets(world, chunk_id)
-    record = world.hub.services.repository_records.list_all(include_retired=False)[0]
-    world.hub.services.config_authoring.edit_repository(record, RepositoryEdit(base_branch="trunk"), OP)
+    record = world.hub.default_adapter(IReadRepositoryRecordRepository).list_all(include_retired=False)[0]
+    world.hub.default_adapter(ConfigAuthoring).edit_repository(record, RepositoryEdit(base_branch="trunk"), OP)
     world.hub.clock.advance(timedelta(seconds=31))
 
     world.tick()
@@ -636,8 +647,8 @@ def test_a_visit_built_after_an_edit_lands_by_the_terms_its_first_turn_took(worl
     world.hooked.hook = visits.append
     chunk_id = world.at_step("test.hooked")
     world.tick()
-    record = world.hub.services.repository_records.list_all(include_retired=False)[0]
-    project = world.hub.services.projects.get(ProjectId(default_project(world.hub.engine)))
+    record = world.hub.default_adapter(IReadRepositoryRecordRepository).list_all(include_retired=False)[0]
+    project = world.hub.default_adapter(IReadProjectRepository).get(ProjectId(default_project(world.hub.engine)))
     assert project is not None
     world.hub.default_adapter(ProjectAuthoring).order_repositories(project, [record], OP)
     world.hub.clock.advance(timedelta(seconds=31))
@@ -645,7 +656,7 @@ def test_a_visit_built_after_an_edit_lands_by_the_terms_its_first_turn_took(worl
     world.tick()
 
     assert len(visits) == 2
-    terms = world.hub.services.flows.terms_of(world.submission(chunk_id).submission_id)
+    terms = world.hub.default_adapter(IReadFlows).terms_of(world.submission(chunk_id).submission_id)
     assert set(terms) == {record.repository_id}
     taken = terms[record.repository_id]
     assert (taken.landing_policy, taken.landing_position) == ("merge-on-checks", None)
@@ -663,7 +674,7 @@ def test_a_pass_that_waits_records_a_pending_wait(world: _World) -> None:
 
     world.tick()
 
-    facts = world.hub.services.chunks.facts.load_facts(chunk_id)
+    facts = world.hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     assert [(poll.kind, poll.last_polled_at) for poll in facts.hub_node_polls] == [("pending", None)]
 
@@ -673,7 +684,7 @@ def test_any_landing_action_scopes_a_parked_watch_to_its_repository(
 ) -> None:
     world = _World(tmp_path, two_repos=True)
     chunk_id = world.at_step("test.hooked")
-    graph = world.hub.services.graphs.get(world.detail(chunk_id)["graph_id"])
+    graph = world.hub.default_adapter(IReadGraphRepository).get(world.detail(chunk_id)["graph_id"])
     assert graph is not None
     step = graph.node_by_name("step")
     assert step is not None
@@ -688,12 +699,12 @@ def test_any_landing_action_scopes_a_parked_watch_to_its_repository(
     )
     records = {
         record.fields.repo: record.repository_id
-        for record in world.hub.services.repository_records.list_all(include_retired=False)
+        for record in world.hub.default_adapter(IReadRepositoryRecordRepository).list_all(include_retired=False)
     }
     watched, sibling = records["gadget"], records["widget"]
     offered_calls: list[object] = []
     forge_calls: list[object] = []
-    forges = world.hub.services.forges
+    forges = world.hub.default_adapter(ForgeRegistry)
     offered = forges.offered
     repository_forge = forges.repository_forge
 
@@ -745,9 +756,9 @@ def _act_with(world: _World, credential_id: str) -> None:
 
 
 def _retired_credential(world: _World) -> str:
-    authoring = world.hub.services.config_authoring
+    authoring = world.hub.default_adapter(ConfigAuthoring)
     authoring.create_secret(SecretName.parse("deploy"), "tok-deploy", OP)
-    (repository,) = world.hub.services.repository_records.list_all(include_retired=False)
+    (repository,) = world.hub.default_adapter(IReadRepositoryRecordRepository).list_all(include_retired=False)
     draft = CredentialDraft(
         slug="deploy",
         name=None,
@@ -762,7 +773,7 @@ def _retired_credential(world: _World) -> str:
 
 
 def _refusal(world: _World, chunk_id: str) -> str | None:
-    artifacts = world.hub.services.chunks.artifacts.load_artifacts(chunk_id)
+    artifacts = world.hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(chunk_id)
     return next((a.data for a in artifacts if a.name == "hub-log.repository-secret-unavailable"), None)
 
 
@@ -796,7 +807,7 @@ def test_a_credential_unavailable_while_checking_what_the_forge_offers_refuses_t
         return frozenset({Capability.CHANGES_READ})
 
     monkeypatch.setattr(world.turns, "_requirements", {"test.hooked": required})
-    monkeypatch.setattr(world.hub.services.forges, "offered", unavailable)
+    monkeypatch.setattr(world.hub.default_adapter(ForgeRegistry), "offered", unavailable)
 
     world.tick()
 
@@ -849,7 +860,7 @@ def test_a_forge_refusing_the_access_checked_for_what_it_offers_escalates_forge_
         return frozenset({Capability.CHANGES_READ})
 
     monkeypatch.setattr(world.turns, "_requirements", {"test.hooked": required})
-    monkeypatch.setattr(world.hub.services.forges, "offered", refused)
+    monkeypatch.setattr(world.hub.default_adapter(ForgeRegistry), "offered", refused)
 
     world.tick()
 
@@ -871,7 +882,7 @@ def test_a_forge_refusing_the_access_its_roles_are_built_on_escalates_forge_auth
     def refused(repository: Any, *, cut_off: Any, priority: Any) -> Any:
         raise _suspended()
 
-    monkeypatch.setattr(world.hub.services.forges, "repository_forge", refused)
+    monkeypatch.setattr(world.hub.default_adapter(ForgeRegistry), "repository_forge", refused)
 
     world.tick()
 
@@ -888,13 +899,13 @@ def test_a_forge_that_does_not_answer_while_its_roles_are_built_waits_pending_be
     def silent(repository: Any, *, cut_off: Any, priority: Any) -> Any:
         raise ForgeUnavailable("the installation could not be read: ReadTimeout")
 
-    monkeypatch.setattr(world.hub.services.forges, "repository_forge", silent)
+    monkeypatch.setattr(world.hub.default_adapter(ForgeRegistry), "repository_forge", silent)
 
     world.tick()
 
     assert world.hooked.passes == 0
     assert "failure" not in world.outcomes(chunk_id)
-    facts = world.hub.services.chunks.facts.load_facts(chunk_id)
+    facts = world.hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     assert [poll.kind for poll in facts.hub_node_polls] == ["pending"]
 
@@ -932,7 +943,7 @@ def _past_deadline(world: _World) -> str:
 
 
 def _polls(world: _World, chunk_id: str) -> list[str]:
-    facts = world.hub.services.chunks.facts.load_facts(chunk_id)
+    facts = world.hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     return [poll.kind for poll in facts.hub_node_polls]
 
@@ -1000,7 +1011,7 @@ def test_a_silent_forge_at_a_final_build_times_out(world: _World, monkeypatch: p
     def silent(repository: Any, *, cut_off: Any, priority: Any) -> Any:
         raise ForgeUnavailable("the installation could not be read: ReadTimeout")
 
-    monkeypatch.setattr(world.hub.services.forges, "repository_forge", silent)
+    monkeypatch.setattr(world.hub.default_adapter(ForgeRegistry), "repository_forge", silent)
 
     world.tick()
 

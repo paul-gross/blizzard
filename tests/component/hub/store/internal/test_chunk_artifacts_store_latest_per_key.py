@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.execution.envelope import LatestArtifacts
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.scoped import ScopedConnections
@@ -60,7 +61,7 @@ def test_it_keeps_what_the_domain_fold_keeps_in_the_whole_reads_order(tmp_path: 
         ("art_seq_a", "build", "same-seq", 2, 8),
     )
     _seed(hub, conns, neighbor, ("art_neighbor", "plan", "doc", 9, 1))
-    artifacts = hub.services.chunks.artifacts
+    artifacts = hub.default_adapter(IReadChunkArtifactsRepository)
     other = add_tenant(hub.engine, "other")
     _seed(hub, scoped_connections(hub.engine, other), chunk_id, ("art_foreign", "plan", "doc", 9, 1))
 
@@ -87,7 +88,7 @@ def test_rows_read_grow_with_the_keys_not_the_history(tmp_path: Path) -> None:
                 for slot, name in enumerate(("a", "b", "c"))
             ),
         )
-        artifacts = hub.services.chunks.artifacts
+        artifacts = hub.default_adapter(IReadChunkArtifactsRepository)
 
         rows = count_rows_read(
             hub.engine, lambda artifacts=artifacts, chunk_id=chunk_id: artifacts.load_latest_artifacts(chunk_id)

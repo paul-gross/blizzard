@@ -23,6 +23,7 @@ from blizzard.foundation.trace_ids import (
 )
 from blizzard.hub import app as hub_app
 from blizzard.hub.app import Sweep
+from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.repository import TraceCheckpoint
 from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
@@ -486,7 +487,7 @@ def test_an_open_step_that_closes_later_is_told_once_after_the_cursor_passed_its
     hub, exporter = _hub(tmp_path)
     sweep = trace_export_sweep(hub)
     sweep.sweep()
-    graph = hub.services.graphs.get_enabled_by_name("default-delivery")
+    graph = hub.default_adapter(IReadGraphRepository).get_enabled_by_name("default-delivery")
     assert graph is not None
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])
     claim(hub, chunk_id, seq=1)

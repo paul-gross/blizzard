@@ -19,7 +19,6 @@ from blizzard.hub.api import chunk_events, problems, problems_chunks
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
@@ -28,6 +27,8 @@ from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.chunk.model import DecisionClosed, GateDecision, NotADecisionChoice
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
 from blizzard.hub.domain.execution.decisions import DecisionService
+from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.events.broker import EventBroker
 from blizzard.wire.completion import CheckResult
 from blizzard.wire.decision import (
@@ -77,14 +78,18 @@ def to_decision_view(row: GateDecision, runner_names: Mapping[str, str], project
 
 
 @router.get("/decisions", response_model=OpenDecisionsResponse, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def list_decisions(services: Services, project: QueryProject) -> OpenDecisionsResponse:
+@inject_sync
+def list_decisions(
+    project: QueryProject,
+    decision_reads: FromDishka[IReadChunkDecisionsRepository],
+    runners: FromDishka[IReadRunnerRegistry],
+    projects: FromDishka[IReadProjectRepository],
+) -> OpenDecisionsResponse:
     """The fleet's open decisions, or only ``?project=``'s. Return the whole pending
     attention set: operators need every gate awaiting a choice, not a page of them."""
-    rows = services.chunks.decisions.list_open_decisions(project=project)
-    runner_names = services.registry.names_for(
-        d.imposed_by_runner_id for d in rows if d.imposed_by_runner_id is not None
-    )
-    labels = ProjectLabels.read(services.projects, (d.project_id for d in rows))
+    rows = decision_reads.list_open_decisions(project=project)
+    runner_names = runners.names_for(d.imposed_by_runner_id for d in rows if d.imposed_by_runner_id is not None)
+    labels = ProjectLabels.read(projects, (d.project_id for d in rows))
     return OpenDecisionsResponse(
         decisions=[to_decision_view(d, runner_names, labels.fields(d.project_id)) for d in rows]
     )

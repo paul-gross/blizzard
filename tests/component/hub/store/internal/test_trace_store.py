@@ -15,7 +15,7 @@ from sqlalchemy import Connection
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.execution.fleet import FleetService
-from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph, IReadGraphRepository
 from blizzard.hub.domain.observability.egress.rows import step_row
 from blizzard.hub.domain.observability.hub_events import HubEventKind
 from blizzard.hub.domain.observability.tracing.assembly import assemble_step
@@ -33,6 +33,9 @@ from blizzard.hub.domain.observability.tracing.repository import ClosingCandidat
 from blizzard.hub.domain.observability.tracing.steps import StepKind, StepOutcome, identify_steps
 from blizzard.hub.domain.observability.tracing.summary import summarize_step
 from blizzard.hub.domain.observability.tracing.window import TraceWindow, oldest_unsent, read_window
+from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import corpus_rows
 from blizzard.hub.store.internal.fact_families import FactTable
@@ -107,11 +110,10 @@ def test_a_rows_work_refs_and_sources_render_each_sources_slug_as_of_its_read(tm
     slugs = {"default": "acme"}
 
     def hydration(tenant: TenantId) -> StepHydration:
-        services = hub.open_services(tenant)
         return StepHydration(
-            graphs=services.graphs,
-            names=services.registry,
-            projects=ProjectLabels(services.projects),
+            graphs=hub.resolve(tenant, IReadGraphRepository),
+            names=hub.resolve(tenant, IReadRunnerRegistry),
+            projects=ProjectLabels(hub.resolve(tenant, IReadProjectRepository)),
             label=lambda ref: f"{slugs[ref.source]}#{ref.ref}",
             source_label=lambda source: slugs[source],
         )
@@ -322,7 +324,7 @@ def test_each_open_tenants_chunks_are_hydrated_in_their_own_tenant_and_told(tmp_
 
     carried = default_tenant(hub.engine)
     assert {chunk_id: (f.tenant, f.tenant_name) for chunk_id, f in hydrated.items()} == {
-        moved: (carried, hub.hub_services.tenants.open_tenants.name(carried)),
+        moved: (carried, hub.resolve_hub(OpenTenants).name(carried)),
         _OTHER_CHUNK: (_OTHER, _OTHER),
     }
     assert set(hydrated[_OTHER_CHUNK].graphs) == {f"gr_{_OTHER}"}

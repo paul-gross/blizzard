@@ -12,6 +12,7 @@ from blizzard.hub.domain.execution.fleet import FleetService, Registered
 from blizzard.hub.domain.runners.registration import (
     STALE_AFTER,
     DeclaredSubscription,
+    IReadRunnerRegistry,
     RunnerBinding,
     RunnerCapability,
     RunnerDeclining,
@@ -36,7 +37,7 @@ class _RegisterFields(TypedDict, total=False):
 
 
 def _register(hub: HubHarness, **overrides: Unpack[_RegisterFields]) -> Registered:
-    held = hub.services.registry.get_runner(_RUNNER)
+    held = hub.default_adapter(IReadRunnerRegistry).get_runner(_RUNNER)
     assert held is not None
     fields: _RegisterFields = {
         "name": "r-a",

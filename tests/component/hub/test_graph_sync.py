@@ -16,8 +16,9 @@ from structlog.testing import capture_logs
 from typing_extensions import TypeIs
 
 from blizzard.hub.documents import YAML_CODEC
+from blizzard.hub.domain.graph.authoring import GraphMintService
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
-from blizzard.hub.domain.graph.model import GraphArtifact, GraphDoc
+from blizzard.hub.domain.graph.model import GraphArtifact, GraphDoc, IReadGraphRepository
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncOutcome, GraphSyncStatus, reconcile_open_tenants
 from blizzard.hub.graphs import PACKAGED
 from tests.support.scaffolding import HubHarness, build_hub, default_tenant
@@ -52,7 +53,9 @@ def _packaged(tmp_path: Path, name: str, *, prompt: str = "do the work", body: s
 
 
 def _sync(hub: HubHarness, paths: list[Path]) -> list[GraphSyncOutcome]:
-    return GraphReconciliation(hub.services.graph_mint, hub.services.graphs, YAML_CODEC, paths).outcomes()
+    return GraphReconciliation(
+        hub.default_adapter(GraphMintService), hub.default_adapter(IReadGraphRepository), YAML_CODEC, paths
+    ).outcomes()
 
 
 def _statuses(outcomes: list[GraphSyncOutcome]) -> list[tuple[str, str]]:
@@ -168,7 +171,7 @@ def test_a_declared_artifact_file_mints_with_its_own_text_baked(tmp_path: Path) 
     assert _statuses(outcomes) == [("docketed", "minted")]
     graph_id = outcomes[0].graph_id
     assert graph_id is not None
-    minted = hub.services.graphs.get(graph_id)
+    minted = hub.default_adapter(IReadGraphRepository).get(graph_id)
     assert minted is not None
     assert minted.artifacts == [GraphArtifact(name="docket", content=_DOCKET_TEXT, ordinal=0)]
 
@@ -189,7 +192,7 @@ def test_an_artifact_only_edit_is_detected_and_minted(tmp_path: Path) -> None:
     assert _statuses(outcomes) == [("docketed", "minted")]
     graph_id = outcomes[0].graph_id
     assert graph_id is not None
-    minted = hub.services.graphs.get(graph_id)
+    minted = hub.default_adapter(IReadGraphRepository).get(graph_id)
     assert minted is not None
     assert [a.content for a in minted.artifacts] == ["# Docket\n\n- a revised term\n"]
 
@@ -258,8 +261,12 @@ def test_the_shipped_packaged_set_reconciles_and_then_reports_up_to_date(tmp_pat
     paths = PACKAGED.paths
     assert paths, "the wheel ships at least one packaged graph"
 
-    first = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, YAML_CODEC, paths).outcomes()
-    second = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, YAML_CODEC, paths).outcomes()
+    first = GraphReconciliation(
+        hub.default_adapter(GraphMintService), hub.default_adapter(IReadGraphRepository), YAML_CODEC, paths
+    ).outcomes()
+    second = GraphReconciliation(
+        hub.default_adapter(GraphMintService), hub.default_adapter(IReadGraphRepository), YAML_CODEC, paths
+    ).outcomes()
 
     assert {o.status for o in first} == {GraphSyncStatus.MINTED}
     assert {o.status for o in second} == {GraphSyncStatus.UP_TO_DATE}
@@ -298,9 +305,13 @@ def test_strict_decode_equals_pyyaml_for_every_packaged_graph() -> None:
 def test_a_store_seeded_by_the_previous_encoder_reconciles_up_to_date(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     for graph in PACKAGED.files:
-        hub.services.graph_mint.mint(graph.doc, definition_yaml=yaml.safe_dump(graph.body, sort_keys=False))
+        hub.default_adapter(GraphMintService).mint(
+            graph.doc, definition_yaml=yaml.safe_dump(graph.body, sort_keys=False)
+        )
 
-    outcomes = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, YAML_CODEC, PACKAGED.paths).outcomes()
+    outcomes = GraphReconciliation(
+        hub.default_adapter(GraphMintService), hub.default_adapter(IReadGraphRepository), YAML_CODEC, PACKAGED.paths
+    ).outcomes()
 
     assert {o.status for o in outcomes} == {GraphSyncStatus.UP_TO_DATE}
 
@@ -341,9 +352,9 @@ def test_reordering_the_artifacts_map_alone_mints_nothing(tmp_path: Path) -> Non
 
 
 def _retire_all(hub: HubHarness, name: str) -> None:
-    for summary in hub.services.graphs.list_summaries():
+    for summary in hub.default_adapter(IReadGraphRepository).list_summaries():
         if summary.name == name:
-            graph = hub.services.graphs.get(summary.graph_id)
+            graph = hub.default_adapter(IReadGraphRepository).get(summary.graph_id)
             assert graph is not None
             hub.resolve(default_tenant(hub.engine), GraphLifecycleService).retire(graph, by="operator")
 
@@ -362,7 +373,7 @@ def test_reconciling_a_fully_retired_name_with_an_unchanged_definition_mints_not
     rows = hub.client.get("/api/graphs").json()
     assert len(rows) == 1
     assert rows[0]["retired"] is True
-    assert hub.services.graphs.get_enabled_by_name("braked") is None
+    assert hub.default_adapter(IReadGraphRepository).get_enabled_by_name("braked") is None
 
 
 def test_reconciling_a_fully_retired_name_with_a_changed_definition_mints_a_new_enabled_graph(
@@ -381,7 +392,7 @@ def test_reconciling_a_fully_retired_name_with_a_changed_definition_mints_a_new_
     assert _statuses(outcomes) == [("braked", "minted")]
     new_id = outcomes[0].graph_id
     assert new_id is not None and new_id != first.graph_id
-    enabled = hub.services.graphs.get_enabled_by_name("braked")
+    enabled = hub.default_adapter(IReadGraphRepository).get_enabled_by_name("braked")
     assert enabled is not None and enabled.graph_id == new_id
     listed = {g["graph_id"]: g for g in hub.client.get("/api/graphs").json()}
     assert listed[new_id]["retired"] is False
@@ -393,7 +404,7 @@ def _seed_unreadable(hub: HubHarness, path: Path) -> str:
     doc = GraphDoc.of(YAML_CODEC.decode(path.read_bytes()))
     body = yaml.safe_load(path.read_text())
     body["nodes"]["build"]["produces"] = [{"name": "out", "kind": "not-a-kind"}]
-    minted, _ = hub.services.graph_mint.mint(doc, definition_yaml=yaml.safe_dump(body))
+    minted, _ = hub.default_adapter(GraphMintService).mint(doc, definition_yaml=yaml.safe_dump(body))
     return minted.graph_id
 
 
@@ -411,7 +422,7 @@ def test_reconciling_a_fully_retired_name_whose_stored_definition_no_longer_pars
     assert "no longer parses" in outcomes[0].detail
     assert "blizzard hub graph enable" in outcomes[0].detail
     assert [g["graph_id"] for g in hub.client.get("/api/graphs").json()] == [seeded]
-    assert hub.services.graphs.get_enabled_by_name("braked") is None
+    assert hub.default_adapter(IReadGraphRepository).get_enabled_by_name("braked") is None
 
 
 def test_the_hold_warning_names_the_tenant_a_cross_tenant_pass_was_reconciling(tmp_path: Path) -> None:
@@ -420,7 +431,9 @@ def test_the_hold_warning_names_the_tenant_a_cross_tenant_pass_was_reconciling(t
     _seed_unreadable(hub, path)
     _retire_all(hub, "braked")
     tenant = default_tenant(hub.engine)
-    reconciliation = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, YAML_CODEC, [path])
+    reconciliation = GraphReconciliation(
+        hub.default_adapter(GraphMintService), hub.default_adapter(IReadGraphRepository), YAML_CODEC, [path]
+    )
 
     with capture_logs(processors=[merge_contextvars]) as logs:
         reconcile_open_tenants({tenant: "default"}, lambda _: reconciliation)
@@ -494,7 +507,9 @@ def test_a_store_holding_the_pre_action_packaged_set_mints_one_new_version_of_ea
         # Minted from the packaged doc, since mint now refuses `run:`, but stored as the pre-action text: the
         # stored definition is all reconciliation reads.
         body = _pre_action_body(graph.body)
-        minted, _ = hub.services.graph_mint.mint(graph.doc, definition_yaml=YAML_CODEC.encode(body).decode())
+        minted, _ = hub.default_adapter(GraphMintService).mint(
+            graph.doc, definition_yaml=YAML_CODEC.encode(body).decode()
+        )
         pre_action[graph.doc.name] = minted.graph_id
     chunk_id = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}).json()["chunk_id"]
     assert hub.client.patch(f"/api/chunks/{chunk_id}", json={"graph_id": pre_action["bas-dwf"]}).status_code == 202
@@ -530,6 +545,6 @@ def test_a_store_holding_the_packaged_set_with_its_actions_as_run_reconciles_up_
                 assert isinstance(action, str)
                 node.pop("with", None)
                 node["run"] = _PRE_ACTION_RUN[action]
-        hub.services.graph_mint.mint(graph.doc, definition_yaml=YAML_CODEC.encode(body).decode())
+        hub.default_adapter(GraphMintService).mint(graph.doc, definition_yaml=YAML_CODEC.encode(body).decode())
 
     assert {o.status for o in _sync(hub, PACKAGED.paths)} == {GraphSyncStatus.UP_TO_DATE}

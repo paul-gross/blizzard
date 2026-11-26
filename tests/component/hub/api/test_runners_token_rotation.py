@@ -13,7 +13,12 @@ from sqlalchemy.exc import OperationalError
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
-from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerAddition, TokenRotation
+from blizzard.hub.domain.runners.registration import (
+    IReadRunnerRegistry,
+    IWriteRunnerRegistry,
+    RunnerAddition,
+    TokenRotation,
+)
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore, locked_token_hash
 from tests.support.scaffolding import HubHarness, build_hub, hub_store_connections, migrated_hub_at, runner_token
@@ -92,7 +97,7 @@ def test_competing_rotations_on_one_lifecycle_leave_one_current_token_and_revoke
 ) -> None:
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a"}).is_success
-    registry = cast(IWriteRunnerRegistry, hub.services.registry)
+    registry = cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry))
     original = registry.rotate_token
     minted: list[str] = []
     second: list[threading.Thread] = []

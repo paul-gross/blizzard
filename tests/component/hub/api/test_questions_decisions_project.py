@@ -10,7 +10,9 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.chunk.model import Chunk, DecisionChoice, decide_close_enqueue
+from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository
 from blizzard.hub.domain.projects.model import ProjectId
 from tests.support.scaffolding import (
     HubHarness,
@@ -109,10 +111,8 @@ def _ids(hub: HubHarness, route: str, **params: str) -> list[str]:
 
 def test_the_store_stamps_each_row_with_its_chunks_project(hub: HubHarness) -> None:
     default, gears = _seed(hub)
-    stores = hub.services.chunks
-
-    question = stores.questions.get_question("qn_ch_gears")
-    decision = stores.decisions.get_decision("dec_ch_default")
+    question = hub.default_adapter(IReadChunkQuestionsRepository).get_question("qn_ch_gears")
+    decision = hub.default_adapter(IReadChunkDecisionsRepository).get_decision("dec_ch_default")
     assert question is not None and decision is not None
     assert question.project_id == gears
     assert decision.project_id == default
@@ -135,7 +135,7 @@ def test_a_question_asked_through_the_fact_path_is_stamped_with_its_chunks_proje
     ack = report_question(hub, chunk_id, epoch=1, seq=2, question_id="qn_fact")
 
     assert ack["applied"] == [2], ack
-    asked = hub.services.chunks.questions.get_question("qn_fact")
+    asked = hub.default_adapter(IReadChunkQuestionsRepository).get_question("qn_fact")
     assert asked is not None and asked.project_id == gears
 
 

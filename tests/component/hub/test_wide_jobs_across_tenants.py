@@ -18,11 +18,11 @@ from sqlalchemy import Engine
 
 from blizzard.cli.main import blizzard
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.registry.scopes import Resolver
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.sealing import IResealSecretRepository, Reseal, SealedSecret, SecretRotationConflict
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import app as hub_app
-from blizzard.hub.composition import TenantStores
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.carry_over import ImportStatus
@@ -39,6 +39,9 @@ from blizzard.hub.secrets import (
 )
 from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.store import schema
+from blizzard.hub.store.internal.config_import_store import ConfigImportStore
+from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
 from tests.support.scaffolding import (
@@ -77,22 +80,23 @@ class _Hub:
     first: TenantId
     second: TenantId
 
-    def stores(self, tenant: TenantId) -> TenantStores:
-        return configured_core(self.engine, self.config.root, clock=FixedClock(_NOW)).open(StoreScope(tenant))
+    def stores(self, tenant: TenantId) -> Resolver:
+        """``tenant``'s container scope, opened by a fresh process as a running hub opens it."""
+        process = configured_core(self.engine, self.config.root, clock=FixedClock(_NOW))
+        return process.tenants.open(StoreScope(tenant)).resolver
 
     def authoring(self, tenant: TenantId) -> ConfigAuthoring:
-        core = configured_core(self.engine, self.config.root, clock=FixedClock(_NOW))
-        return core.open(StoreScope(tenant)).tenant.get(ConfigAuthoring)
+        return self.stores(tenant).get(ConfigAuthoring)
 
     def reveal(self, tenant: TenantId, name: str) -> str:
         """``name``'s value in ``tenant``, opened as a running hub opens it."""
-        store = self.stores(tenant).secrets
+        store = self.stores(tenant).get(SecretStore)
         keys = hub_key_provider({}, data_dir=self.config.data_dir)
         reader = StoreSecretReader(catalog=store, sealed=store, cipher=secret_cipher(keys))
         return reader.reveal(SecretName.parse(name)).value.expose()
 
     def key_ids(self, tenant: TenantId) -> set[str]:
-        return self.stores(tenant).secrets.key_ids_in_use()
+        return self.stores(tenant).get(SecretStore).key_ids_in_use()
 
     def meta(self) -> dict[str, object]:
         return json.loads((secret_keys_dir(self.config.data_dir) / "meta.json").read_text())
@@ -227,7 +231,7 @@ def test_a_tenant_that_fails_to_reseal_leaves_the_old_key_current_and_a_rerun_mo
     hub.authoring(hub.second).create_secret(SecretName.parse("gh"), "tok-second", OP)
     before = hub.meta()
     old = str(before["current"])
-    first, second = hub.stores(hub.first).secrets, hub.stores(hub.second).secrets
+    first, second = hub.stores(hub.first).get(SecretStore), hub.stores(hub.second).get(SecretStore)
 
     with pytest.raises(SecretRotationConflict):
         rotate_keys([first, _Racing(second)], hub_key_provider({}, data_dir=hub.config.data_dir), secret_cipher)
@@ -254,7 +258,7 @@ def test_the_import_refuses_naming_every_tenant_when_the_hub_holds_several_and_n
 
     assert hub.first in str(refused.value)
     assert hub.second in str(refused.value)
-    assert not hub.stores(hub.first).config_import.recorded()
+    assert not hub.stores(hub.first).get(ConfigImportStore).recorded()
 
 
 def test_the_verb_imports_into_the_tenant_it_names_and_writes_nothing_in_another(
@@ -270,14 +274,14 @@ def test_the_verb_imports_into_the_tenant_it_names_and_writes_nothing_in_another
 
     assert result.exit_code == 0, result.output
     second, first = hub.stores(hub.second), hub.stores(hub.first)
-    assert [record.name for record in second.work_source_records.list_all(include_retired=True)] == ["blizzard"]
-    assert [secret.name for secret in second.secrets.list_all()] == ["bz-shared-token"]
-    assert second.config_import.recorded()
-    assert first.work_source_records.list_all(include_retired=True) == []
-    assert first.secrets.list_all() == []
+    assert [record.name for record in second.get(WorkSourceRecordStore).list_all(include_retired=True)] == ["blizzard"]
+    assert [secret.name for secret in second.get(SecretStore).list_all()] == ["bz-shared-token"]
+    assert second.get(ConfigImportStore).recorded()
+    assert first.get(WorkSourceRecordStore).list_all(include_retired=True) == []
+    assert first.get(SecretStore).list_all() == []
     again = hub_app.import_legacy_config(hub.config, _ENVIRON, tenant=hub.first)
     assert again.status is ImportStatus.ALREADY_IMPORTED  # the import is the hub's, carried into one tenant
-    assert first.work_source_records.list_all(include_retired=True) == []
+    assert first.get(WorkSourceRecordStore).list_all(include_retired=True) == []
 
 
 def test_the_import_refuses_a_tenant_that_is_not_open(hub: _Hub) -> None:
@@ -304,7 +308,7 @@ def test_a_work_source_cannot_name_a_secret_only_another_tenant_holds(hub: _Hub)
     with pytest.raises(WorkSourceSecretUnavailable):
         second.create_work_source_naming("demo", None, _SOURCE, ForgeChoice(forge=forge.forge_id, named=forge), OP)
 
-    assert hub.stores(hub.second).work_source_records.list_all(include_retired=True) == []
+    assert hub.stores(hub.second).get(WorkSourceRecordStore).list_all(include_retired=True) == []
 
 
 def _setting_names(model: type) -> Iterator[str]:

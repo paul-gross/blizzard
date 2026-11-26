@@ -14,6 +14,7 @@ import pytest
 from fastapi import HTTPException
 
 from blizzard.hub.api.project_params import UNKNOWN_PROJECT, body_project
+from blizzard.hub.domain.projects.model import IReadProjectRepository
 from tests.support.scaffolding import HubHarness, build_hub, default_project
 
 
@@ -76,10 +77,10 @@ def test_an_id_resolves_to_its_project_whatever_slug_it_holds(hub: HubHarness) -
 def test_a_body_value_resolves_by_id_or_slug_and_naming_none_is_422_on_its_field(hub: HubHarness) -> None:
     widgets = _create(hub, "widgets", "Widgets")
 
-    assert body_project(widgets, hub.services.projects).slug == "widgets"
-    assert body_project("widgets", hub.services.projects).project_id == widgets
+    assert body_project(widgets, hub.default_adapter(IReadProjectRepository)).slug == "widgets"
+    assert body_project("widgets", hub.default_adapter(IReadProjectRepository)).project_id == widgets
     with pytest.raises(HTTPException) as refused:
-        body_project("Widgets", hub.services.projects, field="projects")
+        body_project("Widgets", hub.default_adapter(IReadProjectRepository), field="projects")
     assert refused.value.status_code == 422
     assert refused.value.detail == [
         {"loc": ["body", "projects"], "msg": "unknown project 'Widgets'", "type": UNKNOWN_PROJECT}

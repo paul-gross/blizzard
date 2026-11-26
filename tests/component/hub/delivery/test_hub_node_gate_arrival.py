@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.delivery import hub_node
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from tests.support.hub_command_graphs import HUB_CMD_GRAPH_YAML, post_build_pass, submit_build_pass, to_merge_node
 from tests.support.scaffolding import HubHarness, build_hub
 
@@ -168,7 +169,7 @@ def test_a_restarted_visit_is_not_hopped_by_its_stale_exit(tmp_path: Path) -> No
 
     hub.settle_turns()
 
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     assert list(facts.migrations) == []
     assert not any(t.choice_name == "success" for t in facts.transitions)

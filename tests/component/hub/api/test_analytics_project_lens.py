@@ -13,8 +13,10 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.event_log import EventLogSeverity
+from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
 from blizzard.hub.domain.observability.analytics.derivation import EventDerivationReconciler
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.store.internal.chunk_events_store import ChunkEventsStore
 from blizzard.hub.store.internal.chunk_usage_store import ChunkUsageStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
@@ -96,7 +98,7 @@ def _ndjson(hub: HubHarness, path: str, **params: str) -> list[dict[str, object]
 
 
 def _log(hub: HubHarness, kind: str, *, chunk_id: str | None = None, runner_id: str | None = None) -> None:
-    events = hub.services.chunks.events
+    events = hub.default_adapter(IReadChunkEventsRepository)
     assert isinstance(events, ChunkEventsStore), "the feed rows are written through the hub's own events store"
     events.record_event(
         severity=EventLogSeverity.WARNING,
@@ -196,7 +198,7 @@ def test_the_activity_feed_narrows_each_source_to_the_project(tmp_path: Path) ->
     _log(hub, "beta-chunk", chunk_id=b1)
     _log(hub, "default-runner", runner_id="r-default")
     _log(hub, "hub-wide")
-    registry = hub.services.registry
+    registry = hub.default_adapter(IReadRunnerRegistry)
     assert isinstance(registry, RunnerRegistryStore), "pause facts are written through the hub's own registry"
     registry.record_pause("r-default", paused=True, at=hub.clock.now(), by="op")
     registry.record_pause("r-beta", paused=True, at=hub.clock.now(), by="op")
@@ -220,7 +222,7 @@ def test_the_activity_feed_keeps_the_projects_pause_when_another_projects_crowd_
     hub, _ = _two_project_hub(tmp_path)
     seed_runner(hub, "r-default", projects=("default",), register=False)
     seed_runner(hub, "r-beta", projects=("beta",), register=False)
-    registry = hub.services.registry
+    registry = hub.default_adapter(IReadRunnerRegistry)
     assert isinstance(registry, RunnerRegistryStore), "pause facts are written through the hub's own registry"
     registry.record_pause("r-default", paused=True, at=hub.clock.now(), by="op")
     for _ in range(6):

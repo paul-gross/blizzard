@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 from sqlalchemy import Column, Integer, MetaData, String, Table, insert
 
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import fact_families
 from blizzard.hub.store.internal.fact_families import ephemeral_tables
@@ -45,7 +47,7 @@ def _mark(hub: HubHarness, chunk_id: str) -> None:
 def test_a_registered_ephemeral_family_is_excluded_by_every_chunk_reader(stand_in: HubHarness) -> None:
     hub = stand_in
     every_branch(hub)
-    record = hub.services.chunks.record
+    record = hub.default_adapter(IReadChunkRecordRepository)
     victim = record.newest_done(limit=1)[0]
     pages_before = {c.chunk_id for c in record.list_page(limit=500).chunks}
     assert victim in pages_before
@@ -60,7 +62,7 @@ def test_a_registered_ephemeral_family_is_excluded_by_every_chunk_reader(stand_i
 def test_a_registered_ephemeral_family_moves_the_work_refs_signature(stand_in: HubHarness) -> None:
     hub = stand_in
     every_branch(hub)
-    work_refs = hub.services.chunks.work_refs
+    work_refs = hub.default_adapter(IReadChunkWorkRefsRepository)
     before = work_refs.live_work_refs_signature()
     assert work_refs.live_work_refs_signature() == before
     _mark(hub, "ch_stopped_new")
@@ -70,7 +72,7 @@ def test_a_registered_ephemeral_family_moves_the_work_refs_signature(stand_in: H
 def test_each_live_ephemeral_family_moves_the_work_refs_signature(tmp_path: Path) -> None:
     hub = hub_with_graph(tmp_path)
     every_branch(hub)
-    work_refs = hub.services.chunks.work_refs
+    work_refs = hub.default_adapter(IReadChunkWorkRefsRepository)
     names = [t.name for t in ephemeral_tables()]
     assert {"chunk_grouped", "chunk_deleted"} <= set(names)
     assert {name for name, _, _ in work_refs.live_work_refs_signature().marks} >= set(names)

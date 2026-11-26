@@ -13,10 +13,13 @@ import yaml
 from sqlalchemy import select, update
 
 from blizzard.hub.domain.chunk.model import OperationalEvent, WorkRef, decide_close_enqueue
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository, IWriteChunkMovementRepository
+from blizzard.hub.domain.delivery.ports.flows import IReadFlows
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
-from blizzard.hub.domain.graph.model import GraphDoc
+from blizzard.hub.domain.graph.model import GraphDoc, IReadGraphRepository
 from blizzard.hub.domain.graph.validation import ValidationResult, Validator
 from blizzard.hub.store import schema as s
 from blizzard.tools.invariants import hub_invariants
@@ -110,12 +113,12 @@ def _pass_build(hub: HubHarness, chunk_id: str, build_node_id: str) -> str:
 
 def _park_at_merge(hub: HubHarness, chunk_id: str, build_node_id: str, graph_id: str) -> None:
     """Move the chunk onto ``merge`` without driving it — as a chunk stood when the hub was stopped."""
-    graph = hub.services.graphs.get(graph_id)
+    graph = hub.default_adapter(IReadGraphRepository).get(graph_id)
     assert graph is not None
     merge = graph.node_by_name("merge")
     assert merge is not None
     with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
-        cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
+        cast(IWriteChunkMovementRepository, hub.default_adapter(IReadChunkMovementRepository)).record_transition(
             transition_id="tr_parked",
             close_decision=decide_close_enqueue([WorkRef("default", "7")], lambda _: True),
             chunk_id=chunk_id,
@@ -143,7 +146,7 @@ def _escalations(hub: HubHarness, chunk_id: str) -> list[tuple[int, str, str]]:
 
 
 def _events(hub: HubHarness, chunk_id: str, kind: str) -> list[OperationalEvent]:
-    return [e for e in hub.services.chunks.events.list_events(chunk_id=chunk_id) if e.kind == kind]
+    return [e for e in hub.default_adapter(IReadChunkEventsRepository).list_events(chunk_id=chunk_id) if e.kind == kind]
 
 
 def _advance(hub: HubHarness, chunk_id: str) -> dict[str, object]:
@@ -280,8 +283,8 @@ def test_an_unrouted_answer_escalates_at_once_naming_the_choice_and_takes_no_sec
     assert _advance(hub, chunk_id)["ran"] is False
     hub.settle_turns()
 
-    names = [a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)]
+    names = [a.name for a in hub.default_adapter(IReadChunkArtifactsRepository).load_artifacts(chunk_id)]
     assert sorted(n for n in names if n.startswith("test-sequence/")) == ["test-sequence/0"]
     assert len(_escalations(hub, chunk_id)) == 1
     assert len(_events(hub, chunk_id, "hub-node-unroutable-outcome")) == 1
-    assert hub.services.flows.open_turns() == []
+    assert hub.default_adapter(IReadFlows).open_turns() == []

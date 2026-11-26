@@ -23,10 +23,13 @@ from blizzard.hub.domain.chunk.ingest import IngestService
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.work_refs import work_ref_lock
 from blizzard.hub.domain.config.changes import RecordKind
-from blizzard.hub.domain.config.repositories import RepositoryId
-from blizzard.hub.domain.config.work_sources import WorkSourceId, WorkSourceSlug
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryId
+from blizzard.hub.domain.config.secrets import ISecretCatalog
+from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository, WorkSourceId, WorkSourceSlug
 from blizzard.hub.domain.delivery.flows import Flow
-from blizzard.hub.domain.graph.model import GraphDoc
+from blizzard.hub.domain.graph.authoring import GraphMintService
+from blizzard.hub.domain.graph.model import GraphDoc, IReadGraphRepository
+from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
@@ -97,7 +100,7 @@ def _config_hub(tmp_path: Path, n: int) -> HubHarness:
 
 
 def _source_id(hub: HubHarness, slug: str) -> WorkSourceId:
-    record = hub.services.work_source_records.get_by_slug(WorkSourceSlug.parse(slug))
+    record = hub.default_adapter(IReadWorkSourceRepository).get_by_slug(WorkSourceSlug.parse(slug))
     assert record is not None
     return record.work_source_id
 
@@ -122,7 +125,7 @@ def _pairs(hub: HubHarness, kind: str) -> list[tuple[ProjectId, str]]:
 
 
 def test_source_links_for_matches_source_link_and_drops_a_never_linked_pair(links_hub: HubHarness) -> None:
-    links = links_hub.services.project_links
+    links = links_hub.default_adapter(IReadProjectLinks)
     pairs = [(p, WorkSourceId(s)) for p, s in _pairs(links_hub, "s")]
     unknown = (project_id(links_hub, "p0"), WorkSourceId("wsrc_never"))
 
@@ -135,7 +138,7 @@ def test_source_links_for_matches_source_link_and_drops_a_never_linked_pair(link
 
 
 def test_repository_links_for_matches_repository_link_and_drops_a_never_linked_pair(links_hub: HubHarness) -> None:
-    links = links_hub.services.project_links
+    links = links_hub.default_adapter(IReadProjectLinks)
     pairs = [(p, RepositoryId(r)) for p, r in _pairs(links_hub, "r")]
     unknown = (ProjectId("prj_never"), repository_id(links_hub, "r0"))
 
@@ -147,7 +150,7 @@ def test_repository_links_for_matches_repository_link_and_drops_a_never_linked_p
 
 
 def test_the_of_projects_plurals_match_their_singulars_and_drop_an_unknown_project(links_hub: HubHarness) -> None:
-    links = links_hub.services.project_links
+    links = links_hub.default_adapter(IReadProjectLinks)
     projects = [project_id(links_hub, f"p{i}") for i in range(N)]
 
     sources = links.sources_of_projects([*projects, ProjectId("prj_never")])
@@ -161,7 +164,7 @@ def test_the_of_projects_plurals_match_their_singulars_and_drop_an_unknown_proje
 
 
 def test_projects_linking_sources_matches_the_singular_and_drops_an_unlinked_source(links_hub: HubHarness) -> None:
-    links = links_hub.services.project_links
+    links = links_hub.default_adapter(IReadProjectLinks)
     sources = [_source_id(links_hub, f"s{i}") for i in range(N)]
 
     found = links.projects_linking_sources([*sources, "wsrc_never"])
@@ -172,7 +175,7 @@ def test_projects_linking_sources_matches_the_singular_and_drops_an_unlinked_sou
 
 
 def test_the_link_plurals_match_across_a_batch_boundary(links_hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> None:
-    links = links_hub.services.project_links
+    links = links_hub.default_adapter(IReadProjectLinks)
     projects = [project_id(links_hub, f"p{i}") for i in range(N)]
     sources = [_source_id(links_hub, f"s{i}") for i in range(N)]
     source_pairs = [(p, WorkSourceId(s)) for p, s in _pairs(links_hub, "s")]
@@ -197,7 +200,7 @@ def test_the_link_plurals_match_across_a_batch_boundary(links_hub: HubHarness, m
 
 
 def test_the_link_plurals_issue_no_statement_for_no_keys(links_hub: HubHarness) -> None:
-    links = links_hub.services.project_links
+    links = links_hub.default_adapter(IReadProjectLinks)
     for read in (
         links.source_links_for,
         links.repository_links_for,
@@ -209,7 +212,7 @@ def test_the_link_plurals_issue_no_statement_for_no_keys(links_hub: HubHarness) 
 
 
 def test_the_link_plurals_statement_counts_are_flat_across_key_set_sizes(links_hub: HubHarness) -> None:
-    links = links_hub.services.project_links
+    links = links_hub.default_adapter(IReadProjectLinks)
     projects = [project_id(links_hub, f"p{i}") for i in range(N)]
     sources = [_source_id(links_hub, f"s{i}") for i in range(N)]
     repositories = [repository_id(links_hub, f"r{i}") for i in range(N)]
@@ -236,7 +239,7 @@ def secrets_hub(tmp_path: Path) -> HubHarness:
 
 
 def test_bounded_retired_names_agrees_with_is_retired_and_drops_an_unknown_name(secrets_hub: HubHarness) -> None:
-    catalog = secrets_hub.services.secret_catalog
+    catalog = secrets_hub.default_adapter(ISecretCatalog)
     names = [f"k{i}" for i in range(N)]
 
     assert catalog.retired_names([*names, "never"]) == {"k1", "k3"}
@@ -248,11 +251,11 @@ def test_bounded_retired_names_matches_across_a_batch_boundary(
     secrets_hub: HubHarness, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
-    assert secrets_hub.services.secret_catalog.retired_names([f"k{i}" for i in range(N)]) == {"k1", "k3"}
+    assert secrets_hub.default_adapter(ISecretCatalog).retired_names([f"k{i}" for i in range(N)]) == {"k1", "k3"}
 
 
 def test_bounded_retired_names_is_statement_free_when_empty_and_flat_otherwise(secrets_hub: HubHarness) -> None:
-    catalog = secrets_hub.services.secret_catalog
+    catalog = secrets_hub.default_adapter(ISecretCatalog)
     assert count_queries(secrets_hub.engine, lambda: catalog.retired_names([])) == 0
     _flat(secrets_hub, lambda n: catalog.retired_names([f"k{i}" for i in range(n)]))
 
@@ -300,7 +303,7 @@ def graphs_hub(tmp_path: Path) -> HubHarness:
 
 
 def test_enabled_names_agrees_with_get_enabled_by_name_and_drops_an_unknown_name(graphs_hub: HubHarness) -> None:
-    graphs = graphs_hub.services.graphs
+    graphs = graphs_hub.default_adapter(IReadGraphRepository)
     names = [f"g{i}" for i in range(N)]
 
     found = graphs.enabled_names([*names, "never"])
@@ -311,11 +314,15 @@ def test_enabled_names_agrees_with_get_enabled_by_name_and_drops_an_unknown_name
 
 def test_enabled_names_matches_across_a_batch_boundary(graphs_hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
-    assert graphs_hub.services.graphs.enabled_names([f"g{i}" for i in range(N)]) == {"g0", "g2", "g3"}
+    assert graphs_hub.default_adapter(IReadGraphRepository).enabled_names([f"g{i}" for i in range(N)]) == {
+        "g0",
+        "g2",
+        "g3",
+    }
 
 
 def test_enabled_names_is_statement_free_when_empty_and_flat_otherwise(graphs_hub: HubHarness) -> None:
-    graphs = graphs_hub.services.graphs
+    graphs = graphs_hub.default_adapter(IReadGraphRepository)
     assert count_queries(graphs_hub.engine, lambda: graphs.enabled_names([])) == 0
     _flat(graphs_hub, lambda n: graphs.enabled_names([f"g{i}" for i in range(n)]))
 
@@ -326,7 +333,7 @@ def test_enabled_names_is_statement_free_when_empty_and_flat_otherwise(graphs_hu
 def test_get_enabled_by_names_agrees_with_the_singular_and_drops_missing_and_retired_names(
     graphs_hub: HubHarness,
 ) -> None:
-    graphs = graphs_hub.services.graphs
+    graphs = graphs_hub.default_adapter(IReadGraphRepository)
     names = [f"g{i}" for i in range(N)]
 
     found = graphs.get_enabled_by_names([*names, "never"])
@@ -340,12 +347,12 @@ def test_get_enabled_by_names_matches_across_a_batch_boundary(
     graphs_hub: HubHarness, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(batching_module, "BATCH_SIZE", 2)
-    found = graphs_hub.services.graphs.get_enabled_by_names([f"g{i}" for i in range(N)])
+    found = graphs_hub.default_adapter(IReadGraphRepository).get_enabled_by_names([f"g{i}" for i in range(N)])
     assert set(found) == {"g0", "g2", "g3"}
 
 
 def test_get_enabled_by_names_is_statement_free_when_empty_and_flat_otherwise(graphs_hub: HubHarness) -> None:
-    graphs = graphs_hub.services.graphs
+    graphs = graphs_hub.default_adapter(IReadGraphRepository)
     assert count_queries(graphs_hub.engine, lambda: graphs.get_enabled_by_names([])) == 0
     _flat(graphs_hub, lambda n: graphs.get_enabled_by_names([f"g{i}" for i in range(n)]))
 
@@ -361,7 +368,7 @@ def test_the_flow_namer_names_flows_from_one_preload_and_falls_back_to_the_raw_i
     flows = [_flow(repository_id(links_hub, f"r{i}")) for i in range(N)]
     flows.append(_flow("rp_gone"))
 
-    namer = flow_namer(links_hub.services, flows)
+    namer = flow_namer(links_hub.default_adapter(IReadRepositoryRecordRepository), flows)
 
     assert [namer(f) for f in flows] == [*(f"r{i}/feat" for i in range(N)), "rp_gone/feat"]
 
@@ -370,11 +377,16 @@ def test_the_flow_namer_statements_are_flat_across_flow_counts(links_hub: HubHar
     flows = [_flow(repository_id(links_hub, f"r{i}")) for i in range(N)]
 
     def build(n: int) -> object:
-        namer = flow_namer(links_hub.services, flows[:n])
+        namer = flow_namer(links_hub.default_adapter(IReadRepositoryRecordRepository), flows[:n])
         return [namer(f) for f in flows[:n]]
 
     assert count_queries(links_hub.engine, lambda: build(1)) == count_queries(links_hub.engine, lambda: build(N))
-    assert count_queries(links_hub.engine, lambda: flow_namer(links_hub.services, [])) == 0
+    assert (
+        count_queries(
+            links_hub.engine, lambda: flow_namer(links_hub.default_adapter(IReadRepositoryRecordRepository), [])
+        )
+        == 0
+    )
 
 
 # --- Call sites ----------------------------------------------------------------------------
@@ -424,7 +436,7 @@ def test_resolve_reads_every_active_source_s_revisions_once(tmp_path: Path) -> N
         built_in = hub.work_sources.get("hub")
         assert isinstance(built_in, HubWorkSource)
         registry = StoreWorkSourceRegistry(
-            records=hub.services.work_source_records,
+            records=hub.default_adapter(IReadWorkSourceRepository),
             objects=ConfigObjectCache(ConfigRevisionsStore(hub_store_connections(hub.engine))),
             build=lambda record: BuiltWorkSource(record, FakeWorkSource(name=record.name), lambda: None),
             built_in=built_in,
@@ -436,7 +448,7 @@ def test_resolve_reads_every_active_source_s_revisions_once(tmp_path: Path) -> N
 
 
 def test_the_graph_mint_s_cross_graph_check_is_flat_across_target_counts(graphs_hub: HubHarness) -> None:
-    mint = graphs_hub.services.graph_mint
+    mint = graphs_hub.default_adapter(GraphMintService)
 
     def doc(n: int) -> GraphDoc:
         choices = {f"to-g{i}": {"description": f"to g{i}", "to": f"graph:g{i}"} for i in range(n)}
@@ -457,7 +469,7 @@ def test_the_transaction_taking_source_links_answer_every_source_flat_across_sou
     links_hub: HubHarness,
 ) -> None:
     sources = [_source_id(links_hub, f"s{i}") for i in range(N)]
-    links = links_hub.services.project_links
+    links = links_hub.default_adapter(IReadProjectLinks)
 
     with chunk_unit(
         hub_store_connections(links_hub.engine), [], keys=[work_ref_lock(WorkRef(source=s, ref="1")) for s in sources]

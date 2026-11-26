@@ -15,6 +15,7 @@ from sqlalchemy import Engine, insert
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
 from tests.support.hub_request_auth import bearer, enroll_runner, register_runner
@@ -194,7 +195,7 @@ def test_live_read_equals_the_full_derivation_minus_terminal_statuses(tmp_path: 
     _transition(hub.engine, "ch_tied", RESERVED_TERMINAL, epoch=1, at=5)
     _transition(hub.engine, "ch_tied", "nd_2", epoch=1, at=5)
 
-    facts = hub.services.chunks.facts
+    facts = hub.default_adapter(IReadChunkFactsRepository)
     expected = {cid: f.status() for cid, f in facts.load_all_facts().items() if f.status() not in TERMINAL_STATUSES}
 
     live = facts.load_live_statuses()

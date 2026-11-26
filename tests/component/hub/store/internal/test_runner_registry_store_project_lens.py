@@ -6,8 +6,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.tokens import TokenHash
-from blizzard.hub.domain.runners.registration import RunnerAddition, ServedEntry
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerAddition, ServedEntry
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from tests.support.scaffolding import HubHarness, build_hub, count_queries, count_rows_read, runner_token
 
@@ -16,14 +17,14 @@ _THEIRS = "proj_theirs"
 
 
 def _add(hub: HubHarness, runner_id: str, *served: ServedEntry) -> None:
-    registry = hub.services.registry
+    registry = hub.default_adapter(IReadRunnerRegistry)
     assert isinstance(registry, RunnerRegistryStore)
     registry.add(
         RunnerAddition(
             runner_id,
             runner_id,
             TokenHash(runner_token(runner_id)).hex,
-            at=hub.services.clock.now(),
+            at=hub.default_adapter(IClock).now(),
             by="test",
             served=served,
         )
@@ -48,13 +49,20 @@ def test_runners_serving_names_exactly_the_runners_whose_declaration_resolved_to
     _add(hub, "rn_unresolved", ServedEntry(_MINE, None))
     _add(hub, "rn_nothing")
     _add(hub, "rn_retired", ServedEntry("mine", _MINE))
-    registry = hub.services.registry
+    registry = hub.default_adapter(IReadRunnerRegistry)
     assert isinstance(registry, RunnerRegistryStore)
-    registry.record_lifecycle("rn_retired", retired=True, at=hub.services.clock.now(), by="test", expected_lifecycle=0)
+    registry.record_lifecycle(
+        "rn_retired", retired=True, at=hub.default_adapter(IClock).now(), by="test", expected_lifecycle=0
+    )
     assert registry.is_retired("rn_retired")
 
-    assert hub.services.registry.runners_serving(_MINE) == {"rn_slug", "rn_id", "rn_both", "rn_retired"}
-    assert hub.services.registry.runners_serving("proj_none") == frozenset()
+    assert hub.default_adapter(IReadRunnerRegistry).runners_serving(_MINE) == {
+        "rn_slug",
+        "rn_id",
+        "rn_both",
+        "rn_retired",
+    }
+    assert hub.default_adapter(IReadRunnerRegistry).runners_serving("proj_none") == frozenset()
 
 
 def test_runners_serving_reads_the_same_rows_however_many_runners_serve_other_projects(tmp_path: Path) -> None:
@@ -62,7 +70,7 @@ def test_runners_serving_reads_the_same_rows_however_many_runners_serve_other_pr
     many = _hub_with_other_runners(tmp_path / "many", 40)
 
     def read(hub: HubHarness) -> object:
-        return hub.services.registry.runners_serving(_MINE)
+        return hub.default_adapter(IReadRunnerRegistry).runners_serving(_MINE)
 
     assert count_rows_read(few.engine, lambda: read(few)) == count_rows_read(many.engine, lambda: read(many))
     assert count_queries(few.engine, lambda: read(few)) == count_queries(many.engine, lambda: read(many))

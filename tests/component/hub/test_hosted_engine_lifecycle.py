@@ -177,7 +177,7 @@ def test_failed_construction_releases_engine(tmp_path: Path, monkeypatch: pytest
         raise RuntimeError("construction failed")
 
     monkeypatch.setattr(hub_composition, "open_hub_engine", open_engine)
-    monkeypatch.setattr(hub_app, "build_hub_core", fail)
+    monkeypatch.setattr(hub_app, "open_store_backed", fail)
     with pytest.raises(RuntimeError, match="construction failed"):
         build_hosted_hub_app(config)
     _assert_closed(connections[0])
@@ -208,7 +208,7 @@ def test_failed_construction_shuts_down_only_owned_tracing(
 
     monkeypatch.setattr(tracing_handle, "build_platform_tracing", build_tracing)
     monkeypatch.setattr(
-        hub_composition if fail_open else hub_app, "open_hub_engine" if fail_open else "build_hub_core", fail
+        hub_composition if fail_open else hub_app, "open_hub_engine" if fail_open else "open_store_backed", fail
     )
     with pytest.raises(RuntimeError, match="construction failed"):
         build_hosted_hub_app(config, platform_tracing=tracing if caller_owned else None)

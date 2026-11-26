@@ -1,37 +1,34 @@
 """The chunk-store bundles. :class:`ChunkStores` is the tenant's one set of chunk-seam adapters, which each chunk
-port resolves a field of; :class:`ChunkReadStores` is its read-typed view. No ``src/`` domain collaborator takes either
-bundle: every service names its seams explicitly, so no chunk service can hold write access to a concept it never
-calls."""
+port resolves a field of. No ``src/`` domain collaborator takes the bundle: every service names its seams explicitly,
+so no chunk service can hold write access to a concept it never calls."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol
 
-from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
-from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository, IWriteChunkDecisionsRepository
-from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository, IWriteChunkDeliveryRepository
+from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
+from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.dependencies import (
-    IReadChunkDependenciesRepository,
     IWriteChunkDependenciesRepository,
 )
 from blizzard.hub.domain.chunk.ports.escalations import (
-    IReadChunkEscalationsRepository,
     IWriteChunkEscalationsRepository,
 )
-from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository, IWriteChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.events import IWriteChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunk.ports.hub_exec import IReadChunkHubExecRepository, IWriteChunkHubExecRepository
-from blizzard.hub.domain.chunk.ports.lifecycle import IReadChunkLifecycleRepository, IWriteChunkLifecycleRepository
-from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository, IWriteChunkMovementRepository
-from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository, IWriteChunkQuestionsRepository
-from blizzard.hub.domain.chunk.ports.queue import IReadChunkQueueRepository, IWriteChunkQueueRepository
-from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository, IWriteChunkRecordRepository
-from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository, IWriteChunkRouteRepository
-from blizzard.hub.domain.chunk.ports.usage import IReadChunkUsageRepository, IWriteChunkUsageRepository
-from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, IWriteChunkWorkRefsRepository
+from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
+from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
+from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
+from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository
 
-__all__ = ["ChunkReadStores", "ChunkStores", "IChunkStoreBundle"]
+__all__ = ["ChunkStores", "IChunkStoreBundle"]
 
 
 class IChunkStoreBundle(Protocol):
@@ -108,27 +105,3 @@ class ChunkStores:
     delivery: IWriteChunkDeliveryRepository
     hub_exec: IWriteChunkHubExecRepository
     dependencies: IWriteChunkDependenciesRepository
-
-
-@dataclass(frozen=True)
-class ChunkReadStores:
-    """The read-typed view of the tenant's chunk stores that the legacy tenant services still carry for the readers
-    not yet narrowed to the chunk read ports — every field typed to its concept's read Protocol only, so
-    ``bzh:controller-read-only`` is enforced at type-check time, and each the instance its read port resolves to."""
-
-    facts: IReadChunkFactsRepository
-    record: IReadChunkRecordRepository
-    lifecycle: IReadChunkLifecycleRepository
-    work_refs: IReadChunkWorkRefsRepository
-    queue: IReadChunkQueueRepository
-    route: IReadChunkRouteRepository
-    movement: IReadChunkMovementRepository
-    artifacts: IReadChunkArtifactsRepository
-    questions: IReadChunkQuestionsRepository
-    decisions: IReadChunkDecisionsRepository
-    escalations: IReadChunkEscalationsRepository
-    events: IReadChunkEventsRepository
-    usage: IReadChunkUsageRepository
-    delivery: IReadChunkDeliveryRepository
-    hub_exec: IReadChunkHubExecRepository
-    dependencies: IReadChunkDependenciesRepository

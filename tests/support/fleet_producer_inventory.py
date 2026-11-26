@@ -34,7 +34,6 @@ _SHARED = _entries(
         for owner, expressions in HOST[("GET", "/api/fleet/host")].items()
         if owner
         in {
-            "hub_level.hub_services",
             "auth_session.resolve_tenant",
             "auth_session._no_such_tenant",
             "auth_session._tenant_required",
@@ -171,7 +170,7 @@ _MODELS = {
         ),
         (
             "blizzard.hub.api.fleet.hub_advance",
-            "HubAdvanceResponse(chunk_id=chunk_id, status=facts.status(), ran=False, detail=describe_standing(facts, node, standing, epoch=epoch, now=services.clock.now(), flow_name=_flow_namer(services, standing.submission.flows if standing is not None else ())))",
+            "HubAdvanceResponse(chunk_id=chunk_id, status=facts.status(), ran=False, detail=describe_standing(facts, node, standing, epoch=epoch, now=clock.now(), flow_name=_flow_namer(repository_records, standing.submission.flows if standing is not None else ())))",
         ),
     },
     ("POST", "/api/fleet/chunks/{chunk_id}/release"): {

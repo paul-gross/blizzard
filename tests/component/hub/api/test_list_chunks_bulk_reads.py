@@ -21,6 +21,7 @@ from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesR
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.revisions import ConfigRevisions
+from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.delivery.flows import FlowResource
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.pagination import MAX_LIMIT
@@ -140,7 +141,7 @@ def test_list_resolves_store_backed_sources_once_per_name_and_only_on_the_page(
     built_in = hub.work_sources.get("hub")
     assert isinstance(built_in, HubWorkSource)
     registry = StoreWorkSourceRegistry(
-        records=hub.services.work_source_records,
+        records=hub.default_adapter(IReadWorkSourceRepository),
         objects=ConfigObjectCache(revisions),
         build=lambda record: BuiltWorkSource(record, FakeWorkSource(name=record.name), lambda: None),
         built_in=built_in,
@@ -201,7 +202,7 @@ def test_on_page_fallback_pointers_do_not_repeat_record_reads(tmp_path: Path, mo
     built_in = hub.work_sources.get("hub")
     assert isinstance(built_in, HubWorkSource)
     registry = StoreWorkSourceRegistry(
-        records=hub.services.work_source_records,
+        records=hub.default_adapter(IReadWorkSourceRepository),
         objects=ConfigObjectCache(revisions),
         build=lambda record: BuiltWorkSource(record, FallbackSource(name=record.slug), lambda: None),
         built_in=built_in,
@@ -622,9 +623,9 @@ def test_list_chunks_never_reads_standing_edges_or_records_tenant_wide(
             raise AssertionError("list_all")
 
     edges = _NoEdges.__new__(_NoEdges)
-    edges.__dict__.update(hub.services.chunks.dependencies.__dict__)
+    edges.__dict__.update(hub.default_adapter(IReadChunkDependenciesRepository).__dict__)
     record = _NoList.__new__(_NoList)
-    record.__dict__.update(hub.services.chunks.record.__dict__)
+    record.__dict__.update(hub.default_adapter(IReadChunkRecordRepository).__dict__)
     resolve_default_tenant_with(
         hub, monkeypatch, {IReadChunkDependenciesRepository: edges, IReadChunkRecordRepository: record}
     )
@@ -651,7 +652,7 @@ def test_list_page_reads_are_flat_as_deleted_chunks_pile_ahead_of_the_page(tmp_p
                 seed_chunk(conn, f"ch_live_{i}", graph_id="gr_page", at=_T0 + timedelta(seconds=i))
         for i in range(n):
             _delete_chunk(hub, f"ch_gone_{i}")
-        record = hub.services.chunks.record
+        record = hub.default_adapter(IReadChunkRecordRepository)
 
         def page(record: Any = record) -> Any:
             return record.list_page(limit=2)

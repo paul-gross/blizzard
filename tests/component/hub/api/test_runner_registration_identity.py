@@ -15,13 +15,14 @@ import sqlalchemy as sa
 from fastapi.testclient import TestClient
 
 from blizzard import __version__
-from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.version_window import line_of
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
 from tests.support.config_inputs import VERSION_WINDOW
-from tests.support.scaffolding import HubHarness, add_tenant, build_hub, default_project, default_tenant, seed_runner
+from tests.support.scaffolding import HubHarness, add_tenant, build_hub, default_project, default_tenant, seed_runner_in
 
 #: What a registration answers when the runner sent no bindings.
 _NO_BINDINGS: dict[str, object] = {
@@ -79,7 +80,7 @@ def _rename(hub: HubHarness, tenant: TenantId, name: str) -> None:
     """Rename ``tenant`` in the store and refresh the hub's open tenants, as renaming a tenant does."""
     with hub.engine.begin() as conn:
         conn.execute(sa.update(schema.tenants).where(schema.tenants.c.tenant_id == tenant).values(name=name))
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
 
 
 def _register(hub: HubHarness, token: str, *, name: str | None = None, workspace_id: str = "w1") -> httpx2.Response:
@@ -93,7 +94,7 @@ def _register(hub: HubHarness, token: str, *, name: str | None = None, workspace
 def test_an_added_runner_first_registers_under_its_minted_id(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     added = hub.default_adapter(RunnerEnrollmentService).add("r-claude", by="op")
-    held = hub.services.registry.get_runner(added.runner_id)
+    held = hub.default_adapter(IReadRunnerRegistry).get_runner(added.runner_id)
     assert added.runner_id.startswith("rn_")
     assert held is not None and held.never_connected()
     assert (held.name, held.added_by) == ("r-claude", "op")
@@ -112,7 +113,7 @@ def test_an_added_runner_first_registers_under_its_minted_id(tmp_path: Path) -> 
         **_tenant(hub),
     }
     assert again.json()["first_registration"] is False
-    registered = hub.services.registry.get_runner(added.runner_id)
+    registered = hub.default_adapter(IReadRunnerRegistry).get_runner(added.runner_id)
     assert registered is not None and not registered.never_connected()
 
 
@@ -125,7 +126,7 @@ def test_a_registration_declaring_no_name_keeps_the_one_held(tmp_path: Path, dec
 
     assert resp.status_code == 201, resp.text
     assert resp.json()["runner_name"] == "r-claude"
-    held = hub.services.registry.get_runner(added.runner_id)
+    held = hub.default_adapter(IReadRunnerRegistry).get_runner(added.runner_id)
     assert held is not None and held.name == "r-claude"
 
 
@@ -136,7 +137,7 @@ def test_a_restart_under_a_new_name_renames_the_runner_and_changes_nothing_else(
     assert _register(hub, added.token, name="r-old").status_code == 201
     if paused:
         assert hub.client.post(f"/api/runners/{added.runner_id}/pause", json={"by": "op"}).status_code == 200
-    before = hub.services.registry.get_runner(added.runner_id)
+    before = hub.default_adapter(IReadRunnerRegistry).get_runner(added.runner_id)
 
     renamed = _register(hub, added.token, name="r-new")
 
@@ -149,7 +150,7 @@ def test_a_restart_under_a_new_name_renames_the_runner_and_changes_nothing_else(
         "first_registration": False,
         **_tenant(hub),
     }
-    after = hub.services.registry.get_runner(added.runner_id)
+    after = hub.default_adapter(IReadRunnerRegistry).get_runner(added.runner_id)
     assert before is not None and after is not None
     assert after.name == "r-new"
     assert (after.token_hash, after.hub_paused, after.registered_at, after.added_at) == (
@@ -175,7 +176,7 @@ def test_two_runners_sharing_a_name_register_independently(tmp_path: Path) -> No
     workspaces = {
         runner_id: registration.workspace_id
         for runner_id in (first.runner_id, second.runner_id)
-        if (registration := hub.services.registry.get_runner(runner_id)) is not None
+        if (registration := hub.default_adapter(IReadRunnerRegistry).get_runner(runner_id)) is not None
     }
     assert workspaces == {first.runner_id: "w1", second.runner_id: "w2"}
 
@@ -200,7 +201,7 @@ def test_the_fleet_read_of_a_runner_that_never_registered_is_409(tmp_path: Path)
 def test_a_runner_added_in_another_tenant_registers_naming_that_tenant(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     bravo = add_tenant(hub.engine, "bravo")
-    token = seed_runner(hub.open_services(bravo), "rn-bravo-1", register=False)
+    token = seed_runner_in(hub.process, bravo, "rn-bravo-1", register=False)
 
     first = _register(hub, token, name="r-bravo")
 
@@ -220,7 +221,7 @@ def test_a_runner_added_in_another_tenant_registers_naming_that_tenant(tmp_path:
 def test_a_renamed_tenant_reaches_its_runner_on_the_next_registration(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     bravo = add_tenant(hub.engine, "bravo")
-    token = seed_runner(hub.open_services(bravo), "rn-bravo-1", fleet=hub.resolve(bravo, FleetService))
+    token = seed_runner_in(hub.process, bravo, "rn-bravo-1")
     before = _register(hub, token)
 
     _rename(hub, bravo, "bravo-renamed")

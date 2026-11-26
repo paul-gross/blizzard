@@ -11,10 +11,11 @@ from sqlalchemy import select
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.garden.review.materialize import ReviewFindingsOutcome
 from blizzard.hub.domain.garden.review.service import ReviewFindingsRecorder
 from blizzard.hub.domain.garden.review.validation import ReviewFindingsRejected
-from blizzard.hub.domain.graph.model import Graph, Node
+from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, Node
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.graph_store import GraphStore
 from tests.support.hub_node_artifacts import record_hub_asset
@@ -84,9 +85,9 @@ class Delivered:
 
 def deliver(hub: HubHarness, chunk_id: str, *, epoch: int = EPOCH) -> Delivered:
     """Deliver the chunk's newest review-finding delta from its record-findings node at ``epoch``."""
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None, chunk_id
-    graph = hub.services.graphs.get(chunk.graph_id)
+    graph = hub.default_adapter(IReadGraphRepository).get(chunk.graph_id)
     node = graph.node_by_id(NODE_ID) if graph is not None else None
     assert node is not None
     recorder = hub.default_adapter(ReviewFindingsRecorder)

@@ -6,6 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from blizzard.hub.domain.chunk.model import ChunkFacts
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from blizzard.hub.store.scoped import ScopedConnections
@@ -37,7 +38,7 @@ def _restart(hub: HubHarness, conns: ScopedConnections, chunk_id: str, *epochs: 
 def test_the_probe_agrees_with_the_projection(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     conns = hub_store_connections(hub.engine)
-    facts = hub.services.chunks.facts
+    facts = hub.default_adapter(IReadChunkFactsRepository)
     never, same, above, several, deleted, grouped = (
         ingest(hub, [{"source": "default", "ref": str(i)}]) for i in range(6)
     )
@@ -67,7 +68,7 @@ def test_the_probe_agrees_with_the_projection(tmp_path: Path) -> None:
 def test_another_tenants_restart_does_not_count(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])
-    facts = hub.services.chunks.facts
+    facts = hub.default_adapter(IReadChunkFactsRepository)
     other = add_tenant(hub.engine, "other")
     _restart(hub, scoped_connections(hub.engine, other), chunk_id, 9)
 

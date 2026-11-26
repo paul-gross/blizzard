@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import cast
 
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
+from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.store.internal.chunk_movement_store import ChunkMovementStore
 from tests.support.scaffolding import build_hub, ingest
@@ -32,7 +33,7 @@ def test_a_claim_blocks_while_a_restart_holds_the_row_lock_mid_write(tmp_path: P
 
     entered_write = threading.Event()
     release_write = threading.Event()
-    movement = cast(ChunkMovementStore, hub.services.chunks.movement)
+    movement = cast(ChunkMovementStore, hub.default_adapter(IReadChunkMovementRepository))
     real_record_restart = movement.record_restart
 
     def _blocking_record_restart(

@@ -15,11 +15,13 @@ from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.app import create_app_for_export
 from blizzard.hub.domain.chunk.dependencies import DependencyService, PrerequisiteScope
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.execution.fleet import FleetService
-from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from blizzard.hub.domain.runners.host import HostTokenRotation
-from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, IWriteRunnerRegistry
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -337,7 +339,7 @@ def test_claim_runtime_variants_match_registered_responses(tmp_path: Path) -> No
     observe(claim("r1", terminal), 409, RouteClaimTerminalProblem)
     dependent = ingest(hub, [{"source": "default", "ref": "dependent"}])
     prerequisite = ingest(hub, [{"source": "default", "ref": "prerequisite"}])
-    record = hub.services.chunks.record.get(dependent)
+    record = hub.default_adapter(IReadChunkRecordRepository).get(dependent)
     assert record is not None
     hub.default_adapter(DependencyService).declare(record, PrerequisiteScope(prerequisite), by="user:alice")
     observe(claim("r1", dependent), 409, RouteClaimDependencyProblem)
@@ -506,7 +508,7 @@ def test_fleet_shared_dependencies_observed_on_queue(tmp_path: Path) -> None:
     assert unobserved_variants(spec, "get", path, 401, "application/problem+json", observed) == set()
 
     live_token = seed_runner(hub, "runner-b")
-    registry = cast(IWriteRunnerRegistry, hub.services.registry)
+    registry = cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry))
     registry.record_lifecycle("runner-b", retired=True, at=hub.clock.now(), by="operator", expected_lifecycle=0)
     retired = client.get(path, headers=bearer(live_token))
     assert retired.status_code == 403, retired.text
@@ -582,7 +584,7 @@ def test_rekey_not_holder_matches_declared_variant(tmp_path: Path) -> None:
         "post", release_path, 403, release.headers["content-type"], RouteNotHeldProblem, release.json()
     )
     assert refusal_mismatches(hub.app.openapi(), observation) == []
-    registry = cast(IWriteRunnerRegistry, hub.services.registry)
+    registry = cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry))
     registry.record_lifecycle("r2", retired=True, at=hub.clock.now(), by="operator", expected_lifecycle=0)
     for suffix, body in (
         ("route-token", {"runner_id": "r2"}),
@@ -657,7 +659,7 @@ def test_claim_runner_gate_refusals_match_openapi(tmp_path: Path) -> None:
         == []
     )
     assert hub.client.post("/api/runners/paused/pause", json={"by": "operator"}).status_code == 200
-    registry = cast(IWriteRunnerRegistry, hub.services.registry)
+    registry = cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry))
     registry.record_lifecycle("retired", retired=True, at=hub.clock.now(), by="operator", expected_lifecycle=0)
     observed: set[type[BaseModel]] = set()
     for runner, model in (
@@ -758,9 +760,9 @@ def test_missing_pinned_graph_on_claim_and_envelope_matches_openapi(
     assert hub.app is not None
     seed_runner(hub, "r1")
     chunk = ingest(hub, [{"source": "default", "ref": "missing-graph"}])
-    record = hub.services.chunks.record.get(chunk)
+    record = hub.default_adapter(IReadChunkRecordRepository).get(chunk)
     assert record is not None
-    graphs = hub.services.graphs
+    graphs = hub.default_adapter(IReadGraphRepository)
     get_graph = graphs.get
     assert get_graph(record.graph_id) is not None
 
@@ -810,7 +812,7 @@ def test_host_runner_retirement_lifecycle_races_match_openapi(
         "/api/fleet/routes", json={"chunk_id": chunk, "runner_id": "r1", "workspace_id": "w1", "environment_ids": []}
     )
     assert claim.status_code == 201, claim.text
-    registry = cast(IWriteRunnerRegistry, hub.services.registry)
+    registry = cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry))
     fleet = hub.default_adapter(FleetService)
     if interrupted:
         release = hub.default_adapter(DetachService).release_held
@@ -842,7 +844,7 @@ def test_host_runner_retirement_lifecycle_races_match_openapi(
     assert response.status_code == 409, response.text
     observation = RefusalObservation("post", path, 409, response.headers["content-type"], model, response.json())
     assert refusal_mismatches(hub.app.openapi(), observation) == []
-    assert hub.services.chunks.route.route_of(chunk) is not None
+    assert hub.default_adapter(IReadChunkRouteRepository).route_of(chunk) is not None
     assert (
         unobserved_variants(
             hub.app.openapi(),
@@ -904,7 +906,7 @@ nodes:
         json={"choice": "pass", "epoch": 1, "runner_id": "r1", "from_node_id": node, "artifacts": []},
     )
     assert done.status_code == 200 and done.json()["outcome"] == "done", done.text
-    assert hub.services.chunks.route.route_of(chunk) is not None
+    assert hub.default_adapter(IReadChunkRouteRepository).route_of(chunk) is not None
     path = "/api/fleet/chunks/{chunk_id}/route-token"
     response = hub.client.post(f"/api/fleet/chunks/{chunk}/route-token", json={"runner_id": "r1"})
     assert response.status_code == 409, response.text
@@ -978,7 +980,7 @@ def test_fleet_runner_decisions_ownership_and_retirement_match_openapi(tmp_path:
     path = "/api/fleet/runners/{runner_id}/decisions"
     assert client.get("/api/fleet/runners/r1/decisions", headers=bearer(token)).status_code == 200
     foreign = client.get("/api/fleet/runners/r2/decisions", headers=bearer(token))
-    registry = cast(IWriteRunnerRegistry, hub.services.registry)
+    registry = cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry))
     registry.record_lifecycle("r1", retired=True, at=hub.clock.now(), by="operator", expected_lifecycle=0)
     retired = client.get("/api/fleet/runners/r1/decisions", headers=bearer(token))
     for response, model in ((foreign, RunnerOwnershipProblem), (retired, RunnerRetiredProblem)):

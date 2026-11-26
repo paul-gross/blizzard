@@ -33,16 +33,22 @@ from fastapi import FastAPI
 
 from blizzard.auth_core import Role
 from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.foundation.registry.scopes import Resolver
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.app import Sweep
-from blizzard.hub.composition import TenantStores
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectId
+from blizzard.hub.events.broker import EventBroker
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store import schema
+from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
+from blizzard.hub.store.internal.project_store import ProjectStore
+from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
+from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.tenancy import StoreScope
 from tests.support.route_classes import FLEET, FLEET_CLAIM, HUB_LEVEL, HUMAN, live_routes
 from tests.support.scaffolding import (
@@ -755,13 +761,13 @@ def test_a_write_in_one_tenant_changes_nothing_the_other_reads(two: Two) -> None
     assert _reads(two.first) == before
 
 
-def _project_answers(stores: TenantStores, project_id: ProjectId, owner: _Tenant, at: datetime) -> tuple[object, ...]:
+def _project_answers(stores: Resolver, project_id: ProjectId, owner: _Tenant, at: datetime) -> tuple[object, ...]:
     """What ``stores`` answers for ``project_id`` and the source and repository ``owner`` linked it to."""
-    links = stores.project_links
+    links = stores.get(ProjectLinkStore)
     source, repository = owner.ids["source"], owner.ids["repository"]
     return (
-        stores.projects.get(project_id),
-        stores.projects.get_many([project_id]),
+        stores.get(ProjectStore).get(project_id),
+        stores.get(ProjectStore).get_many([project_id]),
         links.source_link(project_id, WorkSourceId(source)),
         links.repository_link(project_id, RepositoryId(repository)),
         links.sources_of(project_id),
@@ -773,22 +779,22 @@ def _project_answers(stores: TenantStores, project_id: ProjectId, owner: _Tenant
 def test_a_tenants_projects_and_links_answer_only_in_their_own_tenant(two: Two) -> None:
     """At the store: the other tenant's project, slugs and links answer as a project never minted does, while their own
     tenant reads them."""
-    core = second_core(two.hub)
-    stores = {t.label: core.open(StoreScope(t.harness.tenant)) for t in two.both()}
+    process = second_core(two.hub)
+    stores = {t.label: process.tenants.open(StoreScope(t.harness.tenant)).resolver for t in two.both()}
     projects: dict[str, Project] = {}
     for t in two.both():
         own = stores[t.label]
         authoring = ProjectAuthoring(
-            projects=own.projects,
-            links=own.project_links,
-            positions=own.tenant.get(ProjectPositionStore),
+            projects=own.get(ProjectStore),
+            links=own.get(ProjectLinkStore),
+            positions=own.get(ProjectPositionStore),
             pick=first_color,
             clock=two.hub.clock,
         )
-        [project] = own.projects.list_all()
+        [project] = own.get(ProjectStore).list_all()
         source, repository = (
-            own.work_source_records.get(WorkSourceId(t.ids["source"])),
-            own.repository_records.get(RepositoryId(t.ids["repository"])),
+            own.get(WorkSourceRecordStore).get(WorkSourceId(t.ids["source"])),
+            own.get(RepositoryRecordStore).get(RepositoryId(t.ids["repository"])),
         )
         assert source is not None and repository is not None
         authoring.link_source(project, source, OP)
@@ -803,10 +809,10 @@ def test_a_tenants_projects_and_links_answer_only_in_their_own_tenant(two: Two) 
         assert _project_answers(own, project.project_id, owner, at) != unknown
         assert _project_answers(foreign, project.project_id, owner, at) == unknown
         slug = f"{owner.label}-renamed"
-        assert own.projects.resolve(slug) == project
-        assert foreign.projects.resolve(slug) is None
-        assert project.project_id in own.project_links.projects_linking_source(owner.ids["source"])
-        assert project.project_id not in foreign.project_links.projects_linking_source(owner.ids["source"])
+        assert own.get(ProjectStore).resolve(slug) == project
+        assert foreign.get(ProjectStore).resolve(slug) is None
+        assert project.project_id in own.get(ProjectLinkStore).projects_linking_source(owner.ids["source"])
+        assert project.project_id not in foreign.get(ProjectLinkStore).projects_linking_source(owner.ids["source"])
 
 
 def test_a_project_named_by_the_other_tenants_id_or_slug_answers_404_as_a_never_minted_one(two: Two) -> None:
@@ -825,7 +831,7 @@ def test_a_project_named_by_the_other_tenants_id_or_slug_answers_404_as_a_never_
 
 def test_each_tenants_stream_replays_its_own_events_only(two: Two) -> None:
     for reader, other in ((two.first, two.second), (two.second, two.first)):
-        frames = asyncio.run(drain_stream(reader.harness.services.events))
+        frames = asyncio.run(drain_stream(reader.harness.default_adapter(EventBroker)))
         text = repr(frames)
         assert reader.ids["chunk_id"] in text
         assert not {marker for marker in other.markers if marker in text}
@@ -921,7 +927,7 @@ def test_every_sweep_acts_in_each_open_tenant_and_opens_no_closed_one(tmp_path: 
     first, second, closed = seeded(hub, "alpha", "beta", "gamma")
     intents = {t.label: landed_hub_ref(hub, t.harness.tenant, f"ch_close_{t.label}") for t in (first, second, closed)}
     close_tenant(hub.engine, closed.harness.tenant)
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
     assert hub.app is not None
     sweeps = {sweep.name: sweep.reconciler for sweep in Sweep.all(hub.app)}
     passes = ("forge_status", "transcript_events", "work_closure", "trace_export", "egress", "cadence")

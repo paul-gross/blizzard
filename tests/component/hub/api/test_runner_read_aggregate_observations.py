@@ -11,9 +11,10 @@ from pydantic import BaseModel
 
 from blizzard.hub.api.auth import RunnerAuth
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
-from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.garden.run_context import RunContext
+from blizzard.hub.domain.graph.model import IReadGraphRepository
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
@@ -104,7 +105,7 @@ def test_chunk_read_problem_variants_are_aggregated(
             return None
 
         with monkeypatch.context() as patch:
-            patch.setattr(hub.services.graphs, "get", no_graph)
+            patch.setattr(hub.default_adapter(IReadGraphRepository), "get", no_graph)
             missing_graph = client.get(path.format(chunk_id=chunk), headers=bearer(live))
         assert missing_graph.json()["detail"] == "chunk's pinned graph is missing"
         observe(missing_graph, 500, PinnedGraphMissingProblem)
@@ -112,10 +113,10 @@ def test_chunk_read_problem_variants_are_aggregated(
     with store_free(hub.app):
         observe(client.get(url, headers=bearer(live)), 503, HubStoreUnavailableProblem)
 
-    def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
+    def close_before_resolution(request: Request) -> AdmittedTenant:
         principal = RunnerAuth.of(request).demand()
         close_tenant(hub.engine, principal.tenant_id)
-        services.tenants.open_tenants.refresh()
+        hub.resolve_hub(OpenTenants).refresh()
         return resolve_tenant(request)
 
     hub.app.dependency_overrides[resolve_tenant] = close_before_resolution

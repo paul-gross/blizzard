@@ -1,5 +1,5 @@
-"""The fleet registrations as the hub container holds them: within a tenant each fleet port, service and retained bag
-field is one instance, and the execution services hold the container's retired-runner guard, detach path and fleet
+"""The fleet registrations as the hub container holds them: within a tenant each fleet port and service is one
+instance, and the execution services hold the container's retired-runner guard, detach path and fleet
 service; across tenants the instances differ, except the version window, which every tenant shares (component
 tier)."""
 
@@ -25,6 +25,7 @@ from blizzard.hub.domain.runners.host_report import HostReportService
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, IWriteRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.domain.runners.served import IServedProjects
 from blizzard.hub.domain.runners.version import IVersionWindow
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.tenancy import StoreScope
@@ -34,7 +35,6 @@ from tests.support.scaffolding import HubHarness, add_tenant, build_hub, default
 def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
     """Every holder of each fleet instance in ``tenant``, by what the instance is."""
     scope = hub.process.tenants.open(tenant).resolver
-    services = hub.hub_services.tenants.open_services(tenant)
     fleet = scope.get(FleetService)
     # The execution services hold what they were built over privately; reading it is the only way to see it is shared.
     return {
@@ -42,7 +42,6 @@ def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
             scope.get(RunnerRegistryStore),
             scope.get(IReadRunnerRegistry),
             scope.get(IWriteRunnerRegistry),
-            services.registry,
             scope.get(ClaimService).registry,
             fleet.registry,
         ],
@@ -50,7 +49,6 @@ def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
             scope.get(HostRegistryStore),
             scope.get(IReadHostRegistry),
             scope.get(IWriteHostRegistry),
-            services.hosts,
         ],
         "retired-runner guard": [
             scope.get(RetiredRunnerGuard),
@@ -83,7 +81,7 @@ def test_the_fleet_keys_share_identity_within_a_tenant_and_differ_across_tenants
     hub = build_hub(tmp_path)
     first = StoreScope(default_tenant(hub.engine))
     second = StoreScope(add_tenant(hub.engine, "second"))
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
 
     mine, theirs = _shared(hub, first), _shared(hub, second)
 
@@ -97,7 +95,7 @@ def test_every_tenant_judges_versions_through_the_one_supplied_window(tmp_path: 
     hub = build_hub(tmp_path, hub_version="0.3")
     first = StoreScope(default_tenant(hub.engine))
     second = StoreScope(add_tenant(hub.engine, "second"))
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
     tenants = hub.process.tenants
 
     window = hub.process.resolver.get(HubVersionWindow)

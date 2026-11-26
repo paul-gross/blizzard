@@ -16,7 +16,6 @@ from structlog.testing import capture_logs
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.flags import resolve_flags
 from blizzard.foundation.run_mode import RunMode
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.cadence.errands import Errand, ErrandRun
 from blizzard.hub.domain.cadence.mint import CadenceMint, ErrandInputs, MintedErrand
 from blizzard.hub.domain.cadence.model import CadenceShape, ChoreShape
@@ -24,18 +23,21 @@ from blizzard.hub.domain.cadence.services import CadenceAuthoring
 from blizzard.hub.domain.cadence.sweep import CADENCE_PASS_LIMIT
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkItemAuthorKind, WorkRef
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine, RoutineAuthoring, RoutineScopeMembership
 from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, RunService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeRegistry, ScopeSlug
-from blizzard.hub.domain.projects.model import Project, ProjectId
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
+from blizzard.hub.domain.projects.model import IReadProjectRepository, Project, ProjectId
 from blizzard.hub.domain.sweeps.roster import SweepRoster
+from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
 from blizzard.hub.store import schema as s
 from blizzard.hub.tenancy import TenantId
 from tests.support.config_inputs import FLAG_REGISTRY
-from tests.support.scaffolding import HubHarness, build_hub, default_project, default_tenant, hub_scoped
+from tests.support.scaffolding import HubHarness, TenantHarness, build_hub, default_project, default_tenant, hub_scoped
 
 _CTX = ChangeContext(actor="operator", door=Door.API)
 _CADENCES_ON = resolve_flags(FLAG_REGISTRY, "hub", {"cadences": True}).flags
@@ -45,16 +47,18 @@ def _hub(tmp_path: Path, *, on: bool = True) -> HubHarness:
     return build_hub(tmp_path, flags=_CADENCES_ON if on else None)
 
 
-def _project(hub: HubHarness, services: TenantServices, tenant: TenantId) -> Project:
-    project = services.projects.get(ProjectId(default_project(hub.engine, tenant)))
+def _project(hub: HubHarness, reads: HubHarness | TenantHarness, tenant: TenantId) -> Project:
+    project = reads.default_adapter(IReadProjectRepository).get(ProjectId(default_project(hub.engine, tenant)))
     assert project is not None
     return project
 
 
 def _routine(
-    hub: HubHarness, tenant: TenantId, services: TenantServices, project: Project, slug: str, *linked: str
+    hub: HubHarness, tenant: TenantId, reads: HubHarness | TenantHarness, project: Project, slug: str, *linked: str
 ) -> Routine:
-    graph = services.default_graph.ensure_default(PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml())
+    graph = reads.default_adapter(DefaultGraphService).ensure_default(
+        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
+    )
     routine = hub.resolve(tenant, RoutineAuthoring).create(
         project=project, ctx=_CTX, slug=slug, graph_name=graph.name, default_scope_slug=ScopeSlug.parse(slug)
     )
@@ -86,14 +90,14 @@ def _runs(hub: HubHarness, tenant: TenantId) -> list[tuple[str, str]]:
         return [(row.author_kind, row.scope_slug) for row in conn.execute(hub_scoped(query))]
 
 
-def _statuses(services: TenantServices) -> list[ChunkStatus]:
-    return sorted(services.chunks.facts.load_live_statuses().values())
+def _statuses(reads: HubHarness | TenantHarness) -> list[ChunkStatus]:
+    return sorted(reads.default_adapter(IReadChunkFactsRepository).load_live_statuses().values())
 
 
 def test_a_pass_mints_each_due_errand_promoted_or_held_and_then_waits_on_its_live_run(tmp_path: Path) -> None:
     hub = _hub(tmp_path)
-    project = _project(hub, hub.services, default_tenant(hub.engine))
-    _routine(hub, default_tenant(hub.engine), hub.services, project, "sweep", "runner")
+    project = _project(hub, hub, default_tenant(hub.engine))
+    _routine(hub, default_tenant(hub.engine), hub, project, "sweep", "runner")
     _cadence(
         hub,
         default_tenant(hub.engine),
@@ -107,13 +111,13 @@ def test_a_pass_mints_each_due_errand_promoted_or_held_and_then_waits_on_its_liv
 
     tenant = default_tenant(hub.engine)
     assert sorted(_runs(hub, tenant)) == [("cadence", "runner"), ("cadence", "runner"), ("cadence", "sweep")]
-    assert _statuses(hub.services) == sorted([ChunkStatus.READY, ChunkStatus.READY, ChunkStatus.NOT_READY])
+    assert _statuses(hub) == sorted([ChunkStatus.READY, ChunkStatus.READY, ChunkStatus.NOT_READY])
 
 
 def test_a_pass_with_the_flag_off_mints_nothing(tmp_path: Path) -> None:
     hub = _hub(tmp_path, on=False)
-    project = _project(hub, hub.services, default_tenant(hub.engine))
-    _routine(hub, default_tenant(hub.engine), hub.services, project, "sweep")
+    project = _project(hub, hub, default_tenant(hub.engine))
+    _routine(hub, default_tenant(hub.engine), hub, project, "sweep")
     _cadence(hub, default_tenant(hub.engine), project, ChoreShape("plain", "sweep"))
 
     _sweep(hub)
@@ -126,9 +130,9 @@ def test_one_pass_mints_each_tenants_errands_in_that_tenant(tmp_path: Path) -> N
     hub = _hub(tmp_path)
     carried = default_tenant(hub.engine)
     other = hub.add_tenant("other")
-    for services, tenant, slug in ((hub.services, carried, "alpha"), (other.services, other.tenant, "beta")):
-        project = _project(hub, services, tenant)
-        _routine(hub, tenant, services, project, slug)
+    for reads, tenant, slug in ((hub, carried, "alpha"), (other, other.tenant, "beta")):
+        project = _project(hub, reads, tenant)
+        _routine(hub, tenant, reads, project, slug)
         _cadence(hub, tenant, project, ChoreShape("plain", slug))
 
     _sweep(hub)
@@ -140,9 +144,9 @@ def test_one_pass_mints_each_tenants_errands_in_that_tenant(tmp_path: Path) -> N
 def test_a_pass_mints_up_to_its_bound_and_the_next_pass_mints_the_rest(tmp_path: Path) -> None:
     hub = _hub(tmp_path)
     tenant = default_tenant(hub.engine)
-    project = _project(hub, hub.services, tenant)
+    project = _project(hub, hub, tenant)
     linked = [f"scope-{n:02}" for n in range(CADENCE_PASS_LIMIT + 1)]
-    _routine(hub, default_tenant(hub.engine), hub.services, project, "sweep", *linked)
+    _routine(hub, default_tenant(hub.engine), hub, project, "sweep", *linked)
     _cadence(hub, default_tenant(hub.engine), project, ChoreShape("every", "sweep", scopes="all"))
 
     _sweep(hub)
@@ -155,8 +159,8 @@ def test_a_pass_mints_up_to_its_bound_and_the_next_pass_mints_the_rest(tmp_path:
 def test_a_hand_started_run_neither_counts_as_the_errands_run_nor_holds_it(tmp_path: Path) -> None:
     hub = _hub(tmp_path)
     tenant = default_tenant(hub.engine)
-    project = _project(hub, hub.services, tenant)
-    routine = _routine(hub, default_tenant(hub.engine), hub.services, project, "sweep")
+    project = _project(hub, hub, tenant)
+    routine = _routine(hub, default_tenant(hub.engine), hub, project, "sweep")
     scope = hub.default_adapter(IReadScopeRepository).get(project.project_id, "sweep")
     assert scope is not None
     hub.default_adapter(RunService).run(
@@ -174,8 +178,8 @@ def test_a_refused_errand_counts_as_refused_and_the_pass_mints_the_others(
 ) -> None:
     hub = _hub(tmp_path)
     tenant = default_tenant(hub.engine)
-    project = _project(hub, hub.services, tenant)
-    _routine(hub, default_tenant(hub.engine), hub.services, project, "sweep", "retired", "taken")
+    project = _project(hub, hub, tenant)
+    _routine(hub, default_tenant(hub.engine), hub, project, "sweep", "retired", "taken")
     _cadence(hub, default_tenant(hub.engine), project, ChoreShape("every", "sweep", scopes="all"))
     mint = hub.default_adapter(CadenceMint).mint
     refusals = {
@@ -204,14 +208,14 @@ def test_a_refused_errand_counts_as_refused_and_the_pass_mints_the_others(
 def test_a_sweep_mint_publishes_its_minted_frame_and_the_queue_change_on_the_tenants_broker(tmp_path: Path) -> None:
     hub = _hub(tmp_path)
     tenant = default_tenant(hub.engine)
-    project = _project(hub, hub.services, tenant)
-    _routine(hub, tenant, hub.services, project, "sweep", "runner")
+    project = _project(hub, hub, tenant)
+    _routine(hub, tenant, hub, project, "sweep", "runner")
     _cadence(hub, default_tenant(hub.engine), project, ChoreShape("plain", "sweep"))
-    before = hub.services.events.latest_id()
+    before = hub.default_adapter(EventBroker).latest_id()
 
     _sweep(hub)
 
-    published = hub.services.events.replay_since(before)
+    published = hub.default_adapter(EventBroker).replay_since(before)
     chunks = [json.loads(each.data) for each in published if each.type == "chunk-changed"]
     assert [(each["cause"], each["status"]) for each in chunks] == [("minted", ChunkStatus.READY.value)]
     assert [each.type for each in published].count("queue-changed") == 1
@@ -222,14 +226,14 @@ def test_a_failed_announcement_is_logged_and_the_committed_mint_still_counts(
 ) -> None:
     hub = _hub(tmp_path)
     tenant = default_tenant(hub.engine)
-    project = _project(hub, hub.services, tenant)
-    _routine(hub, default_tenant(hub.engine), hub.services, project, "sweep", "runner")
+    project = _project(hub, hub, tenant)
+    _routine(hub, default_tenant(hub.engine), hub, project, "sweep", "runner")
     _cadence(hub, default_tenant(hub.engine), project, ChoreShape("every", "sweep", scopes="all"))
 
     def refuse() -> None:
         raise RuntimeError("broker down")
 
-    monkeypatch.setattr(hub.services.events, "publish_queue_changed", refuse)
+    monkeypatch.setattr(hub.default_adapter(EventBroker), "publish_queue_changed", refuse)
 
     with capture_logs() as logs:
         _sweep(hub)

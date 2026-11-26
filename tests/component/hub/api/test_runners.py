@@ -16,7 +16,7 @@ import httpx2
 import pytest
 
 from blizzard.auth_core import Role
-from blizzard.hub.domain.runners.registration import RunnerRegistration
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerRegistration
 from tests.support.scaffolding import HubHarness, build_hub, emitted_events, seed_runner, seed_session, seed_user
 
 
@@ -272,7 +272,7 @@ def _by_id(hub: HubHarness, runner_id: str, suffix: str, body: dict[str, str] | 
 
 
 def _states(hub: HubHarness, runner_ids: list[str]) -> dict[str, RunnerRegistration | None]:
-    return {runner_id: hub.services.registry.get_runner(runner_id) for runner_id in runner_ids}
+    return {runner_id: hub.default_adapter(IReadRunnerRegistry).get_runner(runner_id) for runner_id in runner_ids}
 
 
 @pytest.mark.parametrize(("suffix", "body", "first"), _BY_ID_ROUTES)

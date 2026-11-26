@@ -13,6 +13,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryOutcome,
     GardenDelivery,
@@ -25,6 +26,7 @@ from blizzard.hub.domain.garden.findings.model import IWriteFindingRepository, I
 from blizzard.hub.domain.garden.formats import IGardenFormats
 from blizzard.hub.domain.garden.proposals.model import IWriteGardenProposalRepository
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
+from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
@@ -103,9 +105,9 @@ def test_a_write_landing_before_the_lock_is_older_than_the_deliverys_facts(tmp_p
         seed_fact(connections, finding_id, kind="observed", at=winner_at)
         hub.clock.advance(timedelta(minutes=2))
 
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
-    graph = hub.services.graphs.get(chunk.graph_id)
+    graph = hub.default_adapter(IReadGraphRepository).get(chunk.graph_id)
     assert graph is not None
     node = graph.node_by_id("nd_deliver")
     assert node is not None

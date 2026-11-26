@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.hub_event_types import HubEventType
+from blizzard.hub.domain.chunk.event_log import EventLogService
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
@@ -153,7 +154,7 @@ def test_an_id_the_registry_does_not_hold_reads_unnamed(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     since = hub.events.latest_id()
 
-    hub.services.event_log.record(
+    hub.default_adapter(EventLogService).record(
         kind="attempt-failed",
         runner_id="rn_gone",
         chunk_id=None,

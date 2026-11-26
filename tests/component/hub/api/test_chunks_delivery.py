@@ -12,8 +12,8 @@ import pytest
 from sqlalchemy import Connection, event
 
 from blizzard.hub.domain.chunk.no_code import no_code_marker
-from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId
-from blizzard.hub.domain.projects.links import RepositoryLink
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId, IReadForgeRepository
+from blizzard.hub.domain.projects.links import IReadProjectLinks, RepositoryLink
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from tests.support.scaffolding import (
@@ -108,7 +108,7 @@ def test_a_landing_with_no_pr_links_its_commit_through_the_repository_records_fo
 
     assert urls() == [{"acme/unknown": None}, {"acme/widget": "http://forge.fixture/acme/widget/commit/widget-sha"}]
 
-    forges = hub.services.forge_records
+    forges = hub.default_adapter(IReadForgeRepository)
     get_many = forges.get_many
 
     def moved(ids: list[ForgeId]) -> dict[ForgeId, ConfiguredForge]:
@@ -314,7 +314,7 @@ def test_no_code_declarations_resolve_a_page_in_one_batch(tmp_path: Path, monkey
                     )
                 )
             )
-    links = hub.services.project_links
+    links = hub.default_adapter(IReadProjectLinks)
     calls: list[Sequence[ProjectId]] = []
     original = links.repositories_of_projects
 

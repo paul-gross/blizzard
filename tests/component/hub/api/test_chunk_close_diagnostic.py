@@ -6,6 +6,7 @@ from pathlib import Path
 from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkItemCloseOutcome, WorkRef
+from blizzard.hub.open_tenants import OpenTenants
 from tests.support.hub_request_auth import bearer, cookie, enrolled_runner_token, ingest_chunk
 from tests.support.scaffolding import (
     add_tenant,
@@ -67,7 +68,7 @@ def test_close_diagnostic_isolation_and_auth(tmp_path: Path) -> None:
     guest = seed_session(hub, seed_user(hub, username="grace", role=Role.GUEST))
     assert hub.client.get(f"/api/chunks/{chunk}/close-diagnostic", headers=cookie(guest)).status_code == 200
     other = add_tenant(hub.engine, "bravo")
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
     headers = {**cookie(guest), TENANT_HEADER: other}
     assert hub.client.get(f"/api/chunks/{chunk}/close-diagnostic", headers=headers).status_code in (403, 404)
 
@@ -76,7 +77,7 @@ def test_foreign_chunk_and_unknown_chunk_are_indistinguishable(tmp_path: Path) -
     hub = build_hub(tmp_path)
     chunk = ingest_chunk(hub)
     other = add_tenant(hub.engine, "bravo")
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
     headers = {TENANT_HEADER: other}
     assert hub.client.get(f"/api/chunks/{chunk}/close-diagnostic", headers=headers).status_code == 404
     assert hub.client.get("/api/chunks/ch_never/close-diagnostic", headers=headers).status_code == 404

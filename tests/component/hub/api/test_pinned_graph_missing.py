@@ -2,7 +2,10 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
+from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from blizzard.wire.route import PinnedGraphMissingProblem
 from tests.support.hub_request_auth import bearer
 from tests.support.refusal_observation import RefusalObservation, refusal_mismatches, unobserved_variants
@@ -23,13 +26,13 @@ def test_missing_pinned_graph_refuses_runner_operation_without_mutation(
         headers=bearer(token),
     )
     assert claim.status_code == 201, claim.text
-    record = hub.services.chunks.record.get(chunk)
+    record = hub.default_adapter(IReadChunkRecordRepository).get(chunk)
     assert record is not None
-    graphs = hub.services.graphs
+    graphs = hub.default_adapter(IReadGraphRepository)
     get_graph = graphs.get
     assert get_graph(record.graph_id) is not None
-    before_facts = hub.services.chunks.facts.load_facts(chunk)
-    before_route = hub.services.chunks.route.route_of(chunk)
+    before_facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk)
+    before_route = hub.default_adapter(IReadChunkRouteRepository).route_of(chunk)
     before_events = list(hub.events.snapshot())
 
     def missing_graph(graph_id: str) -> Graph | None:
@@ -57,7 +60,7 @@ def test_missing_pinned_graph_refuses_runner_operation_without_mutation(
         )
         == set()
     )
-    assert hub.services.chunks.record.get(chunk) == record
-    assert hub.services.chunks.facts.load_facts(chunk) == before_facts
-    assert hub.services.chunks.route.route_of(chunk) == before_route
+    assert hub.default_adapter(IReadChunkRecordRepository).get(chunk) == record
+    assert hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk) == before_facts
+    assert hub.default_adapter(IReadChunkRouteRepository).route_of(chunk) == before_route
     assert hub.events.snapshot() == before_events

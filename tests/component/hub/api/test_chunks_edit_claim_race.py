@@ -16,8 +16,8 @@ from typing import Any, cast
 
 import pytest
 
-from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
-from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository, IWriteChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository, IWriteChunkRouteRepository
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.runners.route import Route
 from tests.support.scaffolding import HubHarness, build_hub, ingest
@@ -26,12 +26,12 @@ from tests.support.scaffolding import HubHarness, build_hub, ingest
 def _writable_record(hub: HubHarness) -> IWriteChunkRecordRepository:
     """These tests patch the chunk-record store's write methods to force the exact
     interleaving the shared lock must serialize."""
-    return cast(IWriteChunkRecordRepository, hub.services.chunks.record)
+    return cast(IWriteChunkRecordRepository, hub.default_adapter(IReadChunkRecordRepository))
 
 
 def _writable_route(hub: HubHarness) -> IWriteChunkRouteRepository:
     """Same as :func:`_writable_record`, for the chunk-route seam."""
-    return cast(IWriteChunkRouteRepository, hub.services.chunks.route)
+    return cast(IWriteChunkRouteRepository, hub.default_adapter(IReadChunkRouteRepository))
 
 
 _ALT_YAML = """

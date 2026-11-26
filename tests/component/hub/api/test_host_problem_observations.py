@@ -8,7 +8,7 @@ import pytest
 from httpx2 import Response
 from pydantic import BaseModel
 
-from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerRegistration
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, IWriteRunnerRegistry, RunnerRegistration
 from blizzard.wire.host import HostNameTakenProblem
 from blizzard.wire.runner import RunnerAlreadyHostedProblem, RunnerLifecycleConflictProblem, RunnerRetiredProblem
 from blizzard.wire.tenant import TenantRequiredProblem
@@ -49,7 +49,7 @@ def test_host_add_lifecycle_refusals_match_openapi(tmp_path: Path, monkeypatch: 
         _observe(hub, response, model)
         observed.add(model)
 
-    registry = cast(IWriteRunnerRegistry, hub.services.registry)
+    registry = cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry))
     read = registry.get_runners
 
     def retire_after_read(runner_ids: Iterable[str]) -> dict[str, RunnerRegistration]:

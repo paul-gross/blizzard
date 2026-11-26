@@ -19,6 +19,7 @@ from blizzard.foundation.node_steps import Executor
 from blizzard.hub.api.chunk_views import ChunkHistoryView
 from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.domain.chunk.model import ChunkFacts, MigrationFact, TransitionFact
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import Graph, GraphDoc, GraphSummary
 from blizzard.hub.store import schema as s
@@ -296,7 +297,7 @@ def test_load_facts_resolves_each_transition_executor_against_its_own_graph(tmp_
             )
         )
 
-    facts = hub.services.chunks.facts.load_facts("ch_1")
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts("ch_1")
 
     assert facts is not None
     by_target = {t.to_node_id: t for t in facts.transitions}

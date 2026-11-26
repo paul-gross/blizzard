@@ -12,8 +12,9 @@ from pydantic import BaseModel
 from blizzard.auth_core import Role
 from blizzard.hub.api.auth import RunnerAuth
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
-from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.domain.chunk.dependencies import DependencyService, PrerequisiteScope
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
     CliPkceRequiredProblem,
@@ -81,10 +82,10 @@ def test_runner_read_tenant_closes_between_authentication_and_resolution(
     if suffix == "findings/fin_missing":
         template = "/api/fleet/chunks/{chunk_id}/findings/{finding_id}"
 
-    def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
+    def close_before_resolution(request: Request) -> AdmittedTenant:
         principal = RunnerAuth.of(request).demand()
         close_tenant(hub.engine, principal.tenant_id)
-        services.tenants.open_tenants.refresh()
+        hub.resolve_hub(OpenTenants).refresh()
         return resolve_tenant(request)
 
     monkeypatch.setitem(hub.app.dependency_overrides, resolve_tenant, close_before_resolution)
@@ -347,7 +348,7 @@ def test_claim_409_variants_are_all_observed(tmp_path: Path) -> None:
 
     dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}])
     prerequisite_id = ingest(hub, [{"source": "default", "ref": "prerequisite"}])
-    dependent = hub.services.chunks.record.get(dependent_id)
+    dependent = hub.default_adapter(IReadChunkRecordRepository).get(dependent_id)
     assert dependent is not None
     hub.default_adapter(DependencyService).declare(dependent, PrerequisiteScope(prerequisite_id), by="user:alice")
     dependency = claim("r1", dependent_id)

@@ -20,6 +20,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunks as chunks_api
 from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.api.chunks import BOARD_DONE_FLOOR
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.operations.promote import is_promotable
 from blizzard.hub.store import schema as s
 from tests.support.chunk_world import (
@@ -155,7 +156,9 @@ def _oracle_window(hub: HubHarness, floor: int) -> set[str]:
     """Every chunk but a ``done`` one outside both the window and the ``floor`` newest finished."""
     cutoff: datetime = hub.clock.now() - BOARD_DONE_WINDOW
     visible = set(_listed(hub, board_window=False))
-    all_facts = {c: f for c, f in hub.services.chunks.facts.load_all_facts().items() if c in visible}
+    all_facts = {
+        c: f for c, f in hub.default_adapter(IReadChunkFactsRepository).load_all_facts().items() if c in visible
+    }
     # ``ch_mixed_tie_old`` is the tie residue the store's SQL cannot rank (``chunk_is_terminal``'s residue).
     ranked = sorted(
         (
@@ -189,7 +192,7 @@ def test_window_membership_and_counts_equal_the_full_derivation_over_every_branc
     monkeypatch.setattr(chunks_api, "BOARD_DONE_FLOOR", floor)
     hub = hub_with_graph(tmp_path)
     every_branch(hub)
-    all_facts = hub.services.chunks.facts.load_all_facts()
+    all_facts = hub.default_adapter(IReadChunkFactsRepository).load_all_facts()
 
     assert all_facts["ch_mixed_tie_old"].status() is ChunkStatus.DONE  # the residue the handler drops
     expected_window = _oracle_window(hub, floor)
@@ -203,7 +206,9 @@ def test_window_membership_and_counts_equal_the_full_derivation_over_every_branc
         assert set(listed) == expected_window, limit
 
     oracle = Counter(facts.status() for facts in all_facts.values())
-    assert hub.services.chunks.facts.status_counts() == {status: oracle[status] for status in ChunkStatus}
+    assert hub.default_adapter(IReadChunkFactsRepository).status_counts() == {
+        status: oracle[status] for status in ChunkStatus
+    }
 
 
 def test_chunk_counts_count_all_time_and_exclude_ephemeral_chunks(tmp_path: Path) -> None:
@@ -242,7 +247,7 @@ def test_list_rows_carry_promotable_from_the_shared_promote_predicate(tmp_path: 
     assert hub.client.post("/api/chunks/ch_paused_never_promoted/pause", json={"by": "op"}).status_code == 202
 
     rows = {c["chunk_id"]: c for c in hub.client.get("/api/chunks").json()["chunks"]}
-    all_facts = hub.services.chunks.facts.load_all_facts()
+    all_facts = hub.default_adapter(IReadChunkFactsRepository).load_all_facts()
 
     assert (rows["ch_paused_never_promoted"]["status"], rows["ch_paused_never_promoted"]["promotable"]) == (
         "paused",

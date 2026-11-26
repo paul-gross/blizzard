@@ -22,6 +22,7 @@ from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.domain.chunk.model import QuestionClosed
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.execution.questions import QuestionService
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.operations.complete import CompleteService
@@ -40,13 +41,13 @@ from tests.support.scaffolding import (
 
 
 def _stop(hub: HubHarness, chunk_id: str) -> None:
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     hub.default_adapter(StopService).stop(chunk, by="operator")
 
 
 def _complete(hub: HubHarness, chunk_id: str) -> None:
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     hub.default_adapter(CompleteService).complete(chunk, by="operator")
 

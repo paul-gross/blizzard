@@ -19,7 +19,12 @@ from blizzard.hub.domain.chunk.dependencies import (
     PrerequisiteScope,
 )
 from blizzard.hub.domain.chunk.model import Chunk, DependencyEdge
-from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.dependencies import (
+    FoldTarget,
+    IReadChunkDependenciesRepository,
+    IWriteChunkDependenciesRepository,
+)
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.operations.queue import GroupService
 from tests.support.scaffolding import HubHarness, build_hub, ingest
@@ -28,7 +33,7 @@ from tests.support.scaffolding import HubHarness, build_hub, ingest
 def _writable_dependencies(hub: HubHarness) -> IWriteChunkDependenciesRepository:
     """These tests patch the chunk-dependencies store's write method to force the exact
     interleaving the shared lock must serialize."""
-    return cast(IWriteChunkDependenciesRepository, hub.services.chunks.dependencies)
+    return cast(IWriteChunkDependenciesRepository, hub.default_adapter(IReadChunkDependenciesRepository))
 
 
 def test_two_opposing_declarations_racing_resolve_to_exactly_one_commit(tmp_path: Path) -> None:
@@ -38,8 +43,8 @@ def test_two_opposing_declarations_racing_resolve_to_exactly_one_commit(tmp_path
     hub = build_hub(tmp_path)
     chunk_a = ingest(hub, [{"source": "default", "ref": "1"}], promote=False)
     chunk_b = ingest(hub, [{"source": "default", "ref": "2"}], promote=False)
-    a = hub.services.chunks.record.get(chunk_a)
-    b = hub.services.chunks.record.get(chunk_b)
+    a = hub.default_adapter(IReadChunkRecordRepository).get(chunk_a)
+    b = hub.default_adapter(IReadChunkRecordRepository).get(chunk_b)
     assert a is not None
     assert b is not None
 
@@ -87,7 +92,7 @@ def test_two_opposing_declarations_racing_resolve_to_exactly_one_commit(tmp_path
         "the opposing declaration completed while the first still held the shared lock — not atomic"
     )
     # Nothing has landed yet — the first declaration's write is still paused.
-    assert hub.services.chunks.dependencies.list_standing_edges() == []
+    assert hub.default_adapter(IReadChunkDependenciesRepository).list_standing_edges() == []
 
     release_write.set()
     first_thread.join(timeout=5)
@@ -97,7 +102,7 @@ def test_two_opposing_declarations_racing_resolve_to_exactly_one_commit(tmp_path
     assert "refused" in second_result, second_result
     assert isinstance(second_result["refused"], DependencyWouldCloseCycle)
 
-    standing = hub.services.chunks.dependencies.list_standing_edges()
+    standing = hub.default_adapter(IReadChunkDependenciesRepository).list_standing_edges()
     assert len(standing) == 1
     assert standing[0].dependent_chunk_id == chunk_a
     assert standing[0].prerequisite_chunk_id == chunk_b
@@ -120,10 +125,10 @@ def test_a_disjoint_cycle_across_four_chunks_is_closed_by_the_shared_lock_not_th
     chunk_b = ingest(hub, [{"source": "default", "ref": "b"}], promote=False)
     chunk_c = ingest(hub, [{"source": "default", "ref": "c"}], promote=False)
     chunk_d = ingest(hub, [{"source": "default", "ref": "d"}], promote=False)
-    a = hub.services.chunks.record.get(chunk_a)
-    b = hub.services.chunks.record.get(chunk_b)
-    c = hub.services.chunks.record.get(chunk_c)
-    d = hub.services.chunks.record.get(chunk_d)
+    a = hub.default_adapter(IReadChunkRecordRepository).get(chunk_a)
+    b = hub.default_adapter(IReadChunkRecordRepository).get(chunk_b)
+    c = hub.default_adapter(IReadChunkRecordRepository).get(chunk_c)
+    d = hub.default_adapter(IReadChunkRecordRepository).get(chunk_d)
     assert a is not None
     assert b is not None
     assert c is not None
@@ -180,7 +185,7 @@ def test_a_disjoint_cycle_across_four_chunks_is_closed_by_the_shared_lock_not_th
         "serialize two declares naming no chunk id in common"
     )
     # Nothing has landed yet — the first declaration's write is still paused.
-    assert len(hub.services.chunks.dependencies.list_standing_edges()) == 2
+    assert len(hub.default_adapter(IReadChunkDependenciesRepository).list_standing_edges()) == 2
 
     release_write.set()
     first_thread.join(timeout=5)
@@ -190,7 +195,7 @@ def test_a_disjoint_cycle_across_four_chunks_is_closed_by_the_shared_lock_not_th
     assert "refused" in second_result, second_result
     assert isinstance(second_result["refused"], DependencyWouldCloseCycle)
 
-    standing = hub.services.chunks.dependencies.list_standing_edges()
+    standing = hub.default_adapter(IReadChunkDependenciesRepository).list_standing_edges()
     assert len(standing) == 3  # the two pre-existing edges, plus a -> b; c -> d was refused
 
 
@@ -201,8 +206,8 @@ def test_repeated_opposing_declaration_races_never_yield_two_standing_edges(tmp_
     for i in range(8):
         chunk_x = ingest(hub, [{"source": "default", "ref": f"x{i}"}], promote=False)
         chunk_y = ingest(hub, [{"source": "default", "ref": f"y{i}"}], promote=False)
-        x = hub.services.chunks.record.get(chunk_x)
-        y = hub.services.chunks.record.get(chunk_y)
+        x = hub.default_adapter(IReadChunkRecordRepository).get(chunk_x)
+        y = hub.default_adapter(IReadChunkRecordRepository).get(chunk_y)
         assert x is not None
         assert y is not None
         start = threading.Barrier(2)
@@ -240,7 +245,7 @@ def test_repeated_opposing_declaration_races_never_yield_two_standing_edges(tmp_
         assert outcomes == {True, False}, f"pair {i}: {results}"
         standing = [
             e
-            for e in hub.services.chunks.dependencies.list_standing_edges()
+            for e in hub.default_adapter(IReadChunkDependenciesRepository).list_standing_edges()
             if e.dependent_chunk_id in (chunk_x, chunk_y) and e.prerequisite_chunk_id in (chunk_x, chunk_y)
         ]
         assert len(standing) == 1, f"pair {i}: {standing}"
@@ -254,8 +259,8 @@ def test_a_fold_and_a_racing_declare_naming_its_target_are_serialized_by_the_sha
     survivor_id = ingest(hub, [{"source": "default", "ref": "survivor"}], promote=False)
     target_id = ingest(hub, [{"source": "default", "ref": "target"}], promote=False)
     dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
-    dependent = hub.services.chunks.record.get(dependent_id)
-    target = hub.services.chunks.record.get(target_id)
+    dependent = hub.default_adapter(IReadChunkRecordRepository).get(dependent_id)
+    target = hub.default_adapter(IReadChunkRecordRepository).get(target_id)
     assert dependent is not None
     assert target is not None
 

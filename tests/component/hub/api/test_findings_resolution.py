@@ -1,7 +1,7 @@
 """The finding routes resolve their services through the admitted tenant's request scope (component tier).
 
-Every refusal the tenant chain answers before a finding route runs keeps the payload an unmigrated route on the same
-chain answers; a tenant deleted between its admission and a finding service's lazy resolution answers as a closed
+Every refusal the tenant chain answers before a finding route runs keeps the payload a garden-proposal route on the
+same chain answers; a tenant deleted between its admission and a finding service's lazy resolution answers as a closed
 tenant, never as a server fault; concurrent requests share only their own tenant's services; and an async route's
 first construction runs off the event loop, as a sync route's does."""
 
@@ -28,6 +28,7 @@ from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.domain.tenancy.teardown import TenantTeardown
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.scopes.tenants import TenantContainers
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.tenancy import StoreScope, TenantId
@@ -38,12 +39,13 @@ from tests.support.scaffolding import (
     default_tenant,
     seed_membership,
     seed_runner,
+    seed_runner_in,
     seed_session,
     seed_user,
 )
 
-#: An unmigrated route on the finding routes' own chain — the people guards and ``FLEET_VIEW`` over ``Services``.
-_UNMIGRATED = "/api/garden-proposals"
+#: A garden-proposal route on the finding routes' own chain — the people guards and ``FLEET_VIEW``.
+_SIBLING = "/api/garden-proposals"
 _UNKNOWN = TenantId("ten_00000000000000000000000000")
 
 
@@ -136,7 +138,7 @@ def _answer(client: TestClient, method: str, path: str, headers: dict[str, str])
 def _closed(hub: HubHarness) -> TenantId:
     closed = hub.add_tenant("gone")
     close_tenant(hub.engine, closed.tenant)
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
     return closed.tenant
 
 
@@ -145,7 +147,7 @@ def _refusal_headers(hub: HubHarness, refusal: str) -> dict[str, str]:
     if refusal == "missing identity":
         return {TENANT_HEADER: default}
     if refusal == "machine tenant mismatch":
-        token = seed_runner(hub.open_services(default), "rn-mismatch", register=False)
+        token = seed_runner_in(hub.process, default, "rn-mismatch", register=False)
         return {"Authorization": f"Bearer {token}", TENANT_HEADER: hub.add_tenant("other").tenant}
     if refusal == "missing membership":
         return {**_session(hub, "ada", Role.ADMIN), TENANT_HEADER: hub.add_tenant("other").tenant}
@@ -168,9 +170,7 @@ def _refusal_headers(hub: HubHarness, refusal: str) -> dict[str, str]:
         "route admission",
     ],
 )
-def test_a_finding_route_keeps_the_refusal_an_unmigrated_route_on_its_chain_answers(
-    hub: HubHarness, refusal: str
-) -> None:
+def test_a_finding_route_keeps_the_refusal_a_sibling_route_on_its_chain_answers(hub: HubHarness, refusal: str) -> None:
     headers = _refusal_headers(hub, refusal)
     client = _client(hub)
 
@@ -178,15 +178,15 @@ def test_a_finding_route_keeps_the_refusal_an_unmigrated_route_on_its_chain_answ
         # A guest views findings but may not exit one: the write's own permission refuses it.
         assert _answer(client, "GET", "/api/findings", headers)[0] == 200
         status, body = _answer(client, "POST", "/api/findings/resolve", headers)
-        _, unmigrated = _answer(client, "POST", "/api/garden-proposals/gpr_x/pass", headers)
+        _, sibling = _answer(client, "POST", "/api/garden-proposals/gpr_x/pass", headers)
         assert status == 403
-        assert body == unmigrated
+        assert body == sibling
         return
-    migrated = _answer(client, "GET", "/api/findings", headers)
-    unmigrated = _answer(client, "GET", _UNMIGRATED, headers)
+    finding = _answer(client, "GET", "/api/findings", headers)
+    sibling = _answer(client, "GET", _SIBLING, headers)
 
-    assert migrated == unmigrated
-    assert migrated[0] in {401, 403, 404}
+    assert finding == sibling
+    assert finding[0] in {401, 403, 404}
 
 
 def _deleting_after_admission(hub: HubHarness, monkeypatch: pytest.MonkeyPatch, tenant: TenantId) -> None:
@@ -218,7 +218,7 @@ def test_a_tenant_deleted_before_a_lazy_finding_resolution_answers_a_runner_401(
     hub: HubHarness, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     created = hub.add_tenant("doomed")
-    token = seed_runner(created.services, "rn-doomed", register=False)
+    token = seed_runner(created, "rn-doomed", register=False)
     headers = {"Authorization": f"Bearer {token}"}
     assert _client(hub).get("/scratch/fleet/findings", headers=headers).status_code == 200
     _deleting_after_admission(hub, monkeypatch, created.tenant)

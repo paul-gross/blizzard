@@ -8,10 +8,12 @@ import os
 from pathlib import Path
 
 from blizzard.hub.documents import codec_for_path
+from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.config.forges import ForgeSlug
-from blizzard.hub.domain.config.repositories import RepositoryFields
-from blizzard.hub.domain.config.work_sources import WorkSourceFields
+from blizzard.hub.domain.config.forges import ForgeSlug, IReadForgeRepository
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryFields
+from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository, WorkSourceFields
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
 from tests.support.scaffolding import HubHarness, build_hub
@@ -24,9 +26,11 @@ _CAPTURE = os.environ.get("BLIZZARD_CAPTURE_GOLDEN") == "1"
 
 
 def _graph(hub: HubHarness) -> str:
-    return hub.services.default_graph.ensure_default(
-        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
-    ).name
+    return (
+        hub.default_adapter(DefaultGraphService)
+        .ensure_default(PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml())
+        .name
+    )
 
 
 def _seeded(tmp_path: Path) -> HubHarness:
@@ -95,9 +99,9 @@ def _seeded(tmp_path: Path) -> HubHarness:
     # carried-over record is, on a forge an earlier apply declared.
     forges = hub.client.post("/api/config/apply", json={"version": 2, "forges": document["forges"]})
     assert forges.status_code == 200, forges.text
-    forge = hub.services.forge_records.get_by_slug(ForgeSlug.parse("internal"))
+    forge = hub.default_adapter(IReadForgeRepository).get_by_slug(ForgeSlug.parse("internal"))
     assert forge is not None
-    authoring = hub.services.config_authoring
+    authoring = hub.default_adapter(ConfigAuthoring)
     authoring.create_repository(
         "tools",
         None,
@@ -120,8 +124,8 @@ def _pinned(path: Path, actual: bytes) -> None:
 
 def test_the_v2_export_is_byte_identical_to_its_golden(tmp_path: Path) -> None:
     hub = _seeded(tmp_path)
-    tools = hub.services.repository_records.resolve("tools")
-    public = hub.services.work_source_records.resolve("public")
+    tools = hub.default_adapter(IReadRepositoryRecordRepository).resolve("tools")
+    public = hub.default_adapter(IReadWorkSourceRepository).resolve("public")
     assert tools is not None and tools.fields.credential_id is None
     assert public is not None and public.fields.credential_id is None
 
@@ -146,7 +150,7 @@ def test_reapplying_the_v2_export_over_records_acting_with_no_credential_settles
     assert again.status_code == 200, again.text
     assert {o["op"] for o in again.json()["outcomes"]} == {"unchanged"}
     assert hub.client.get("/api/config/changes").json()["total"] == before
-    tools = hub.services.repository_records.resolve("tools")
-    public = hub.services.work_source_records.resolve("public")
+    tools = hub.default_adapter(IReadRepositoryRecordRepository).resolve("tools")
+    public = hub.default_adapter(IReadWorkSourceRepository).resolve("public")
     assert tools is not None and tools.fields.credential_id is None
     assert public is not None and public.fields.credential_id is None

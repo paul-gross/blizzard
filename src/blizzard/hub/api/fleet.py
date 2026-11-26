@@ -44,7 +44,6 @@ from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant, tenant
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.chunk_views import ChunkViewReads
 from blizzard.hub.api.decisions import to_decision_view
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.findings import finding_view
 from blizzard.hub.api.garden_proposals import garden_proposal_view
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast, pushed_facts
@@ -54,20 +53,24 @@ from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.api.request_config import request_config
 from blizzard.hub.api.scopes import scope_view
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.config import HubConfig
+from blizzard.hub.delivery.flow_driver import StepWake
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
+    WorkRefLabel,
 )
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
-from blizzard.hub.domain.config.repositories import RepositoryId
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryId
 from blizzard.hub.domain.delivery.flows import Flow, describe_standing
+from blizzard.hub.domain.delivery.ports.flows import IReadFlows
 from blizzard.hub.domain.execution.apply import ApplyService
 from blizzard.hub.domain.execution.claim import (
     ClaimConflict,
@@ -460,37 +463,52 @@ def fleet_summary(facts: FromDishka[IReadChunkFactsRepository]) -> FleetSummaryV
 
 
 @router.get("/questions/{question_id}", response_model=QuestionView)
-def get_question(question_id: str, services: Services) -> QuestionView:
+@inject_sync
+def get_question(
+    question_id: str,
+    question_reads: FromDishka[IReadChunkQuestionsRepository],
+    facts: FromDishka[IReadChunkFactsRepository],
+    runners: runners_api.Runners,
+    projects: ProjectReads,
+) -> QuestionView:
     """The runner's answer poll before it resumes the dormant session."""
-    row = services.chunks.questions.get_question(question_id)
+    row = question_reads.get_question(question_id)
     if row is None:
         raise ProblemHTTPException(partial(problems.question_not_found_problem, question_id))
-    labels = ProjectLabels.read(services.projects, [row.project_id])
+    labels = ProjectLabels.read(projects, [row.project_id])
     return questions_api.question_view(
         row,
-        services.registry.names_for([row.runner_id]),
+        runners.names_for([row.runner_id]),
         labels.fields(row.project_id),
-        superseded_by_restart=services.chunks.facts.restarted_past(row.chunk_id, row.epoch),
+        superseded_by_restart=facts.restarted_past(row.chunk_id, row.epoch),
     )
 
 
 @router.get("/chunks/{chunk_id}/envelope", response_model=NodeEnvelope)
-def get_envelope(chunk_id: str, services: Services) -> NodeEnvelope:
+@inject_sync
+def get_envelope(
+    chunk_id: str,
+    records: Records,
+    graphs: Graphs,
+    facts: FromDishka[IReadChunkFactsRepository],
+    artifacts: FromDishka[IReadChunkArtifactsRepository],
+    label: FromDishka[WorkRefLabel],
+) -> NodeEnvelope:
     """The chunk's current node envelope, idempotent — the lost-apply re-read."""
-    chunk = services.chunks.record.get(chunk_id)
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    graph = services.graphs.get(chunk.graph_id)
+    graph = graphs.get(chunk.graph_id)
     if graph is None:
         raise ProblemHTTPException(problems.pinned_graph_missing_problem)
-    facts = ChunkFacts.or_default(services.chunks.facts.load_facts(chunk_id))
+    chunk_facts = ChunkFacts.or_default(facts.load_facts(chunk_id))
     try:
         envelope = Envelope.current(
             chunk,
             graph,
-            facts,
-            services.chunks.artifacts.load_latest_artifacts(chunk_id),
-            label=services.work_ref_label,
+            chunk_facts,
+            artifacts.load_latest_artifacts(chunk_id),
+            label=label,
         )
     except NoCurrentNode as exc:
         raise ProblemHTTPException(partial(problems.no_current_node_problem, exc)) from exc
@@ -788,27 +806,34 @@ def get_chunk_finding(
 
 
 @router.post("/chunks/{chunk_id}/hub-advance", response_model=HubAdvanceResponse)
+@inject_sync
 def hub_advance(
     chunk_id: str,
-    services: Services,
+    records: Records,
+    graphs: Graphs,
+    fact_reads: FromDishka[IReadChunkFactsRepository],
+    step_wake: FromDishka[StepWake],
+    flows: FromDishka[IReadFlows],
+    clock: FromDishka[IClock],
+    repository_records: FromDishka[IReadRepositoryRecordRepository],
 ) -> HubAdvanceResponse:
     """Wake the hub's flow driver for a chunk parked at a hub command node, and answer where its visit stands in the
     flows it holds — ``detail`` names it. The call never takes a pass itself: ``ran`` is always false."""
-    chunk = services.chunks.record.get(chunk_id)
+    chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    graph = services.graphs.get(chunk.graph_id)
+    graph = graphs.get(chunk.graph_id)
     if graph is None:
         raise ProblemHTTPException(problems.pinned_graph_missing_problem)
-    facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
+    facts = fact_reads.load_facts(chunk_id) or ChunkFacts(minted=True)
     node = facts.hub_advance_node(graph)
     if node is None:
         return HubAdvanceResponse(
             chunk_id=chunk_id, status=facts.status(), ran=False, detail="not parked at a hub command node"
         )
-    services.hub_step_wake.wake()
+    step_wake.wake()
     epoch = facts.latest_epoch() or 0
-    standing = services.flows.visit_standing(chunk_id, node_id=node.node_id, epoch=epoch)
+    standing = flows.visit_standing(chunk_id, node_id=node.node_id, epoch=epoch)
     return HubAdvanceResponse(
         chunk_id=chunk_id,
         status=facts.status(),
@@ -818,17 +843,17 @@ def hub_advance(
             node,
             standing,
             epoch=epoch,
-            now=services.clock.now(),
-            flow_name=_flow_namer(services, standing.submission.flows if standing is not None else ()),
+            now=clock.now(),
+            flow_name=_flow_namer(repository_records, standing.submission.flows if standing is not None else ()),
         ),
     )
 
 
-def _flow_namer(services: TenantServices, flows: Sequence[Flow]) -> Callable[[Flow], str]:
+def _flow_namer(repository_records: IReadRepositoryRecordRepository, flows: Sequence[Flow]) -> Callable[[Flow], str]:
     """A flow as an operator names it: its repository and branch. The ``flows``' repository records are read once,
     up front."""
     ids = [RepositoryId(repository_id) for repository_id in sorted({flow.repository_id for flow in flows})]
-    records = services.repository_records.get_many(ids) if ids else {}
+    records = repository_records.get_many(ids) if ids else {}
 
     def name(flow: Flow) -> str:
         record = records.get(RepositoryId(flow.repository_id))
@@ -1286,17 +1311,20 @@ def heartbeat_runner(
 
 
 @router.get("/runners/{runner_id}/decisions", response_model=OpenDecisionsResponse)
+@inject_sync
 def list_runner_decisions(
     runner_id: str,
-    services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
+    decision_reads: DecisionReads,
+    runners: runners_api.Runners,
+    projects: ProjectReads,
 ) -> OpenDecisionsResponse:
     """The calling runner's own open gate decisions — the unresolved ones its configuration imposed, whole rather than
     paged; 403 when the path names another runner."""
     fleet.assert_owns(runner_id)
-    rows = services.chunks.decisions.list_open_decisions(imposed_by_runner_id=runner_id)
-    runner_names = services.registry.names_for([runner_id]) if rows else {}
-    labels = ProjectLabels.read(services.projects, (d.project_id for d in rows))
+    rows = decision_reads.list_open_decisions(imposed_by_runner_id=runner_id)
+    runner_names = runners.names_for([runner_id]) if rows else {}
+    labels = ProjectLabels.read(projects, (d.project_id for d in rows))
     return OpenDecisionsResponse(
         decisions=[to_decision_view(d, runner_names, labels.fields(d.project_id)) for d in rows]
     )

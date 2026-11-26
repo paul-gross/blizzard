@@ -9,16 +9,20 @@ from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, decide_close_e
 from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from tests.support.scaffolding import HubHarness, chunk_stores, chunk_unit, hub_store_connections
 
 
 def _close_decision(hub: HubHarness, chunk_id: str) -> CloseEnqueueDecision:
     """The close intents a landing on the chunk owes, judged against the hub's own work sources."""
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None, chunk_id
-    return decide_close_enqueue(chunk.work_refs, lambda source: hub.services.work_sources.closer(source) is not None)
+    return decide_close_enqueue(
+        chunk.work_refs, lambda source: hub.default_adapter(IWorkSourceRegistry).closer(source) is not None
+    )
 
 
 def record_hub_asset(

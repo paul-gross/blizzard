@@ -7,6 +7,7 @@ from pathlib import Path
 from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkRef
+from blizzard.hub.open_tenants import OpenTenants
 from tests.support.hub_node_artifacts import record_landing
 from tests.support.hub_request_auth import bearer, cookie, enrolled_runner_token, ingest_chunk
 from tests.support.scaffolding import (
@@ -60,7 +61,7 @@ def test_foreign_and_unknown_chunks_are_indistinguishable(tmp_path: Path) -> Non
     hub = build_hub(tmp_path)
     chunk = ingest_chunk(hub)
     other = add_tenant(hub.engine, "bravo")
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
     headers = {TENANT_HEADER: other}
     assert hub.client.get(f"/api/chunks/{chunk}/landing-facts", headers=headers).status_code == 404
     assert hub.client.get("/api/chunks/ch_never/landing-facts", headers=headers).status_code == 404

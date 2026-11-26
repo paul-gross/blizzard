@@ -18,6 +18,7 @@ from blizzard.foundation.clock import FixedClock, ManualMonotonicClock
 from blizzard.foundation.credential_check import CheckOutcome
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.event_log import EventLogService
+from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.config.changes import RecordKind, RecordRef
 from blizzard.hub.domain.config.credential_resolution import CredentialChoice
 from blizzard.hub.domain.config.credentials import (
@@ -45,6 +46,9 @@ from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.readiness import CredentialReadiness
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import schema
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
+from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
+from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.tenancy import StoreScope
 from tests.support.scaffolding import (
     OP,
@@ -127,10 +131,14 @@ class _World:
         self.engine = create_engine_from_url(db_url)
         keys = hub_key_provider({}, data_dir=tmp_path / "data")
         clock = FixedClock(_NOW)
-        self.stores = configured_core(self.engine, tmp_path, clock=clock).open(StoreScope(default_tenant(self.engine)))
+        self.stores = (
+            configured_core(self.engine, tmp_path, clock=clock)
+            .tenants.open(StoreScope(default_tenant(self.engine)))
+            .resolver
+        )
         self.authoring = config_authoring(self.engine, keys=keys, clock=clock)
         forge_id = seed_forge(self.engine, "http://forge.fixture")
-        forge = self.stores.forge_records.get(forge_id)
+        forge = self.stores.get(ForgeRecordStore).get(forge_id)
         assert forge is not None
         self.forge_id = forge_id
         self.forge = ForgeChoice(forge=forge_id, named=forge)
@@ -141,7 +149,7 @@ class _World:
         self.elsewhere = self._repository("elsewhere", self.other)
         self.issues = self._work_source("issues", self.deploy)
         self.requests: list[str] = []
-        self.event_log = EventLogService(events=self.stores.chunk_stores.events, publisher=EventBroker())
+        self.event_log = EventLogService(events=self.stores.get(ChunkStores).events, publisher=EventBroker())
         self.live = tenant_live(self.stores)
 
     def _credential(self, slug: str) -> ConfiguredCredential:
@@ -174,9 +182,9 @@ class _World:
         self, *, authorizations: IForgeAuthorizations | None = None, monotonic: ManualMonotonicClock | None = None
     ) -> CredentialReadiness:
         return CredentialReadiness(
-            repositories=self.stores.repository_records,
-            work_sources=self.stores.work_source_records,
-            forges=self.stores.forge_records,
+            repositories=self.stores.get(RepositoryRecordStore),
+            work_sources=self.stores.get(WorkSourceRecordStore),
+            forges=self.stores.get(ForgeRecordStore),
             authorizations=authorizations or self.live.authorizations,
             budgets=ForgeBudgets(clock=FixedClock(_NOW), dialects=rate_dialect),
             probes={"github": GitHubReadinessProbe(transport=httpx2.MockTransport(self._forge))},

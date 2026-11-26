@@ -26,6 +26,7 @@ from blizzard.hub.api.auth_session import (
 )
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.config import AUTH_MODE_OAUTH
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.tenancy import TenantId
 from tests.support.scaffolding import (
     HubHarness,
@@ -122,7 +123,7 @@ def test_the_admitted_permission_is_the_only_one_the_admitted_person_holds(hub: 
 def _closed_tenant(hub: _Hub) -> TenantId:
     closed = hub.harness.add_tenant("gone")
     close_tenant(hub.harness.engine, closed.tenant)
-    hub.harness.hub_services.tenants.open_tenants.refresh()
+    hub.harness.resolve_hub(OpenTenants).refresh()
     return closed.tenant
 
 

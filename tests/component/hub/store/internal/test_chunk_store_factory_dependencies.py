@@ -1,8 +1,7 @@
-"""``build_chunk_stores``/``build_services`` expose the new chunk-dependencies seam on
-both the write (``ChunkStores``) and read-only (``ChunkReadStores``) bundles (component
-tier) — the read bundle typed to the read Protocol so
-``bzh:controller-read-only`` holds at type-check time; this asserts the runtime half:
-both bundles carry the field, and it is the same underlying adapter instance."""
+"""The chunk-dependencies seam is exposed on the write bundle (``ChunkStores``) and through the read port a tenant's
+container scope resolves (component tier) — the read port typed to the read Protocol so ``bzh:controller-read-only``
+holds at type-check time; this asserts the runtime half: both carry the seam, and it is the same underlying adapter
+instance."""
 
 from __future__ import annotations
 
@@ -26,10 +25,10 @@ def test_the_write_bundle_exposes_the_dependencies_seam(tmp_path: Path) -> None:
     assert isinstance(stores.dependencies, ChunkDependenciesStore)
 
 
-def test_the_read_bundle_exposes_the_same_dependencies_adapter(tmp_path: Path) -> None:
+def test_the_read_port_resolves_the_same_dependencies_adapter(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
 
-    dependencies: IReadChunkDependenciesRepository = hub.services.chunks.dependencies
+    dependencies: IReadChunkDependenciesRepository = hub.default_adapter(IReadChunkDependenciesRepository)
 
     # Identity, not just isinstance — the very same adapter instance `DependencyService`
     # holds for its own writes, not a second, disconnected object.

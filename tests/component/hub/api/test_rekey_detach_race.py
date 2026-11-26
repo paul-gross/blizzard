@@ -7,6 +7,8 @@ from typing import Any
 
 import pytest
 
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from tests.support.scaffolding import build_hub, pointer_token, runner_token
 
 _YAML = """
@@ -64,7 +66,7 @@ def _claimed_chunk(hub: Any) -> str:
 
 
 def _token_facts(hub: Any, chunk_id: str) -> int:
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     return 0 if facts is None else len(facts.route_tokens_minted)
 
 
@@ -73,7 +75,7 @@ def _rekey_held_between_read_and_write(
 ) -> int:
     reached = threading.Event()
     release = threading.Event()
-    route_repo = hub.services.chunks.route
+    route_repo = hub.default_adapter(IReadChunkRouteRepository)
     real_route_of = route_repo.route_of
     armed = [True]
 

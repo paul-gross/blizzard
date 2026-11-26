@@ -18,7 +18,6 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.permissions import HUB_PERMISSIONS
-from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
 from tests.support.scaffolding import (
@@ -27,7 +26,7 @@ from tests.support.scaffolding import (
     build_hub,
     default_tenant,
     seed_hub_admin,
-    seed_runner,
+    seed_runner_in,
     seed_session,
     seed_user,
 )
@@ -41,9 +40,9 @@ def _two_tenants(tmp_path: Path) -> tuple[HubHarness, TenantId, TenantId]:
     holds ``_BRAVO_RUNNER`` — each runner visible only from its own tenant."""
     hub = build_hub(tmp_path, auth_mode="oauth")
     alpha = default_tenant(hub.engine)
-    seed_runner(hub.open_services(alpha), _ALPHA_RUNNER, fleet=hub.resolve(alpha, FleetService))
+    seed_runner_in(hub.process, alpha, _ALPHA_RUNNER)
     bravo = add_tenant(hub.engine, "bravo")
-    seed_runner(hub.open_services(bravo), _BRAVO_RUNNER, fleet=hub.resolve(bravo, FleetService))
+    seed_runner_in(hub.process, bravo, _BRAVO_RUNNER)
     return hub, alpha, bravo
 
 

@@ -17,6 +17,7 @@ import pytest
 from blizzard.foundation.clock import IClock
 from blizzard.hub.api.chunk_views import ChunkViewReads
 from blizzard.hub.domain.chunk.model import ChunkFacts
+from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.scoped import ScopedConnections
@@ -177,7 +178,7 @@ def test_grouping_deletion_and_the_pre_claim_edit_still_admit_a_blocked_chunk(tm
 
     delete_resp = hub.client.request("DELETE", f"/api/chunks/{dependent_id}", json={})
     assert delete_resp.status_code == 202, delete_resp.text
-    assert hub.services.chunks.dependencies.standing_edge(dependent_id, prerequisite_id) is None
+    assert hub.default_adapter(IReadChunkDependenciesRepository).standing_edge(dependent_id, prerequisite_id) is None
 
 
 def test_a_completed_dependent_derives_no_marking_despite_its_standing_edge(tmp_path: Path) -> None:

@@ -13,7 +13,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.foundation.registry.scopes import ScopeValues
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.hub.composition import build_hub_core, connections_for_engine
+from blizzard.hub.composition import connections_for_engine
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.egress.backfill import EgressBackfill
 from blizzard.hub.domain.observability.egress.boot import EgressPathKey
@@ -36,7 +36,9 @@ from blizzard.hub.domain.observability.tracing.status import TraceStatusReader
 from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
 from blizzard.hub.domain.sweeps.names import SweepName
 from blizzard.hub.domain.sweeps.roster import SweepRoster
-from blizzard.hub.egress.factory import BackfillWriters, ConfiguredWriter
+from blizzard.hub.egress.factory import BackfillWriters, ConfiguredWriter, egress_boot
+from blizzard.hub.open_tenants import OpenTenants
+from blizzard.hub.process_root import open_store_backed
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.store.internal.trace_store import TraceStore
@@ -122,7 +124,7 @@ def test_step_facts_are_hydrated_through_the_tenant_accessor_and_a_closed_tenant
     assert hydrations(tenant) is process.tenants.resolve(StoreScope(tenant), StepHydration)
 
     close_tenant(hub.engine, tenant)
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
     process.tenants.evict(tenant)
     with pytest.raises((TenantClosed, UnknownTenant)):
         hydrations(tenant)
@@ -146,7 +148,7 @@ def test_closing_the_process_leaves_the_lent_exporter_open(tmp_path: Path) -> No
     config = HubConfig(
         root=built.config.root, db_url=built.config.db_url, egress=EgressConfig(directory=tmp_path / "out")
     )
-    core = build_hub_core(
+    opened = open_store_backed(
         connections_for_engine(built.engine),
         clock=FixedClock(built.clock.now()),
         config=config,
@@ -154,13 +156,13 @@ def test_closing_the_process_leaves_the_lent_exporter_open(tmp_path: Path) -> No
         environ={},
         actions=TEST_HUB_ACTIONS,
         trace_exporter=exporter,
-        egress_path_key=EgressPathKey(b"k" * 32),
+        egress_boot=egress_boot(config.egress, EgressPathKey(b"k" * 32)),
     )
-    process = core.process.resolver
+    process = opened.resolver
     assert process.get(TraceExportSweep | None) is not None
     writer = process.get(IEgressWriter)
     assert process.get(ConfiguredWriter).for_config(config.egress) is writer
 
-    core.process.close()
+    opened.close()
 
     assert exporter.closed == 0

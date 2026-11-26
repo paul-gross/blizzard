@@ -8,7 +8,7 @@ from typing import Any, cast
 
 import pytest
 
-from blizzard.hub.domain.runners.host import HostNameTaken, HostReport
+from blizzard.hub.domain.runners.host import HostNameTaken, HostReport, IReadHostRegistry
 from blizzard.hub.domain.runners.host_report import HostReportService
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
 from tests.support.scaffolding import build_hub
@@ -17,7 +17,7 @@ from tests.support.scaffolding import build_hub
 def test_a_rename_onto_a_name_taken_after_the_domain_check_is_refused_in_the_write(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     ids: dict[str, Any] = {n: hub.client.post("/api/hosts", json={"name": n}).json() for n in ("one", "two")}
-    store = cast(HostRegistryStore, hub.services.hosts)
+    store = cast(HostRegistryStore, hub.default_adapter(IReadHostRegistry))
     report = HostReport(name="one", url=None, redirect_uris=(), workspaces=(), subscriptions=())
 
     # The domain's read saw "one" free for ``two`` only before ``one`` was added; the write must look again.
@@ -44,7 +44,7 @@ class _StaleNames:
 def test_a_report_that_loses_the_rename_race_still_lands_as_a_heartbeat(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     ids: dict[str, Any] = {n: hub.client.post("/api/hosts", json={"name": n}).json() for n in ("one", "two")}
-    store = cast(HostRegistryStore, hub.services.hosts)
+    store = cast(HostRegistryStore, hub.default_adapter(IReadHostRegistry))
     service = HostReportService(hosts=cast(Any, _StaleNames(store)), clock=hub.clock)
     held = store.get_host(ids["two"]["host_id"])
     assert held is not None

@@ -14,9 +14,15 @@ import pytest
 from blizzard.foundation.node_steps import Executor, SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.model import Movement, MovementKind, WorkRef, decide_close_enqueue
-from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunk.ports.escalations import (
+    IReadChunkEscalationsRepository,
+    IWriteChunkEscalationsRepository,
+)
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository, IWriteChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
+from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.domain.operations import restart
 from blizzard.hub.domain.operations.edit import EditService
 from blizzard.hub.domain.operations.restart import SUPERSEDED_ANSWER, RestartGraphPinChanged, RestartService
@@ -434,7 +440,7 @@ def test_restart_supersedes_an_open_escalation(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
     with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
-        cast(IWriteChunkEscalationsRepository, hub.services.chunks.escalations).record_escalation(
+        cast(IWriteChunkEscalationsRepository, hub.default_adapter(IReadChunkEscalationsRepository)).record_escalation(
             chunk_id,
             epoch=1,
             takeover_command="resume it",
@@ -567,7 +573,7 @@ def test_restart_refuses_a_chunk_standing_on_a_node_its_graph_does_not_carry(tmp
     pinned = _detail(hub, chunk_id)["graph_id"]
     other = next(g["graph_id"] for g in hub.client.get("/api/graphs").json() if g["graph_id"] != pinned)
     with chunk_unit(hub_store_connections(hub.engine), chunk_id) as tx:
-        cast(IWriteChunkRecordRepository, hub.services.chunks.record).set_graph(
+        cast(IWriteChunkRecordRepository, hub.default_adapter(IReadChunkRecordRepository)).set_graph(
             chunk_id, graph_id=other, transaction=tx
         )
 
@@ -689,7 +695,7 @@ def test_a_cross_graph_restart_keeps_the_holding_runners_route(tmp_path: Path) -
 
     assert _restart(hub, chunk_id, to_graph=target).status_code == 202
 
-    route = hub.services.chunks.route.route_of(chunk_id)
+    route = hub.default_adapter(IReadChunkRouteRepository).route_of(chunk_id)
     assert route is not None
     assert route.runner_id == "r1"
 
@@ -699,12 +705,12 @@ def test_a_same_graph_restart_refuses_a_graph_that_changed_since_the_caller_load
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _YAML}).status_code == 201
     chunk_id = ingest(hub, [_POINTER])  # left unclaimed: `set_graph` admits pre-claim statuses only
-    stale_chunk = hub.services.chunks.record.get(chunk_id)
+    stale_chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert stale_chunk is not None
-    stale_graph = hub.services.graphs.get(stale_chunk.graph_id)
+    stale_graph = hub.default_adapter(IReadGraphRepository).get(stale_chunk.graph_id)
     assert stale_graph is not None
     target_id = _target_graph(hub)
-    target_graph = hub.services.graphs.get(target_id)
+    target_graph = hub.default_adapter(IReadGraphRepository).get(target_id)
     assert target_graph is not None
     hub.default_adapter(EditService).set_graph(stale_chunk, graph=target_graph)  # a concurrent edit re-pins it
 
@@ -745,7 +751,7 @@ def test_the_restart_is_the_movement_the_chunk_stands_on(tmp_path: Path) -> None
 
     assert _restart(hub, chunk_id, node="audit", to_graph=target).status_code == 202
 
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     migration, restart = facts.migrations[0], facts.restarts[0]
     assert (migration.recorded_at, migration.epoch) == (restart.recorded_at, restart.epoch)
@@ -969,7 +975,7 @@ def test_a_cross_graph_restart_of_a_never_moved_chunk_records_the_re_pin(tmp_pat
     assert len(detail["migrations"]) == 1
     migration = detail["migrations"][0]
     assert (migration["from_graph_id"], migration["to_graph_id"], migration["source"]) == (source, target, "restart")
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     assert facts.migrations[0].epoch == facts.restarts[0].epoch == 2
 
@@ -986,6 +992,6 @@ def test_every_re_entry_into_the_forced_visit_is_fresh(tmp_path: Path) -> None:
         assert node["session"] == SessionMode.FRESH.value, f"re-entry at epoch {epoch} resumed"
         report_lease(hub, chunk_id, epoch=epoch, seq=epoch)
 
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     assert facts.entered_by_restart() is True

@@ -17,6 +17,8 @@ from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import RoutineAuthoring
 from blizzard.hub.domain.garden.runs.run import RunService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
+from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
 from tests.support.scaffolding import HubHarness, build_hub, project_record
@@ -39,9 +41,11 @@ def hub(tmp_path: Path) -> HubHarness:
 
 
 def _graph_name(hub: HubHarness) -> str:
-    return hub.services.default_graph.ensure_default(
-        PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
-    ).name
+    return (
+        hub.default_adapter(DefaultGraphService)
+        .ensure_default(PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml())
+        .name
+    )
 
 
 def _routine(hub: HubHarness, project: str, name: str = "nightly") -> dict[str, object]:
@@ -51,7 +55,7 @@ def _routine(hub: HubHarness, project: str, name: str = "nightly") -> dict[str, 
 
 def _run(hub: HubHarness, project: str) -> str:
     """A routine run minted in ``project``, its chunk promoted."""
-    resolved = hub.services.projects.resolve(project)
+    resolved = hub.default_adapter(IReadProjectRepository).resolve(project)
     assert resolved is not None
     routine = hub.default_adapter(RoutineAuthoring).create(
         ctx=_CTX,

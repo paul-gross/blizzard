@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import func, select
 
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
-from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, TransactionMisuse
 from blizzard.hub.store import schema as s
@@ -22,7 +22,7 @@ _NAME = "progress/one"
 
 def _record(hub: HubHarness, chunk_id: str, transaction: LockedTransaction) -> bool:
     return (
-        cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
+        cast(IWriteChunkArtifactsRepository, hub.default_adapter(IReadChunkArtifactsRepository))
         .record_hub_artifact(
             chunk_id,
             node_id="nd_deliver",

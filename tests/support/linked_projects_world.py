@@ -5,8 +5,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from blizzard.hub.domain.config.repositories import RepositoryId, RepositorySlug
-from blizzard.hub.domain.projects.model import ProjectId, ProjectSlug
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryId, RepositorySlug
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId, ProjectSlug
 from tests.support.scaffolding import HubHarness, build_hub
 
 N = 4
@@ -44,13 +44,13 @@ def apply_config(hub: HubHarness, document: dict[str, object]) -> list[str]:
 
 
 def project_id(hub: HubHarness, slug: str) -> ProjectId:
-    project = hub.services.projects.get_by_slug(ProjectSlug.parse(slug))
+    project = hub.default_adapter(IReadProjectRepository).get_by_slug(ProjectSlug.parse(slug))
     assert project is not None
     return project.project_id
 
 
 def repository_id(hub: HubHarness, slug: str) -> RepositoryId:
-    record = hub.services.repository_records.get_by_slug(RepositorySlug.parse(slug))
+    record = hub.default_adapter(IReadRepositoryRecordRepository).get_by_slug(RepositorySlug.parse(slug))
     assert record is not None
     return record.repository_id
 

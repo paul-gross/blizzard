@@ -26,6 +26,7 @@ from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.observability.hub_events import HubEventLogService, IReadHubEventLog
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.tenancy import teardown
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.domain.tenancy.teardown import (
@@ -44,7 +45,6 @@ from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantClosed, Te
 from blizzard.wire.tenant import TENANT_NOT_FOUND
 from tests.support.scaffolding import (
     HubHarness,
-    added_runner,
     build_hub,
     capture_statements,
     default_project,
@@ -55,7 +55,7 @@ from tests.support.scaffolding import (
     scoped_connections,
     seed_hub_admin,
     seed_membership,
-    seed_runner,
+    seed_runner_in,
     seed_session,
     seed_user,
 )
@@ -133,7 +133,7 @@ def test_the_drain_order_is_every_tenant_owned_table_children_before_parents() -
 
 def test_a_close_records_the_fact_and_drops_the_tenant_from_memory(hub: HubHarness) -> None:
     tenant = _created(hub)
-    assert hub.open_services(tenant) is hub.open_services(tenant)
+    assert hub.process.tenants.open(StoreScope(tenant)) is hub.process.tenants.open(StoreScope(tenant))
 
     outcome = hub.resolve_hub(TenantTeardown).close(tenant, by="usr_closer")
 
@@ -147,9 +147,9 @@ def test_a_close_records_the_fact_and_drops_the_tenant_from_memory(hub: HubHarne
         0,
     )
     assert as_utc(fact.closed_at) == hub.resolve_hub(IClock).now()
-    assert tenant not in hub.hub_services.tenants.open_tenants.every()
+    assert tenant not in hub.resolve_hub(OpenTenants).every()
     with pytest.raises(TenantClosed):
-        hub.open_services(tenant)
+        hub.process.tenants.open(StoreScope(tenant))
     with pytest.raises(TenantClosed), scoped_connections(hub.engine, tenant).write("test"):
         pass
     assert _hub_events(hub) == [("tenant-closed", {"tenant_id": tenant, "by": "usr_closer"})]
@@ -160,7 +160,7 @@ def test_after_a_close_the_tenants_people_get_404_and_its_runners_401(hub: HubHa
     member = seed_user(hub, username="mia", role=Role.PENDING)
     seed_membership(hub.engine, tenant, member.user_id, Role.ADMIN)
     session = seed_session(hub, member)
-    token = seed_runner(hub.open_services(tenant), "rn-acme-1", register=False)
+    token = seed_runner_in(hub.process, tenant, "rn-acme-1", register=False)
     assert hub.app is not None
     client = TestClient(hub.app)
     person = {"Authorization": f"Bearer {session}", "X-Blizzard-Tenant": tenant}
@@ -212,7 +212,7 @@ def test_a_member_write_whose_tenant_closes_mid_request_answers_404_and_writes_n
 
 def test_a_runner_write_whose_tenant_closes_mid_request_answers_401_and_writes_nothing(hub: HubHarness) -> None:
     tenant = _created(hub)
-    runner = {"Authorization": f"Bearer {seed_runner(hub.open_services(tenant), 'rn-acme-1', register=False)}"}
+    runner = {"Authorization": f"Bearer {seed_runner_in(hub.process, tenant, 'rn-acme-1', register=False)}"}
     rows: dict[str, dict[str, int]] = {}
     _closing_after_resolution(hub, tenant, rows)
     assert hub.app is not None
@@ -328,11 +328,12 @@ def test_after_a_close_a_member_signing_in_to_its_runner_is_answered_as_an_unkno
     tenant = _created(hub)
     member = seed_user(hub, username="mia", role=Role.PENDING)
     seed_membership(hub.engine, tenant, member.user_id, Role.ADMIN)
-    services = hub.open_services(tenant)
-    seed_runner(services, "rn-acme-1", register=False)
+    seed_runner_in(hub.process, tenant, "rn-acme-1", register=False)
+    registration = hub.resolve(tenant, IReadRunnerRegistry).get_runner("rn-acme-1")
+    assert registration is not None
     callback = "https://rn-acme-1.example/api/auth/callback"
     hub.resolve(tenant, FleetService).register(
-        added_runner(services, "rn-acme-1"), "w1", public_url="https://rn-acme-1.example", redirect_uris=(callback,)
+        registration, "w1", public_url="https://rn-acme-1.example", redirect_uris=(callback,)
     )
     assert hub.app is not None
     client = TestClient(hub.app)
@@ -360,7 +361,7 @@ def test_a_delete_removes_every_row_of_the_tenant_and_nothing_of_another(hub: Hu
     other = _created(hub, "bystander")
     member = seed_user(hub, username="mia", role=Role.PENDING)
     seed_membership(hub.engine, tenant, member.user_id, Role.ADMIN)
-    seed_runner(hub.open_services(tenant), "rn-acme-1", fleet=hub.resolve(tenant, FleetService))
+    seed_runner_in(hub.process, tenant, "rn-acme-1")
     before = _rows_of(hub, tenant)
     others_before = _rows_of(hub, other)
     carried_before = _rows_of(hub, default_tenant(hub.engine))

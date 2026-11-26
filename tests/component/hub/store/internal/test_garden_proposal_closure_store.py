@@ -29,6 +29,7 @@ from blizzard.hub.domain.garden.proposals.closure import (
     IWriteGardenProposalClosureRepository,
 )
 from blizzard.hub.domain.garden.proposals.model import GardenProposalAlreadyClosed
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.graphs import PACKAGED
@@ -383,7 +384,9 @@ class _StaleBeforeTheUnit:
 
 def _closure_service(hub: HubHarness, closures: IWriteGardenProposalClosureRepository) -> GardenProposalClosureService:
     store = hub_store_connections(hub.engine)
-    graph = hub.services.default_graph.ensure_default(PACKAGED.default.doc, definition_yaml=PACKAGED.default.text)
+    graph = hub.default_adapter(DefaultGraphService).ensure_default(
+        PACKAGED.default.doc, definition_yaml=PACKAGED.default.text
+    )
     return GardenProposalClosureService(
         closures=closures,
         items=hub.default_adapter(GardenProposalClosureService).items,

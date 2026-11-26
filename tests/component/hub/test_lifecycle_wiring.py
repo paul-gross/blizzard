@@ -54,7 +54,6 @@ def test_the_hosted_app_boots_over_the_containers_lifecycle_owners(tmp_path: Pat
     assert app.state.flags is resolver.get(Flags)
     assert resolver.get(IHubStepWake) is resolver.get(StepWake)
     assert resolver.get(ActionPassDriver)._loop is loop
-    assert app.state.services.tenants.open_tenants is resolver.get(OpenTenants)
     with TestClient(app) as client:
         assert loop._loop is not None
         assert client.get("/api/ready").json()["ready"] is True

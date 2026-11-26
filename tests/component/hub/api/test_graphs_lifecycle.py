@@ -14,8 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
+from blizzard.hub.domain.graph.authoring import DefaultGraphRetired, DefaultGraphService
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
+from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
 from tests.support.scaffolding import HubHarness, build_hub, count_queries, default_tenant
@@ -228,23 +229,23 @@ def test_re_enabling_restores_effective(tmp_path: Path) -> None:
 def test_retiring_every_version_of_the_default_graph_survives_a_restart(tmp_path: Path) -> None:
     """Retiring the packaged default graph's only version is the operator's deliberate
     brake — not undone by a second ``ensure_default`` call across a hub restart (fresh
-    ``HubServices``/engine, same on-disk store)."""
+    process/engine, same on-disk store)."""
     hub = build_hub(tmp_path)
     doc = PACKAGED_GRAPHS.default.doc
-    graph = hub.services.default_graph.ensure_default(doc, definition_yaml=packaged_default_yaml())
+    graph = hub.default_adapter(DefaultGraphService).ensure_default(doc, definition_yaml=packaged_default_yaml())
     hub.resolve(default_tenant(hub.engine), GraphLifecycleService).retire(graph, by="operator")
-    assert hub.services.graphs.get_enabled_by_name(doc.name) is None
+    assert hub.default_adapter(IReadGraphRepository).get_enabled_by_name(doc.name) is None
 
-    # A second "boot": a fresh HubServices over the same sqlite file — never the same
+    # A second "boot": a fresh hub process over the same sqlite file — never the same
     # Python objects the first boot already ran `ensure_default` against.
     restarted = build_hub(tmp_path)
     with pytest.raises(DefaultGraphRetired):
-        restarted.services.default_graph.ensure_default(
+        restarted.default_adapter(DefaultGraphService).ensure_default(
             PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
         )
     # Only the one graph this test itself minted exists — the retire was not undone
     # by a silent re-mint racing ahead of the assertion above.
-    same_name = [g for g in restarted.services.graphs.list_summaries() if g.name == doc.name]
+    same_name = [g for g in restarted.default_adapter(IReadGraphRepository).list_summaries() if g.name == doc.name]
     assert [g.graph_id for g in same_name] == [graph.graph_id]
 
     # The route-level refusal an operator actually hits: ingest against the retired
@@ -264,12 +265,12 @@ def test_ensure_default_disambiguates_a_retirement_with_a_cheap_existence_probe_
     for i in range(10):
         _mint(hub, _GRAPH_A.replace("name: alpha", f"name: other-{i}"))
     doc = PACKAGED_GRAPHS.default.doc
-    graph = hub.services.default_graph.ensure_default(doc, definition_yaml=packaged_default_yaml())
+    graph = hub.default_adapter(DefaultGraphService).ensure_default(doc, definition_yaml=packaged_default_yaml())
     hub.resolve(default_tenant(hub.engine), GraphLifecycleService).retire(graph, by="operator")
 
     def _retry() -> None:
         with pytest.raises(DefaultGraphRetired):
-            hub.services.default_graph.ensure_default(doc, definition_yaml=packaged_default_yaml())
+            hub.default_adapter(DefaultGraphService).ensure_default(doc, definition_yaml=packaged_default_yaml())
 
     # The pre-lock get_enabled_by_name, the cross-graph warning read (none for a graph with no
     # cross-graph target), the name lock's own statements, the write's open-tenant lock and closed-tenant read, and

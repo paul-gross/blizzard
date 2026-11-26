@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from tests.support.scaffolding import HubHarness, build_hub, pointer_token, report_lease, runner_token
 
 _YAML = """
@@ -62,14 +63,14 @@ def _done_chunk(hub: HubHarness) -> str:
 def test_detach_of_a_done_chunk_still_carrying_its_finishers_route_is_refused(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = _done_chunk(hub)
-    route = hub.services.chunks.route.route_of(chunk_id)
+    route = hub.default_adapter(IReadChunkRouteRepository).route_of(chunk_id)
     assert route is not None
 
     resp = hub.client.post(f"/api/chunks/{chunk_id}/detach")
 
     assert resp.status_code == 409, resp.text
     assert "holds no claim" in resp.json()["detail"]
-    assert hub.services.chunks.route.route_of(chunk_id) == route
+    assert hub.default_adapter(IReadChunkRouteRepository).route_of(chunk_id) == route
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
 
@@ -80,13 +81,13 @@ def test_detach_of_a_running_chunk_still_releases_its_route(tmp_path: Path) -> N
     resp = hub.client.post(f"/api/chunks/{chunk_id}/detach")
 
     assert resp.status_code == 202, resp.text
-    assert hub.services.chunks.route.route_of(chunk_id) is None
+    assert hub.default_adapter(IReadChunkRouteRepository).route_of(chunk_id) is None
 
 
 def test_rekey_of_a_done_chunk_still_carrying_its_finishers_route_is_refused(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = _done_chunk(hub)
-    assert hub.services.chunks.route.route_of(chunk_id) is not None
+    assert hub.default_adapter(IReadChunkRouteRepository).route_of(chunk_id) is not None
 
     resp = hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/route-token", headers={"Authorization": f"Bearer {runner_token('runner-a')}"}

@@ -12,16 +12,19 @@ import sqlalchemy as sa
 
 from blizzard.hub.api import transcripts as transcripts_api
 from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.execution.apply import ApplyService
 from blizzard.hub.domain.execution.claim import ClaimService
 from blizzard.hub.domain.execution.decisions import DecisionService
 from blizzard.hub.domain.execution.facts import FactIngestService, PushedFact
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.execution.submissions import Completion, GateSubmission
-from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from blizzard.hub.domain.observability.transcripts import TranscriptIngestService, TranscriptSlice
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.registration import (
+    IReadRunnerRegistry,
     IWriteRunnerRegistry,
     RunnerCapability,
     RunnerRegistration,
@@ -40,13 +43,13 @@ def _retired_hub(tmp_path: Path) -> HubHarness:
     hub.default_adapter(FleetService).register(
         _registration(hub), "ws-a", capabilities=(RunnerCapability("claude", default=True),)
     )
-    writer = cast(IWriteRunnerRegistry, hub.services.registry)
+    writer = cast(IWriteRunnerRegistry, hub.default_adapter(IReadRunnerRegistry))
     writer.record_lifecycle(_RUNNER, retired=True, at=hub.clock.now(), by="op", expected_lifecycle=0)
     return hub
 
 
 def _registration(hub: HubHarness) -> RunnerRegistration:
-    registration = hub.services.registry.get_runner(_RUNNER)
+    registration = hub.default_adapter(IReadRunnerRegistry).get_runner(_RUNNER)
     assert registration is not None
     return registration
 
@@ -95,9 +98,9 @@ def test_claim_refuses_a_retired_runner_and_leaves_the_chunk_unrouted(tmp_path: 
     chunk_id = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}).json()["chunk_id"]
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     make_ready(hub, chunk_id)
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
-    graph = hub.services.graphs.get(chunk.graph_id)
+    graph = hub.default_adapter(IReadGraphRepository).get(chunk.graph_id)
     assert graph is not None
 
     with pytest.raises(RunnerRetired):
@@ -136,19 +139,19 @@ class _Routed:
         )
         assert claim.status_code == 201, claim.text
         report_lease(self.hub, self.chunk_id, epoch=1, seq=1, runner_id=_RUNNER)
-        writer = cast(IWriteRunnerRegistry, self.hub.services.registry)
+        writer = cast(IWriteRunnerRegistry, self.hub.default_adapter(IReadRunnerRegistry))
         writer.record_lifecycle(_RUNNER, retired=True, at=self.hub.clock.now(), by="op", expected_lifecycle=0)
         self.hub.clock.advance(timedelta(seconds=5))
 
     @property
     def chunk(self) -> Chunk:
-        chunk = self.hub.services.chunks.record.get(self.chunk_id)
+        chunk = self.hub.default_adapter(IReadChunkRecordRepository).get(self.chunk_id)
         assert chunk is not None
         return chunk
 
     @property
     def graph(self) -> Graph:
-        graph = self.hub.services.graphs.get(self.chunk.graph_id)
+        graph = self.hub.default_adapter(IReadGraphRepository).get(self.chunk.graph_id)
         assert graph is not None
         return graph
 
@@ -158,7 +161,7 @@ class _Routed:
 
     @property
     def route(self) -> Route:
-        route = self.hub.services.chunks.route.route_of(self.chunk_id)
+        route = self.hub.default_adapter(IReadChunkRouteRepository).route_of(self.chunk_id)
         assert route is not None
         return route
 

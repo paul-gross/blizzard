@@ -20,7 +20,6 @@ from blizzard.hub.api import chunk_events, problems, problems_chunks
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
@@ -30,6 +29,8 @@ from blizzard.hub.domain.chunk.model import NodeQuestion, QuestionClosed, Questi
 from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.execution.questions import AskedQuestion, QuestionService
+from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.events.broker import EventBroker
 from blizzard.wire.question import AnswerRequest, AnswerResult, QuestionAsked, QuestionView
 
@@ -170,13 +171,19 @@ def answer_question(
 
 
 @router.get("/questions", response_model=list[QuestionView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def list_open_questions(services: Services, project: QueryProject) -> list[QuestionView]:
+@inject_sync
+def list_open_questions(
+    project: QueryProject,
+    question_reads: FromDishka[IReadChunkQuestionsRepository],
+    runners: FromDishka[IReadRunnerRegistry],
+    projects: FromDishka[IReadProjectRepository],
+) -> list[QuestionView]:
     """Every open (unanswered) question across the fleet — the ``hub status`` surface — or only
     ``?project=``'s. Return the whole pending attention set so operators see every
     question awaiting an answer, rather than only one page."""
-    rows = services.chunks.questions.list_open_questions(project=project)
-    runner_names = services.registry.names_for(row.runner_id for row in rows)
-    labels = ProjectLabels.read(services.projects, (row.project_id for row in rows))
+    rows = question_reads.list_open_questions(project=project)
+    runner_names = runners.names_for(row.runner_id for row in rows)
+    labels = ProjectLabels.read(projects, (row.project_id for row in rows))
     # A restart answers every open question in its one write, so an unanswered row is never superseded.
     return [
         question_view(row, runner_names, labels.fields(row.project_id), superseded_by_restart=False) for row in rows

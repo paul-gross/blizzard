@@ -15,6 +15,7 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.permissions import HUB_PERMISSIONS, expand
 from blizzard.hub.config import AUTH_MODE_NONE
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.tenancy import TenantId
 from tests.support.scaffolding import (
     HubHarness,
@@ -64,7 +65,7 @@ def test_every_membership_is_listed_with_its_own_role_and_permissions(tmp_path: 
     body = _me(hub, _cookie(hub, ada))
 
     assert body["hub_admin"] is True
-    alpha_name = hub.hub_services.tenants.open_tenants.name(alpha)
+    alpha_name = hub.resolve_hub(OpenTenants).name(alpha)
     assert body["tenants"] == sorted(
         [
             {
@@ -138,7 +139,7 @@ def test_a_closed_tenants_membership_is_neither_listed_nor_resolved(tmp_path: Pa
     ada = seed_user(hub, username="ada", role=Role.GUEST)
     seed_membership(hub.engine, bravo, ada.user_id, Role.ADMIN)
     close_tenant(hub.engine, bravo)
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
     cookie = _cookie(hub, ada)
 
     headerless = _me(hub, cookie)
@@ -170,7 +171,7 @@ def test_under_auth_none_the_operator_is_an_admin_of_every_open_tenant(tmp_path:
     assert [(tenant["tenant_id"], tenant["role"]) for tenant in alone["tenants"]] == [(alpha, "admin")]
 
     bravo = add_tenant(hub.engine, "bravo")
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
 
     both = _me(hub, {})
     assert [tenant["tenant_id"] for tenant in both["tenants"]] == sorted([alpha, bravo])

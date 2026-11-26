@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.project_option import project_option, project_query
+from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.domain.projects.order import LandingOrderConflict
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
 from tests.support.scaffolding import HubHarness, build_hub, default_project, ensure_fixture_forge, seed_project
@@ -243,7 +244,7 @@ def test_tenant_names_the_tenant_a_project_verb_acts_in(hub: HubHarness, sent: l
 
     assert created.exit_code == 0, created.output
     assert {row["slug"] for row in in_bravo} == {"default", "widgets"}
-    assert [p.slug for p in hub.services.projects.list_all()] == ["default"]
+    assert [p.slug for p in hub.default_adapter(IReadProjectRepository).list_all()] == ["default"]
     assert sent and all(headers[TENANT_HEADER] == bravo.tenant for headers in sent)
 
 

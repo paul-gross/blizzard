@@ -11,6 +11,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from tests.support.scaffolding import HubHarness, build_hub, ingest, report_lease
 
 
@@ -42,7 +43,7 @@ def test_two_concurrent_stops_yield_one_success_and_one_refusal(tmp_path: Path) 
         t.join()
 
     assert sorted(results.values()) == [202, 409], f"expected one success and one refusal, got {results}"
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None and facts.stopped, "the winner's fact must have landed"
 
 
@@ -95,7 +96,7 @@ def test_a_stop_racing_a_completion_is_refused_once_the_completion_wins(tmp_path
     for t in threads:
         t.join()
 
-    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    facts = hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     # `complete` is admitted from `stopped` (any non-`done` status), so stop-then-complete
     # legitimately lands both facts. What the row lock must rule out is a stop landing

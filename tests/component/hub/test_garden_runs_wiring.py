@@ -12,6 +12,7 @@ from blizzard.hub.domain.garden.routines import IReadRoutineScopeRepository
 from blizzard.hub.domain.garden.runs.history import GardenRunService, IReadGardenRunRepository
 from blizzard.hub.domain.garden.runs.run import RunService
 from blizzard.hub.domain.garden.runs.sweeps import GardenSweepsService, IReadGardenSweepsRepository
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
@@ -47,7 +48,7 @@ def _hub_with_two_tenants(tmp_path: Path) -> tuple[HubHarness, StoreScope, Store
     hub = build_hub(tmp_path)
     first = StoreScope(default_tenant(hub.engine))
     second = StoreScope(add_tenant(hub.engine, "second"))
-    hub.hub_services.tenants.open_tenants.refresh()
+    hub.resolve_hub(OpenTenants).refresh()
     return hub, first, second
 
 

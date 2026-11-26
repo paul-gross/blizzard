@@ -9,11 +9,18 @@ from collections.abc import Iterator
 import httpx2
 import pytest
 import uvicorn
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from blizzard.hub.composition import HubServices, TenantServices
-from blizzard.hub.tenancy import StoreScope
-from tests.support.scaffolding import ForgeDouble, ForgeIssue, bound_socket, ensure_fixture_forge, github_double
+from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
+from tests.support.scaffolding import (
+    ForgeDouble,
+    ForgeIssue,
+    bound_socket,
+    ensure_fixture_forge,
+    github_double,
+    tenant_adapter_of,
+)
 
 _ISSUES: dict[str, ForgeIssue] = {
     f"acme/widget#{n}": {"title": f"t{n}", "body": f"b{n}", "comments": []} for n in (1, 2)
@@ -43,14 +50,14 @@ def forge() -> Iterator[tuple[ForgeDouble, str]]:
 
 def create(
     client: TestClient,
-    services: HubServices,
+    app: FastAPI,
     forge_url: str,
     *,
     annotate: bool = False,
     slug: str = "widget",
     locator: str = "acme/widget",
 ) -> str:
-    """Create and link the source, returning its id."""
+    """Create and link the source in ``app``'s only open tenant, returning its id."""
     if client.get("/api/secrets/gh").status_code == 404:
         assert client.post("/api/secrets", json={"name": "gh", "value": "tok-a"}).status_code == 201
     created = client.post(
@@ -65,7 +72,7 @@ def create(
         },
     )
     assert created.status_code == 201, created.text
-    source_id = _id(services, slug)
+    source_id = _id(app, slug)
     linked = client.put(f"/api/projects/default/source-links/{source_id}")
     assert linked.status_code == 200, linked.text
     return source_id
@@ -81,13 +88,7 @@ def promote(client: TestClient, token: str) -> None:
     assert client.post(f"/api/chunks/{resp.json()['chunk_id']}/promote").status_code == 202
 
 
-def _tenant(services: HubServices) -> TenantServices:
-    tenant = services.tenants.open_tenants.only()
-    assert tenant is not None
-    return services.tenants.open_services(StoreScope(tenant))
-
-
-def _id(services: HubServices, slug: str) -> str:
-    record = _tenant(services).work_source_records.resolve(slug)
+def _id(app: FastAPI, slug: str) -> str:
+    record = tenant_adapter_of(app, IReadWorkSourceRepository).resolve(slug)
     assert record is not None
     return record.work_source_id

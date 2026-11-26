@@ -12,6 +12,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from tests.support.hub_request_auth import bearer, seed_enrolled
 from tests.support.scaffolding import build_hub, seed_runner
 
@@ -102,7 +103,7 @@ def test_a_body_runner_id_naming_another_runner_is_ignored_on_a_fleet_write(tmp_
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["runner_id"] == "runner-a"
-    assert hub.services.registry.get_runner("runner-b") is None
+    assert hub.default_adapter(IReadRunnerRegistry).get_runner("runner-b") is None
 
 
 # A path naming another runner is refused, whatever the token

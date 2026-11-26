@@ -28,7 +28,10 @@ from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceE
 from blizzard.hub.forge.auth import ForgeScope
 from blizzard.hub.live_config import CacheKey
 from blizzard.hub.secrets import hub_key_provider
+from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
+from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.schema import work_sources
 from blizzard.hub.tenancy import StoreScope
 from tests.support.forge_auth import sent_token
@@ -68,27 +71,29 @@ class _World:
         clock = FixedClock(_NOW)
         self.tmp_path = tmp_path
         self.clock = clock
-        self.core = configured_core(self.engine, tmp_path, clock=clock)
-        self.stores = self.core.open(StoreScope(default_tenant(self.engine)))
+        self.process = configured_core(self.engine, tmp_path, clock=clock)
+        self.tenant_scope = self.process.tenants.open(StoreScope(default_tenant(self.engine))).resolver
         self.authoring = config_authoring(self.engine, keys=self.keys, clock=clock)
         self.authoring.create_secret(SecretName.parse("gh"), "tok-a", OP)
         self.source_id = self.authoring.create_work_source_naming(
             "demo", None, _FIELDS, _on_github(self.engine), OP
         ).record.work_source_id
-        self.live = tenant_live(self.stores)
+        self.live = tenant_live(self.tenant_scope)
         self.builds = 0
 
     def second_process(self) -> TenantLive:
         core = configured_core(self.engine, self.tmp_path, clock=self.clock)
-        return tenant_live(core.open(StoreScope(default_tenant(self.engine))))
+        return tenant_live(core.tenants.open(StoreScope(default_tenant(self.engine))).resolver)
 
     def client(self, live: TenantLive | None = None) -> _Client | None:
         live = live or self.live
 
         def build() -> _Client:
             self.builds += 1
-            record = self.stores.work_source_records.get(self.source_id)
-            credential = resolve_credential(record, self.stores.credential_records) if record is not None else None
+            record = self.tenant_scope.get(WorkSourceRecordStore).get(self.source_id)
+            credential = (
+                resolve_credential(record, self.tenant_scope.get(CredentialRecordStore)) if record is not None else None
+            )
             assert record is not None and credential is not None
             token = sent_token(live.authorizations.authorization(credential, ForgeScope.WORK_SOURCE))
             return _Client(record.fields.locator, record.fields.annotate, token)
@@ -126,7 +131,7 @@ class _World:
         return credential
 
     def source(self):
-        record = self.stores.work_source_records.get(self.source_id)
+        record = self.tenant_scope.get(WorkSourceRecordStore).get(self.source_id)
         assert record is not None
         return record
 
@@ -177,7 +182,7 @@ def test_a_retire_rebuilds_and_sets_the_replaced_object_aside(world: _World) -> 
 
 def test_a_secret_replace_rebuilds_with_the_new_value(world: _World) -> None:
     first = world.client()
-    secret = world.stores.secrets.get("gh")
+    secret = world.tenant_scope.get(SecretStore).get("gh")
     assert secret is not None
     world.authoring.replace_secret(secret, "tok-b", OP)
 
@@ -258,7 +263,7 @@ def test_a_credential_edit_changes_a_referrer_s_key(world: _World) -> None:
 def test_a_credential_secret_replace_changes_a_referrer_s_key(world: _World) -> None:
     world.act_with_credential()
     before = world.key()
-    secret = world.stores.secrets.get("deploy")
+    secret = world.tenant_scope.get(SecretStore).get("deploy")
     assert secret is not None
 
     world.authoring.replace_secret(secret, "tok-deploy-2", OP)

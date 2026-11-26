@@ -34,7 +34,7 @@ class TenantContainers:
     ) -> None:
         """``process`` is the borrowed process scope; ``confirm_open`` raises ``UnknownTenant`` or ``TenantClosed``
         for a tenant that is not open; ``open_tenants`` names the tenants ``every_open`` walks; ``eager`` are the
-        types resolved when a tenant opens, before it is published, for state the legacy bridge needs at once."""
+        types resolved when a tenant opens, before it is published."""
         self._process = process
         self._confirm_open = confirm_open
         self._open_tenants = open_tenants

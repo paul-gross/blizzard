@@ -15,10 +15,16 @@ from sqlalchemy import select
 
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkItemCloseOutcome, WorkRef
 from blizzard.hub.domain.chunk.no_code import no_code_marker
-from blizzard.hub.domain.chunk.ports.artifacts import HubArtifactWrite, IWriteChunkArtifactsRepository
-from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
+from blizzard.hub.domain.chunk.ports.artifacts import (
+    HubArtifactWrite,
+    IReadChunkArtifactsRepository,
+    IWriteChunkArtifactsRepository,
+)
+from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository, IWriteChunkDeliveryRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import TransitionWrite
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.operations.delete import DeleteService
 from blizzard.hub.domain.operations.queue import GroupService
@@ -39,7 +45,9 @@ from tests.support.scaffolding import (
 def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> HubArtifactWrite:
     """Simulate a generic hub command node's mid-run ``merged/<repo>`` marker."""
     with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
-        return cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
+        return cast(
+            IWriteChunkArtifactsRepository, hub.default_adapter(IReadChunkArtifactsRepository)
+        ).record_hub_artifact(
             chunk_id,
             node_id="nd_deliver",
             node_name="deliver",
@@ -107,7 +115,9 @@ def test_a_replayed_landing_marker_enqueues_nothing_new(tmp_path: Path) -> None:
 
     _land(hub, chunk_id)
     with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
-        replayed = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
+        replayed = cast(
+            IWriteChunkArtifactsRepository, hub.default_adapter(IReadChunkArtifactsRepository)
+        ).record_hub_artifact(
             chunk_id,
             node_id="nd_deliver",
             node_name="deliver",
@@ -143,7 +153,9 @@ def test_a_no_code_marker_closes_no_refs(tmp_path: Path) -> None:
     )
 
     with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
-        written = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
+        written = cast(
+            IWriteChunkArtifactsRepository, hub.default_adapter(IReadChunkArtifactsRepository)
+        ).record_hub_artifact(
             chunk_id,
             node_id="nd_deliver",
             node_name="deliver",
@@ -166,7 +178,7 @@ def test_a_no_code_marker_closes_no_refs(tmp_path: Path) -> None:
 def test_a_stop_with_no_landing_enqueues_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
 
     hub.default_adapter(StopService).stop(chunk, by="test")
@@ -214,7 +226,7 @@ def test_mixed_landing_enqueues_closable_and_terminally_skips_other_refs_on_repl
     decision = CloseEnqueueDecision(
         closable=frozenset({WorkRef("default", "1")}), skipped=frozenset({WorkRef("default", "2")})
     )
-    artifacts = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
+    artifacts = cast(IWriteChunkArtifactsRepository, hub.default_adapter(IReadChunkArtifactsRepository))
     since = hub.events.latest_id()
     with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
         written = [
@@ -247,18 +259,20 @@ def test_mixed_landing_enqueues_closable_and_terminally_skips_other_refs_on_repl
 def test_a_fenced_landing_still_returns_the_skip_rows_it_wrote(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     hub.default_adapter(StopService).stop(chunk, by="operator")
 
     with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
-        landed = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_landing(
+        landed = cast(
+            IWriteChunkArtifactsRepository, hub.default_adapter(IReadChunkArtifactsRepository)
+        ).record_landing(
             chunk_id,
             node_id="nd_deliver",
             node_name="deliver",
             epoch=1,
             admission=EpochAdmission.AT_OR_ABOVE,
-            terminal=terminal_under_lock(hub.services.chunks.facts, chunk_id, transaction=unit),
+            terminal=terminal_under_lock(hub.default_adapter(IReadChunkFactsRepository), chunk_id, transaction=unit),
             repo="widget",
             revision="m1",
             repository_id="re_widget",
@@ -285,7 +299,7 @@ def test_a_grouped_chunks_landing_marker_enqueues_nothing(tmp_path: Path) -> Non
 def test_a_deleted_chunks_landing_marker_enqueues_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=False)
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
 
     hub.default_adapter(DeleteService).delete(chunk, by="test")
@@ -302,7 +316,7 @@ def test_a_ref_already_carrying_a_terminal_outcome_enqueues_nothing(
 ) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
+    cast(IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository)).record_work_item_closure(
         chunk_id,
         pointer=WorkRef(source="default", ref="1"),
         outcome=outcome,
@@ -318,7 +332,7 @@ def test_a_ref_already_carrying_a_terminal_outcome_enqueues_nothing(
 def test_a_ref_carrying_only_a_failed_outcome_still_enqueues(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
+    cast(IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository)).record_work_item_closure(
         chunk_id,
         pointer=WorkRef(source="default", ref="1"),
         outcome=WorkItemCloseOutcome.FAILED,

@@ -17,8 +17,10 @@ from structlog import get_logger
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.config.repositories import RepositoryId
-from blizzard.hub.domain.config.work_sources import WorkSourceId
+from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository, WorkSourceId
 from blizzard.hub.domain.observability.tracing.repository import StepHydration
+from blizzard.hub.domain.projects.links import IReadProjectLinks
+from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_queue_store import ChunkQueueStore
@@ -275,11 +277,12 @@ def test_the_link_reads_by_source_are_flat_across_history_depth(tmp_path: Path) 
     rows: list[int] = []
     for depth in (1, 6):
         hub = _linked_hub(tmp_path / str(depth), depth=depth)
-        links = hub.services.project_links
+        links = hub.default_adapter(IReadProjectLinks)
         slug_of: dict[str, str] = {
-            r.work_source_id: r.slug for r in hub.services.work_source_records.list_all(include_retired=False)
+            r.work_source_id: r.slug
+            for r in hub.default_adapter(IReadWorkSourceRepository).list_all(include_retired=False)
         }
-        project_slug = {p.project_id: p.slug for p in hub.services.projects.list_all()}
+        project_slug = {p.project_id: p.slug for p in hub.default_adapter(IReadProjectRepository).list_all()}
         sources = sorted(slug_of)
         found = links.projects_linking_sources(sources)
         answers.append({slug_of[s]: sorted(project_slug[p] for p in projects) for s, projects in found.items()})

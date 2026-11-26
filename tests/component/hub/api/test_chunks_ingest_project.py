@@ -11,6 +11,9 @@ import pytest
 from blizzard.hub.api import problems
 from blizzard.hub.domain.chunk.ingest import IngestService, IngestSourceNotLinked
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.graph.authoring import DefaultGraphService
+from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.graphs import PACKAGED as PACKAGED_GRAPHS
 from blizzard.hub.graphs import packaged_default_yaml
@@ -26,7 +29,7 @@ from tests.support.scaffolding import (
 
 
 def _project_of(hub: HubHarness, chunk_id: str) -> ProjectId | None:
-    chunk = hub.services.chunks.record.get(chunk_id)
+    chunk = hub.default_adapter(IReadChunkRecordRepository).get(chunk_id)
     assert chunk is not None
     return chunk.project_id
 
@@ -157,15 +160,15 @@ def test_ingest_never_links_a_source(tmp_path: Path) -> None:
 
     ingest_project(hub, "a:6", project="second")
 
-    assert hub.services.project_links.projects_linking_source("a") != [second]
-    assert second not in hub.services.project_links.projects_linking_source("a")
+    assert hub.default_adapter(IReadProjectLinks).projects_linking_source("a") != [second]
+    assert second not in hub.default_adapter(IReadProjectLinks).projects_linking_source("a")
 
 
 def test_a_source_unlinked_after_the_project_was_chosen_refuses_the_ingest(tmp_path: Path) -> None:
     """An unlink landing between the project's choice and the mint refuses the ingest instead of minting a
     chunk the project no longer draws from."""
     hub, first, _ = two_projects(tmp_path)
-    graph = hub.services.default_graph.ensure_default(
+    graph = hub.default_adapter(DefaultGraphService).ensure_default(
         PACKAGED_GRAPHS.default.doc, definition_yaml=packaged_default_yaml()
     )
     ingest = hub.default_adapter(IngestService)
