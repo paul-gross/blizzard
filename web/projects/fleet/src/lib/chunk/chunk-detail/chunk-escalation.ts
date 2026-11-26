@@ -39,8 +39,8 @@ export class ChunkEscalation {
 }
 
 /** The sentence each recognized escalation cause opens with, ahead of ` (epoch N).`.
- * The hub-authored causes (`bounce-cap`, `migration-target-unresolvable`) name no
- * worker — no worker was involved. The wire carries a cause as an open string — a stored
+ * The hub-authored causes (`bounce-cap`, `migration-target-unresolvable`, `escalate-choice`)
+ * name no worker — none need have been involved. The wire carries a cause as an open string — a stored
  * cause is free text on ingest — so an unrecognized value renders raw. */
 const CAUSE_SENTENCES = openLookup<string, string>(
   {
@@ -62,7 +62,7 @@ const CAUSE_SENTENCES = openLookup<string, string>(
     'merge-method-refused': 'No allowed merge method could be used',
     'missing-checks': 'No CI checks were observed for the revision',
     'park-timeout': 'The wait for the change to merge timed out',
-    'escalate-choice': 'The worker judged the work cannot be completed by a fleet worker',
+    'escalate-choice': 'A choice the chunk took escalated it to a person',
   },
   (raw) => `Escalated: ${raw}`,
 );

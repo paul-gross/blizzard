@@ -374,12 +374,12 @@ describe('ChunkEscalation', () => {
       expect(detail).toBe(given);
     });
 
-    it("renders an escalate-choice cause as the worker's own judgement, with its detail", async () => {
+    it("renders an escalate-choice cause naming no actor, with its detail", async () => {
       const given =
         'node `triage` took choice `unfulfillable`, which escalates for a human';
       const { sentence, detail } = await causeOf('escalate-choice', given);
       expect(sentence).toBe(
-        'The worker judged the work cannot be completed by a fleet worker (epoch 3).',
+        'A choice the chunk took escalated it to a person (epoch 3).',
       );
       expect(detail).toBe(given);
     });

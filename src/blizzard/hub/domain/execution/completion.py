@@ -360,7 +360,7 @@ class UnresolvableTarget:
 @domain_model
 @dataclass(frozen=True)
 class EscalateChoice:
-    """The hub's escalation when a worker takes a choice whose ``to:`` is the reserved ``escalate``."""
+    """The hub's escalation when a worker or a gate takes a choice whose ``to:`` is the reserved ``escalate``."""
 
     takeover_command: str
     detail: str
@@ -370,7 +370,7 @@ class EscalateChoice:
     def of(cls, node: Node, choice: str) -> EscalateChoice:
         return cls(
             takeover_command=(
-                f"node `{node.name}` escalated through choice `{choice}` — read the assets it produced, "
+                f"node `{node.name}` escalated through choice `{choice}` — read any assets the node produced, "
                 f"then requeue this chunk with a note that settles it"
             ),
             detail=f"node `{node.name}` took choice `{choice}`, which escalates for a human",
