@@ -1,12 +1,9 @@
-"""An answer decides inside its own write (component tier, SQLite).
-
-``POST /questions/{id}/answers`` loads the question and its chunk's facts before the answer's
-write opens. Something committing at that point — a stop, a terminal completion, a competing
-answer — must be decided against as if it had committed first: an ended chunk refuses the answer
-as ``QuestionClosed``, landing no answer row and publishing no ``question-answered`` event — even
-for a question already answered, whose winner the late answerer is then not shown — and a
-racing answer still loses to the first one written. The decision's reads and its write all run
-on the one token the unit's chunk lock returned."""
+"""An answer decides inside its own write (component tier, SQLite). A stop, a completion, or a
+competing answer committing after ``POST /questions/{id}/answers`` loads the question but before
+its write opens is decided against as if first: an ended chunk refuses it as ``QuestionClosed``,
+landing no answer row and publishing no ``question-answered`` event, and a racing answer loses to
+the first one written. The decision's reads and write all run on the one token the unit's chunk
+lock returned."""
 
 from __future__ import annotations
 
