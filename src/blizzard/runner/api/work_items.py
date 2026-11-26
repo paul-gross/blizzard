@@ -1,10 +1,9 @@
 """The runner-local work-item proxy — ``GET /api/chunks/{id}/work-items``.
 
-The forward is the layering: a caller here never reaches the work source directly, and
-work-source credentials never reach the runner. Nothing is stored on the path — the
-pointer is the durable referent. Hub-authored board paths are anchored to the hub origin for
-the panel's browser. Read-only over its wiring (``bzh:controller-read-only``): a transport
-failure is a ``502`` and an upstream status passes through verbatim."""
+The caller never reaches the work source or its credentials; the pointer is the durable
+referent. Hub-authored board paths are anchored to the hub origin for the browser.
+Read-only over its wiring (``bzh:controller-read-only``): a transport failure is a ``502``
+and an upstream status passes through verbatim."""
 
 from __future__ import annotations
 
