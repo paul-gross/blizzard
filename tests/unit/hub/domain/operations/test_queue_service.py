@@ -14,15 +14,22 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
 
+import pytest
+
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK, IWriteChunkQueueRepository
-from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.queue import (
+    BACKLOG_RANKING_LOCK,
+    READY_RANKING_LOCK,
+    IWriteChunkQueueRepository,
+    QueueList,
+)
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository, QueueKey
 from blizzard.hub.domain.kernel.locks import HubLock, LockKey
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
-from blizzard.hub.domain.operations.queue import QueueList, QueueRanking, QueueService
+from blizzard.hub.domain.operations.queue import QueueRanking, QueueService
 from blizzard.hub.domain.urgency.ports import IReadUrgencyOrder
 
 _NO_STATUSES: dict[str, ChunkStatus] = {}
@@ -89,6 +96,15 @@ class _FakeChunkRepo:
     promoted_ats_by_chunk: dict[str, datetime] = field(default_factory=dict[str, datetime])
     stamped: list[tuple[str, float, datetime]] = field(default_factory=list[tuple[str, float, datetime]])
     locks: list[tuple[list[str], list[LockKey]]] = field(default_factory=list[tuple[list[str], list[LockKey]]])
+    reconstituted: list[list[str]] = field(default_factory=list[list[str]])
+
+    def queue_keys(self, list_: QueueList, *, statuses: dict[str, ChunkStatus]) -> list[QueueKey]:
+        members = self.ready if list_ is QueueList.READY else self.not_ready
+        return [QueueKey(chunk_id=c.chunk_id, project_id=c.project_id, minted_at=c.minted_at) for c in members]
+
+    def get_many(self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None) -> dict[str, Chunk]:
+        self.reconstituted.append(list(chunk_ids))
+        return {c.chunk_id: c for c in [*self.ready, *self.not_ready] if c.chunk_id in chunk_ids}
 
     @contextmanager
     def begin(self) -> Generator[Transaction]:
@@ -169,6 +185,18 @@ def test_ordered_not_ready_never_reads_the_ready_candidate_set() -> None:
 
     assert service.ordered_not_ready(statuses=_NO_STATUSES) == []
     assert service.ordered_ready(statuses=_NO_STATUSES) == [ready_only]
+
+
+@pytest.mark.parametrize("list_", [QueueList.READY, QueueList.NOT_READY])
+def test_page_reconstitutes_only_the_paged_members_of_its_own_list(list_: QueueList) -> None:
+    a, b, c = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_c")
+    repo = _FakeChunkRepo(positions={"chk_a": 2.0, "chk_b": 0.0, "chk_c": 1.0})
+    (repo.ready if list_ is QueueList.READY else repo.not_ready).extend([a, b, c])
+
+    page = _service(repo).page(list_, statuses=_NO_STATUSES, limit=2)
+
+    assert [(e.chunk, e.position) for e in page.entries] == [(b, 0), (c, 1)]
+    assert repo.reconstituted == [["chk_b", "chk_c"]]
 
 
 def test_reposition_between_two_neighbours_lands_on_their_midpoint() -> None:

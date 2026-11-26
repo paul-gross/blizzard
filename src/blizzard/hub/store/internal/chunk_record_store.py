@@ -20,7 +20,8 @@ from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration, WorkRef
-from blizzard.hub.domain.chunk.ports.record import ChunkPage, IWriteChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.queue import QueueList
+from blizzard.hub.domain.chunk.ports.record import ChunkPage, IWriteChunkRecordRepository, QueueKey
 from blizzard.hub.domain.chunk.ports.work_refs import work_ref_lock
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
@@ -34,6 +35,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     chunk_row,
     ephemeral_ids,
     ephemeral_ids_in,
+    ephemeral_ids_select,
     graph_id_of_batch,
     insert_chunk_rows,
     is_ephemeral_id,
@@ -46,6 +48,9 @@ from blizzard.hub.store.transactions import connection_for, connection_in
 
 #: `(minted_at, chunk_id)` — the tiebreak `minted_at desc` alone lacks.
 _CURSOR_ARITY = 2
+
+#: The status each list's members stand at (``bzh:ranking-is-per-list``).
+_LIST_STATUS = {QueueList.READY: ChunkStatus.READY, QueueList.NOT_READY: ChunkStatus.NOT_READY}
 
 
 def _encode_chunk_cursor(chunk: Chunk) -> str:
@@ -89,6 +94,10 @@ def _chunk_page_stmt(
         # row-value comparison support varies by backend (`bzh:sql-portable`).
         stmt = stmt.where(or_(c.minted_at < minted_at, and_(c.minted_at == minted_at, c.chunk_id < chunk_id)))
     return stmt.order_by(s.chunks.c.minted_at.desc(), s.chunks.c.chunk_id.desc()).limit(limit)
+
+
+def _named_with_status(status: ChunkStatus, statuses: Mapping[str, ChunkStatus]) -> list[str]:
+    return [chunk_id for chunk_id, derived in statuses.items() if derived is status]
 
 
 class ChunkRecordStore:
@@ -271,6 +280,24 @@ class ChunkRecordStore:
         next_cursor = _encode_chunk_cursor(chunks[-1]) if len(rows) > limit and chunks else None
         return ChunkPage(chunks=chunks, next_cursor=next_cursor)
 
+    def queue_keys(self, list_: QueueList, *, statuses: Mapping[str, ChunkStatus]) -> list[QueueKey]:
+        """Excludes ephemeral ids by an uncorrelated ``NOT IN``, for the reason pinned in
+        ``tests/component/hub/store/internal/test_chunk_record_store_bulk_reads.py``'s
+        ``test_queue_keys_reads_the_ephemeral_set_once_per_statement_not_once_per_member``."""
+        named = _named_with_status(_LIST_STATUS[list_], statuses)
+        if not named:
+            return []
+        c = s.chunks.c
+        stmt = self._store.select(s.chunks, c.chunk_id, c.project_id, c.minted_at).where(
+            c.chunk_id.not_in(ephemeral_ids_select(self._store))
+        )
+        with self._store.read("queue_keys") as conn:
+            return [
+                QueueKey(chunk_id=r.chunk_id, project_id=r.project_id, minted_at=r.minted_at)
+                for batch in id_batches(named)
+                for r in conn.execute(stmt.where(c.chunk_id.in_(batch))).all()
+            ]
+
     def list_ready(self, *, statuses: Mapping[str, ChunkStatus], transaction: Transaction | None = None) -> list[Chunk]:
         return self._listed_with_status(ChunkStatus.READY, statuses=statuses, transaction=transaction)
 
@@ -286,7 +313,7 @@ class ChunkRecordStore:
         never this seam's own facts read — names at ``status``, reconstituted by id
         (``bzh:bulk-reconstitution``) so the read is bounded by the live set. An id deleted
         since the caller derived ``statuses`` is silently dropped by :meth:`get_many`."""
-        named = [chunk_id for chunk_id, derived in statuses.items() if derived is status]
+        named = _named_with_status(status, statuses)
         return list(self.get_many(named, transaction=transaction).values())
 
     def mint(self, chunk: Chunk, *, transaction: LockedTransaction) -> None:

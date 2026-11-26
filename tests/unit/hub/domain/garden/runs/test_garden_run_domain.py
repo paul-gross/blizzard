@@ -18,7 +18,8 @@ from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, EscalationFact, MigrationFact, TransitionFact
-from blizzard.hub.domain.chunk.ports.record import ChunkPage
+from blizzard.hub.domain.chunk.ports.queue import QueueList
+from blizzard.hub.domain.chunk.ports.record import ChunkPage, QueueKey
 from blizzard.hub.domain.garden.findings.model import Finding, FindingFact, FindingPage
 from blizzard.hub.domain.garden.runs.history import (
     DeliveredSet,
@@ -75,6 +76,9 @@ class _FakeChunkRecords:
     def list_not_ready(
         self, *, statuses: Mapping[str, ChunkStatus] | None = None, transaction: object = None
     ) -> list[Chunk]:
+        return []
+
+    def queue_keys(self, list_: QueueList, *, statuses: Mapping[str, ChunkStatus]) -> list[QueueKey]:
         return []
 
     def list_all(self) -> list[Chunk]:

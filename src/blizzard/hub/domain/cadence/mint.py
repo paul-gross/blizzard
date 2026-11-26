@@ -19,7 +19,12 @@ from blizzard.hub.domain.cadence.model import AttentionFacts
 from blizzard.hub.domain.cadence.ports import IReadErrandRunsRepository, errand_lock
 from blizzard.hub.domain.chunk.model import Chunk, ErrandMark, HubWorkItem, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK, IWriteChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.queue import (
+    BACKLOG_RANKING_LOCK,
+    READY_RANKING_LOCK,
+    IWriteChunkQueueRepository,
+    QueueList,
+)
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, work_ref_lock
 from blizzard.hub.domain.garden.findings.model import FindingSet, IReadFindingSetRepository
@@ -35,7 +40,6 @@ from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTran
 from blizzard.hub.domain.operations.promote import ready_members
 from blizzard.hub.domain.operations.queue import (
     TAIL_PLACEMENT,
-    QueueList,
     read_ranking,
     resolve_landing,
     write_positions,

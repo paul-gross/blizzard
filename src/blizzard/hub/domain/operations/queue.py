@@ -11,6 +11,7 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
@@ -39,8 +40,9 @@ from blizzard.hub.domain.chunk.ports.queue import (
     READY_RANKING_LOCK,
     IReadChunkQueueRepository,
     IWriteChunkQueueRepository,
+    QueueList,
 )
-from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository, QueueKey
 from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository
 from blizzard.hub.domain.execution.eligibility import EligibilityCheck
 from blizzard.hub.domain.graph.model import Graph
@@ -56,14 +58,6 @@ _log = get_logger("blizzard.hub.queue")
 
 # Grouping stays actor-less on the wire; every fold edge is stamped with this fixed actor.
 FOLD_ACTOR = "fold"
-
-
-class QueueList(Enum):
-    """Which of the two independently-ranked lists a queue op targets
-    (``bzh:ranking-is-per-list``) — never mixed into one order."""
-
-    READY = "ready"
-    NOT_READY = "not_ready"
 
 
 def queue_match_policy(value: QueueMatchPolicy | Unrecognized) -> QueueMatchPolicy:
@@ -321,6 +315,41 @@ class QueuePage:
 
 @domain_model
 @dataclass(frozen=True)
+class QueueKeyEntry:
+    """One paged member before its chunk is read — its ranking key at its absolute 0-based whole-list position."""
+
+    key: QueueKey
+    position: int
+
+
+@domain_model
+@dataclass(frozen=True)
+class QueueKeyPage:
+    """The page :meth:`QueueRanking.page` computes over ranking keys; ``next_cursor`` is ``None`` exactly when this
+    page is the last one."""
+
+    entries: list[QueueKeyEntry]
+    next_cursor: str | None
+
+    @property
+    def chunk_ids(self) -> list[str]:
+        return [entry.key.chunk_id for entry in self.entries]
+
+    def onto(self, records: Mapping[str, Chunk]) -> QueuePage:
+        """This page over ``records``, in page order at the same positions and cursor. A member ``records`` does not
+        hold is dropped (``bzh:bulk-reconstitution``)."""
+        return QueuePage(
+            entries=[
+                QueueEntry(chunk=records[entry.key.chunk_id], position=entry.position)
+                for entry in self.entries
+                if entry.key.chunk_id in records
+            ],
+            next_cursor=self.next_cursor,
+        )
+
+
+@domain_model
+@dataclass(frozen=True)
 class RankedOrder:
     """The order a ranking write left a list in, and the live statuses its unit decided on."""
 
@@ -495,6 +524,17 @@ class Landing:
     renormalized: tuple[tuple[str, float], ...] = ()
 
 
+class QueueMember(Protocol):
+    """What ranking reads of a list member."""
+
+    @property
+    def chunk_id(self) -> str: ...
+    @property
+    def project_id(self) -> str | None: ...
+    @property
+    def minted_at(self) -> datetime: ...
+
+
 @domain_model
 @dataclass(frozen=True)
 class QueueRanking:
@@ -504,7 +544,7 @@ class QueueRanking:
     positions: Mapping[str, float]
     promoted_ats: Mapping[str, datetime]
 
-    def effective_position(self, chunk: Chunk) -> float:
+    def effective_position(self, chunk: QueueMember) -> float:
         """A chunk's sort key: its newest explicit position, else its promotion instant,
         else its mint instant. The fallback is a unix timestamp, so a chunk minted long ago
         but promoted late still sorts at the tail rather than mid-queue."""
@@ -514,7 +554,7 @@ class QueueRanking:
         promoted_at = self.promoted_ats.get(chunk.chunk_id)
         return promoted_at.timestamp() if promoted_at is not None else chunk.minted_at.timestamp()
 
-    def ordered(self, candidates: Iterable[Chunk]) -> list[Chunk]:
+    def ordered[Member: QueueMember](self, candidates: Iterable[Member]) -> list[Member]:
         """``candidates`` ascending by effective position, ``chunk_id`` breaking a tie."""
         return sorted(candidates, key=lambda c: (self.effective_position(c), c.chunk_id))
 
@@ -523,8 +563,8 @@ class QueueRanking:
         return max((self.effective_position(c) for c in candidates), default=-1.0) + 1.0
 
     def page(
-        self, candidates: Iterable[Chunk], *, cursor: str | None, limit: int, project: str | None = None
-    ) -> QueuePage:
+        self, candidates: Iterable[QueueKey], *, cursor: str | None, limit: int, project: str | None = None
+    ) -> QueueKeyPage:
         """A keyset page of the ordered candidates after ``cursor``, ``limit`` long, narrowed
         to ``project``'s chunks when one is named. Each entry carries its absolute index in
         the whole order — narrowing selects from that order and never reranks it — so a
@@ -533,19 +573,19 @@ class QueueRanking:
             raise ValueError(f"limit must be at least 1, got {limit}")
         keyed = sorted((self.effective_position(c), c.chunk_id, c) for c in candidates)
         after = _decode_queue_cursor(cursor) if cursor is not None else None
-        entries: list[QueueEntry] = []
+        entries: list[QueueKeyEntry] = []
         entry_keys: list[tuple[float, str]] = []
-        for index, (effective_position, chunk_id, chunk) in enumerate(keyed):
-            if project is not None and chunk.project_id != project:
+        for index, (effective_position, chunk_id, key) in enumerate(keyed):
+            if project is not None and key.project_id != project:
                 continue
             if after is not None and (effective_position, chunk_id) <= after:
                 continue
-            entries.append(QueueEntry(chunk=chunk, position=index))
+            entries.append(QueueKeyEntry(key=key, position=index))
             entry_keys.append((effective_position, chunk_id))
             if len(entries) == limit + 1:
                 break
         next_cursor = encode_cursor(*entry_keys[limit - 1]) if len(entries) > limit else None
-        return QueuePage(entries=entries[:limit], next_cursor=next_cursor)
+        return QueueKeyPage(entries=entries[:limit], next_cursor=next_cursor)
 
     def slot_after(self, ordered: Sequence[Chunk], after: Chunk | None) -> float | None:
         """The fractional position landing a chunk right after ``after`` in ``ordered`` (the
@@ -612,7 +652,7 @@ def write_positions(
 
 
 def read_ranking(
-    queue: IReadChunkQueueRepository, candidates: Sequence[Chunk], *, transaction: Transaction | None = None
+    queue: IReadChunkQueueRepository, candidates: Sequence[QueueMember], *, transaction: Transaction | None = None
 ) -> QueueRanking:
     """The explicit positions and promotion instants of ``candidates`` alone — the
     ranking inputs, read bounded by the candidate set (``bzh:live-set-read``), in
@@ -661,13 +701,14 @@ class QueueService:
         limit: int,
         project: str | None = None,
     ) -> QueuePage:
-        """``list_``'s chunks bounded and keyset-paginated (:meth:`QueueRanking.page`) over the
-        already-materialized order, not a second SQL read, narrowed to ``project``'s chunks
-        when one is named — ranked over the whole list first, so narrowing never reranks.
+        """``list_``'s chunks, keyset-paginated (:meth:`QueueRanking.page`) and narrowed to ``project``'s when one is
+        named; only the page's chunks are reconstituted. Keys, positions and promotion instants read every member
+        (``bzh:page-bounded-read``): an absolute position and the keyset order need each one's effective position.
         ``cursor`` is a prior :attr:`QueuePage.next_cursor`, else raising
         :class:`~blizzard.hub.domain.kernel.pagination.MalformedCursor`."""
-        candidates = self._candidates(list_, statuses=statuses)
-        return read_ranking(self._queue, candidates).page(candidates, cursor=cursor, limit=limit, project=project)
+        keys = self._record.queue_keys(list_, statuses=statuses)
+        page = read_ranking(self._queue, keys).page(keys, cursor=cursor, limit=limit, project=project)
+        return page.onto(self._record.get_many(page.chunk_ids))
 
     def ordered_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
         """Ready chunks in queue order — ascending by effective position."""

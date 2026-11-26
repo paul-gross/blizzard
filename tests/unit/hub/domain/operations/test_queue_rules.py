@@ -10,6 +10,8 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, PauseFact, RouteCreatedFact
+from blizzard.hub.domain.chunk.ports.queue import QueueList
+from blizzard.hub.domain.chunk.ports.record import QueueKey
 from blizzard.hub.domain.kernel.pagination import encode_cursor
 from blizzard.hub.domain.operations.queue import (
     ChunkNotGroupable,
@@ -19,7 +21,6 @@ from blizzard.hub.domain.operations.queue import (
     Landing,
     NotInList,
     Placement,
-    QueueList,
     QueueRanking,
     SelfAnchoredMove,
     merge_targets,
@@ -30,6 +31,7 @@ from blizzard.hub.domain.operations.queue import (
     resolve_landing,
     resolve_move,
 )
+from blizzard.hub.domain.projects.model import ProjectId
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _PROMOTED = datetime(2026, 2, 1, tzinfo=UTC)
@@ -39,7 +41,12 @@ def _chunk(chunk_id: str, *, minted_at: datetime = _T0) -> Chunk:
     return Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=minted_at)
 
 
+def _key(chunk_id: str, *, project_id: ProjectId | None = None) -> QueueKey:
+    return QueueKey(chunk_id=chunk_id, project_id=project_id, minted_at=_T0)
+
+
 _A, _B, _C = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_c")
+_KA, _KB, _KC = _key("chk_a"), _key("chk_b"), _key("chk_c")
 _N, _R = _chunk("chk_n"), _chunk("chk_r")
 _STATUSES = {
     "chk_a": ChunkStatus.READY,
@@ -86,12 +93,30 @@ def test_slot_after_reports_an_exhausted_gap_for_renormalizing() -> None:
 
 def test_a_page_carries_absolute_positions_and_a_cursor_only_when_more_remain() -> None:
     ranking = QueueRanking(positions={"chk_a": 1.0, "chk_b": 2.0, "chk_c": 3.0}, promoted_ats={})
-    first = ranking.page([_C, _A, _B], cursor=None, limit=2)
-    assert [(e.chunk.chunk_id, e.position) for e in first.entries] == [("chk_a", 0), ("chk_b", 1)]
+    first = ranking.page([_KC, _KA, _KB], cursor=None, limit=2)
+    assert [(e.key.chunk_id, e.position) for e in first.entries] == [("chk_a", 0), ("chk_b", 1)]
     assert first.next_cursor == encode_cursor(2.0, "chk_b")
-    last = ranking.page([_C, _A, _B], cursor=first.next_cursor, limit=2)
-    assert [(e.chunk.chunk_id, e.position) for e in last.entries] == [("chk_c", 2)]
+    last = ranking.page([_KC, _KA, _KB], cursor=first.next_cursor, limit=2)
+    assert [(e.key.chunk_id, e.position) for e in last.entries] == [("chk_c", 2)]
     assert last.next_cursor is None
+
+
+def test_a_narrowed_page_keeps_whole_order_positions() -> None:
+    ranking = QueueRanking(positions={"chk_a": 1.0, "chk_b": 2.0, "chk_c": 3.0}, promoted_ats={})
+    keys = [_key("chk_a", project_id=ProjectId("p")), _KB, _key("chk_c", project_id=ProjectId("p"))]
+    page = ranking.page(keys, cursor=None, limit=5, project="p")
+    assert [(e.key.chunk_id, e.position) for e in page.entries] == [("chk_a", 0), ("chk_c", 2)]
+
+
+def test_a_page_joined_onto_records_drops_an_unresolved_member_and_keeps_positions_and_cursor() -> None:
+    ranking = QueueRanking(positions={"chk_a": 1.0, "chk_b": 2.0, "chk_c": 3.0}, promoted_ats={})
+    keys = ranking.page([_KA, _KB, _KC], cursor=None, limit=2)
+    assert keys.chunk_ids == ["chk_a", "chk_b"]
+
+    page = keys.onto({"chk_b": _B})
+
+    assert [(e.chunk, e.position) for e in page.entries] == [(_B, 1)]
+    assert page.next_cursor == keys.next_cursor
 
 
 def test_a_page_refuses_a_non_positive_limit() -> None:

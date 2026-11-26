@@ -14,14 +14,13 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository, QueueList
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.operations.queue import (
     BOTH_LISTS,
     TAIL_PLACEMENT,
     Placement,
-    QueueList,
     ranking_lock_set,
     read_ranking,
     resolve_landing,
