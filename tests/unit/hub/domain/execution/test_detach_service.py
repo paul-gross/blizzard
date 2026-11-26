@@ -67,7 +67,7 @@ class _FakeChunkRepo:
         chunk_id: str,
         *,
         at: datetime,
-        cause: RouteReleaseCause | None = None,
+        cause: RouteReleaseCause,
         reason: str | None = None,
         expected_runner: RunnerLifecycleVersion | None = None,
         transaction: LockedTransaction,

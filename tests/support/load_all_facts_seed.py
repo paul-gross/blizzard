@@ -13,6 +13,7 @@ from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     DecisionChoice,
+    RouteReleaseCause,
     decide_close_enqueue,
 )
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -262,7 +263,9 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
     with chunk_unit(hub_store_connections(engine), "ch_kitchen_sink") as unit:
         store.route.record_route_token("ch_kitchen_sink", token_hash="th_ks_2", at=_at(1), transaction=unit)
     with chunk_unit(hub_store_connections(engine), "ch_kitchen_sink") as unit:
-        store.route.record_route_released("ch_kitchen_sink", at=_at(2), transaction=unit)
+        store.route.record_route_released(
+            "ch_kitchen_sink", at=_at(2), cause=RouteReleaseCause.DETACH, transaction=unit
+        )
         store.movement.record_requeue(
             "ch_kitchen_sink",
             at=_at(2),

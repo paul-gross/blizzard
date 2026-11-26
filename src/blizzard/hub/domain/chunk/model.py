@@ -384,8 +384,8 @@ class RouteCreatedFact:
 
 
 class RouteReleaseCause(StrEnum):
-    """Which write gave a ``route.released`` fact's tenure back, as its row records it. A row
-    written by any other release — or before the cause was recorded — carries none."""
+    """Which write gave a ``route.released`` fact's tenure back, as its row records it. A row written
+    before the cause was recorded carries none."""
 
     #: The operator's detach.
     DETACH = "detach"
@@ -393,6 +393,24 @@ class RouteReleaseCause(StrEnum):
     RETIREMENT = "retirement"
     #: The holding runner's own mid-graph release.
     RELEASE = "release"
+    #: Part of the operator's stop.
+    STOP = "stop"
+    #: Part of the operator's manual completion.
+    COMPLETE = "complete"
+    #: Part of the hub's requeue of an escalated chunk.
+    REQUEUE = "requeue"
+    #: Part of a migration landing.
+    MIGRATION = "migration"
+    #: Part of a hub node's move onto the terminal.
+    HUB_STEP = "hub-step"
+    #: Part of a delivery's terminal transition.
+    DELIVERY = "delivery"
+
+
+#: The causes whose release is an occurrence of its own — every other cause releases as part of another fact.
+OWN_OCCURRENCE_RELEASE_CAUSES = frozenset(
+    {RouteReleaseCause.DETACH, RouteReleaseCause.RETIREMENT, RouteReleaseCause.RELEASE}
+)
 
 
 @domain_model

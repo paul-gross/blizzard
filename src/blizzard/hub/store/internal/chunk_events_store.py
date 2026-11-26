@@ -25,6 +25,7 @@ from blizzard.foundation.hub_event_types import ActivityChunkChangeCause
 from blizzard.foundation.roles import adapter_model
 from blizzard.hub.domain.chunk.model import (
     DEFAULT_EVENT_LIST_LIMIT,
+    OWN_OCCURRENCE_RELEASE_CAUSES,
     ActivityEntry,
     OperationalEvent,
     RouteReleaseCause,
@@ -243,8 +244,10 @@ def requeues_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Sel
 
 
 def route_released_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
-    """Each release with the runner whose route it released: the chunk's ``route_created`` with the
-    greatest ``seq`` below the release's, resolved per row inside the bounded page statement."""
+    """Each release that is a row of its own, with the runner whose route it released: the chunk's
+    ``route_created`` with the greatest ``seq`` below the release's, resolved per row inside the bounded page
+    statement. A release written as part of another fact is excluded here, so it spends no slot of the page; a
+    row with no recorded cause stays."""
     released, created = s.route_released, s.route_created
     holder = (
         stmts.select(created, created.c.runner_id)
@@ -264,12 +267,16 @@ def route_released_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) 
         released.c.reason,
         holder.label("holder_runner_id"),
         s.chunks.c.graph_id,
-    ).where(released.c.chunk_id.not_in(deleted))
+    ).where(
+        released.c.chunk_id.not_in(deleted),
+        or_(released.c.cause.is_(None), released.c.cause.in_(sorted(OWN_OCCURRENCE_RELEASE_CAUSES))),
+    )
 
 
 def _route_released_entry(r: Row[Any]) -> ActivityEntry:
-    """A ``route_released`` row as its feed entry: a release reads ``released``, naming its holder and its
-    reason; every other cause, a null one included, reads ``detached``."""
+    """A selected ``route_released`` row as its feed entry: the holder's own release reads ``released``, naming
+    its holder and its reason; a detach, retirement's release, and a row with no recorded cause read
+    ``detached``."""
     if r.cause == RouteReleaseCause.RELEASE:
         return ActivityEntry(
             type="chunk-changed",
