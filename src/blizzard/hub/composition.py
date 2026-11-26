@@ -1,6 +1,7 @@
 """The hub's construction root for the borrowed context ``hub host`` supplies — the settings graph, the store engine and
-connections, and the system clock — and for the hosted hub's flow driver over an opened :class:`HubProcess`
-(``bzh:dependency-injection``). Every other collaborator is the process container's, born in its area's wiring."""
+connections, and the system clock — for the fact export's boot, and for the hosted hub's flow driver over an opened
+:class:`HubProcess` (``bzh:dependency-injection``). Every other collaborator is the process container's, born in its
+area's wiring."""
 
 from __future__ import annotations
 

@@ -2,8 +2,8 @@
 
 Every route borrows the process scope's resolver first (:func:`process_request`); a tenant route's admitted request then
 replaces it with a request scope opened beneath its tenant's scope (:func:`request_scope`), closed when the request
-completes or is cancelled — never closing the tenant. A registration the store-free graph declares absent answers the
-same ``503`` a store-backed route without services answers (:func:`refuse_absent_service`)."""
+completes or is cancelled — never closing the tenant. A registration the store-free graph declares absent answers
+``503`` (:func:`refuse_absent_service`)."""
 
 from __future__ import annotations
 

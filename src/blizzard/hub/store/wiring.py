@@ -3,8 +3,9 @@
 The tenant's adapters are registered at the tenant scope, each over the tenant's one :class:`ScopedConnections`. Each
 registration is a service, except the seam itself (opened only through the borrowed connections' ``scoped``) and the
 adapters a borrowed-connection root also builds, whose one constructor function the registry shares. The registrations
-hand back the ``Ref`` an area aliases its own ports onto, so a port and its adapter are
-one instance. The store-free graph declares each registered key absent, from the same roster, so the two cannot drift.
+hand back the ``Ref`` an area aliases its own ports onto, so a port and its adapter are one instance — except the
+transaction primitive, which this module aliases onto ``IHubTransactions`` itself. The store-free graph declares each
+registered key absent, from the same roster, so the two cannot drift.
 
 This is the only module besides the composition roots that names ``hub/store/internal``. It acquires nothing: the
 engine and the connections are borrowed process values the entrypoint supplies."""
