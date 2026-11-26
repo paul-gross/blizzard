@@ -170,7 +170,7 @@ un-stop and no un-complete, so a chunk reading `done` by either path stays there
 
 ## Delete
 
-`chunk delete <chunk_id>` (`blizzard hub chunk delete <chunk_id> [--by] [--yes]`), the board's confirmed Delete control
+`chunk delete <chunk_id>` (`blizzard hub chunk delete <chunk_id> [--yes]`), the board's confirmed Delete control
 in the chunk dock's header's `⋯` overflow menu — beside Complete — on any `not_ready` or `ready` chunk, or
 `DELETE /api/chunks/{chunk_id}` (gated by `CHUNK_CONTROL` like every control verb here) — deletes a chunk gated on the
 same unacquired predicate `chunk group` requires of every chunk it folds away: `not_ready` or unclaimed `ready`.
@@ -258,7 +258,7 @@ refuses its calls with a `403` — a claim gets the same `403` denial a paused r
 stops too: `/api/auth/authorize` with the runner's client and a redirect URI it registered returns a `403`. The runner's
 registration and every fact attributed to it stay, so chunk history, transcripts, and events keep naming it by its id
 and latest name. `runner list --all` (and the board's "show retired" chip) shows retired runners marked with when and by
-whom. `--by` records who retired it.
+whom — the signed-in caller who retired it.
 
 A runner still holding chunks refuses the retire with a `409` naming each held chunk and its environments. `--force`
 records the retirement and then releases every held route through the same path `chunk detach` uses, so each chunk

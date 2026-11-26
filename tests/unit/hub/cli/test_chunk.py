@@ -235,7 +235,7 @@ def test_restart_without_a_node_posts_a_null_target() -> None:
     result = bound.runner.invoke(hub_group, ["chunk", "restart", "ch_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
-    posted = ("http://hub.local:8421/api/chunks/ch_1/restart", {"node": None, "to_graph": None, "by": "operator"})
+    posted = ("http://hub.local:8421/api/chunks/ch_1/restart", {"node": None, "to_graph": None})
     assert calls == [posted]
     assert "build" in result.output
 
@@ -248,10 +248,10 @@ def test_restart_sends_the_named_node_and_actor() -> None:
         return _summary("ch_1", "plan")
 
     bound = bind_stubs(post=fake_post)
-    result = bound.runner.invoke(hub_group, ["chunk", "restart", "ch_1", "--node", "plan", "--by", "ada"])
+    result = bound.runner.invoke(hub_group, ["chunk", "restart", "ch_1", "--node", "plan"])
 
     assert result.exit_code == 0, result.output
-    assert calls[0][1] == {"node": "plan", "to_graph": None, "by": "ada"}
+    assert calls[0][1] == {"node": "plan", "to_graph": None}
 
 
 def test_restart_sends_the_cross_graph_target_and_names_it_back() -> None:
@@ -266,7 +266,7 @@ def test_restart_sends_the_cross_graph_target_and_names_it_back() -> None:
     result = bound.runner.invoke(hub_group, ["chunk", "restart", "ch_1", "--to-graph", "beta"])
 
     assert result.exit_code == 0, result.output
-    assert calls[0][1] == {"node": None, "to_graph": "beta", "by": "operator"}
+    assert calls[0][1] == {"node": None, "to_graph": "beta"}
     assert "beta" in result.output
 
 
@@ -612,7 +612,7 @@ def test_depend_declares_and_defaults_by_to_operator() -> None:
     assert calls == [
         (
             "http://hub.local:8421/api/chunks/ch_1/dependencies",
-            {"prerequisite_chunk_id": "ch_2", "by": "operator"},
+            {"prerequisite_chunk_id": "ch_2"},
         )
     ]
     assert "ch_1" in result.output
@@ -636,10 +636,10 @@ def test_depend_sends_a_named_by() -> None:
         )
 
     bound = bind_stubs(post=fake_post)
-    result = bound.runner.invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2", "--by", "ada"])
+    result = bound.runner.invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2"])
 
     assert result.exit_code == 0, result.output
-    assert calls == [{"prerequisite_chunk_id": "ch_2", "by": "ada"}]
+    assert calls == [{"prerequisite_chunk_id": "ch_2"}]
 
 
 def test_depend_refuses_a_dependent_not_editable() -> None:
@@ -730,7 +730,7 @@ def test_release_dependency_releases_and_defaults_by_to_operator() -> None:
     assert calls == [
         (
             "http://hub.local:8421/api/chunks/ch_1/dependencies/release",
-            {"prerequisite_chunk_id": "ch_2", "by": "operator"},
+            {"prerequisite_chunk_id": "ch_2"},
         )
     ]
     assert "ch_1" in result.output

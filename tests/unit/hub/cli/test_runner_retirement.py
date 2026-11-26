@@ -61,11 +61,11 @@ _RETIRED_VIEW = _runner(retired=True, retired_at="2026-09-28T00:00:00Z", retired
 def test_retire_posts_force_and_by_and_names_what_it_released() -> None:
     bound, calls = _stub("post", _FakeResponse(200, {"runner": _RETIRED_VIEW, "released_chunk_ids": ["ch_1", "ch_2"]}))
 
-    result = bound.runner.invoke(hub_group, ["runner", "retire", "runner-a", "--force", "--by", "op"], env=_ENV)
+    result = bound.runner.invoke(hub_group, ["runner", "retire", "runner-a", "--force"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert calls[0]["url"] == "http://hub.local:8421/api/runners/runner-a/retire"
-    assert calls[0]["json"] == {"by": "op", "force": True}
+    assert calls[0]["json"] == {"force": True}
     assert "ch_1, ch_2" in result.output
 
 
@@ -85,7 +85,7 @@ def test_reinstate_posts_by_and_reports_it() -> None:
 
     assert result.exit_code == 0, result.output
     assert calls[0]["url"].endswith("/api/runners/runner-a/reinstate")
-    assert calls[0]["json"] == {"by": "operator"}
+    assert calls[0]["json"] == {}
     assert "reinstated" in result.output
 
 

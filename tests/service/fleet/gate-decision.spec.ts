@@ -25,7 +25,7 @@ async function gated({ api, cli, forge, issue, repository, runnerHosts }: World,
   const decision = detail.decision as { decision_id: string; node_name: string; choices: { name: string }[] };
   const listed = await cli(['hub', 'decision', 'list']);
   await beforeResolve?.();
-  const resolved = await cli(['hub', 'decision', 'resolve', decision.decision_id, 'approve', '--by', 'alice', '--json']);
+  const resolved = await cli(['hub', 'decision', 'resolve', decision.decision_id, 'approve', '--json']);
   const landed = await stepChunkVia(host, api, chunk.chunk_id, (status) => ['done', 'needs_human', 'stopped'].includes(status), wait);
   const open = (await api.get('/api/decisions')).body.decisions as { decision_id: string }[];
   const pulls = (await forge.call('GET', `/repos/${repo.owner}/${repo.name}/pulls?state=all`)).body as { merged: boolean }[];

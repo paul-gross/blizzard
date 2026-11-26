@@ -43,15 +43,13 @@ def question_list(cli: CliContext, project: str | None) -> None:
 @question_group.command("answer", cls=FleetCommand)
 @click.argument("question_id")
 @click.argument("answer_text")
-@click.option("--by", "answered_by", default="operator", help="Who is answering, recorded as the actor.")
-def question_answer(cli: CliContext, question_id: str, answer_text: str, answered_by: str) -> None:
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
+def question_answer(cli: CliContext, question_id: str, answer_text: str) -> None:
     """Answer an open question; the waiting chunk's runner then resumes its session.
 
     Only the first answer counts: a later one is refused and told who already answered.
     Refused too when the question's chunk has ended."""
-    resp = cli.send(
-        "post", f"/api/questions/{question_id}/answers", json_body={"answer": answer_text, "answered_by": answered_by}
-    )
+    resp = cli.send("post", f"/api/questions/{question_id}/answers", json_body={"answer": answer_text})
     refusal = refusal_of(resp)
     if refusal.type == QUESTION_ALREADY_ANSWERED:
         body = refusal.members

@@ -244,7 +244,7 @@ def test_detach_shows_the_hubs_unknown_chunk_refusal() -> None:
 
 
 def test_stop_posts_to_the_chunk_and_reports_stopped() -> None:
-    """The verb POSTs to the chunk's stop sub-resource, carrying ``--by``."""
+    """The verb POSTs to the chunk's stop sub-resource, naming no actor."""
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -252,15 +252,31 @@ def test_stop_posts_to_the_chunk_and_reports_stopped() -> None:
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
     bound = bind_stubs(post=fake_post)
-    result = bound.runner.invoke(
-        hub_group, ["chunk", "stop", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
-    )
+    result = bound.runner.invoke(hub_group, ["chunk", "stop", "ch_42"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
     url, body = calls[0]
     assert url == "http://hub.local:8421/api/chunks/ch_42/stop"
-    assert body == {"by": "alice"}
+    assert body == {}
     assert "stopped ch_42" in result.output
+
+
+def test_a_deprecated_by_is_accepted_warned_of_and_not_sent() -> None:
+    """``--by`` still parses, so an older script keeps working, but it warns and names no actor in the body."""
+    calls: list[object] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append(json)
+        return _FakeResponse(202, {"chunk_id": "ch_42"})
+
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
+        hub_group, ["chunk", "stop", "ch_42", "--by", "mallory"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [{}]
+    assert "deprecated" in result.output.lower()
 
 
 def test_stop_maps_a_conflict_with_the_servers_detail() -> None:
@@ -301,11 +317,11 @@ def test_stop_defaults_by_to_operator() -> None:
 
     assert result.exit_code == 0, result.output
     _, body = calls[0]
-    assert body == {"by": "operator"}
+    assert body == {}
 
 
 def test_done_posts_to_the_chunk_and_reports_completed() -> None:
-    """The verb POSTs to the chunk's complete sub-resource, carrying ``--by``."""
+    """The verb POSTs to the chunk's complete sub-resource, naming no actor."""
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -313,14 +329,12 @@ def test_done_posts_to_the_chunk_and_reports_completed() -> None:
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
     bound = bind_stubs(post=fake_post)
-    result = bound.runner.invoke(
-        hub_group, ["chunk", "done", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
-    )
+    result = bound.runner.invoke(hub_group, ["chunk", "done", "ch_42"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
     url, body = calls[0]
     assert url == "http://hub.local:8421/api/chunks/ch_42/complete"
-    assert body == {"by": "alice"}
+    assert body == {}
     assert "completed ch_42" in result.output
 
 
@@ -349,11 +363,11 @@ def test_done_defaults_by_to_operator() -> None:
 
     assert result.exit_code == 0, result.output
     _, body = calls[0]
-    assert body == {"by": "operator"}
+    assert body == {}
 
 
 def test_pause_chunk_posts_to_the_chunk_and_reports_paused() -> None:
-    """The verb POSTs to the chunk's pause sub-resource, carrying ``--by``."""
+    """The verb POSTs to the chunk's pause sub-resource, naming no actor."""
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -361,14 +375,12 @@ def test_pause_chunk_posts_to_the_chunk_and_reports_paused() -> None:
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
     bound = bind_stubs(post=fake_post)
-    result = bound.runner.invoke(
-        hub_group, ["chunk", "pause", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
-    )
+    result = bound.runner.invoke(hub_group, ["chunk", "pause", "ch_42"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
     url, body = calls[0]
     assert url == "http://hub.local:8421/api/chunks/ch_42/pause"
-    assert body == {"by": "alice"}
+    assert body == {}
     assert "paused ch_42" in result.output
 
 
@@ -407,14 +419,12 @@ def test_resume_chunk_posts_to_the_chunk_and_reports_resumed() -> None:
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
     bound = bind_stubs(post=fake_post)
-    result = bound.runner.invoke(
-        hub_group, ["chunk", "resume", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
-    )
+    result = bound.runner.invoke(hub_group, ["chunk", "resume", "ch_42"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
     url, body = calls[0]
     assert url == "http://hub.local:8421/api/chunks/ch_42/resume"
-    assert body == {"by": "alice"}
+    assert body == {}
     assert "resumed ch_42" in result.output
 
 
@@ -441,7 +451,7 @@ def test_chunk_delete_confirms_and_sends_the_delete_with_by() -> None:
     bound = bind_stubs(request=fake_request)
     result = bound.runner.invoke(
         hub_group,
-        ["chunk", "delete", "ch_42", "--by", "alice"],
+        ["chunk", "delete", "ch_42"],
         input="y\n",
         env={"BZ_HUB_URL": "http://hub.local:8421"},
     )
@@ -450,7 +460,7 @@ def test_chunk_delete_confirms_and_sends_the_delete_with_by() -> None:
     method, url, json_body = calls[0]
     assert method == "delete"
     assert url == "http://hub.local:8421/api/chunks/ch_42"
-    assert json_body == {"by": "alice"}
+    assert json_body == {}
     assert "deleted ch_42" in result.output
 
 
@@ -478,7 +488,7 @@ def test_chunk_delete_yes_skips_the_prompt_and_defaults_by_to_operator() -> None
     method, url, json_body = calls[0]
     assert method == "delete"
     assert url == "http://127.0.0.1:8421/api/chunks/ch_42"
-    assert json_body == {"by": "operator"}
+    assert json_body == {}
 
 
 def test_chunk_delete_maps_a_conflict_with_the_servers_detail() -> None:

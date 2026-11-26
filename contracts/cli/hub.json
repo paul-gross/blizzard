@@ -1908,18 +1908,6 @@
               "type": "text"
             },
             {
-              "help": "Who is re-enabling, recorded as the actor.",
-              "hidden": false,
-              "kind": "option",
-              "name": "by",
-              "opts": [
-                "--by"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
               "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
               "hidden": false,
               "kind": "option",
@@ -2185,18 +2173,6 @@
               "type": "text"
             },
             {
-              "help": "Who is retiring, recorded as the actor.",
-              "hidden": false,
-              "kind": "option",
-              "name": "by",
-              "opts": [
-                "--by"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
               "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
               "hidden": false,
               "kind": "option",
@@ -2275,7 +2251,8 @@
               "type": "text"
             },
             {
-              "help": "Who is deleting, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -2430,7 +2407,8 @@
               "type": "text"
             },
             {
-              "help": "Who is declaring, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -2550,7 +2528,8 @@
               "type": "text"
             },
             {
-              "help": "Who is completing, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -2958,7 +2937,8 @@
               "type": "text"
             },
             {
-              "help": "Who is pausing, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -3155,7 +3135,8 @@
               "type": "text"
             },
             {
-              "help": "Who is releasing, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -3311,7 +3292,8 @@
               "type": "text"
             },
             {
-              "help": "Who is restarting, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -3389,7 +3371,8 @@
               "type": "text"
             },
             {
-              "help": "Who is resuming, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -3569,7 +3552,8 @@
               "type": "text"
             },
             {
-              "help": "Who is stopping, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -4795,10 +4779,11 @@
               "type": "text"
             },
             {
-              "help": "Who is resolving, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
-              "name": "resolved_by",
+              "name": "by",
               "opts": [
                 "--by"
               ],
@@ -9016,10 +9001,11 @@
               "type": "text"
             },
             {
-              "help": "Who is answering, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
-              "name": "answered_by",
+              "name": "by",
               "opts": [
                 "--by"
               ],
@@ -10305,7 +10291,8 @@
               "type": "text"
             },
             {
-              "help": "Who is re-enabling, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -10606,7 +10593,8 @@
               "type": "text"
             },
             {
-              "help": "Who is retiring, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -11592,7 +11580,8 @@
               "type": "text"
             },
             {
-              "help": "Who is pausing, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -11658,7 +11647,8 @@
               "type": "text"
             },
             {
-              "help": "Who is reinstating, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -11724,7 +11714,8 @@
               "type": "text"
             },
             {
-              "help": "Who is resuming, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -11802,7 +11793,8 @@
               "type": "boolean"
             },
             {
-              "help": "Who is retiring, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -11868,7 +11860,8 @@
               "type": "text"
             },
             {
-              "help": "Who is revoking, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -12023,7 +12016,8 @@
               "type": "text"
             },
             {
-              "help": "Who is adopting, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -12263,7 +12257,8 @@
               "type": "text"
             },
             {
-              "help": "Who is releasing, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -12341,7 +12336,8 @@
               "type": "boolean"
             },
             {
-              "help": "Who is retiring, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -12407,7 +12403,8 @@
               "type": "text"
             },
             {
-              "help": "Who is revoking, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -12641,7 +12638,8 @@
               "type": "text"
             },
             {
-              "help": "Who is re-enabling, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -12840,7 +12838,8 @@
               "type": "text"
             },
             {
-              "help": "Who is retiring, recorded as the actor.",
+              "deprecated": true,
+              "help": "Ignored: the hub records the signed-in caller. (DEPRECATED)",
               "hidden": false,
               "kind": "option",
               "name": "by",

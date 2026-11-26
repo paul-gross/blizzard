@@ -369,8 +369,8 @@ def chunk_demote(cli: CliContext, chunk_id: str, after: str | None) -> None:
 
 @chunk_group.command("pause", cls=FleetCommand)
 @click.argument("chunk_id")
-@click.option("--by", "by", default="operator", help="Who is pausing, recorded as the actor.")
-def chunk_pause(cli: CliContext, chunk_id: str, by: str) -> None:
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
+def chunk_pause(cli: CliContext, chunk_id: str) -> None:
     """Pause CHUNK — hold it where it stands until resumed.
 
     A runner holding the chunk parks its worker after a brief grace period, keeping the claim; an
@@ -379,7 +379,7 @@ def chunk_pause(cli: CliContext, chunk_id: str, by: str) -> None:
     resp = cli.post(
         f"/api/chunks/{chunk_id}/pause",
         "POST /chunks/{id}/pause",
-        json_body={"by": by},
+        json_body={},
     )
     cli.finish(
         resp,
@@ -392,8 +392,8 @@ def chunk_pause(cli: CliContext, chunk_id: str, by: str) -> None:
 
 @chunk_group.command("resume", cls=FleetCommand)
 @click.argument("chunk_id")
-@click.option("--by", "by", default="operator", help="Who is resuming, recorded as the actor.")
-def chunk_resume(cli: CliContext, chunk_id: str, by: str) -> None:
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
+def chunk_resume(cli: CliContext, chunk_id: str) -> None:
     """Resume a paused CHUNK — clear the pause.
 
     A held chunk continues from its current node; an unclaimed one rejoins the queue.
@@ -401,7 +401,7 @@ def chunk_resume(cli: CliContext, chunk_id: str, by: str) -> None:
     resp = cli.post(
         f"/api/chunks/{chunk_id}/resume",
         "POST /chunks/{id}/resume",
-        json_body={"by": by},
+        json_body={},
     )
     cli.finish(
         resp,
@@ -435,8 +435,8 @@ def chunk_detach(cli: CliContext, chunk_id: str) -> None:
 @chunk_group.command("depend", cls=FleetCommand)
 @click.argument("chunk_id")
 @click.argument("prerequisite_chunk_id")
-@click.option("--by", "by", default="operator", help="Who is declaring, recorded as the actor.")
-def chunk_depend(cli: CliContext, chunk_id: str, prerequisite_chunk_id: str, by: str) -> None:
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
+def chunk_depend(cli: CliContext, chunk_id: str, prerequisite_chunk_id: str) -> None:
     """Declare that CHUNK_ID depends on PREREQUISITE_CHUNK_ID.
 
     CHUNK_ID waits until PREREQUISITE_CHUNK_ID is done. Declaring an existing
@@ -445,7 +445,7 @@ def chunk_depend(cli: CliContext, chunk_id: str, prerequisite_chunk_id: str, by:
     resp = cli.send(
         "post",
         f"/api/chunks/{chunk_id}/dependencies",
-        json_body={"prerequisite_chunk_id": prerequisite_chunk_id, "by": by},
+        json_body={"prerequisite_chunk_id": prerequisite_chunk_id},
     )
     refusal = refusal_of(resp)
     kind = refusal.type
@@ -476,15 +476,15 @@ def chunk_depend(cli: CliContext, chunk_id: str, prerequisite_chunk_id: str, by:
 @chunk_group.command("release-dependency", cls=FleetCommand)
 @click.argument("chunk_id")
 @click.argument("prerequisite_chunk_id")
-@click.option("--by", "by", default="operator", help="Who is releasing, recorded as the actor.")
-def chunk_release_dependency(cli: CliContext, chunk_id: str, prerequisite_chunk_id: str, by: str) -> None:
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
+def chunk_release_dependency(cli: CliContext, chunk_id: str, prerequisite_chunk_id: str) -> None:
     """Release CHUNK_ID's standing dependency on PREREQUISITE_CHUNK_ID.
 
     Refused when CHUNK_ID has no such dependency."""
     resp = cli.send(
         "post",
         f"/api/chunks/{chunk_id}/dependencies/release",
-        json_body={"prerequisite_chunk_id": prerequisite_chunk_id, "by": by},
+        json_body={"prerequisite_chunk_id": prerequisite_chunk_id},
     )
     refusal = refusal_of(resp)
     if refusal.type == NO_STANDING_DEPENDENCY:
@@ -523,8 +523,8 @@ def chunk_requeue(cli: CliContext, chunk_id: str, note: str | None) -> None:
 
 @chunk_group.command("stop", cls=FleetCommand)
 @click.argument("chunk_id")
-@click.option("--by", "by", default="operator", help="Who is stopping, recorded as the actor.")
-def chunk_stop(cli: CliContext, chunk_id: str, by: str) -> None:
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
+def chunk_stop(cli: CliContext, chunk_id: str) -> None:
     """Terminally abandon CHUNK — the operator's last-resort verb.
 
     CHUNK becomes ``stopped`` and is never offered to a runner again; its runner is
@@ -533,7 +533,7 @@ def chunk_stop(cli: CliContext, chunk_id: str, by: str) -> None:
     resp = cli.post(
         f"/api/chunks/{chunk_id}/stop",
         "POST /chunks/{id}/stop",
-        json_body={"by": by},
+        json_body={},
     )
     cli.finish(
         resp,
@@ -545,8 +545,8 @@ def chunk_stop(cli: CliContext, chunk_id: str, by: str) -> None:
 
 @chunk_group.command("done", cls=FleetCommand)
 @click.argument("chunk_id")
-@click.option("--by", "by", default="operator", help="Who is completing, recorded as the actor.")
-def chunk_done(cli: CliContext, chunk_id: str, by: str) -> None:
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
+def chunk_done(cli: CliContext, chunk_id: str) -> None:
     """Mark CHUNK done from any status, including ``stopped``.
 
     Its runner is released, it leaves the delivery lines it waits in, and its work items
@@ -554,7 +554,7 @@ def chunk_done(cli: CliContext, chunk_id: str, by: str) -> None:
     resp = cli.post(
         f"/api/chunks/{chunk_id}/complete",
         "POST /chunks/{id}/complete",
-        json_body={"by": by},
+        json_body={},
     )
     cli.finish(
         resp,
@@ -578,11 +578,9 @@ def chunk_done(cli: CliContext, chunk_id: str, by: str) -> None:
     help="Node name to force CHUNK onto, on --to-graph's graph when one is given and CHUNK's own "
     "otherwise. Omit for its current node's name, or that graph's entry node if CHUNK has never moved.",
 )
-@click.option("--by", "by", default="operator", help="Who is restarting, recorded as the actor.")
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
 @click.option("--note", default=None, help="A note binding every later session on the chunk, as an answer does.")
-def chunk_restart(
-    cli: CliContext, chunk_id: str, to_graph: str | None, node: str | None, by: str, note: str | None
-) -> None:
+def chunk_restart(cli: CliContext, chunk_id: str, to_graph: str | None, node: str | None, note: str | None) -> None:
     """Force CHUNK onto a node now, on a freshly minted session.
 
     The move has happened when the command returns: the running worker is stopped and the chunk
@@ -592,7 +590,7 @@ def chunk_restart(
     resp = cli.post(
         f"/api/chunks/{chunk_id}/restart",
         "POST /chunks/{id}/restart",
-        json_body={"node": node, "to_graph": to_graph, "by": by, **({"note": note} if note is not None else {})},
+        json_body={"node": node, "to_graph": to_graph, **({"note": note} if note is not None else {})},
     )
     raw, restarted = cli.decode(resp, _SUMMARY, "POST /chunks/{id}/restart")
     landed = restarted.current_node_name or node or "its current node"
@@ -660,9 +658,9 @@ def chunk_group_cmd(cli: CliContext, chunk_id: str, merge_ids: tuple[str, ...]) 
 
 @chunk_group.command("delete", cls=FleetCommand)
 @click.argument("chunk_id")
-@click.option("--by", "by", default="operator", help="Who is deleting, recorded as the actor.")
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
 @click.option("--yes", is_flag=True, default=False, help="Skip the confirmation prompt.")
-def chunk_delete(cli: CliContext, chunk_id: str, by: str, yes: bool) -> None:
+def chunk_delete(cli: CliContext, chunk_id: str, yes: bool) -> None:
     """Delete CHUNK, withdrawing every open hub item it holds.
 
     Irreversible, so confirms first unless ``--yes``. Refused when CHUNK is claimed, done or
@@ -672,7 +670,7 @@ def chunk_delete(cli: CliContext, chunk_id: str, by: str, yes: bool) -> None:
     resp = cli.delete(
         f"/api/chunks/{chunk_id}",
         "DELETE /chunks/{id}",
-        json_body={"by": by},
+        json_body={},
     )
     cli.finish(
         resp,

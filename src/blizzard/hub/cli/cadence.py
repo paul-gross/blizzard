@@ -294,28 +294,26 @@ def cadence_edit(
 
 @cadence_group.command("retire", cls=FleetCommand)
 @click.argument("slug")
-@click.option("--by", "by", default="operator", help="Who is retiring, recorded as the actor.")
 @project_option(required_by_hub=True)
-def cadence_retire(cli: CliContext, slug: str, by: str, project: str | None) -> None:
+def cadence_retire(cli: CliContext, slug: str, project: str | None) -> None:
     """Retire cadence SLUG — a reversible brake: a retired cadence mints nothing."""
-    _set_lifecycle(cli, slug, verb="retire", by=by, project=project)
+    _set_lifecycle(cli, slug, verb="retire", project=project)
 
 
 @cadence_group.command("enable", cls=FleetCommand)
 @click.argument("slug")
-@click.option("--by", "by", default="operator", help="Who is re-enabling, recorded as the actor.")
 @project_option(required_by_hub=True)
-def cadence_enable(cli: CliContext, slug: str, by: str, project: str | None) -> None:
+def cadence_enable(cli: CliContext, slug: str, project: str | None) -> None:
     """Re-enable a retired cadence SLUG."""
-    _set_lifecycle(cli, slug, verb="enable", by=by, project=project)
+    _set_lifecycle(cli, slug, verb="enable", project=project)
 
 
-def _set_lifecycle(cli: CliContext, slug: str, *, verb: str, by: str, project: str | None) -> None:
+def _set_lifecycle(cli: CliContext, slug: str, *, verb: str, project: str | None) -> None:
     _, cadence = _resolve_cadence(cli, slug, project)
     resp = cli.post(
         f"/api/cadences/{cadence.cadence_id}/{verb}",
         f"POST /cadences/{{id}}/{verb}",
-        json_body={"by": by},
+        json_body={},
         door=True,
     )
     raw, body = cli.decode(resp, _CADENCE, f"POST /cadences/{{id}}/{verb}")

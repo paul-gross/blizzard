@@ -289,28 +289,28 @@ def _resolve_routine_id(cli: CliContext, name: str, project: str | None) -> str:
 
 @routine_group.command("retire", cls=FleetCommand)
 @click.argument("name")
-@click.option("--by", "by", default="operator", help="Who is retiring, recorded as the actor.")
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
 @project_option(required_by_hub=True)
-def routine_retire(cli: CliContext, name: str, by: str, project: str | None) -> None:
+def routine_retire(cli: CliContext, name: str, project: str | None) -> None:
     """Retire routine NAME (its slug) — a reversible brake; in-flight runs are untouched."""
-    _set_routine_lifecycle(cli, name, verb="retire", by=by, project=project)
+    _set_routine_lifecycle(cli, name, verb="retire", project=project)
 
 
 @routine_group.command("enable", cls=FleetCommand)
 @click.argument("name")
-@click.option("--by", "by", default="operator", help="Who is re-enabling, recorded as the actor.")
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
 @project_option(required_by_hub=True)
-def routine_enable(cli: CliContext, name: str, by: str, project: str | None) -> None:
+def routine_enable(cli: CliContext, name: str, project: str | None) -> None:
     """Re-enable a retired routine NAME (its slug)."""
-    _set_routine_lifecycle(cli, name, verb="enable", by=by, project=project)
+    _set_routine_lifecycle(cli, name, verb="enable", project=project)
 
 
-def _set_routine_lifecycle(cli: CliContext, name: str, *, verb: str, by: str, project: str | None) -> None:
+def _set_routine_lifecycle(cli: CliContext, name: str, *, verb: str, project: str | None) -> None:
     routine_id = _resolve_routine_id(cli, name, project)
     resp = cli.post(
         f"/api/routines/{routine_id}/{verb}",
         f"POST /routines/{{id}}/{verb}",
-        json_body={"by": by},
+        json_body={},
         door=True,
     )
     raw, body = cli.decode(resp, _ROUTINE, f"POST /routines/{{id}}/{verb}")

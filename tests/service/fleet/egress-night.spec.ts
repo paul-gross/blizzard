@@ -23,7 +23,6 @@ const SLOW_STATION = 'assemble';
 // exceeds every other step's controlled duration (each pass accrues one second) and stays well under the hub's runner
 // `STALE_AFTER` (five minutes), since the host is not stepped while the worker is held.
 const SLOW_HOLD_SECONDS = 60;
-const RESOLVER = `egress-night-resolver-${RUN}`;
 const ASK_QUESTION = `EGRESS-ASK-${RUN}: which API style should the endpoint use?`;
 const ASK_ANSWER = `EGRESS-ANSWER-${RUN}`;
 const TRANSCRIPT_TOKEN = `EGRESS-TRANSCRIPT-${RUN}`;
@@ -282,10 +281,9 @@ test.describe('the night, held on one stack', () => {
       const decisionId = (await detail(gate)).decision.decision_id;
       // A person acts after the worker did: at an instant of their own, never one the hub's record already holds.
       await clock.advance(1);
-      await blizzard(['hub', 'decision', 'resolve', decisionId, 'approve', '--by', RESOLVER, '--json']);
+      await blizzard(['hub', 'decision', 'resolve', decisionId, 'approve', '--json']);
       expect((await stepTo(gate)).status).toBe('done');
       planted['gate choice description'] = [APPROVE_DESCRIPTION, REJECT_DESCRIPTION];
-      planted['resolver login'] = [RESOLVER];
 
       // -- an ask answered by a person --
       const ask = await ingest(
@@ -295,7 +293,7 @@ test.describe('the night, held on one stack', () => {
       expect((await stepTo(ask, (d) => d.status === 'waiting_on_human' || TERMINAL.includes(d.status))).status).toBe('waiting_on_human');
       const questionId = (await detail(ask)).questions[0]!.question_id;
       await clock.advance(1);
-      await blizzard(['hub', 'question', 'answer', questionId, commitScript(cliPath, 'feature/night-ask', 'ASKED.md', 'resolve the ask', `# ${ASK_ANSWER}\n`), '--by', RESOLVER]);
+      await blizzard(['hub', 'question', 'answer', questionId, commitScript(cliPath, 'feature/night-ask', 'ASKED.md', 'resolve the ask', `# ${ASK_ANSWER}\n`)]);
       expect((await stepTo(ask)).status).toBe('done');
       planted['ask question'] = [ASK_QUESTION];
       planted['ask answer'] = [ASK_ANSWER];
@@ -432,7 +430,7 @@ test.describe('the night, held on one stack', () => {
     const fixtures = { api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once };
     const exported = await night(fixtures);
     expect(Object.keys(exported.planted)).toEqual(expect.arrayContaining([
-      'work item title', 'work item body', 'ask question', 'ask answer', 'gate choice description', 'resolver login',
+      'work item title', 'work item body', 'ask question', 'ask answer', 'gate choice description',
       'bounce envelope', 'worker transcript output', 'takeover command', 'lease token',
     ]));
     for (const [label, reader] of [['ndjson', fixtures.egress], ['parquet', exported.parquet]] as const) {

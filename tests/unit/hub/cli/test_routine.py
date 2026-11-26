@@ -311,11 +311,11 @@ def test_routine_retire_posts_to_the_retire_endpoint() -> None:
 
     bound = bind_stubs(get=_in_one_project(fake_get), post=fake_post)
     result = bound.runner.invoke(
-        hub_group, ["routine", "retire", "nightly", "--by", "paul"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+        hub_group, ["routine", "retire", "nightly"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
     assert result.exit_code == 0, result.output
-    assert post_calls == [("http://hub.local:8421/api/routines/rtn_1/retire", {"by": "paul"})]
+    assert post_calls == [("http://hub.local:8421/api/routines/rtn_1/retire", {})]
     assert doors == ["cli"]
     assert "retired" in result.output
 
@@ -338,7 +338,7 @@ def test_routine_enable_posts_to_the_enable_endpoint() -> None:
     )
 
     assert result.exit_code == 0, result.output
-    assert post_calls == [("http://hub.local:8421/api/routines/rtn_1/enable", {"by": "operator"})]
+    assert post_calls == [("http://hub.local:8421/api/routines/rtn_1/enable", {})]
     assert "enabled" in result.output
 
 

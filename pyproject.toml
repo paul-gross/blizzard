@@ -23,7 +23,7 @@ dependencies = [
     "sqlalchemy>=2.0,<3.0",
     "alembic>=1.13.0",
     # CLI surface — the one `blizzard` binary, verbs namespaced by target.
-    "click>=8.1.0",
+    "click>=8.2.0",
     # Domain models and request/response schemas.
     "pydantic>=2.0.0",
     # Structured logging, per blizzard-context standards/logging.md

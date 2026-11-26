@@ -246,8 +246,8 @@ new one, printed once as a `BZ_HOST_TOKEN=<token>` line, and records the token i
 stays dead, as for a runner. `runner-host retire <host_id>` revokes the token and retires the host, then retires each
 runner under the host when its retirement lands; a runner moved to another host before then is left alone, and one
 released and reinstated while the retire works through the others makes it answer `409`, leaving that runner's fresh
-token and chunks alone. It refuses while a runner still holds routes unless `--force` is given, and `--by` records who
-retired it. Between the host's retirement and its last runner's, a runner is still held but its host is gone: `release`
+token and chunks alone. It refuses while a runner still holds routes unless `--force` is given, and records the signed-in
+caller as who retired it. Between the host's retirement and its last runner's, a runner is still held but its host is gone: `release`
 of a runner the retire has not retired yet refuses with a `409` naming the host, and running `runner-host retire` again
 finishes the retire, after which the runner can be released. `enroll` on a retired host refuses with a `409`. When
 another verb changes a host's or runner's lifecycle while `adopt`, `release`, `retire`, or `add --adopt` is deciding,

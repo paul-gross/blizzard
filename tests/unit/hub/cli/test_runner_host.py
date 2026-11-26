@@ -134,11 +134,11 @@ def test_show_of_an_unknown_host_exits_unknown() -> None:
 def test_adopt_and_release_post_the_runner_ids(verb: str, path: str) -> None:
     bound, calls = _stub("post", _respond(200, _row("hs_a", "box")))
 
-    result = bound.runner.invoke(hub_group, ["runner-host", verb, "hs_a", "rn_1", "rn_2", "--by", "op"], env=ENV)
+    result = bound.runner.invoke(hub_group, ["runner-host", verb, "hs_a", "rn_1", "rn_2"], env=ENV)
 
     assert result.exit_code == 0, result.output
     assert calls[0]["url"] == f"{HUB_URL}/api/hosts/hs_a/{path}"
-    assert calls[0]["json"] == {"by": "op", "runner_ids": ["rn_1", "rn_2"]}
+    assert calls[0]["json"] == {"runner_ids": ["rn_1", "rn_2"]}
 
 
 def test_adopt_needs_at_least_one_runner() -> None:
@@ -168,11 +168,11 @@ def test_revoke_token_posts_to_the_revocations() -> None:
 def test_retire_posts_force_and_by_and_names_what_it_released() -> None:
     bound, calls = _stub("post", _respond(200, {"host": _row("hs_a", "box"), "released_chunk_ids": ["ch_1"]}))
 
-    result = bound.runner.invoke(hub_group, ["runner-host", "retire", "hs_a", "--force", "--by", "op"], env=ENV)
+    result = bound.runner.invoke(hub_group, ["runner-host", "retire", "hs_a", "--force"], env=ENV)
 
     assert result.exit_code == 0, result.output
     assert calls[0]["url"] == f"{HUB_URL}/api/hosts/hs_a/retire"
-    assert calls[0]["json"] == {"by": "op", "force": True}
+    assert calls[0]["json"] == {"force": True}
     assert "released: ch_1" in result.output
 
 

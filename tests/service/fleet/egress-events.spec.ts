@@ -154,7 +154,7 @@ test.describe('at fresh-hub', () => {
     const ask = await ingest(askGraph, 'ask');
     expect(await stepTo(ask, ['waiting_on_human', 'done', 'stopped', 'needs_human'])).toBe('waiting_on_human');
     const question = ((await api.get(`/api/chunks/${ask}`)).body.questions as { question_id: string }[])[0]!.question_id;
-    await blizzard(['hub', 'question', 'answer', question, answerScript(), '--by', 'events-resolver']);
+    await blizzard(['hub', 'question', 'answer', question, answerScript()]);
     expect(await stepTo(ask, ['done', 'stopped', 'needs_human'])).toBe('done');
 
     await deriveEverything();
