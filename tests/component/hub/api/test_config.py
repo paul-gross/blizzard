@@ -1023,6 +1023,7 @@ def test_a_stated_field_is_edited_an_omitted_one_left_and_a_retired_record_enabl
     routine = _routine(hub)
     hub.client.post(f"/api/routines/{routine['routine_id']}/retire", json={})
     hub.client.post("/api/scopes/edge/retire", json={})
+    assert hub.client.get("/api/scopes/edge").json()["retired"] is True
     hub.client.patch(f"/api/routines/{routine['routine_id']}", json={"default_effort": "high"})
     document = {
         "version": 2,
@@ -1045,7 +1046,30 @@ def test_a_stated_field_is_edited_an_omitted_one_left_and_a_retired_record_enabl
     ]
     after = _routine(hub)
     assert (after["graph_name"], after["default_effort"], after["retired"]) == ("beta", "high", False)
+    assert hub.client.get("/api/scopes/edge").json()["retired"] is False
     assert hub.client.get(f"/api/routines/{routine['routine_id']}/scopes").json() == ["edge"]
+
+
+def _apply_routine(hub: HubHarness, **stated: object) -> dict[str, Any]:
+    """The stored routine after applying the garden document with ``stated`` laid over its routine entry."""
+    applied = _apply_json(hub, {**_GARDEN, "routines": [{**_ROUTINE_ENTRY, **stated}]})
+    assert applied.status_code == 200, applied.text
+    return _routine(hub)
+
+
+def test_an_applied_model_preference_is_stored_in_order_on_create_and_edit(hub: HubHarness) -> None:
+    _mint_graph(hub)
+
+    assert _apply_routine(hub, default_model=["sonnet", "opus"])["default_model"] == ["sonnet", "opus"]
+    assert _apply_routine(hub, default_model=["sonnet", "haiku"])["default_model"] == ["sonnet", "haiku"]
+
+
+def test_an_applied_effort_is_stored_on_create_edit_and_explicit_clear(hub: HubHarness) -> None:
+    _mint_graph(hub)
+
+    assert _apply_routine(hub, default_effort="high")["default_effort"] == "high"
+    assert _apply_routine(hub, default_effort="low")["default_effort"] == "low"
+    assert _apply_routine(hub, default_effort=None)["default_effort"] is None
 
 
 def test_an_entry_without_scopes_leaves_the_linked_set(hub: HubHarness) -> None:

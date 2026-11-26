@@ -44,13 +44,13 @@ function scriptedGraph(body: Graph, repo: string): string {
   ].join('\n');
   nodes.review!.judgement.prompt = "verdict('pass', 'cold-eyes review: one should-fix deferred, one fixed, one refuted')\n";
 
-  nodes['pre-push']!.prompt = [
+  nodes['pre-release']!.prompt = [
     'import os, pathlib, subprocess',
     `repo = str(pathlib.Path(os.environ['BLIZZARD_ENV_WORKDIRS'].split(',')[0]) / '${repo}')`,
     "subprocess.run(['git', '-C', repo, 'switch', '-C', 'feature/scripted-build'], check=True)",
     ...pushAndDeclare(repo),
   ].join('\n');
-  nodes['pre-push']!.judgement.prompt = "verdict('clean', 'no conflicts; fast-forward ready')\n";
+  nodes['pre-release']!.judgement.prompt = "verdict('clean', 'no conflicts; fast-forward ready')\n";
   nodes.retrospective!.prompt = 'pass\n';
   nodes.retrospective!.judgement.prompt = "verdict('recorded', 'landed clean; the review round left one deferred finding')\n";
   expect(nodes.deliver).toEqual(body.nodes.deliver);

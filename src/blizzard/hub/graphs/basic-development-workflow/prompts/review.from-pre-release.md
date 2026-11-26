@@ -1,5 +1,5 @@
-You are re-entering this node after a pre-push rebase whose minor conflicts were resolved without semantic choices. The
-`pre-push-summary` asset in this envelope records each conflict and its resolution.
+You are re-entering this node after a pre-release rebase whose minor conflicts were resolved without semantic choices.
+The `pre-release-summary` asset in this envelope records each conflict and its resolution.
 
 The change already passed review, so the rebase is the delta — and it rewrote the branches, so the tip your last
 `review-findings` recorded predates it. Scope this round by the change's own commits: run `git range-diff` across the

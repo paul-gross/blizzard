@@ -1,9 +1,8 @@
 """A tick's per-lease handlers re-read nothing the tick already holds — loop component tier.
 
-Each arm seeds N leases in one state, runs a warm-up tick, then counts the statements of the
-next. Every arm must stay linear in N; the exited-awaiting and pause-parked arms, whose
-per-lease work the tick hoists, must stay flat. The adopt arm is one-shot, so its first tick
-on each fresh store is the measure."""
+Each arm seeds N leases or held chunks and counts one tick's statements, after a warm-up tick except
+in the one-shot adopt arm. It holds that count flat or to its measured per-item slope; a change
+adding a legitimate per-item read raises the arm's budget."""
 
 from __future__ import annotations
 
@@ -13,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import pytest
 from sqlalchemy import Engine
 
 from blizzard.foundation.chunk_status import ChunkStatus
@@ -24,6 +24,7 @@ from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.hub.client import HubQuestion
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
+from blizzard.runner.lifecycle import claim
 from blizzard.runner.lifecycle.ownership_reconcile import OwnershipReconcile
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.tick import tick
@@ -35,11 +36,13 @@ from tests.support.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    FakeTranscriptSource,
     SqlAlchemyRunnerStore,
     make_context,
     make_envelope,
     runner_store_errors,
     serving,
+    usage_limit_mark,
 )
 from tests.support.runner_mint import new_mint
 from tests.support.runner_tick_engines import migrated_engine
@@ -91,7 +94,15 @@ def _seed_lease(store: SqlAlchemyRunnerStore, i: int) -> None:
     store.record_binding(chunk_id=chunk_id, environment_id=f"e{i}", workdir=f"/ws/e{i}", bound_at=_NOW)
 
 
-def _run(tmp_path: Path, n: int, seed: Callable[[SqlAlchemyRunnerStore, FakeHub, int], None]) -> _Run:
+def _run(
+    tmp_path: Path,
+    n: int,
+    seed: Callable[[SqlAlchemyRunnerStore, FakeHub, int], None],
+    *,
+    ship: bool = False,
+    alive: bool = False,
+) -> _Run:
+    """``ship`` turns transcript shipping on; ``alive`` leaves each seeded worker running."""
     engine = migrated_engine(tmp_path)
     store = SqlAlchemyRunnerStore(engine, runner_store_errors())
     hub = FakeHub()
@@ -104,14 +115,19 @@ def _run(tmp_path: Path, n: int, seed: Callable[[SqlAlchemyRunnerStore, FakeHub,
         )
         seed(store, hub, i)
     handle = WorkerHandle(session_id="unused", pid=1, process_start_time="unused", pgid=1)
+    running: set[tuple[int, str | None]] = {(2000 + i, f"p{i}") for i in range(n)}  # the elicitations
+    if alive:
+        running |= {(1000 + i, f"t{i}") for i in range(n)}  # the workers
     ctx = make_context(
         store,
         hub=hub,
         provider=FakeProvider({f"e{i}": f"/ws/e{i}" for i in range(n)}),
         harness=FakeHarness(handle=handle, verdict="pass"),
-        probe=FakeProbe(alive={(2000 + i, f"p{i}") for i in range(n)}),
+        probe=FakeProbe(alive=running),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=n),
+        config=LoopConfig(
+            runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=n, transcripts_ship=ship
+        ),
     )
     return _Run(lambda: tick(ctx), engine, hub, ctx)
 
@@ -122,9 +138,10 @@ def _counts(
     return [_run(tmp_path / f"n{n}", n, seed).measure(warm_up=warm_up) for n in _SIZES]
 
 
-def _assert_linear(counts: list[int]) -> None:
-    one, two, four = counts
-    assert four - two <= 2 * (two - one), counts
+def _assert_slope(counts: list[int], per_item: int) -> None:
+    """At most ``per_item`` more of whatever ``counts`` counts for each added lease or chunk."""
+    _, two, four = counts
+    assert four - two <= 2 * per_item, counts
 
 
 def _assert_flat(counts: list[int]) -> None:
@@ -140,11 +157,8 @@ def _seed_exited_awaiting(store: SqlAlchemyRunnerStore, hub: FakeHub, i: int) ->
     store.record_elicitation_started(f"lease_{i}", 1, pid=2000 + i, process_start_time=f"p{i}", pgid=2000 + i)
 
 
-def test_the_exited_awaiting_arm_is_linear_and_flat_in_leases(tmp_path: Path) -> None:
-    counts = _counts(tmp_path, _seed_exited_awaiting)
-
-    _assert_linear(counts)
-    _assert_flat(counts)
+def test_the_exited_awaiting_arm_is_flat_in_leases(tmp_path: Path) -> None:
+    _assert_flat(_counts(tmp_path, _seed_exited_awaiting))
 
 
 # --- pause-parked --------------------------------------------------------------------------
@@ -163,11 +177,8 @@ def _seed_pause_parked(store: SqlAlchemyRunnerStore, hub: FakeHub, i: int) -> No
     store.record_pause_park(lease_id=f"lease_{i}", chunk_id=f"ch_{i}", parked_at=_NOW)
 
 
-def test_the_pause_parked_arm_is_linear_and_flat_in_leases(tmp_path: Path) -> None:
-    counts = _counts(tmp_path, _seed_pause_parked)
-
-    _assert_linear(counts)
-    _assert_flat(counts)
+def test_the_pause_parked_arm_is_flat_in_leases(tmp_path: Path) -> None:
+    _assert_flat(_counts(tmp_path, _seed_pause_parked))
 
 
 # --- ask-parked -----------------------------------------------------------------------------
@@ -196,16 +207,20 @@ def _seed_ask_parked(store: SqlAlchemyRunnerStore, hub: FakeHub, i: int) -> None
     )
 
 
-def test_the_ask_parked_arm_is_linear_in_statements_and_in_question_reads(tmp_path: Path) -> None:
+def test_the_ask_parked_arm_holds_its_statement_and_question_read_slopes(tmp_path: Path) -> None:
     runs = [_run(tmp_path / f"n{n}", n, _seed_ask_parked) for n in _SIZES]
-    statements = [run.measure(warm_up=True) for run in runs]
-    questions = [len(run.hub.get_question_calls) for run in runs]
+    statements: list[int] = []
+    questions: list[int] = []
+    for run in runs:
+        run.tick_once()
+        asked = len(run.hub.get_question_calls)
+        statements.append(run.measure(warm_up=False))
+        questions.append(len(run.hub.get_question_calls) - asked)
 
-    _assert_linear(statements)
-    _assert_linear(questions)
-    # Each lease costs `get_question` plus its own wake reads; the pass's brakes and each lease's park arrive
-    # from one read apiece, so the per-lease statement slope holds at this measured value.
-    assert statements[1] - statements[0] == 2, statements
+    # The throttle floor's newest mark and newest clear, read for each lease's wake; the pass's brakes and the
+    # open parks each arrive from one read.
+    _assert_slope(statements, 2)
+    _assert_slope(questions, 1)  # each lease polls its own question
 
 
 # --- adopt-candidate ---------------------------------------------------------------------------
@@ -215,8 +230,38 @@ def _seed_adopt_candidate(store: SqlAlchemyRunnerStore, hub: FakeHub, i: int) ->
     store.record_binding(chunk_id=f"ch_{i}", environment_id=f"e{i}", workdir=f"/ws/e{i}", bound_at=_NOW)
 
 
-def test_the_adopt_arm_is_linear_in_held_chunks(tmp_path: Path) -> None:
-    _assert_linear(_counts(tmp_path, _seed_adopt_candidate, warm_up=False))
+def test_the_adopt_arm_holds_its_slope_in_held_chunks(tmp_path: Path) -> None:
+    # Per adopted chunk: the adopt and its spawn, then the same tick's ADVANCE and execution observation of the
+    # new lease, whose pid the probe does not hold, so ADVANCE takes it as exited and launches its elicitation.
+    _assert_slope(_counts(tmp_path, _seed_adopt_candidate, warm_up=False), 62)
+
+
+# --- held in adopt: the node entry is not FILL's ---------------------------------------------
+
+
+def _seed_adopt_held(store: SqlAlchemyRunnerStore, hub: FakeHub, i: int) -> None:
+    # Escalated at the epoch the hub still reports running, so every tick weighs the adopt and declines it.
+    _seed_lease(store, i)
+    store.record_closure(
+        lease_id=f"lease_{i}", chunk_id=f"ch_{i}", node_id="nd_build", reason="escalated", closed_at=_NOW
+    )
+
+
+def test_the_held_adopt_arm_holds_its_slope_in_held_chunks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    verdicts: list[bool] = []
+    real = claim.owns_node_entry
+
+    def recording(*args: Any, **kwargs: Any) -> bool:
+        verdicts.append(real(*args, **kwargs))
+        return verdicts[-1]
+
+    monkeypatch.setattr(claim, "owns_node_entry", recording)
+    runs = [_run(tmp_path / f"n{n}", n, _seed_adopt_held) for n in _SIZES]
+    statements = [run.measure(warm_up=True) for run in runs]
+
+    assert verdicts == [False] * 2 * sum(_SIZES), verdicts  # warm-up and measured tick, every held chunk
+    # The held-chunk drive's own latest epoch, a lease max and a takeover-fence max; the adopt's facts are batched.
+    _assert_slope(statements, 2)
 
 
 # --- the ownership reconcile ----------------------------------------------------------------
@@ -272,3 +317,45 @@ def test_the_backoff_wakes_read_the_brakes_per_pass_not_per_lease(tmp_path: Path
     _assert_flat(not_due_reads)
     # A not-due pass reads no brakes for the wake: it reads fewer than a due pass does.
     assert not_due_reads[0] < due_reads[0], (not_due_reads, due_reads)
+
+
+def _seed_backing_off_under_a_declining_floor(store: SqlAlchemyRunnerStore, hub: FakeHub, i: int) -> None:
+    # The floor declines the wake, so the lease stays due and is weighed again every tick.
+    _seeder_backing_off(_NOW - timedelta(minutes=1))(store, hub, i)
+    store.record_usage_limit_mark(usage_limit_mark(_NOW, resets_in=timedelta(hours=1)))
+
+
+def test_the_due_backoff_arm_holds_its_slope_in_leases(tmp_path: Path) -> None:
+    runs = [_run(tmp_path / f"n{n}", n, _seed_backing_off_under_a_declining_floor) for n in _SIZES]
+    statements: list[int] = []
+    floor_reads: list[int] = []
+    for run in runs:
+        run.tick_once()
+        with support.capture_statements(run.engine) as captured:
+            run.tick_once()
+        statements.append(len(captured))
+        floor_reads.append(sum(1 for text, _ in captured if "FROM runner_floor_clears" in text))
+
+    assert floor_reads[2] - floor_reads[1] == 2, floor_reads  # every lease is still due and asks the floor
+    # The throttle floor's newest mark and newest clear per lease; the brakes are read once a pass.
+    _assert_slope(statements, 2)
+
+
+# --- the transcript pump ---------------------------------------------------------------------
+
+
+def _seed_live_lease(store: SqlAlchemyRunnerStore, hub: FakeHub, i: int) -> None:
+    _seed_lease(store, i)
+
+
+def test_the_transcript_pump_arm_is_flat_in_open_segments(tmp_path: Path) -> None:
+    """Live workers, shipping on: each spawn opened a segment, and the pump reads every one of them. The fake
+    source answers unavailable, so the count is the pump's reads ahead of the source and not its writes."""
+    runs = [_run(tmp_path / f"n{n}", n, _seed_live_lease, ship=True, alive=True) for n in _SIZES]
+    statements = [run.measure(warm_up=True) for run in runs]
+
+    for n, run in zip(_SIZES, runs, strict=True):
+        source = run.ctx.harnesses.transcript_source(CLAUDE_CODE_HARNESS_ID)
+        assert isinstance(source, FakeTranscriptSource)
+        assert len(source.turns_since_calls) == 2 * n  # both ticks reached every segment
+    _assert_flat(statements)

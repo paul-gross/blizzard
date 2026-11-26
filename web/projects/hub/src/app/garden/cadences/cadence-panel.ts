@@ -12,6 +12,7 @@ import {
   KitErrorLine,
   type KitFact,
   KitFactList,
+  KitSectionHead,
   type Tone,
 } from 'fleet';
 import { AppLink } from 'fleet/shell';
@@ -111,6 +112,7 @@ export interface ChoreFormVm {
     KitConfirmDialog,
     KitErrorLine,
     KitFactList,
+    KitSectionHead,
     AppLink,
     RouterLink,
   ],

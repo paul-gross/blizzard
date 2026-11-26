@@ -104,7 +104,7 @@
 
       @if (hasProjectLens()) {
         <section class="sp-routines" data-testid="gardening-scope-panel-routines">
-          <h4>Tended by</h4>
+          <fleet-kit-section-head label="Tended by" [level]="4" />
           <fleet-kit-async-state [state]="relatedRoutinesState()" placement="inline"
             loadingText="Loading related routines…" errorText="Related routines unavailable."
             emptyText="No routine tends this scope." emptyTestid="gardening-scope-panel-routines-none">

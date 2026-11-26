@@ -67,11 +67,7 @@
   font-size: var(--fs-label);
 }
 .section {
-  margin: 10px 0 2px;
-  color: var(--label);
-  font-size: var(--fs-label);
-  font-weight: 600;
-  text-transform: uppercase;
+  margin-top: 10px;
 }
 .drop {
   min-height: 32px;

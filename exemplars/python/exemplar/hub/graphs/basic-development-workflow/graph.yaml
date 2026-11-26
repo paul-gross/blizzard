@@ -31,7 +31,7 @@ nodes:
       choices:
         pass:
           description: The submitted work passes review.
-          to: pre-push
+          to: pre-release
         fail:
           description: Review found blocking issues, recorded in the review-findings asset.
           to: build

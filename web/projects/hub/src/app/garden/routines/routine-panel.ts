@@ -17,6 +17,7 @@ import {
   KitErrorLine,
   KitField,
   KitForm,
+  KitSectionHead,
   KitSelect,
   KitTextInput,
   type Urgency,
@@ -175,7 +176,7 @@ export interface RoutinePanelVm {
 @Component({
   selector: 'app-routine-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, FormField, KitConfirmDialog, KitErrorLine, KitFactList, KitField, KitForm, KitPanel, KitProseBlock, KitSelect, KitTextInput, AppLink, RouterLink],
+  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, FormField, KitConfirmDialog, KitErrorLine, KitFactList, KitField, KitForm, KitPanel, KitProseBlock, KitSectionHead, KitSelect, KitTextInput, AppLink, RouterLink],
   templateUrl: './routine-panel.html',
   styleUrl: './routine-panel.css',
 })

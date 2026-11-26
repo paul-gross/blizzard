@@ -72,7 +72,7 @@ and needs you, `blizzard runner takeover <chunk>` opens that agent's session rig
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/media/pillar-loop-dark.png">
-    <img src="docs/media/pillar-loop.png" alt="Two workflow graphs. Top: the packaged advanced graph, plan, plan-review, build, verify, review, pre-push and deliver. A failed plan-review loops back to plan, and a failed verify or review loops back into build. A conflict or failed check at deliver goes to resolve, which delivers again. Each verdict is an edge, and Blizzard carries the work along it. Bottom: your own graph, a four-step bug triage of triage, reproduce, fix and deliver, where cannot-reproduce loops back to triage, beside the YAML that defines it: a prompt for each node, each verdict an edge, a prompt for each edge." width="840">
+    <img src="docs/media/pillar-loop.png" alt="Two workflow graphs. Top: the packaged advanced graph, plan, plan-review, build, verify, review, pre-release and deliver. A failed plan-review loops back to plan, and a failed verify or review loops back into build. A conflict or failed check at deliver goes to resolve, which delivers again. Each verdict is an edge, and Blizzard carries the work along it. Bottom: your own graph, a four-step bug triage of triage, reproduce, fix and deliver, where cannot-reproduce loops back to triage, beside the YAML that defines it: a prompt for each node, each verdict an edge, a prompt for each edge." width="840">
   </picture>
 </p>
 

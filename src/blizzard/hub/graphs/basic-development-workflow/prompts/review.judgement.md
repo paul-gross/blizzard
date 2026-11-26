@@ -12,7 +12,7 @@ finding whose refutation you accepted is resolved, and does not block `pass`.
 
 A `blocking` finding blocks on every round. A `should-fix` blocks only on a first round — no `review-findings` asset
 from an earlier round — and only when tagged `in-diff`: a defect in what this change itself wrote is repaired while the
-build still holds the context. On a re-visit — any round with one, re-entry after `pre-push` included — no should-fix
+build still holds the context. On a re-visit — any round with one, re-entry after `pre-release` included — no should-fix
 blocks, a still-open round-one `in-diff` one included: it is deferred on `pass`, so the loop converges after one repair
 round. Severity describes the defect and the round decides whether a should-fix blocks — never re-grade or re-tag a
 finding to steer the verdict.

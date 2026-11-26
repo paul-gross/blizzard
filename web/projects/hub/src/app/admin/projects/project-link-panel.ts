@@ -9,6 +9,7 @@ import {
   KitErrorLine,
   KitPanel,
   KitPanelHeader,
+  KitSectionHead,
 } from 'fleet';
 
 import { branchMarkerTone, builtInTone } from '../../core/lifecycle-tone';
@@ -27,7 +28,7 @@ import type { ProjectLinkRowVm } from './projects.model';
 @Component({
   selector: 'app-project-link-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CdkDrag, CdkDropList, KitAsyncState, KitBadge, KitButton, KitErrorLine, KitPanel, KitPanelHeader, NgTemplateOutlet],
+  imports: [CdkDrag, CdkDropList, KitAsyncState, KitBadge, KitButton, KitErrorLine, KitPanel, KitPanelHeader, KitSectionHead, NgTemplateOutlet],
   templateUrl: './project-link-panel.html',
   styleUrl: './project-link-panel.css',
 })

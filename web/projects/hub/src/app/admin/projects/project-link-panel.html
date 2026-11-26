@@ -21,7 +21,7 @@
     >
       @if (sections(); as order) {
         @for (section of sectionOrder; track section.key) {
-          <h3 class="section" [attr.data-testid]="testid() + '-' + section.key + '-heading'">{{ section.label }}</h3>
+          <fleet-kit-section-head class="section" [label]="section.label" [level]="3" [attr.data-testid]="testid() + '-' + section.key + '-heading'" />
           @if (canEdit()) {
             <ul
               class="rows drop"

@@ -115,9 +115,13 @@ describe('step refs', () => {
 
 describe('nodeShade', () => {
   it('deepens along the delivery graphs usual node order', () => {
-    expect(['plan', 'plan-review', 'build', 'verify', 'review', 'resolve', 'pre-push', 'deliver'].map(nodeShade)).toEqual([
+    expect(['plan', 'plan-review', 'build', 'verify', 'review', 'resolve', 'pre-release', 'deliver'].map(nodeShade)).toEqual([
       0, 1, 2, 3, 4, 5, 6, 7,
     ]);
+  });
+
+  it('shades a node under its earlier name as it does under its current one', () => {
+    expect(nodeShade('pre-push')).toBe(nodeShade('pre-release'));
   });
 
   it('hashes an unlisted node to a stable shade on the ramp', () => {

@@ -1,4 +1,17 @@
 <div class="s-head">
-  <span class="tag" [attr.id]="labelId()">{{ count() === null ? label() : label() + ' · ' + count() }}</span>
+  @switch (level()) {
+    @case (2) {
+      <h2 class="tag" [attr.id]="labelId()">{{ text() }}</h2>
+    }
+    @case (3) {
+      <h3 class="tag" [attr.id]="labelId()">{{ text() }}</h3>
+    }
+    @case (4) {
+      <h4 class="tag" [attr.id]="labelId()">{{ text() }}</h4>
+    }
+    @default {
+      <span class="tag" [attr.id]="labelId()">{{ text() }}</span>
+    }
+  }
   <ng-content />
 </div>

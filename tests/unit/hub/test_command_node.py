@@ -376,13 +376,13 @@ def _delivered(artifacts: list[StoredArtifact]) -> list[dict[str, str | None]]:
 
 
 def test_a_rebased_tip_supersedes_the_pre_rebase_commit_for_the_same_repo() -> None:
-    """The pre-push wedge (#130): a rebase REWRITES the branch, so `build`'s orphaned
+    """The pre-release wedge (#130): a rebase REWRITES the branch, so `build`'s orphaned
     commit can never fast-forward. Delivery must see ONLY the rebased tip — keyed per
     ``(node_name, name)``, the later declaration wins."""
     commits = _delivered(
         [
             _commit_row(node_name="build", epoch=2, commit="a" * 40),
-            _commit_row(node_name="pre-push", epoch=7, commit="b" * 40),
+            _commit_row(node_name="pre-release", epoch=7, commit="b" * 40),
         ]
     )
     assert commits == [{"repo": "acme/widget", "branch": "feat/x", "commit": "b" * 40}]
@@ -391,7 +391,7 @@ def test_a_rebased_tip_supersedes_the_pre_rebase_commit_for_the_same_repo() -> N
 def test_declaration_order_never_decides_which_commit_delivers() -> None:
     """Epoch decides, not row order — the store's ordering must not be load-bearing."""
     rows = [
-        _commit_row(node_name="pre-push", epoch=7, commit="b" * 40),
+        _commit_row(node_name="pre-release", epoch=7, commit="b" * 40),
         _commit_row(node_name="build", epoch=2, commit="a" * 40),
     ]
     assert _delivered(rows) == [{"repo": "acme/widget", "branch": "feat/x", "commit": "b" * 40}]
@@ -403,7 +403,7 @@ def test_a_multi_repo_chunk_keeps_one_commit_per_repo() -> None:
         [
             _commit_row(node_name="build", epoch=2, commit="a" * 40, repo="acme/widget"),
             _commit_row(node_name="build", epoch=2, commit="c" * 40, repo="acme/gadget"),
-            _commit_row(node_name="pre-push", epoch=7, commit="b" * 40, repo="acme/widget"),
+            _commit_row(node_name="pre-release", epoch=7, commit="b" * 40, repo="acme/widget"),
         ]
     )
     by_repo = {c["repo"]: c["commit"] for c in commits}
@@ -414,12 +414,12 @@ def test_a_multi_repo_chunk_keeps_one_commit_per_repo() -> None:
 
 
 def test_a_later_epoch_supersedes_an_earlier_pointer_for_the_same_repo() -> None:
-    """The rebase case the per-repo key exists for: pre-push rewrites build's branch, so
+    """The rebase case the per-repo key exists for: pre-release rewrites build's branch, so
     the later declaration replaces it rather than delivery being handed both."""
     commits = _delivered(
         [
             _commit_row(node_name="build", epoch=1, commit="a" * 40),
-            _commit_row(node_name="pre-push", epoch=3, commit="b" * 40),
+            _commit_row(node_name="pre-release", epoch=3, commit="b" * 40),
         ]
     )
 
@@ -440,7 +440,7 @@ def test_an_identical_re_declaration_at_one_epoch_is_a_correction_not_a_conflict
 def test_two_branches_for_one_repo_at_one_epoch_refuse_to_deliver() -> None:
     """A chunk declaring a branch per env at the same epoch is unconverged: keeping
     whichever came last would deliver a fraction of the work and call it a landing, so
-    it is refused, not tie-broken. Convergence belongs to pre-push."""
+    it is refused, not tie-broken. Convergence belongs to pre-release."""
     with pytest.raises(UnconvergedDeliveryError) as exc:
         _delivered(
             [

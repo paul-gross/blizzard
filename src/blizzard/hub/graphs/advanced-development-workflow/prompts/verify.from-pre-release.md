@@ -1,0 +1,12 @@
+# Verify — re-entry after a significant pre-release rebase
+
+You are re-entering the **verify** node after the pre-release rebase ruled `significant`: a resolution required a
+semantic choice, the rebase materially reshaped the change, or the targeted lint and unit checks failed. The
+`pre-release-summary` asset in this envelope records which, with each conflict, the choice made, and the checks'
+results.
+
+The branches have been rewritten since you last saw them, so the tip your last report recorded predates the rebase:
+scope this visit by the change's own commits, as *Scope this visit* directs for a rebase, and re-verify through the
+project's declared methods the behavior the `pre-release-summary`'s resolutions reach. Every lint or test failure the
+summary reports is a standing failure, whatever the range-diff shows: re-run it alongside the resolutions, and report
+any that still fails.

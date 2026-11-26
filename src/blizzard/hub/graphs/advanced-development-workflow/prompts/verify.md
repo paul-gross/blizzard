@@ -13,8 +13,8 @@ established stands for everything unchanged since; this visit re-verifies what m
 
 - Diff each repo from the recorded tip to its current tip. A report naming no tip scopes this visit to the whole change.
   A rebase or a base merge since the recorded tip makes that diff mostly the base branch's motion: scope by the change's
-  own commits instead — `git range-diff` across a rebase, `git show --remerge-diff` on a merge, the `pre-push-summary`
-  or `resolve-report` naming what integration touched.
+  own commits instead — `git range-diff` across a rebase, `git show --remerge-diff` on a merge, the
+  `pre-release-summary` or `resolve-report` naming what integration touched.
 - Re-run a method the prior report records as failed unless that failure is explicitly waived within scope.
 - For every declared method, including one with a waived prior failure, decide whether the delta touches behavior it
   covers and run it when it does, unless its execution is explicitly waived. Waiving a prior failure alone does not
@@ -46,7 +46,7 @@ passed, what failed and how to reproduce it, and always:
 - **the tip verified**, per repo — `<repo> <branch> <sha>`, the full sha, so the next visit can diff from it;
 - **the standing result of every declared method** — passed, failed, or not run and why, and on a re-visit whether this
   visit re-ran it or carried it forward from the prior report, so each report stands on its own for the next visit and
-  for `pre-push`;
+  for `pre-release`;
 - **any explicit waiver** — identify it and its scope; report the actual failed or not-run result, never as passed;
 - **the scoping decision**, on a re-visit — the delta you diffed, which methods you re-ran, which you did not and why,
   or that nothing needed re-verifying.

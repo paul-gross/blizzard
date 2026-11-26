@@ -49,7 +49,7 @@ def test_reify_mints_ids_and_splits_choices_into_edges() -> None:
     # The deliver hub node authors its own judgement (#67) exactly like a worker node's.
     assert {c.name for c in deliver.choices} == {"landed", "conflict", "failure", "inherited-failure"}
     deliver_targets = {e.to_node_name for e in graph.edges_from(deliver.node_id)}
-    assert deliver_targets == {"record-findings", "pre-push", "build"}
+    assert deliver_targets == {"record-findings", "pre-release", "build"}
     assert deliver.action == "land" and deliver.legacy_run is None
     # The lane authors no bounce_cap (#64) — it reifies as None, so the
     # executor falls back to the fleet-wide default.

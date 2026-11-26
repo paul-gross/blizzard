@@ -351,6 +351,64 @@ def test_reordering_the_artifacts_map_alone_mints_nothing(tmp_path: Path) -> Non
     assert len(hub.client.get("/api/graphs").json()) == 1
 
 
+_GARDEN_DELIVER_YAML = """
+name: delivering
+entry: deliver
+nodes:
+  deliver:
+    executor: hub
+    action: garden-deliver
+    with: {{delta: {delta}, proposals: docket}}
+    judgement:
+      choices:
+        recorded:
+          description: recorded
+          to: done
+        invalid:
+          description: delta fault
+          to: deliver
+        invalid-proposals:
+          description: docket fault
+          to: deliver
+        failure:
+          description: delivery failed
+          to: deliver
+"""
+
+
+def test_a_changed_action_argument_alone_is_minted(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    path = _packaged(tmp_path, "delivering", body=_GARDEN_DELIVER_YAML.format(delta="delta"))
+    assert _statuses(_sync(hub, [path])) == [("delivering", "minted")]
+    assert _statuses(_sync(hub, [path])) == [("delivering", "up-to-date")]
+
+    hub.clock.advance(timedelta(minutes=1))
+    path.write_text(_GARDEN_DELIVER_YAML.format(delta="other"))
+
+    assert _statuses(_sync(hub, [path])) == [("delivering", "minted")]
+
+
+def test_a_stored_run_whose_flag_differs_from_the_packaged_argument_is_minted(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    path = _packaged(tmp_path, "delivering", body=_GARDEN_DELIVER_YAML.format(delta="other"))
+    body = yaml.safe_load(path.read_text())
+    node = body["nodes"]["deliver"]
+    del node["action"], node["with"]
+    node["run"] = [
+        {"command": "python3 -m blizzard.hub.graphs.scripts.garden_deliver --delta other --proposals docket"}
+    ]
+    hub.default_adapter(GraphMintService).mint(
+        GraphDoc.of(YAML_CODEC.decode(path.read_bytes())), definition_yaml=yaml.safe_dump(body, sort_keys=False)
+    )
+    # The stored `run:` translates: only the argument below can account for a mint.
+    assert _statuses(_sync(hub, [path])) == [("delivering", "up-to-date")]
+
+    hub.clock.advance(timedelta(minutes=1))
+    path.write_text(_GARDEN_DELIVER_YAML.format(delta="delta"))
+
+    assert _statuses(_sync(hub, [path])) == [("delivering", "minted")]
+
+
 def _retire_all(hub: HubHarness, name: str) -> None:
     for summary in hub.default_adapter(IReadGraphRepository).list_summaries():
         if summary.name == name:

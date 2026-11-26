@@ -1,5 +1,5 @@
 <section class="next" data-testid="runner-next-claim">
-  <div class="heading">Next</div>
+  <fleet-kit-section-head label="Next" />
   <fleet-kit-async-state [state]="state()" placement="inline" errorText="Next unavailable" loadingText="Loading next…">
     @if (data(); as result) {
       <div class="scenario-label" data-testid="runner-next-scenario-target">Preparing at repository targets</div>

@@ -1,9 +1,9 @@
-# Pre-push — judgement
+# Pre-release — judgement
 
-You are closing a pre-push node-step: record the integration verdict.
+You are closing a pre-release node-step: record the integration verdict.
 
-Before you record the verdict, submit the `pre-push-summary` asset — this verdict's assessment payload — with
-`blizzard runner artifact create --name pre-push-summary`, content on stdin.
+Before you record the verdict, submit the `pre-release-summary` asset — this verdict's assessment payload — with
+`blizzard runner artifact create --name pre-release-summary`, content on stdin.
 
 Triage on the state as it now stands, counting work an earlier attempt at this visit did — a rebase an interrupted
 attempt already pushed still needs its verdict. A resolution an earlier visit to this node already ruled on is not ruled

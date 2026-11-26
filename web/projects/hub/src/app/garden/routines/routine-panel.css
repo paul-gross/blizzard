@@ -81,11 +81,10 @@ fleet-kit-panel {
 .rp-record-facts {
   --kv-label-col: max-content;
 }
-.rp-recent h4,
-.rp-scopes h4 {
-  margin: 0 0 4px;
-  font-size: var(--fs-sm);
-  color: var(--label);
+.rp-trend fleet-kit-section-head,
+.rp-measurements fleet-kit-section-head,
+.rp-last-swept fleet-kit-section-head {
+  margin-top: 1.33em;
 }
 /* Recent runs: the run's ref, what it swept, and when — the time pinned to the trailing edge. */
 .rp-runs {

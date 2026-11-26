@@ -19,10 +19,10 @@ _GH_INVOCATION = re.compile(r"\bgh\s+[a-z]")
 _RETRY_VOCABULARY = re.compile(r"\bflak(?:e|y)\b")
 _RETRY_ACTION = re.compile(r"\bwait\b.*\bretry\b")
 
-_PRE_PUSH = "prompts/pre-push.from-deliver.md"
+_PRE_RELEASE = "prompts/pre-release.from-deliver.md"
 _EXPECTED_SITES = {
-    f"basic-development-workflow/{_PRE_PUSH}",
-    f"basic-harness-workflow/{_PRE_PUSH}",
+    f"basic-development-workflow/{_PRE_RELEASE}",
+    f"basic-harness-workflow/{_PRE_RELEASE}",
     "advanced-development-workflow/prompts/resolve.md",
 }
 
@@ -36,7 +36,7 @@ _OBLIGATIONS = {
     "never claims unperformed work": re.compile(r"\bnever claim\b"),
 }
 _OUTCOMES = {
-    _PRE_PUSH: [r"\bsignificant\b", r"`pre-push-summary`"],
+    _PRE_RELEASE: [r"\bsignificant\b", r"`pre-release-summary`"],
     "prompts/resolve.md": [r"`resolve-report`", r"`broken`", r"case 2"],
 }
 

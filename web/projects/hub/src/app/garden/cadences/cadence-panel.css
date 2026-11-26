@@ -65,13 +65,8 @@
   padding: 0 12px 10px;
   min-width: 0;
 }
-.cp-section h4 {
-  margin: 8px 0 6px;
-  font-size: var(--fs-label);
-  font-weight: normal;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
+.cp-section fleet-kit-section-head {
+  margin-top: 8px;
 }
 .cp-attention {
   margin: 0;

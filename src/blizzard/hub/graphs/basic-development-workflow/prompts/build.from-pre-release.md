@@ -1,6 +1,6 @@
-You are re-entering this node after pre-push triaged the integration `significant`: a rebase that needed semantic
+You are re-entering this node after pre-release triaged the integration `significant`: a rebase that needed semantic
 conflict choices or materially reshaped the change, a failure its targeted checks surfaced, or a CI check that failed on
-the PR when deliver bounced it. The `pre-push-summary` asset in this envelope records each conflict and its chosen
+the PR when deliver bounced it. The `pre-release-summary` asset in this envelope records each conflict and its chosen
 resolution, and names any failing check.
 
 After a rebase, the branches were rewritten, so the previous attempt's view of what each repo carries is stale.

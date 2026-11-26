@@ -174,6 +174,22 @@ def test_a_re_offer_under_a_fresh_seq_dedupes_against_the_natural_key(tmp_path: 
     assert store.chunk_stored_bytes("ch_1") == len(_record(1, turn_range_start=0, turn_range_end=0)[1].turns_json)
 
 
+def test_a_re_offer_with_different_content_is_acknowledged_and_keeps_the_first_write(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_chunk(hub)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock, transactions=_units(hub))
+    first = '[{"index": 0, "kind": "asst", "text": "first"}]'
+    service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json=first)])
+
+    changed = '[{"index": 0, "kind": "asst", "text": "second"}]'
+    result = service.ingest("r1", [_record(7, turn_range_start=0, turn_range_end=0, turns_json=changed)])
+
+    assert result.applied == [7]
+    [content] = store.records_for_segment("ch_1", "sg_1")
+    assert content.turns_json == first
+
+
 def test_a_below_mark_record_the_hub_no_longer_holds_is_stored_not_reported_idempotent(tmp_path: Path) -> None:
     """The runner PRUNES a row the ack calls ``already_applied``, so reporting idempotency
     for a natural key the hub does not hold destroys the only copy of that content."""

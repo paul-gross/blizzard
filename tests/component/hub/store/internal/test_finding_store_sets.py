@@ -188,17 +188,34 @@ def test_newest_for_routine_scope_is_none_when_the_pair_never_recorded_one(tmp_p
 def test_newest_for_routine_scope_ignores_a_different_routine_or_scope(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
     project = default_project(engine)
+    with engine.begin() as conn:
+        conn.execute(insert(s.scopes).values(stamp(s.scopes, slug="web", description="", created_at=_NOW)))
     store.create(
-        "fins_1",
+        "fins_01A",
         project_id=project,
         artifact_id="art_1",
         chunk_id="ch_1",
         scope_slug="blizzard",
         routine_name="gardening",
-        revisions={},
+        revisions={"blizzard": "mine"},
+        measurement=None,
+    )
+    store.create(
+        "fins_02B",
+        project_id=project,
+        artifact_id="art_2",
+        chunk_id="ch_1",
+        scope_slug="web",
+        routine_name="gardening",
+        revisions={"web": "newer"},
         measurement=None,
     )
 
+    newest = store.newest_for_routine_scope(project, "gardening", "blizzard")
+
+    assert newest is not None
+    assert newest.finding_set_id == "fins_01A"
+    assert newest.revisions == {"blizzard": "mine"}
     assert store.newest_for_routine_scope(project, "other-routine", "blizzard") is None
 
 
