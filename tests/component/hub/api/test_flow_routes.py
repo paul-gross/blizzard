@@ -5,7 +5,7 @@ action holding each visit ``pending``: every place the routes and the chunk read
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +16,7 @@ from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.domain.actions.effects import ActionEscalation, Pass
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkRef
-from blizzard.hub.domain.delivery.flows import Submission, SubmissionRecord
+from blizzard.hub.domain.delivery.flows import FlowOverview, Submission, SubmissionRecord
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support.flow_driver_world import (
@@ -139,6 +139,31 @@ def test_active_keeps_exactly_the_flows_in_line_or_moved_within_the_board_window
 
     assert active() == []
     assert [flow["flow_id"] for flow in line.client.get("/api/flows").json()["flows"]] == [line.flow_id]
+
+
+def test_list_dispatches_to_active_or_full_overviews(line: Line, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    active_overviews = FlowStore.active_flow_overviews
+    all_overviews = FlowStore.flow_overviews
+
+    def active(self: FlowStore, *, since: datetime) -> list[FlowOverview]:
+        calls.append("active")
+        assert since == line.world.hub.clock.now() - BOARD_DONE_WINDOW
+        return active_overviews(self, since=since)
+
+    def all_flows(self: FlowStore) -> list[FlowOverview]:
+        calls.append("all")
+        return all_overviews(self)
+
+    monkeypatch.setattr(FlowStore, "active_flow_overviews", active)
+    monkeypatch.setattr(FlowStore, "flow_overviews", all_flows)
+    assert [f["flow_id"] for f in line.client.get("/api/flows", params={"active": True}).json()["flows"]] == [
+        line.flow_id
+    ]
+    assert calls == ["active"]
+    calls.clear()
+    assert [f["flow_id"] for f in line.client.get("/api/flows").json()["flows"]] == [line.flow_id]
+    assert calls == ["all"]
 
 
 def test_a_submission_closed_between_the_chunk_reads_holds_no_place(

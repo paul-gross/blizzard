@@ -119,21 +119,11 @@ def test_active_overviews_agree_with_domain_rule(world: _World, flows: FlowStore
     assert held is not None and recent is not None and stale is not None
     world.close(recent, "completed", at=since)
     world.close(stale, "completed", at=_AT)
-    with world.engine.begin() as conn:
-        conn.execute(
-            s.flows.insert().values(
-                stamp(
-                    s.flows,
-                    flow_id="flw_empty",
-                    resource="repo:repo_a/empty",
-                    repository_id="repo_a",
-                    branch="empty",
-                    created_at=_AT,
-                )
-            )
-        )
+    with hub_store_connections(world.engine).write("test_empty_flow") as conn:
+        empty = flows._flow_for(conn, FlowResource("repo_a", "empty"), at=_AT)  # pyright: ignore[reportPrivateUsage]  # Exercise a flow before its first fact.
 
     all_flows = flows.flow_overviews()
+    assert any(o.flow == empty and o.newest_at is None for o in all_flows)
     in_line = {
         flow.flow_id for sub in flows.open_submissions_on([o.flow.flow_id for o in all_flows]) for flow in sub.flows
     }
