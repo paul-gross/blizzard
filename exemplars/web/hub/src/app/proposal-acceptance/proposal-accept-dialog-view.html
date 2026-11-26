@@ -1,0 +1,47 @@
+<fleet-kit-dialog
+  [open]="true"
+  [ariaLabel]="'Accept ' + proposalTitle()"
+  testid="proposal-accept-dialog"
+  (closed)="onClosed()"
+>
+  <h2 fleetKitDialogHeader data-testid="proposal-accept-dialog-title">Accept {{ proposalTitle() }}</h2>
+
+  <p>Acceptance itself neither promotes the minted item nor changes any finding's state — it only records agreement.</p>
+
+  @let f = form();
+  @let declining = f.mode().value() === 'decline';
+  <fleet-kit-form [form]="f" saveLabel="Accept" (save)="save.emit()" (cancel)="onClosed()">
+    <fleet-kit-field data-testid="proposal-accept-mode-field" label="Response" [field]="f.mode">
+      <fleet-kit-option-group [formField]="f.mode">
+        <fleet-kit-option value="mint" testid="proposal-accept-mode-mint">Mint a linked work item</fleet-kit-option>
+        <fleet-kit-option value="decline" testid="proposal-accept-mode-decline">Agree, mint nothing</fleet-kit-option>
+      </fleet-kit-option-group>
+    </fleet-kit-field>
+
+    @if (!f.urgency().hidden()) {
+      <fleet-kit-field label="Urgency" [field]="f.urgency">
+        <fleet-kit-select [formField]="f.urgency" ariaLabel="Urgency" [options]="urgencyOptions()" testid="proposal-accept-urgency" />
+      </fleet-kit-field>
+    }
+
+    @if (!f.body().hidden()) {
+      <fleet-kit-field data-testid="proposal-accept-body-field" label="Work item body" [field]="f.body">
+        <fleet-kit-text-input multiline [rows]="16" [formField]="f.body" testid="proposal-accept-body-input" />
+      </fleet-kit-field>
+    }
+
+    <fleet-kit-field
+      data-testid="proposal-accept-reason-field"
+      label="Reason"
+      [field]="f.reason"
+      [hint]="declining ? 'Why no work item is minted.' : 'Optional — why the proposal is accepted.'"
+    >
+      <fleet-kit-text-input
+        multiline
+        [rows]="declining ? 6 : 4"
+        [formField]="f.reason"
+        testid="proposal-accept-reason-input"
+      />
+    </fleet-kit-field>
+  </fleet-kit-form>
+</fleet-kit-dialog>
