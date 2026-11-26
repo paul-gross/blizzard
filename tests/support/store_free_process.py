@@ -15,8 +15,7 @@ from blizzard.hub.process_root import open_store_free
 
 @contextmanager
 def store_free(app: FastAPI) -> Generator[None]:
-    """``app`` serves through a store-free hub process, with no services wired, until the block exits."""
-    services = app.state.services
+    """``app`` serves through a store-free hub process until the block exits."""
     process = app.state.hub_process
     free = open_store_free(
         clock=SystemClock(),
@@ -25,11 +24,9 @@ def store_free(app: FastAPI) -> Generator[None]:
         environ={},
         actions=SHIPPED_ACTIONS,
     )
-    app.state.services = None
     app.state.hub_process = free
     try:
         yield
     finally:
-        app.state.services = services
         app.state.hub_process = process
         free.close()

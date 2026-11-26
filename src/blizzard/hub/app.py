@@ -131,11 +131,9 @@ from blizzard.hub.auth.service import AuthService
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.throttle import LiveIpThrottle
 from blizzard.hub.composition import (
-    HubServices,
     HubSettingsGraph,
+    build_egress_boot,
     build_flow_driver,
-    build_hub_core,
-    build_services,
     build_system_clock,
     open_hub_store,
 )
@@ -647,7 +645,6 @@ def create_app(
     config: HubConfig,
     *,
     readiness: ReadinessService | None = None,
-    services: HubServices | None = None,
     process: HubProcess | None = None,
     platform_tracing: IPlatformTracing | None = None,
     flags: Flags,
@@ -656,11 +653,8 @@ def create_app(
 ) -> FastAPI:
     """Build a fully wired hub app from resolved config and the hub's resolved ``flags``.
 
-    Without a ``process`` the app opens the store-free one, which ``lifespan`` closes; ``services``, the request
-    bridge's tenant opener, is taken only beside the ``process`` it was built over. ``platform_tracing`` is off unless
-    the composition root passes one."""
-    if services is not None and process is None:
-        raise ValueError("create_app takes services only beside the process they were built over")
+    Without a ``process`` the app opens the store-free one, which ``lifespan`` closes. ``platform_tracing`` is off
+    unless the composition root passes one."""
     log = get_logger("blizzard.hub")
 
     platform_tracing = platform_tracing or DisabledPlatformTracing()
@@ -676,8 +670,7 @@ def create_app(
     app.state.config = config
     app.state.flags = flags
     app.state.readiness = readiness
-    app.state.services = services
-    # The store-backed process the services were built over, else the store-free one, which lifespan closes.
+    # The store-backed process the composition root opened, else the store-free one, which lifespan closes.
     app.state.hub_process = (
         process
         if process is not None
@@ -792,7 +785,7 @@ def create_app(
     install_schema_components(app, HUB_SCHEMA_COMPONENTS.models, HUB_SCHEMA_COMPONENTS.enums)
     install_problem_responses(app)
 
-    log.info("hub app created", db_url=config.db_url, services_wired=services is not None)
+    log.info("hub app created", db_url=config.db_url, store_backed=process is not None)
     return app
 
 
@@ -816,7 +809,7 @@ def build_hosted_app(
     with contextlib.ExitStack() as cleanup:
         tracing = TracingSettings.of(os.environ)
 
-        core = build_hub_core(
+        process = open_store_backed(
             connections,
             clock=resolved_clock,
             actions=build_hub_actions(os.environ),
@@ -837,33 +830,32 @@ def build_hosted_app(
                 else None
             ),
             tracing=tracing,
-            egress_path_key=_egress_path_key(config.egress),
+            egress_boot=build_egress_boot(config.egress, _egress_path_key(config.egress)),
         )
         # The hosted resources' one cleanup: the tenant scopes close their configured clients on the running action
         # loop, then the process scope stops the loop; the engine, tracing and settings stay borrowed from `hub host`.
-        cleanup.callback(core.process.close)
-        resolver = core.process.resolver
+        cleanup.callback(process.close)
+        resolver = process.resolver
         # Resolved now: the container builds lazily, and only a resolved resource is finalized on close.
         resolver.get(ActionLoop)
         readiness = resolver.get(ReadinessService)
         expected = readiness.expected_revision
         flags = resolver.get(Flags)
         # Minted here on first start when no key source exists yet.
-        secret_keys = core.process.resolver.get(IRotatableKeyProvider)
+        secret_keys = process.resolver.get(IRotatableKeyProvider)
         remove_retired_workdirs(config.data_dir)
 
         # Resolved before serving, so a misconfigured provider or an unusable signing-keys directory fails boot rather
         # than the first request. Both are built only under `oauth`: under `none` there is no login mechanism to serve.
-        core.process.resolver.get(IOAuthProviderRegistry)
-        core.process.resolver.get(SigningKeyService | None)
+        process.resolver.get(IOAuthProviderRegistry)
+        process.resolver.get(SigningKeyService | None)
 
-        services = build_services(core)
         # Only once the store is at the expected schema head: a store mid-migration must
         # fail *readiness*, not *boot* (pinned:
         # `tests/component/test_readiness.py::test_ready_probe_false_on_unmigrated_store`).
         flow_driver: FlowDriver | None = None
         if readiness.evaluate().ready:
-            open_tenants = core.process.tenants
+            open_tenants = process.tenants
             try:
                 # The import is the hub's, recorded once into the one tenant it wrote, so any tenant answers it.
                 LegacyStart(
@@ -884,7 +876,7 @@ def build_hosted_app(
             try:
                 require_providers_configured(
                     {provider.name for provider in config.auth.oauth_providers},
-                    core.process.resolver.get(IReadIdentityRepository).distinct_provider_names(),
+                    process.resolver.get(IReadIdentityRepository).distinct_provider_names(),
                 )
             except ProvidersOrphaned as refusal:
                 raise ConfigError(str(refusal)) from refusal
@@ -907,7 +899,7 @@ def build_hosted_app(
             # Before the hub serves, in each open tenant: the actionless escalations first, so the flow driver's boot
             # reconcile finds those chunks escalated and submits none of them, then the turns the last process
             # left open.
-            flow_driver = build_flow_driver(core.process)
+            flow_driver = build_flow_driver(process)
             for tenant, reconciler in open_tenants.every_open(FlowLineReconciler):
                 reconciler.escalate_actionless()
                 try:
@@ -928,8 +920,7 @@ def build_hosted_app(
         app = create_app(
             config,
             readiness=readiness,
-            services=services,
-            process=core.process,
+            process=process,
             platform_tracing=platform_tracing,
             flags=flags,
             test_flow_router=(

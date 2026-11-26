@@ -1,9 +1,9 @@
 id: bzh:hub-scoped-reads-confined
 valid:
   - |
-    from blizzard.hub.composition import HubCore, TenantStores
+    from blizzard.hub.process_root import HubProcess
   - |
-    stores = core.open(scope)
+    records = process.tenants.resolve(scope, IReadChunkRecordRepository)
   - |
     def read(self) -> None:
         """Resolves the credential through HubScopedReads before any tenant is known."""

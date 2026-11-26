@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from blizzard.auth_core import Permission
-from blizzard.hub.api import auth_session, flag_guard, hub_level
+from blizzard.hub.api import auth_session, flag_guard
 from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
 from blizzard.hub.auth.permissions import expand
 from tests.support.handler_applicability import transitive_dispatch
@@ -84,8 +84,6 @@ def operator_dependencies(app: Any) -> OperatorDependencies:
     flag: set[Operation] = set()
     for operation, route in operator_operations(app).items():
         calls = list(_calls(route.dependant))
-        if hub_level.hub_services in calls:
-            store.add(operation)
         if auth_session.resolve_tenant in calls:
             store.add(operation)  # it resolves the open tenants, which a store-free hub declares absent
             tenant.add(operation)

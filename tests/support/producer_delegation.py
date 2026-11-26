@@ -11,7 +11,6 @@ from typing import Any
 from fastapi import HTTPException
 from starlette.responses import Response
 
-from blizzard.hub import composition
 from blizzard.hub.api.auth import HostAuth, RunnerAuth
 from tests.support.runner_refusal_discovery import producers
 from tests.support.stable_ast import stable_dump, unparse
@@ -29,46 +28,10 @@ def _inert_statement(node: ast.stmt) -> bool:
     )
 
 
-def _wired_candidates(module: ModuleType) -> dict[tuple[str, str], set[FunctionType]]:
-    """Collect possible HubServices implementations from constructor source, not runtime instances."""
-    tree = ast.parse(inspect.getsource(module))
-    result: dict[tuple[str, str], set[FunctionType]] = {}
-    for function in (node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))):
-        assignments: dict[str, list[ast.AST]] = {}
-        for node in ast.walk(function):
-            if isinstance(node, ast.Assign):
-                for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        assignments.setdefault(target.id, []).append(node.value)
-            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value is not None:
-                assignments.setdefault(node.target.id, []).append(node.value)
-        for call in (node for node in ast.walk(function) if isinstance(node, ast.Call)):
-            if not isinstance(call.func, ast.Name) or call.func.id != "HubServices":
-                continue
-            for keyword in call.keywords:
-                if keyword.arg is None:
-                    continue
-                values = (
-                    assignments.get(keyword.value.id, []) if isinstance(keyword.value, ast.Name) else [keyword.value]
-                )
-                for value in values:
-                    if not isinstance(value, ast.Call) or not isinstance(value.func, ast.Name):
-                        continue
-                    cls = vars(module).get(value.func.id)
-                    if not isinstance(cls, type):
-                        continue
-                    for base in cls.__mro__:
-                        for method, candidate in vars(base).items():
-                            if isinstance(candidate, FunctionType):
-                                result.setdefault((keyword.arg, method), set()).add(candidate)
-    return result
-
-
 def delegation_candidates(function: FunctionType, instance: object = None) -> tuple[set[str], set[str]]:
     found: set[str] = set()
     unresolved: set[str] = set()
     pending = [(function, instance)]
-    wired = _wired_candidates(composition)
     seen: set[tuple[FunctionType, int]] = set()
     while pending:
         current, receiver = pending.pop()
@@ -175,15 +138,6 @@ def delegation_candidates(function: FunctionType, instance: object = None) -> tu
                     candidate = inspect.getattr_static(cls, expr.attr, None)
                     if isinstance(candidate, FunctionType):
                         pending.append((candidate, None))
-            if (
-                isinstance(expr, ast.Attribute)
-                and isinstance(expr.value, ast.Attribute)
-                and isinstance(expr.value.value, ast.Name)
-                and expr.value.value.id == "services"
-                and expr.value.attr == "memberships"
-                and expr.attr == "memberships_for"
-            ):
-                pending.extend((candidate, None) for candidate in wired.get((expr.value.attr, expr.attr), ()))
             if isinstance(expr, ast.Name) and expr.id not in bound:
                 target = current.__globals__.get(expr.id)
             elif (

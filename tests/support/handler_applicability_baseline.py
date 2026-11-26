@@ -82,7 +82,6 @@ POST /api/fleet/chunks/{chunk_id}/artifact-check
 
 HTTP_HANDLER = "blizzard.hub.api.problem_exceptions.problem_http_exception"
 PROBLEM_EXCEPTION = "blizzard.hub.api.problem_exceptions.ProblemHTTPException"
-HUB_SERVICES = f"blizzard.hub.api.hub_level.hub_services raises {PROBLEM_EXCEPTION}"
 TENANT = f"blizzard.hub.api.auth_session.resolve_tenant raises {PROBLEM_EXCEPTION}"
 DIRECT_ENDPOINTS = {
     ("POST", "/api/fleet/chunks/{chunk_id}/artifact-check"): ("check_artifact", PROBLEM_EXCEPTION),
@@ -99,54 +98,9 @@ DIRECT_ENDPOINTS = {
     ("GET", "/api/fleet/chunks/{chunk_id}/envelope"): ("get_envelope", PROBLEM_EXCEPTION),
     ("POST", "/api/fleet/chunks/{chunk_id}/completions"): ("submit_completion", PROBLEM_EXCEPTION),
 }
-#: The operations whose only route on the hub-level services was the tenant resolution, which now takes none.
-NO_HUB_SERVICES = {
-    ("POST", "/api/fleet/chunks/{chunk_id}/completions"),
-    ("POST", "/api/fleet/chunks/{chunk_id}/decisions"),
-    ("POST", "/api/fleet/chunks/{chunk_id}/release"),
-    ("POST", "/api/fleet/chunks/{chunk_id}/route-token"),
-    ("POST", "/api/fleet/events"),
-    ("POST", "/api/fleet/routes"),
-    ("GET", "/api/fleet/chunks/{chunk_id}"),
-    ("GET", "/api/fleet/chunks/{chunk_id}/work-items"),
-    ("GET", "/api/fleet/summary"),
-    ("POST", "/api/fleet/chunks/{chunk_id}/pause"),
-    ("POST", "/api/fleet/chunks/{chunk_id}/resume"),
-    ("POST", "/api/fleet/queue/peek"),
-    ("GET", "/api/fleet/system-artifacts"),
-    ("GET", "/api/fleet/system-artifacts/{name}"),
-    ("GET", "/api/fleet/host"),
-    ("GET", "/api/fleet/runners/{runner_id}"),
-    ("POST", "/api/fleet/host"),
-    ("POST", "/api/fleet/host/events"),
-    ("POST", "/api/fleet/host/runners"),
-    ("POST", "/api/fleet/host/runners/{runner_id}/retire"),
-    ("POST", "/api/fleet/runners"),
-    ("POST", "/api/hosts"),
-    ("POST", "/api/fleet/chunks/{chunk_id}/artifact-check"),
-    ("GET", "/api/fleet/chunks/{chunk_id}/findings"),
-    ("GET", "/api/fleet/chunks/{chunk_id}/findings/{finding_id}"),
-    ("GET", "/api/fleet/chunks/{chunk_id}/garden/findings"),
-    ("GET", "/api/fleet/chunks/{chunk_id}/garden/proposals/page"),
-    ("GET", "/api/fleet/scopes"),
-    ("GET", "/api/fleet/chunk-statuses"),
-    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/files"),
-    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/skills"),
-    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/agent-types"),
-    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/nodes"),
-    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/spend/nodes"),
-    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/spend/graphs"),
-    ("POST", "/api/fleet/transcripts"),
-    ("GET", "/api/fleet/chunks/{chunk_id}/transcript-segments"),
-    ("GET", "/api/fleet/chunks/{chunk_id}/envelope"),
-    ("GET", "/api/fleet/questions/{question_id}"),
-    ("POST", "/api/fleet/chunks/{chunk_id}/hub-advance"),
-    ("GET", "/api/fleet/runners/{runner_id}/decisions"),
-}
 DIRECT_DISPATCH: dict[tuple[str, str], dict[str, set[str]]] = {
     operation: {
-        HTTP_HANDLER: (set() if operation in NO_HUB_SERVICES else {HUB_SERVICES})
-        | {TENANT}
+        HTTP_HANDLER: {TENANT}
         | (
             {f"blizzard.hub.api.fleet.{DIRECT_ENDPOINTS[operation][0]} raises {DIRECT_ENDPOINTS[operation][1]}"}
             if operation in DIRECT_ENDPOINTS

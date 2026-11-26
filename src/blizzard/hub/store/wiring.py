@@ -3,7 +3,7 @@
 The tenant's adapters are registered at the tenant scope, each over the tenant's one :class:`ScopedConnections`. Each
 registration is a service, except the seam itself (opened only through the borrowed connections' ``scoped``) and the
 adapters a borrowed-connection root also builds, whose one constructor function the registry shares. The registrations
-hand back the ``Ref`` an adopted area or the legacy bridge aliases its own ports onto, so a port and its adapter are
+hand back the ``Ref`` an area aliases its own ports onto, so a port and its adapter are
 one instance. The store-free graph declares each registered key absent, from the same roster, so the two cannot drift.
 
 This is the only module besides the composition roots that names ``hub/store/internal``. It acquires nothing: the
@@ -31,6 +31,7 @@ from blizzard.hub.domain.cadence.ports import IReadCadenceCorpus
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.chunk.ports.work_refs import IReadWorkRefsCorpus
 from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.observability.analytics.derivation import IReadDerivationCorpus
 from blizzard.hub.domain.observability.egress.repository import IReadEgressEvents, IReadUsageCorpus
 from blizzard.hub.domain.observability.tracing.repository import StepHydrations
@@ -95,13 +96,10 @@ from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import ClosedTenantUnits, HubTransactions
 from blizzard.hub.tenancy import STORE_UNAVAILABLE, StoreScope
 
-#: Every other tenant adapter built as a service over the tenant's connections.
-_TENANT_SERVICES: tuple[type[Any], ...] = ()
-
 
 class StoreRefs:
-    """The ``Ref`` of each adapter a registration handed back, by its class — what an adopted area or the legacy
-    bridge aliases its own ports onto."""
+    """The ``Ref`` of each adapter a registration handed back, by its class — what an area aliases its own ports
+    onto."""
 
     def __init__(self, refs: Mapping[type[Any], Ref[Any]]) -> None:
         self._refs = dict(refs)
@@ -111,8 +109,8 @@ class StoreRefs:
         return self._refs[adapter]
 
 
-#: The tenant services a legacy-bridge alias targets, registered apart so their ``Ref`` is handed back.
-_TENANT_ALIASED: tuple[type[Any], ...] = (
+#: The tenant's connection-bound services: its transaction primitive and its invitation store.
+_TENANT_SERVICES: tuple[type[Any], ...] = (
     HubTransactions,
     InvitationStore,
 )
@@ -162,19 +160,19 @@ def scoped_connections(connections: HubStoreConnections, scope: StoreScope) -> S
     return connections.scoped(scope)
 
 
-def register_tenant(registry: Registry) -> StoreRefs:
-    """Declare every tenant adapter but the configured records' and the chunk operations' once per tenant, handing
-    back the ``Ref`` of each adapter the legacy bridge's ports alias."""
+def register_tenant(registry: Registry) -> Ref[InvitationStore]:
+    """Declare the tenant's scoped connections, its transaction primitive — answering ``IHubTransactions`` — and its
+    invitation store once per tenant, handing back the invitation store's ``Ref``, which the identity area's write
+    port aliases."""
     registry.factory(scoped_connections, lifetime=Lifetime.TENANT)
-    aliased = StoreRefs({each: registry.service(each, lifetime=Lifetime.TENANT) for each in _TENANT_ALIASED})
-    for each in _TENANT_SERVICES:
-        registry.service(each, lifetime=Lifetime.TENANT)
-    return aliased
+    refs = StoreRefs({each: registry.service(each, lifetime=Lifetime.TENANT) for each in _TENANT_SERVICES})
+    registry.alias(port(IHubTransactions), refs.of(HubTransactions))
+    return refs.of(InvitationStore)
 
 
 def register_tenant_absent(registry: Registry) -> None:
-    """Declare every tenant adapter absent, for the store-free graph."""
-    for missing in (*_TENANT_FACTORY_KEYS, *_TENANT_SERVICES, *_TENANT_ALIASED):
+    """Declare every tenant adapter and the transaction port absent, for the store-free graph."""
+    for missing in (*_TENANT_FACTORY_KEYS, *_TENANT_SERVICES, IHubTransactions):
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
 
 

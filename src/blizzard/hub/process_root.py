@@ -18,8 +18,8 @@ from blizzard.foundation.clock import ControlledClock, IClock
 from blizzard.foundation.platform_tracing import wiring as platform_tracing_wiring
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing
 from blizzard.foundation.registry.interface import Ref, port
+from blizzard.foundation.registry.internal.recording import RecordingRegistry
 from blizzard.foundation.registry.internal.translation import HUB_LIFETIMES, build_container
-from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import OwnedChild, Resolver, ScopeValue, ScopeValues, supply
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.trace_export.exporter import ITraceExporter
@@ -29,7 +29,6 @@ from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.auth import wiring as auth
 from blizzard.hub.auth.wiring import BorrowedOAuthClient
-from blizzard.hub.composition import register_legacy, register_legacy_absent
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery import wiring as delivery
 from blizzard.hub.delivery.action_registry import HubActions
@@ -113,7 +112,7 @@ class HubProcess:
 
 
 def register_hub(
-    registry: LegacyRegistry,
+    registry: RecordingRegistry,
     *,
     store_backed: bool,
     settings: bool = False,
@@ -122,7 +121,7 @@ def register_hub(
     egress_export: bool = False,
     controlled_clock: bool = False,
 ) -> None:
-    """Declare the hub graph: the scope inputs, the legacy bridge's ports, the store adapters, the process lifecycle
+    """Declare the hub graph: the scope inputs, the store adapters, the process lifecycle
     owners and the areas over them — or, store-free, each store-backed registration absent. ``settings``,
     ``versions``, ``trace_export`` and ``egress_export`` each make their keys present, else absent or ``None``;
     ``controlled_clock`` adds the clock controls on either graph."""
@@ -138,11 +137,11 @@ def register_hub(
         scopes.register_tenants(registry)
         chunk_operations = store.register_chunk_operations(registry)
         hub_events = store.register_process(registry)
-        register_legacy(registry)
+        invitations = store.register_tenant(registry)
         delivery.register_tenant(registry)
         delivery_area.register(registry, flows=chunk_operations.flows)
         close_drain = _register_chunk_operations(registry, chunk_operations)
-        auth.register(registry)
+        auth.register(registry, invitations=invitations)
         secrets.register(registry)
         findings.register(registry, store.register_findings(registry))
         graph_area.register(registry, store.register_graphs(registry))
@@ -173,7 +172,7 @@ def register_hub(
         store.register_process_absent(registry)
         delivery.register_absent(registry)
         scopes.register_tenants_absent(registry)
-        register_legacy_absent(registry)
+        store.register_tenant_absent(registry)
         delivery.register_tenant_absent(registry)
         delivery_area.register_absent(registry)
         store.register_chunk_operations_absent(registry)
@@ -223,7 +222,7 @@ def register_hub(
         settings_wiring.register_absent(registry)
 
 
-def _register_chunk_operations(registry: LegacyRegistry, refs: store.ChunkOperationsRefs) -> Ref[CloseDrainSweep]:
+def _register_chunk_operations(registry: RecordingRegistry, refs: store.ChunkOperationsRefs) -> Ref[CloseDrainSweep]:
     """The chunk, chunk operations and work-items areas, over the tenant's chunk-store bundle and flow and work-item
     stores, handing back the close drain's ``Ref``."""
     chunk_area.register(registry, stores=refs.chunks, submissions=refs.flows, work_items=refs.work_items)
@@ -232,7 +231,7 @@ def _register_chunk_operations(registry: LegacyRegistry, refs: store.ChunkOperat
 
 
 def _register_observability(
-    registry: LegacyRegistry, *, hub_events: Ref[HubEventLogStore]
+    registry: RecordingRegistry, *, hub_events: Ref[HubEventLogStore]
 ) -> observability_area.PassRefs:
     """The observability adapters, and the observability area's ports and services over them and the hub event log,
     handing back its passes' ``Ref``s."""
@@ -250,7 +249,7 @@ def _register_observability(
     )
 
 
-def _register_tenancy(registry: LegacyRegistry) -> Ref[TenantTeardownSweep]:
+def _register_tenancy(registry: RecordingRegistry) -> Ref[TenantTeardownSweep]:
     """The tenancy adapters, the tenancy area's services over them, and the graph sync its tenant creation mints
     through, handing back the teardown sweep's ``Ref``."""
     refs = store.register_tenancy(registry)
@@ -260,7 +259,7 @@ def _register_tenancy(registry: LegacyRegistry) -> Ref[TenantTeardownSweep]:
 
 
 def _register_exports(
-    registry: LegacyRegistry, *, trace_export: bool, egress_export: bool
+    registry: RecordingRegistry, *, trace_export: bool, egress_export: bool
 ) -> observability_area.ExportSweepRefs:
     """The trace and egress stores and the egress adapters, and the observability area's exports over them — each
     export's sweep present only when its switch is set, and its ``Ref`` handed back, else ``None``."""
@@ -283,7 +282,7 @@ def _register_exports(
     )
 
 
-def _register_projects(registry: LegacyRegistry) -> None:
+def _register_projects(registry: RecordingRegistry) -> None:
     """The project adapters, and the projects area's ports and services over them."""
     refs = store.register_projects(registry)
     projects.register(
@@ -295,7 +294,7 @@ def _register_projects(registry: LegacyRegistry) -> None:
     )
 
 
-def _register_fleet(registry: LegacyRegistry, *, versions: bool) -> None:
+def _register_fleet(registry: RecordingRegistry, *, versions: bool) -> None:
     """The fleet registry adapters, the runners area's ports and services over them, and the execution area's fleet
     services over the version window the root supplies — or none, its window absent."""
     refs = store.register_fleet(registry)
@@ -307,7 +306,7 @@ def _register_fleet(registry: LegacyRegistry, *, versions: bool) -> None:
         execution.register(registry, versions=None)
 
 
-def _register_garden(registry: LegacyRegistry, *, formats: Ref[GardenFormats]) -> None:
+def _register_garden(registry: RecordingRegistry, *, formats: Ref[GardenFormats]) -> None:
     """The garden authoring adapters, and the garden area's ports and services over them and the API edge's artifact
     formats."""
     refs = store.register_garden_authoring(registry)
@@ -331,13 +330,13 @@ def _register_garden(registry: LegacyRegistry, *, formats: Ref[GardenFormats]) -
     )
 
 
-def _register_cadence(registry: LegacyRegistry) -> Ref[CadenceSweep]:
+def _register_cadence(registry: RecordingRegistry) -> Ref[CadenceSweep]:
     """The cadence adapters, and the cadence area's ports and services over them, handing back its sweep's ``Ref``."""
     refs = store.register_cadence(registry)
     return cadence_area.register(registry, cadences=refs.cadences, runs=refs.runs)
 
 
-def _register_urgency(registry: LegacyRegistry) -> None:
+def _register_urgency(registry: RecordingRegistry) -> None:
     """The urgency adapters, and the urgency area's ports and services over them."""
     refs = store.register_urgency(registry)
     urgency_area.register(
@@ -345,7 +344,7 @@ def _register_urgency(registry: LegacyRegistry) -> None:
     )
 
 
-def _register_config(registry: LegacyRegistry) -> None:
+def _register_config(registry: RecordingRegistry) -> None:
     """The configured-record adapters, and the config area's ports over them."""
     refs = store.register_config(registry)
     config_wiring.register(
@@ -445,7 +444,7 @@ def store_backed_values(
 
 
 def build_store_backed(
-    registry: LegacyRegistry,
+    registry: RecordingRegistry,
     connections: HubStoreConnections,
     *,
     clock: IClock,
@@ -513,25 +512,22 @@ def store_backed_process(owner: OwnedChild) -> HubProcess:
     return process
 
 
-def bind_closed_tenant_forgetting(process: HubProcess, *, legacy: Callable[[TenantId], None] | None = None) -> None:
+def bind_closed_tenant_forgetting(process: HubProcess) -> None:
     """Bind ``process``'s closed-tenant forgetting: a closed tenant's container scope goes first, whose finalizers close
-    its configured clients and drop its broker; then ``legacy``, the legacy cache's entry, when the legacy core holds
-    one; and the in-memory open set is read again last, so a request resolving the tenant meanwhile misses both caches
-    and is refused by the store. Binding again replaces the binding."""
+    its configured clients and drop its broker; and the in-memory open set is read again last, so a request resolving
+    the tenant meanwhile misses the scope cache and is refused by the store. Binding again replaces the binding."""
     tenants = process.tenants
     open_tenants = process.resolver.get(OpenTenants)
 
     def forget(tenant: TenantId) -> None:
         tenants.evict(tenant)
-        if legacy is not None:
-            legacy(tenant)
         open_tenants.refresh()
 
     process.resolver.get(ClosedTenantForgetting).bind(forget)
 
 
 def build_store_free(
-    registry: LegacyRegistry,
+    registry: RecordingRegistry,
     *,
     clock: IClock,
     config: HubConfig,
@@ -632,9 +628,9 @@ def registered(
     trace_export: bool = False,
     egress_export: bool = False,
     controlled_clock: bool = False,
-) -> LegacyRegistry:
+) -> RecordingRegistry:
     """A fresh registry holding the hub graph :func:`register_hub` declares."""
-    registry = LegacyRegistry()
+    registry = RecordingRegistry()
     register_hub(
         registry,
         store_backed=store_backed,

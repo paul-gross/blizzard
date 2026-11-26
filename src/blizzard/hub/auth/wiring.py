@@ -18,7 +18,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import IInstrumentClient
-from blizzard.foundation.registry.interface import Lifetime, Registry, port
+from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.hub_admins import HubAdministrators
@@ -206,8 +206,9 @@ _PROCESS_KEYS: tuple[Any, ...] = (
 )
 
 
-def register(registry: Registry) -> None:
-    """Declare the identity area: its repositories and services at the process, and each tenant's invitation service."""
+def register(registry: Registry, *, invitations: Ref[IWriteInvitationRepository]) -> None:
+    """Declare the identity area: its repositories and services at the process, and each tenant's invitation service
+    over the tenant's ``invitations`` store, which its write port aliases."""
     registry.context(port(BorrowedOAuthClient), lifetime=Lifetime.PROCESS)
     registry.factory(repo_errors, lifetime=Lifetime.PROCESS)
     users = registry.service(UserRepository, lifetime=Lifetime.PROCESS)
@@ -234,6 +235,7 @@ def register(registry: Registry) -> None:
     registry.alias(port(IIdentityTransactions), transactions)
     registry.alias(port(IReadSessionRepository), sessions)
     registry.alias(port(IReadIdentityRepository), identities)
+    registry.alias(port(IWriteInvitationRepository), invitations)
     registry.factory(invitation_service, lifetime=Lifetime.TENANT)
 
 
@@ -241,4 +243,5 @@ def register_absent(registry: Registry) -> None:
     """Declare the identity area absent, for the store-free graph."""
     for missing in _PROCESS_KEYS:
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
-    registry.absent(port(InvitationService), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
+    for missing in (InvitationService, IWriteInvitationRepository):
+        registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)

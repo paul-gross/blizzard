@@ -352,39 +352,6 @@ def test_me_boundary_keeps_reviewed_unknowns_visible() -> None:
     assert not producer_inventory_failures(("GET", "/api/me"), found, REVIEWED)
 
 
-def test_source_wired_adapter_is_traversed_without_claiming_exhaustive_dispatch(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    path = tmp_path / "wiring.py"
-    path.write_text(
-        "from fastapi import HTTPException\n"
-        "class Adapter:\n def memberships_for(self, user):\n  raise HTTPException(409)\n"
-        "class HubServices:\n def __init__(self, **kwargs): pass\n"
-        "def compose():\n"
-        " adapter = Adapter()\n return HubServices(memberships=adapter)\n"
-        "def endpoint(services, user):\n return services.memberships.memberships_for(user)\n"
-    )
-    spec = importlib.util.spec_from_file_location("blizzard.hub.planted_wiring", path)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    monkeypatch.setitem(sys.modules, spec.name, module)
-    spec.loader.exec_module(module)
-    monkeypatch.setattr("tests.support.producer_delegation.composition", module)
-    found, unresolved = delegation_candidates(module.endpoint)
-    assert any("Adapter.memberships_for" in item and "409" in item for item in found)
-    assert any("unresolved call services.memberships.memberships_for" in item for item in unresolved)
-    failures = producer_inventory_failures(("GET", "/planted"), found, {("GET", "/planted"): set()})
-    assert any("Adapter.memberships_for" in item for item in failures)
-
-    def override(self: object, user: object) -> None:
-        pass
-
-    module.Adapter.memberships_for = override
-    found, unresolved = delegation_candidates(module.endpoint)
-    assert any("unresolved call services.memberships.memberships_for" in item for item in unresolved)
-    assert not any("409" in item for item in found)
-
-
 def _boundary_failures(operation: tuple[str, str], evidence: tuple[set[str], set[str]]) -> list[str]:
     baseline = {
         (method, path): (found, unknown) for method, path, found, unknown in map(str.split, EVIDENCE.splitlines())

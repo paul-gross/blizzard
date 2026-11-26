@@ -38,12 +38,7 @@ def inventory_violations(registry: RecordingRegistry, allowed: Mapping[object, s
 HUB_BAG_NAMES = frozenset({"HubServices", "Hub", "hub_services", "HubCore"})
 
 #: Each module under ``src/blizzard`` that still names the hub's legacy bag, and the area owning it until it retires.
-BAG_CONSUMERS: Mapping[Path, str] = {
-    Path("hub/api/deps.py"): "hub legacy retirement: the request bridge",
-    Path("hub/api/hub_level.py"): "hub legacy retirement: the request bridge",
-    Path("hub/app.py"): "hub legacy retirement: the hosted process root",
-    Path("hub/composition.py"): "hub legacy retirement: the legacy process root",
-}
+BAG_CONSUMERS: Mapping[Path, str] = {}
 
 
 def bag_consumer_violations(source_root: Path, allowed: Mapping[Path, str] = BAG_CONSUMERS) -> list[str]:

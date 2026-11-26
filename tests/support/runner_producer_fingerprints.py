@@ -38,7 +38,6 @@ src/blizzard/hub/api/graphs.py 8 c5d141d3365312d774a06270b98a8e795f116a5d27a168f
 src/blizzard/hub/api/health.py 1 a8213336f8c34db34352c309e78bfbf29e149932f2928defbb879cada9b2e18e
 src/blizzard/hub/api/hosts.py 21 9c22a5146cffbc6a0156924bbeab91dfb4368f7a323bbea8532b5351d3f8bd6b
 src/blizzard/hub/api/hub_admins.py 2 a7e5df759cc996a9ca1d6643e2ec44ed982d67230778c4bd8e18c4bf1cf9cd1e
-src/blizzard/hub/api/hub_level.py 1 7cc32584034a4bc0dd0c9dddfb6c4a2502d16c93d958a11c1e4558ce63fc4676
 src/blizzard/hub/api/idp.py 18 986466eccd4a962b71587b9b54638868689bbea7eeb9dafd070fcacf5aae84b6
 src/blizzard/hub/api/invitations.py 4 64c412b992af31293238c5a0d9668dccd042fdff74144eb2a1a7c736b32c5a96
 src/blizzard/hub/api/me.py 2 00f7cc4e738edfa6637e860199acc40c44acb6cda141e74eb7ae1eed64e49bfc

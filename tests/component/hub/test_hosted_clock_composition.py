@@ -9,10 +9,12 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import ControlledClock, IClock, SystemClock
 from blizzard.hub.app import Sweep
-from blizzard.hub.composition import build_flow_driver, build_hub_core
+from blizzard.hub.composition import build_flow_driver
 from blizzard.hub.delivery.flow_driver import StepWake
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepModes, SweepName
 from blizzard.hub.domain.sweeps.roster import SweepRoster
+from blizzard.hub.open_tenants import OpenTenants
+from blizzard.hub.process_root import open_store_backed
 from blizzard.hub.tenancy import StoreScope
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
 from tests.support.hub_event_rows import hub_event_rows
@@ -77,18 +79,18 @@ async def test_controlled_graph_boot_announcements_and_forced_wake(
         sweeps=SweepModes({SweepName.FORGE_STATUS: SweepMode.STEPPED}),
     )
     with (
-        patch("blizzard.hub.app.build_hub_core", wraps=build_hub_core) as core_builder,
+        patch("blizzard.hub.app.open_store_backed", wraps=open_store_backed) as process_opener,
         patch("blizzard.hub.app.build_flow_driver", wraps=build_flow_driver) as driver_builder,
     ):
         app = build_hosted_hub_app(config)
     try:
-        services = app.state.services
-        resolver = app.state.hub_process.resolver
-        # wraps returns the real object, not the mock's return_value; inspect the injected clock and tenant cache.
-        clock = core_builder.call_args.kwargs["clock"]
+        process = app.state.hub_process
+        resolver = process.resolver
+        # wraps returns the real object, not the mock's return_value; inspect the injected clock and a tenant's scope.
+        clock = process_opener.call_args.kwargs["clock"]
         assert resolver.get(IClock) is clock
-        tenant = next(iter(services.tenants.open_tenants.every()))
-        assert services.tenants.open_services(StoreScope(tenant)).clock is clock
+        tenant = next(iter(resolver.get(OpenTenants).every()))
+        assert process.tenants.resolve(StoreScope(tenant), IClock) is clock
         assert app.state.flow_driver is None
         assert {sweep.config_name for sweep in Sweep.all(app)} == set(resolver.get(SweepRoster).names()) - {
             SweepName.FORGE_STATUS

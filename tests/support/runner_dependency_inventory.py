@@ -8,23 +8,20 @@ closure values; changes to those still require separate inspection.
 ANNOTATE = "blizzard.hub.app._annotate_chunk"
 REQUEST_CONFIG = "blizzard.hub.app._bind_request_config"
 PROCESS = "blizzard.hub.api.resolution.process_request"
-HUB = "blizzard.hub.api.hub_level.hub_services"
 TENANT = {
     ANNOTATE,
-    HUB,
     "blizzard.hub.api.auth_session.resolve_tenant",
     "blizzard.hub.api.auth_session.tenant_bound",
     "blizzard.hub.api.auth_session.tenant_request",
-    "blizzard.hub.api.deps.tenant_services",
 }
 RUNNER = TENANT | {"blizzard.hub.api.auth.require_runner_principal"}
 FLEET_REQUEST = RUNNER | {"blizzard.hub.api.fleet.FleetRequest.of"}
-HOST = TENANT - {"blizzard.hub.api.deps.tenant_services", HUB} | {"blizzard.hub.api.auth.require_host_principal"}
+HOST = TENANT | {"blizzard.hub.api.auth.require_host_principal"}
 
 # Keys are the hub's effective route paths, not client-side parameter names.
 GROUPS = [
     (
-        RUNNER - {"blizzard.hub.api.deps.tenant_services", HUB},
+        RUNNER,
         """
 GET /api/fleet/chunk-statuses
 GET /api/fleet/chunks/{chunk_id}
@@ -48,7 +45,7 @@ POST /api/fleet/queue/peek
 """,
     ),
     (
-        RUNNER - {"blizzard.hub.api.deps.tenant_services", HUB} | {"blizzard.hub.api.fleet.AnalyticsWindow.of"},
+        RUNNER | {"blizzard.hub.api.fleet.AnalyticsWindow.of"},
         """
 GET /api/fleet/chunks/{chunk_id}/analytics/counts/agent-types
 GET /api/fleet/chunks/{chunk_id}/analytics/counts/files
@@ -59,7 +56,7 @@ GET /api/fleet/chunks/{chunk_id}/analytics/spend/nodes
 """,
     ),
     (
-        FLEET_REQUEST - {"blizzard.hub.api.deps.tenant_services", HUB},
+        FLEET_REQUEST,
         """
 GET /api/fleet/runners/{runner_id}
 GET /api/fleet/runners/{runner_id}/decisions
@@ -92,7 +89,7 @@ POST /api/fleet/host/runners/{runner_id}/retire
 """,
     ),
     (
-        TENANT - {"blizzard.hub.api.deps.tenant_services", HUB}
+        TENANT
         | {
             "blizzard.hub.api.auth.require_runner_principal_even_if_retired",
             "blizzard.hub.api.fleet.FleetRequest.of_even_if_retired",
@@ -100,7 +97,7 @@ POST /api/fleet/host/runners/{runner_id}/retire
         "POST /api/fleet/routes",
     ),
     (
-        TENANT - {"blizzard.hub.api.deps.tenant_services", HUB}
+        TENANT
         | {
             "blizzard.hub.api.auth.reject_runner_principal",
             "blizzard.hub.api.auth_session.require.<locals>._dependency",

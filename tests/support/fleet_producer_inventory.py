@@ -34,7 +34,6 @@ _SHARED = _entries(
         for owner, expressions in HOST[("GET", "/api/fleet/host")].items()
         if owner
         in {
-            "hub_level.hub_services",
             "auth_session.resolve_tenant",
             "auth_session._no_such_tenant",
             "auth_session._tenant_required",
