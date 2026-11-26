@@ -198,7 +198,7 @@ def test_compatibility_exemption_is_a_package_segment(relative: str, exempt: boo
 # process's own composition root.
 _CLOCK_COMPOSITION_ROOTS: dict[Path, str] = {
     _HUB_DIR / "app.py": "build_hosted_app — the hosted hub's composition root",
-    _HUB_DIR / "composition.py": "build_hub_core and build_services — the hub's process-graph composition root",
+    _HUB_DIR / "composition.py": "build_system_clock — the one wall clock a hub process reads",
     _HUB_DIR / "runtime.py": "init_environment, migrate and migration_runner — offline store administration's own root",
     _RUNNER_DIR / "app.py": "build_hosted_app — the runner's served-app composition root",
     _RUNNER_DIR / "composition.py": "build_runner_process — the runner's hosted process graph",

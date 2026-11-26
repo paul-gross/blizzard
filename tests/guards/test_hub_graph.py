@@ -5,7 +5,7 @@ Each gate runs over the real hub registration and over that registration with a 
 from __future__ import annotations
 
 import shutil
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -19,9 +19,10 @@ from blizzard.foundation.flags import FlagRegistry
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
 from blizzard.foundation.registry.interface import Lifetime, port
+from blizzard.foundation.registry.internal.recording import RecordingRegistry
 from blizzard.foundation.registry.internal.translation import HUB_LIFETIMES, build_container
 from blizzard.foundation.registry.legacy import LegacyRegistry
-from blizzard.foundation.registry.scopes import OwnedChild, ScopeValues, supply
+from blizzard.foundation.registry.scopes import OwnedChild, Resolver, ScopeValues, supply
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -89,7 +90,7 @@ from blizzard.hub.graph_sync import GraphReconciliations
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
 from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.open_tenants import OpenTenants
-from blizzard.hub.process_root import register_hub
+from blizzard.hub.process_root import HubProcess, register_hub, registered
 from blizzard.hub.scopes.environ import HubEnviron
 from blizzard.hub.settings.footing import HubSettingsFooting
 from blizzard.hub.settings.graph import HubSettingsGraph
@@ -104,10 +105,11 @@ from tests.support.container_guards import (
     default_factory_violations,
     duplicate_owners,
     graph_builds,
+    legacy_registrations,
     lifetime_violations,
     role_key_violations,
+    typed_accessor_violations,
 )
-from tests.support.legacy_inventory import LEGACY_INVENTORY, inventory_violations
 from tests.support.route_resolution import RouteDependency, route_dependencies, unresolved_route_dependencies
 from tests.support.scaffolding import InMemoryTraceExporter, hub_migration_prototype
 
@@ -120,10 +122,8 @@ def _hub(
     trace_export: bool = False,
     egress_export: bool = False,
     controlled_clock: bool = False,
-) -> LegacyRegistry:
-    registry = LegacyRegistry()
-    register_hub(
-        registry,
+) -> RecordingRegistry:
+    return registered(
         store_backed=store_backed,
         settings=settings,
         versions=versions,
@@ -131,7 +131,6 @@ def _hub(
         egress_export=egress_export,
         controlled_clock=controlled_clock,
     )
-    return registry
 
 
 class _Unregistered:
@@ -157,7 +156,8 @@ def _second_memberships(connections: HubStoreConnections) -> MembershipRepositor
     return MembershipRepository(connections)
 
 
-@pytest.mark.parametrize(
+#: Every hub graph shape the root registers.
+_EVERY_GRAPH = pytest.mark.parametrize(
     ("store_backed", "settings", "versions", "exports", "controlled"),
     [
         (True, True, True, False, False),
@@ -178,6 +178,9 @@ def _second_memberships(connections: HubStoreConnections) -> MembershipRepositor
         "store-free-controlled-clock",
     ],
 )
+
+
+@_EVERY_GRAPH
 def test_the_hub_graph_builds_and_keeps_every_registration_rule(
     store_backed: bool, settings: bool, versions: bool, exports: bool, controlled: bool
 ) -> None:
@@ -197,6 +200,22 @@ def test_the_hub_graph_builds_and_keeps_every_registration_rule(
     assert default_factory_violations(registry) == []
 
 
+@_EVERY_GRAPH
+def test_the_hub_graph_declares_no_legacy_registration_and_no_generic_resolver_parameter(
+    store_backed: bool, settings: bool, versions: bool, exports: bool, controlled: bool
+) -> None:
+    registry = _hub(
+        store_backed=store_backed,
+        settings=settings,
+        versions=versions,
+        trace_export=exports,
+        egress_export=exports,
+        controlled_clock=controlled,
+    )
+    assert legacy_registrations(registry) == []
+    assert typed_accessor_violations(registry) == []
+
+
 @pytest.mark.parametrize("store_backed", [True, False], ids=["store-backed", "store-free"])
 def test_the_hub_graph_gate_fails_a_planted_unresolvable_dependency(store_backed: bool) -> None:
     registry = _hub(store_backed=store_backed)
@@ -206,14 +225,14 @@ def test_the_hub_graph_gate_fails_a_planted_unresolvable_dependency(store_backed
 
 def test_the_hub_graph_gate_fails_a_planted_second_owner_and_role_key() -> None:
     registry = _hub(store_backed=True)
-    registry.leaf(_second_open_tenants, lifetime=Lifetime.PROCESS)
+    registry.factory(_second_open_tenants, lifetime=Lifetime.PROCESS)
     assert duplicate_owners(registry) == ["OpenTenants has 2 owners"]
     assert role_key_violations(registry) == ["OpenTenants is the key of 2 registrations"]
 
 
 def test_the_hub_graph_gate_fails_a_planted_alias_onto_a_doubled_owner() -> None:
     registry = _hub(store_backed=True)
-    registry.leaf(_second_memberships, lifetime=Lifetime.PROCESS)
+    registry.factory(_second_memberships, lifetime=Lifetime.PROCESS)
     assert alias_identity_violations(registry) == [
         "alias IReadMembershipRepository targets MembershipRepository, which has 2 owners"
     ]
@@ -401,18 +420,43 @@ def test_the_every_route_walk_finds_a_container_dependency_on_a_planted_route() 
     ]
 
 
-def test_the_registry_declares_only_the_inventoried_legacy_leaves_and_bags() -> None:
-    assert inventory_violations(_hub(store_backed=True)) == []
+def test_the_legacy_gate_fails_a_planted_leaf_and_bag() -> None:
+    registry = LegacyRegistry()
+    register_hub(registry, store_backed=True)
+    assert legacy_registrations(registry) == []
+    registry.leaf(_planted_leaf, lifetime=Lifetime.PROCESS)
+    registry.bag(_planted_bag, lifetime=Lifetime.TENANT)
+    assert legacy_registrations(registry) == ["_Defaulted is a legacy leaf", "_Unregistered is a legacy bag"]
 
 
-def test_the_inventory_gate_fails_a_planted_unlisted_leaf_and_a_stale_entry() -> None:
-    registry = _hub(store_backed=True)
-    registry.leaf(_unlisted_leaf, lifetime=Lifetime.PROCESS)
-    assert inventory_violations(registry, {**LEGACY_INVENTORY, _Unregistered: "nowhere"}) == [
-        "_Defaulted is an unlisted legacy leaf",
-        "_Unregistered (nowhere) is listed but no longer declared",
-    ]
-
-
-def _unlisted_leaf(reads: HubScopedReads) -> _Defaulted:
+def _planted_leaf(reads: HubScopedReads) -> _Defaulted:
     return _Defaulted(reads)
+
+
+def _planted_bag(leaf: _Defaulted) -> _Unregistered:
+    return _Unregistered()
+
+
+class _ReachesTheProcess:
+    def __init__(self, process: HubProcess | None) -> None:
+        self.process = process
+
+
+def _reaches_the_resolver(resolver: Resolver) -> _NeedsUnregistered:
+    return _NeedsUnregistered(resolver.get(_Unregistered))
+
+
+def _reaches_the_scopes(open_scope: Callable[[OwnedChild], _Unregistered]) -> _Unregistered:
+    return _Unregistered()
+
+
+def test_the_typed_accessor_gate_fails_a_planted_resolver_process_and_scope_parameter() -> None:
+    registry = _hub(store_backed=True)
+    registry.factory(_reaches_the_resolver, lifetime=Lifetime.PROCESS)
+    registry.service(_ReachesTheProcess, lifetime=Lifetime.TENANT)
+    registry.factory(_reaches_the_scopes, lifetime=Lifetime.TENANT)
+    assert typed_accessor_violations(registry) == [
+        "_reaches_the_resolver parameter 'resolver' takes Resolver",
+        "_ReachesTheProcess parameter 'process' takes HubProcess",
+        "_reaches_the_scopes parameter 'open_scope' takes OwnedChild",
+    ]

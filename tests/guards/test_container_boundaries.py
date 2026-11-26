@@ -11,19 +11,19 @@ from blizzard.foundation.registry.internal.recording import RecordingRegistry
 from blizzard.foundation.registry.internal.translation import HOST_LIFETIMES, HUB_LIFETIMES
 from blizzard.foundation.registry.scopes import ScopeValues
 from tests.support.container_guards import (
-    NARROWED_MODULES,
+    HUB_ROOTS,
     alias_identity_violations,
+    bag_violations,
     child_open_violations,
     default_factory_violations,
     dishka_importers,
     duplicate_owners,
     graph_builds,
     lifetime_violations,
-    narrowing_violations,
     role_key_violations,
+    root_registration_violations,
     wiring_boundary_violations,
 )
-from tests.support.legacy_inventory import bag_consumer_violations
 from tests.support.repo_files import repo_root
 
 _SRC = repo_root() / "src" / "blizzard"
@@ -260,65 +260,58 @@ def test_default_factory_violations_flag_a_defaulted_constructor() -> None:
     assert default_factory_violations(defaulted) == ["Needs parameter 'limit' has a default"]
 
 
-def test_a_narrowed_route_module_names_no_legacy_bag() -> None:
-    assert narrowing_violations(_SRC) == []
+def test_no_module_names_a_services_bag() -> None:
+    assert bag_violations(_SRC) == []
 
 
-def test_the_narrowing_gate_fails_a_planted_bag_import_parameter_and_attribute(tmp_path: Path) -> None:
-    planted = tmp_path / "hub" / "api" / "planted.py"
-    planted.parent.mkdir(parents=True)
-    planted.write_text(
-        "from blizzard.hub.api.deps import Services\n"
-        "from blizzard.hub import composition\n"
-        "def route(services: Services) -> composition.TenantServices: ...\n"
+def test_the_bag_gate_fails_a_planted_bag_import_parameter_attribute_and_definition(tmp_path: Path) -> None:
+    root = _plant(
+        tmp_path,
+        {
+            "hub/api/planted.py": (
+                "from blizzard.hub.api.deps import Services\n"
+                "from blizzard.hub import composition\n"
+                "def route(services: Services) -> composition.TenantServices: ...\n"
+            ),
+            "hub/domain/planted.py": "class HubCore: ...\ndef hub_services(): ...\n",
+            "hub/api/clean.py": "from blizzard.hub.process_root import HubProcess\n",
+        },
     )
-    assert narrowing_violations(tmp_path, [Path("hub/api/planted.py")]) == [
+    assert bag_violations(root) == [
         "hub/api/planted.py:1: names Services",
         "hub/api/planted.py:3: names Services",
         "hub/api/planted.py:3: names TenantServices",
+        "hub/domain/planted.py:1: names HubCore",
+        "hub/domain/planted.py:2: names hub_services",
     ]
 
 
-def test_the_narrowing_gate_fails_a_bag_planted_in_a_rostered_chunk_operations_module(tmp_path: Path) -> None:
-    rostered = Path("hub/api/chunks.py")
-    assert rostered in NARROWED_MODULES
-    planted = tmp_path / rostered
+def test_the_bag_gate_fails_a_bag_planted_in_a_hub_route_module(tmp_path: Path) -> None:
+    route = Path("hub/api/chunks.py")
+    planted = tmp_path / route
     planted.parent.mkdir(parents=True)
-    planted.write_text((_SRC / rostered).read_text() + "\ndef planted(services: Services) -> None: ...\n")
+    planted.write_text((_SRC / route).read_text() + "\ndef planted(hub: Hub) -> ChunkReadStores: ...\n")
     lines = len(planted.read_text().splitlines())
-    assert narrowing_violations(tmp_path, [rostered]) == [f"hub/api/chunks.py:{lines}: names Services"]
-
-
-def test_the_narrowing_gate_fails_a_planted_hub_bag(tmp_path: Path) -> None:
-    planted = tmp_path / "hub" / "api" / "planted.py"
-    planted.parent.mkdir(parents=True)
-    planted.write_text(
-        "from blizzard.hub.api.hub_level import Hub, hub_services\n"
-        "from blizzard.hub import composition\n"
-        "def route(request: object, hub: Hub) -> composition.HubServices: ...\n"
-    )
-    assert narrowing_violations(tmp_path, [Path("hub/api/planted.py")]) == [
-        "hub/api/planted.py:1: names Hub",
-        "hub/api/planted.py:1: names hub_services",
-        "hub/api/planted.py:3: names Hub",
-        "hub/api/planted.py:3: names HubServices",
+    assert bag_violations(tmp_path) == [
+        f"hub/api/chunks.py:{lines}: names ChunkReadStores",
+        f"hub/api/chunks.py:{lines}: names Hub",
     ]
 
 
-def test_only_the_inventoried_modules_name_the_hub_legacy_bag() -> None:
-    assert bag_consumer_violations(_SRC) == []
+def test_no_hub_root_registers_anything_itself() -> None:
+    assert root_registration_violations(_SRC) == []
 
 
-def test_the_bag_consumer_gate_fails_an_unlisted_consumer_and_a_listed_module_that_no_longer_names_the_bag(
-    tmp_path: Path,
-) -> None:
-    planted = tmp_path / "hub" / "api" / "planted.py"
-    planted.parent.mkdir(parents=True)
-    planted.write_text("from blizzard.hub.composition import HubServices\n")
-    cleared = tmp_path / "hub" / "api" / "deps.py"
-    cleared.write_text("def tenant_services() -> None: ...\n")
-    listed = {Path("hub/api/deps.py"): "hub legacy retirement: the request bridge"}
-    assert bag_consumer_violations(tmp_path, listed) == [
-        "hub/api/planted.py names the hub's legacy bag but is unlisted",
-        "hub/api/deps.py (hub legacy retirement: the request bridge) is listed but no longer names the hub's legacy bag",
+def test_the_area_root_gate_fails_a_registration_planted_in_each_root(tmp_path: Path) -> None:
+    planted = {
+        Path("hub/process_root.py"): "def register_hub(registry):\n    registry.service(Store, lifetime=1)\n",
+        Path("hub/app.py"): "def build(registry, ref):\n    registry.alias(port(IRole), ref)\n",
+        Path("hub/composition.py"): "def build(registry):\n    registry.leaf(build_core, lifetime=1)\n",
+    }
+    assert set(planted) == set(HUB_ROOTS)
+    root = _plant(tmp_path, {str(relative): text for relative, text in planted.items()})
+    assert root_registration_violations(root) == [
+        "hub/app.py:2: calls .alias(...)",
+        "hub/composition.py:2: calls .leaf(...)",
+        "hub/process_root.py:2: calls .service(...)",
     ]

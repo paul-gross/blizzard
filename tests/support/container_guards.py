@@ -10,6 +10,7 @@ import inspect
 from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path
+from typing import cast, get_args
 
 from blizzard.foundation.registry.internal.recording import OWNING, Kind, RecordingRegistry, Registration
 from blizzard.foundation.registry.internal.translation import (
@@ -17,7 +18,9 @@ from blizzard.foundation.registry.internal.translation import (
     ProcessLifetimes,
     build_container,
 )
-from blizzard.foundation.registry.scopes import ScopeValues
+from blizzard.foundation.registry.scopes import OwnedChild, Resolver, ScopeValues
+from blizzard.hub.process_root import HubProcess
+from blizzard.hub.scopes.tenants import TenantContainers
 
 _INTERFACE = "blizzard.foundation.registry.interface"
 _REGISTRY_PACKAGE = ("foundation", "registry")
@@ -25,89 +28,47 @@ _REGISTRY_PACKAGE = ("foundation", "registry")
 _ROUTE_EDGE = ("hub", "api")
 _ROUTE_EDGE_DISHKA = "dishka.integrations.fastapi"
 
-#: The hub's composition roots, relative to the source root: the process root, the legacy bridge it registers, and the
-#: hosted app over it. Each composes adapters and areas, so the wiring boundary exempts it.
-PROCESS_ROOTS: frozenset[Path] = frozenset(
-    {Path("hub/process_root.py"), Path("hub/composition.py"), Path("hub/app.py")}
+#: The hub's process roots, relative to the source root: the process root and the hosted app over it. Each composes
+#: adapters and areas, so the wiring boundary exempts it.
+PROCESS_ROOTS: frozenset[Path] = frozenset({Path("hub/process_root.py"), Path("hub/app.py")})
+
+#: The hub's roots, relative to the source root: they compose areas and orchestrate lifecycles, and register nothing
+#: themselves.
+HUB_ROOTS: tuple[Path, ...] = (Path("hub/process_root.py"), Path("hub/app.py"), Path("hub/composition.py"))
+
+#: The ``Registry`` verbs that declare a registration, and the legacy vocabulary's two.
+REGISTRATION_VERBS = frozenset(
+    {"service", "factory", "resource", "context", "alias", "absent", "optional", "leaf", "bag"}
 )
 
-
-#: The route modules whose area resolves through the container, relative to the source root: each names the services
-#: it uses and never the legacy bags.
-NARROWED_MODULES: tuple[Path, ...] = tuple(
-    Path("hub/api") / name
-    for name in (
-        "findings.py",
-        "decisions.py",
-        "questions.py",
-        "fleet.py",
-        "flows.py",
-        "flow_submissions.py",
-        "graphs.py",
-        "admin_settings.py",
-        "config.py",
-        "secrets.py",
-        "forges.py",
-        "credentials.py",
-        "repositories.py",
-        "work_sources.py",
-        "work_source_params.py",
-        "credential_choice.py",
-        "credential_params.py",
-        "forge_choice.py",
-        "forge_params.py",
-        "forge_warnings.py",
-        "repository_params.py",
-        "record_reads.py",
-        "user_names.py",
-        "request_config.py",
-        "projects.py",
-        "project_params.py",
-        "project_labels.py",
-        "project_label_fields.py",
-        "urgencies.py",
-        "settings.py",
-        "hosts.py",
-        "fleet_host.py",
-        "auth_session.py",
-        "auth.py",
-        "auth_login.py",
-        "idp.py",
-        "me.py",
-        "members.py",
-        "users.py",
-        "hub_admins.py",
-        "invitations.py",
-        "fleet_identity.py",
-        "ingest_broadcast.py",
-        "chunks.py",
-        "queue.py",
-        "chunk_dependencies.py",
-        "work_item_reads.py",
-        "chunk_views.py",
-        "chunk_edit.py",
-        "flow_places.py",
-        "scopes.py",
-        "garden_proposals.py",
-        "cadences.py",
-        "events.py",
-        "transcripts.py",
-        "env_timeline.py",
-        "analytics.py",
-        "spend.py",
-        "admin_events.py",
-        "admin_invariants.py",
-        "chunk_statuses.py",
-        "chunk_events.py",
-        "traces.py",
-        "egress.py",
-        "admin_tenants.py",
-        "sweeps.py",
-        "trace_continuation.py",
-    )
+#: The names that reach a hub services bag: the tenant and hub-level bags, the stores and core they were built from,
+#: the request bridge's dependencies, and the chunk read bundle. No module under ``src/blizzard`` names one.
+BAG_NAMES = frozenset(
+    {
+        "TenantServices",
+        "HubServices",
+        "TenantStores",
+        "HubCore",
+        "TenantCache",
+        "ServedTenant",
+        "TenantServing",
+        "IOpenTenantServices",
+        "TenantServicesOpener",
+        "TenantServiceParts",
+        "Services",
+        "Hub",
+        "hub_services",
+        "tenant_services",
+        "ChunkReadStores",
+    }
 )
-#: The legacy bags a narrowed module may not name.
-_LEGACY_BAGS = frozenset({"Services", "TenantServices", "Hub", "HubServices", "hub_services"})
+
+#: The generic resolvers and process handles a registered provider never takes: each reaches every service behind it.
+#: A provider names the types it uses.
+RESOLVER_TYPES: frozenset[type] = frozenset({Resolver, HubProcess, TenantContainers, OwnedChild})
+
+#: The registration kinds whose source the container calls with resolved parameters.
+_CONSTRUCTED = (Kind.SERVICE, Kind.FACTORY, Kind.RESOURCE, Kind.LEAF, Kind.BAG)
 
 
 def graph_builds(registry: RecordingRegistry, lifetimes: ProcessLifetimes, values: ScopeValues) -> list[str]:
@@ -247,12 +208,13 @@ def wiring_boundary_violations(source_root: Path, *, roots: frozenset[Path] = PR
     return problems
 
 
-def narrowing_violations(source_root: Path, modules: Iterable[Path] = NARROWED_MODULES) -> list[str]:
-    """Each place a narrowed module names a legacy bag — an import, a name, or an attribute."""
+def bag_violations(source_root: Path) -> list[str]:
+    """Each place a module under ``source_root`` names a services bag — an import, a definition, a name, or an
+    attribute."""
     problems: list[str] = []
-    for relative in modules:
-        tree = ast.parse((source_root / relative).read_text(), filename=str(relative))
-        for node in ast.walk(tree):
+    for path in sorted(source_root.rglob("*.py")):
+        relative = path.relative_to(source_root)
+        for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
             named: str | None = None
             if isinstance(node, ast.alias):
                 named = node.name.rpartition(".")[2]
@@ -260,9 +222,58 @@ def narrowing_violations(source_root: Path, modules: Iterable[Path] = NARROWED_M
                 named = node.id
             elif isinstance(node, ast.Attribute):
                 named = node.attr
-            if named in _LEGACY_BAGS:
+            elif isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                named = node.name
+            if named in BAG_NAMES:
                 problems.append(f"{relative}:{getattr(node, 'lineno', 0)}: names {named}")
     return sorted(problems)
+
+
+def root_registration_violations(source_root: Path, roots: Iterable[Path] = HUB_ROOTS) -> list[str]:
+    """Each call of a registration verb in a hub root: a root composes the areas, whose wiring registers."""
+    problems: list[str] = []
+    for relative in roots:
+        for node in ast.walk(ast.parse((source_root / relative).read_text(), filename=str(relative))):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in REGISTRATION_VERBS
+            ):
+                problems.append(f"{relative}:{node.lineno}: calls .{node.func.attr}(...)")
+    return sorted(problems)
+
+
+def legacy_registrations(registry: RecordingRegistry) -> list[str]:
+    """Each legacy leaf or bag ``registry`` declares."""
+    return [
+        f"{_name(entry.key)} is a legacy {entry.kind.value}"
+        for entry in registry.entries
+        if entry.kind in (Kind.LEAF, Kind.BAG)
+    ]
+
+
+def typed_accessor_violations(registry: RecordingRegistry) -> list[str]:
+    """Each registered provider or service parameter that takes a generic resolver or process handle, however it is
+    wrapped (``X | None``, a ``Callable``'s arguments, a generic's parameters)."""
+    problems: list[str] = []
+    for entry in registry.entries:
+        if entry.kind not in _CONSTRUCTED:
+            continue
+        for name, parameter in inspect.signature(entry.source, eval_str=True).parameters.items():
+            reached = sorted(_name(each) for each in _types_in(parameter.annotation) if each in RESOLVER_TYPES)
+            problems.extend(f"{_name(entry.source)} parameter {name!r} takes {each}" for each in reached)
+    return problems
+
+
+def _types_in(annotation: object) -> Iterable[type]:
+    if isinstance(annotation, (list, tuple)):
+        for each in cast("Iterable[object]", annotation):
+            yield from _types_in(each)
+        return
+    if isinstance(annotation, type):
+        yield annotation
+    for argument in get_args(annotation):
+        yield from _types_in(argument)
 
 
 def _is_wiring(module: str) -> bool:
