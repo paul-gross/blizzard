@@ -3,7 +3,8 @@
 ``POST /questions/{id}/answers`` loads the question and its chunk's facts before the answer's
 write opens. Something committing at that point — a stop, a terminal completion, a competing
 answer — must be decided against as if it had committed first: an ended chunk refuses the answer
-as ``QuestionClosed``, landing no answer row and publishing no ``question-answered`` event, and a
+as ``QuestionClosed``, landing no answer row and publishing no ``question-answered`` event — even
+for a question already answered, whose winner the late answerer is then not shown — and a
 racing answer still loses to the first one written. The decision's reads and its write all run
 on the one token the unit's chunk lock returned."""
 
@@ -104,6 +105,30 @@ def test_an_answer_refuses_when_the_chunk_ends_after_the_route_read_it(
     ]
     poll = hub.client.get("/api/fleet/questions/qn_1").json()
     assert (poll["answered"], poll["answer"]) == (False, None)
+
+
+@pytest.mark.parametrize("end", [_stop, _complete], ids=["stopped", "done"])
+def test_an_ended_chunk_refuses_a_late_answer_before_naming_the_winner(
+    tmp_path: Path, end: Callable[[HubHarness, str], None]
+) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ask_question(hub)
+    first = hub.client.post("/api/questions/qn_1/answers", json={"answer": "graphql"})
+    assert first.status_code == 201, first.text
+    end(hub, chunk_id)
+    chunk_status = hub.client.get(f"/api/chunks/{chunk_id}").json()["status"]
+    question = chunk_stores(hub.engine, hub.clock).questions.get_question("qn_1")
+    assert question is not None
+
+    with pytest.raises(QuestionClosed) as raised:
+        hub.default_adapter(QuestionService).answer(question, answer="rest", answered_by="operator")
+    resp = hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"})
+
+    assert str(raised.value) == f"question qn_1 closed: chunk {chunk_id} is {chunk_status}"
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["type"] == "urn:blizzard:problem:question-closed"
+    assert resp.json()["detail"] == str(raised.value)
+    assert _answer_rows(hub, "qn_1") == 1
 
 
 def test_a_racing_second_answer_loses_to_the_first_written(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
