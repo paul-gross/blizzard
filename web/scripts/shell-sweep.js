@@ -214,10 +214,10 @@
  *     the Pass dialog's footer: Cancel/Pass genuinely sit side by side with
  *     neither overflowing the panel, at phone and desktop widths.
  *   - projects/hub/src/app/garden/proposals/gardening-proposal-accept-dialog.shell-sweep.spec.ts —
- *     the Accept dialog: the mint/decline radiogroup genuinely stacks its two
- *     options, the decline reason field genuinely renders below them once
- *     chosen, and the footer's Cancel/Accept sit side by side with neither
- *     overflowing the panel, at phone and desktop widths.
+ *     the Accept dialog: the mint/decline option group genuinely stacks its
+ *     two options, the reason field genuinely renders below them in both
+ *     modes, and the form's Cancel/Accept action row sits side by side inside
+ *     the panel, at 320, 390, and 1024px.
  *   - projects/hub/src/app/garden/findings/gardening-findings-triage.shell-sweep.spec.ts —
  *     the findings triage list (`FleetFindingList`): with
  *     every row selected through the real select-all checkbox, the bulk bar's own
