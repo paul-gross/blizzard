@@ -112,6 +112,10 @@ class IReadFlowViews(Protocol):
         """Every flow of the tenant, in resource order, each with the newest of its record."""
         ...
 
+    def active_flow_overviews(self, *, since: datetime) -> list[FlowOverview]:
+        """Flows with an open submission or a recent fact, in resource order."""
+        ...
+
     def flow_overview(self, flow_id: str) -> FlowOverview | None:
         """One flow with the newest of its record, or ``None`` when the tenant holds no such flow."""
         ...

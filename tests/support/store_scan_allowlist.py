@@ -888,6 +888,12 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     ),
     IndexWalkAllowance(IReadFlowViews, "flow_overviews", ("flows",), _TENANT_FLOWS_REASON),
     IndexWalkAllowance(
+        IReadFlowViews,
+        "active_flow_overviews",
+        ("flows",),
+        "The ordered tenant flow index is walked to test open submissions and recent facts before reconstitution.",
+    ),
+    IndexWalkAllowance(
         IReadWorkRefsCorpus,
         "live_work_refs_signature",
         (

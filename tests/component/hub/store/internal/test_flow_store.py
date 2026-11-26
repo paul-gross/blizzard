@@ -111,6 +111,37 @@ def _plant_turn(engine: Engine, submission_id: str, *, turn_id: str = "htn_1") -
         )
 
 
+def test_active_overviews_agree_with_domain_rule(world: _World, flows: FlowStore) -> None:
+    since = _AT + timedelta(hours=1)
+    held = world.submit("ch_held", resources=[FlowResource("repo_a", "held")])
+    recent = world.submit("ch_recent", resources=[FlowResource("repo_a", "recent")])
+    stale = world.submit("ch_stale", resources=[FlowResource("repo_a", "stale")])
+    assert held is not None and recent is not None and stale is not None
+    world.close(recent, "completed", at=since)
+    world.close(stale, "completed", at=_AT)
+    with world.engine.begin() as conn:
+        conn.execute(
+            s.flows.insert().values(
+                stamp(
+                    s.flows,
+                    flow_id="flw_empty",
+                    resource="repo:repo_a/empty",
+                    repository_id="repo_a",
+                    branch="empty",
+                    created_at=_AT,
+                )
+            )
+        )
+
+    all_flows = flows.flow_overviews()
+    in_line = {
+        flow.flow_id for sub in flows.open_submissions_on([o.flow.flow_id for o in all_flows]) for flow in sub.flows
+    }
+    expected = [o for o in all_flows if o.is_active(in_line=o.flow.flow_id in in_line, since=since)]
+    assert {o.flow.flow_id for o in expected} == {held.flows[0].flow_id, recent.flows[0].flow_id}
+    assert flows.active_flow_overviews(since=since) == expected
+
+
 def test_each_submission_arrives_at_the_tenants_newest_plus_one(world: _World, flows: FlowStore) -> None:
     first = world.submit("ch_1")
     second = world.submit("ch_2", resources=[_OTHER])

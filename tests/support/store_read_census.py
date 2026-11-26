@@ -2987,6 +2987,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         w.flow_chunk, node_id=w.deliver_node_id, epoch=1
     ),
     (IReadFlowViews, "flow_overviews"): lambda w: w.hub.default_adapter(IReadFlowViews).flow_overviews(),
+    (IReadFlowViews, "active_flow_overviews"): lambda w: w.hub.default_adapter(IReadFlowViews).active_flow_overviews(
+        since=_HUB_BASE
+    ),
     (IReadFlowViews, "flow_overview"): lambda w: w.hub.default_adapter(IReadFlowViews).flow_overview(w.flow_id),
     (IReadFlowViews, "record_page"): lambda w: w.hub.default_adapter(IReadFlowViews).record_page(
         w.flow_id, before=1000, limit=50

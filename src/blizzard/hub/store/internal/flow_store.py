@@ -266,6 +266,14 @@ class FlowStore:
             rows = conn.execute(self._store.select(s.flows).order_by(s.flows.c.resource)).all()
             return self._overviews(conn, rows)
 
+    def active_flow_overviews(self, *, since: datetime) -> list[FlowOverview]:
+        held = self._store.scope_join(_held, _sub, _held.c.submission_id == _sub.c.submission_id)
+        in_line = self._store.exists(held, _held.c.flow_id == s.flows.c.flow_id, self._open())
+        recent = self._store.exists(_facts, _facts.c.flow_id == s.flows.c.flow_id, _facts.c.at >= since)
+        with self._store.read("active_flow_overviews") as conn:
+            rows = conn.execute(self._store.select(s.flows).where(in_line | recent).order_by(s.flows.c.resource)).all()
+            return self._overviews(conn, rows)
+
     def flow_overview(self, flow_id: str) -> FlowOverview | None:
         with self._store.read("flow_overview") as conn:
             rows = conn.execute(self._store.select(s.flows).where(s.flows.c.flow_id == flow_id)).all()
