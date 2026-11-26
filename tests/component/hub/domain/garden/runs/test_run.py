@@ -65,6 +65,7 @@ def _routine(
     hub: HubHarness,
     *,
     name: str = "gardening",
+    slug: str | None = None,
     scope: str = "blizzard",
     model: list[str] | None = None,
     effort: str | None = None,
@@ -73,6 +74,7 @@ def _routine(
     graph = _default_graph(hub)
     routine = hub.default_adapter(RoutineAuthoring).create(
         ctx=_CTX,
+        slug=slug,
         name=name,
         graph_name=graph.name,
         default_scope_slug=ScopeSlug.parse(scope),
@@ -250,8 +252,8 @@ def test_delta_against_a_never_swept_pair_downgrades_to_full(tmp_path: Path) -> 
 
 def test_delta_with_a_recorded_baseline_stays_delta_and_names_its_revisions(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    routine, graph = _routine(hub)
-    _seed_baseline(hub, graph_id=graph.graph_id, routine_name=routine.name, scope_slug="blizzard")
+    routine, graph = _routine(hub, slug="gardening", name="Garden Sweep")
+    _seed_baseline(hub, graph_id=graph.graph_id, routine_name="gardening", scope_slug="blizzard")
 
     result = hub.default_adapter(RunService).run(
         routine,
