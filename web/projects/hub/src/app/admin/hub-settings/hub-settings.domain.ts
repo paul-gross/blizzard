@@ -15,11 +15,21 @@ export interface HubSettingBaseline extends EditBaseline<HubSettingDraft> {
 
 import type { ConfigFieldChange } from '../config-history.domain';
 
+export interface UnknownHubSettingValue { readonly kind: 'unknown'; readonly raw: string }
+export type HubSettingLifetime = 'pass' | 'session' | 'boot' | 'immutable' | UnknownHubSettingValue;
+export type HubSettingSource = 'entry' | 'default' | UnknownHubSettingValue;
+export type HubSettingsOperation = 'seed' | 'edit' | 'create' | 'retire' | 'enable' | UnknownHubSettingValue;
+export type HubSettingsDoor = 'seed' | 'cli' | 'page' | 'api' | 'apply' | UnknownHubSettingValue;
+
+export function hubSettingValueText(value: string | UnknownHubSettingValue): string {
+  return typeof value === 'string' ? value : value.raw;
+}
+
 export interface HubSettingRow {
   readonly key: string;
   readonly value: unknown;
-  readonly lifetime: string;
-  readonly source: string;
+  readonly lifetime: HubSettingLifetime;
+  readonly source: HubSettingSource;
   readonly revision: number | null;
   readonly written_at: string | null;
   readonly written_by: string | null;
@@ -33,8 +43,8 @@ export interface HubSettings {
 export interface HubSettingsChange {
   readonly id: number;
   readonly revision: number;
-  readonly op: string;
-  readonly door: string;
+  readonly op: HubSettingsOperation;
+  readonly door: HubSettingsDoor;
   readonly actor: string;
   readonly recorded_at: string;
   readonly apply_id: string | null;

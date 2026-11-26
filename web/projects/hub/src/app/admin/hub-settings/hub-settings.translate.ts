@@ -21,16 +21,28 @@ export function hubSettingRefusal(error: unknown): SaveOutcome<HubSettingDraft> 
   return readRefusal(error, HUB_SETTING_REFUSALS, 'Save failed.');
 }
 
-import type { HubSettingRow as WireHubSettingRow, HubSettingsChange } from 'fleet';
-import type { HubSettings, HubSettingsHistoryPage } from './hub-settings.domain';
+import { openLookup, type hubApi, type HubSettingRow as WireHubSettingRow, type HubSettingsChange } from 'fleet';
+import type { HubSettingLifetime, HubSettingSource, HubSettings, HubSettingsDoor, HubSettingsHistoryPage, HubSettingsOperation, UnknownHubSettingValue } from './hub-settings.domain';
+
+const unknown = (raw: string): UnknownHubSettingValue => ({ kind: 'unknown', raw });
+const lifetime = openLookup<hubApi.Lifetime, HubSettingLifetime>(
+  { pass: 'pass', session: 'session', boot: 'boot', immutable: 'immutable' }, unknown,
+);
+const source = openLookup<WireHubSettingRow['source'], HubSettingSource>({ entry: 'entry', default: 'default' }, unknown);
+const operation = openLookup<hubApi.Op, HubSettingsOperation>(
+  { seed: 'seed', edit: 'edit', create: 'create', retire: 'retire', enable: 'enable' }, unknown,
+);
+const door = openLookup<hubApi.Door, HubSettingsDoor>(
+  { seed: 'seed', cli: 'cli', page: 'page', api: 'api', apply: 'apply' }, unknown,
+);
 
 export function toHubSettings(view: { revision: number; settings: WireHubSettingRow[] }): HubSettings {
-  return { revision: view.revision, settings: view.settings.map((row) => ({ ...row })) };
+  return { revision: view.revision, settings: view.settings.map((row) => ({ ...row, lifetime: lifetime(row.lifetime), source: source(row.source) })) };
 }
 
 export function toHubSettingsHistoryPage(page: { changes: HubSettingsChange[]; next_before: number | null }): HubSettingsHistoryPage {
   return {
     next_before: page.next_before,
-    changes: page.changes.map((change) => ({ ...change, diff: change.diff.map((field) => ({ ...field })) })),
+    changes: page.changes.map((change) => ({ ...change, op: operation(change.op), door: door(change.door), diff: change.diff.map((field) => ({ ...field })) })),
   };
 }
