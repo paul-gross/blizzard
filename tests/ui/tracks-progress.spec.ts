@@ -4,7 +4,7 @@ test.use({ isolation: 'fresh-tenant' });
 
 test('tracks shows real chunk graph progress while switching layouts', async ({ api, issue, repository, runnerHosts, page, wideViewport, clock }) => {
   test.setTimeout(240_000);
-  const repo = await repository('tracks-progress');
+  const repo = await repository();
   const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
   const graph = { name: 'default-delivery', entry: 'build', nodes: {
     build: { executor: 'runner', prompt: 'ask("Choose a direction", ["one", "two"])\n', judgement: {
