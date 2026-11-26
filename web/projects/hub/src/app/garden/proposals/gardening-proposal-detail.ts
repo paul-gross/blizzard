@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { injectPendingMutationVariables, compactRef, errorMessage, restingAsyncState, type KitAsyncStateValue, KitErrorLine } from 'fleet';
@@ -16,6 +16,7 @@ import { map } from 'rxjs';
 
 import { GardeningProposalAcceptDialog } from './gardening-proposal-accept-dialog';
 import { GardeningProposalPassDialog } from './gardening-proposal-pass-dialog';
+import { GardeningProposalsState } from './gardening-proposals-state';
 import {
   acceptedItemPointer,
   proposalById,
@@ -45,7 +46,8 @@ import {
  * accepted-and-minted proposal, resolves the linked work item through its
  * closure's `source`/`ref` pointer via `injectHubWorkItemQuery`.
  *
- * Owns the two closing dialogs' own dialog-open signals (both verbs
+ * Owns the two closing dialogs' own dialog-open signals, telling the list route
+ * which proposal an open one is for through {@link GardeningProposalsState} (both verbs
  * gate on `chunk:control`, resolved here through `injectMeQuery` +
  * `hasPermission` and forwarded to the panel as `canControl`).
  */
@@ -58,6 +60,7 @@ import {
 })
 export class GardeningProposalDetail {
   private readonly route = inject(ActivatedRoute);
+  private readonly state = inject(GardeningProposalsState);
   private readonly proposalsQuery = injectHubGardenProposalsQuery();
   private readonly meQuery = injectMeQuery();
   private readonly routinesQuery = injectHubRoutinesQuery();
@@ -208,19 +211,27 @@ export class GardeningProposalDetail {
    * shape as {@link passingProposal}. */
   protected readonly acceptingProposal = signal<Proposal | null>(null);
 
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.state.dialogProposalId.set(null));
+  }
+
   protected openPass(): void {
     this.passingProposal.set(this.selectedProposal());
+    this.state.dialogProposalId.set(this.passingProposal()?.id ?? null);
   }
 
   protected openAccept(): void {
     this.acceptingProposal.set(this.selectedProposal());
+    this.state.dialogProposalId.set(this.acceptingProposal()?.id ?? null);
   }
 
   protected closePass(): void {
     this.passingProposal.set(null);
+    this.state.dialogProposalId.set(null);
   }
 
   protected closeAccept(): void {
     this.acceptingProposal.set(null);
+    this.state.dialogProposalId.set(null);
   }
 }

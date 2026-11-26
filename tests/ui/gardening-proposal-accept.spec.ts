@@ -1,13 +1,14 @@
 import { expect, test } from '../harness/fixtures';
 
 // Proposal acceptance through the board's Accept dialog, against open proposals seeded on the test's own hub: a mint
-// with an edited body and a chosen urgency, and a decline blocked at its reason and then sent with one. Every gesture
-// is read back from the hub. It mints an urgency and a work item, so the test owns its tenant.
+// with an edited body and a chosen urgency, a decline blocked at its reason and then sent with one, and recovery from
+// a proposal closed over the API while its dialog was open. Every gesture is read back from the hub. It mints an
+// urgency and a work item, so the test owns its tenant.
 test.use({ isolation: 'fresh-tenant' });
 
 type Closure = { closure: string; reason: string | null; item_outcome: string; source: string | null; ref: string | null };
 
-test('test_gardening_proposal_accept_dialog_mints_and_declines', async ({ api, page, project, wideViewport }) => {
+test('test_gardening_proposal_accept_dialog_mints_declines_and_recovers_from_a_closure', async ({ api, page, project, wideViewport }) => {
   expect((await api.post('/api/urgencies', { data: { slug: 'expedite', name: 'Expedite' } })).status).toBe(201);
   const seed = async (title: string) => {
     const created = await api.post(`/api/projects/${project.slug}/garden-proposals`, {
@@ -18,6 +19,7 @@ test('test_gardening_proposal_accept_dialog_mints_and_declines', async ({ api, p
   };
   const minted = await seed('mint me');
   const declined = await seed('decline me');
+  const raced = await seed('race me');
   const closure = async (id: string) => (await api.get(`/api/garden-proposals/${id}`)).body.closure as Closure | null;
 
   await page.setViewportSize(wideViewport);
@@ -62,4 +64,16 @@ test('test_gardening_proposal_accept_dialog_mints_and_declines', async ({ api, p
   await expect(dialog).toHaveCount(0);
   await expect.poll(async () => (await closure(declined))?.item_outcome).toBe('declined');
   expect(await closure(declined)).toMatchObject({ closure: 'accepted', reason: 'already covered elsewhere', ref: null });
+
+  // Refusal recovery: the proposal is passed over the API while its dialog is open. The hub's refusal lands on the
+  // form line, the typed body survives, the hub keeps the pass, and Cancel still closes.
+  await open(raced);
+  await body.fill('typed before the closure');
+  expect((await api.post(`/api/garden-proposals/${raced}/pass`, { data: { reason: 'passed elsewhere' } })).status).toBe(200);
+  await accept.click();
+  await expect(dialog.getByTestId('kit-form-line')).toContainText(/already passed/);
+  await expect(body).toHaveValue('typed before the closure');
+  expect(await closure(raced)).toMatchObject({ closure: 'passed', reason: 'passed elsewhere' });
+  await dialog.getByTestId('kit-form-cancel').click();
+  await expect(dialog).toHaveCount(0);
 });

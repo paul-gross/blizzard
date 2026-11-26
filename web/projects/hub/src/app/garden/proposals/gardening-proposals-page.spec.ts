@@ -18,6 +18,7 @@ import {
 } from 'fleet/testing';
 import { vi } from 'vitest';
 
+import { GardeningProposalDetail } from './gardening-proposal-detail';
 import { GardeningProposalsPage } from './gardening-proposals-page';
 
 /** A read-only identity — every permission `OPERATOR_ME_RESPONSE` carries except
@@ -126,6 +127,7 @@ describe('GardeningProposalsPage', () => {
     url = '/gardening/proposals',
     mobile = false,
     extraRoutes: Parameters<typeof stubHubClient>[0] = {},
+    routeTable: Routes = routes,
   ) {
     stub = stubHubClient({
       'GET /api/garden-proposals': () => gardenProposalsPageView({ proposals }),
@@ -143,7 +145,7 @@ describe('GardeningProposalsPage', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        provideRouter(routes),
+        provideRouter(routeTable),
       ],
     }).compileComponents();
     TestBed.inject(ViewportService).setOverride(mobile ? 'mobile' : 'desktop');
@@ -341,6 +343,54 @@ describe('GardeningProposalsPage', () => {
     expect(router.url).toBe('/gardening/proposals/gp_4?routine=architecture');
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeNull();
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_4"]')?.classList).toContain('selected');
+  });
+
+  describe('a closing dialog open over the routed proposal', () => {
+    const withDetail: Routes = [
+      {
+        path: 'gardening/proposals',
+        component: GardeningProposalsPage,
+        children: [
+          { path: '', component: GardeningProposalDetail },
+          { path: ':proposalId', component: GardeningProposalDetail },
+        ],
+      },
+    ];
+
+    it('survives a raced closure with its draft, and the selection moves on only once it closes', async () => {
+      let closedElsewhere = false;
+      const closed = gardenProposalView({ ...WAITING_A, closure: gardenProposalClosureView() });
+      const { fixture, router, el } = await render(
+        undefined,
+        OPERATOR_ME_RESPONSE,
+        '/gardening/proposals/gp_1',
+        false,
+        {
+          'GET /api/garden-proposals': () =>
+            gardenProposalsPageView({ proposals: [closedElsewhere ? closed : WAITING_A, WAITING_B] }),
+          'POST /api/garden-proposals/{proposal_id}/accept': () => {
+            closedElsewhere = true;
+            return stubError(409, { detail: 'garden proposal gp_1 already carries a closure' });
+          },
+        },
+        withDetail,
+      );
+      el.querySelector<HTMLElement>('[data-testid="gardening-proposal-accept"]')!.click();
+      await settle(fixture);
+
+      inOverlay('kit-form-save')!.click();
+      await settle(fixture, 8);
+
+      expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeNull();
+      expect(router.url).toBe('/gardening/proposals/gp_1');
+      expect(inOverlay('kit-form-line')?.textContent).toContain('already carries a closure');
+      expect((inOverlay('proposal-accept-body-input') as HTMLTextAreaElement).value).toBe(WAITING_A.body);
+
+      inOverlay('kit-form-cancel')!.click();
+      await settle(fixture, 8);
+
+      expect(router.url).toBe('/gardening/proposals/gp_2');
+    });
   });
 
   describe('a proposal with a pending Pass/Accept drops from the waiting docket (Part B)', () => {

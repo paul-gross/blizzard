@@ -136,16 +136,18 @@ export function waitingLabel(count: number): string {
  * `proposalId` of `null` is the bare docket. A routed proposal the filters keep stays. On desktop, an excluded
  * proposal — or a bare route on a docket that has rows — resolves to the first row; on mobile, an excluded
  * proposal returns to the docket and a bare route stays there. Nothing moves until the list read has `settled`:
- * a pending read reads empty, and a failed one is not evidence the proposal was filtered out.
+ * a pending read reads empty, and a failed one is not evidence the proposal was filtered out. A routed proposal
+ * `held` open by a closing dialog stays whatever the filters say.
  */
 export function proposalSelectionTarget(
   settled: boolean,
   routed: string | null,
   rowIds: readonly string[],
   mobile: boolean,
+  held: string | null = null,
 ): { readonly proposalId: string | null } | null {
   if (!settled) return null;
-  if (routed !== null && rowIds.includes(routed)) return null;
+  if (routed !== null && (routed === held || rowIds.includes(routed))) return null;
   if (mobile) return routed === null ? null : { proposalId: null };
   const first = rowIds[0] ?? null;
   return routed === null && first === null ? null : { proposalId: first };

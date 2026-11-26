@@ -19,6 +19,7 @@ import {
 import { BehaviorSubject } from 'rxjs';
 
 import { GardeningProposalDetail } from './gardening-proposal-detail';
+import { GardeningProposalsState } from './gardening-proposals-state';
 
 /** A read-only identity — every permission `OPERATOR_ME_RESPONSE` carries except
  * `chunk:control` — the default for tests unconcerned with the Pass/Accept gate. */
@@ -125,6 +126,8 @@ describe('GardeningProposalDetail', () => {
         // evidence-row `routerLink`s resolve to real hrefs.
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { paramMap: paramMap$ } },
+        // The list route provides it in production.
+        GardeningProposalsState,
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(GardeningProposalDetail);
