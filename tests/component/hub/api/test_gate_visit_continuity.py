@@ -190,6 +190,23 @@ def _resolved_then_reclaimed(hub: HubHarness, choice: str = "pass") -> tuple[_Ch
 # --- the current holder carries the visit's decision ----------------------------------------------
 
 
+def test_a_decision_replayed_after_its_resolving_transition_keeps_its_outcome(tmp_path: Path) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+    chunk.claim("r1", epoch=1)
+    first = chunk.gate("r1", epoch=1)
+    assert first["outcome"] == "parked_at_gate"
+    [decision_id] = chunk.decision_ids()
+    chunk.resolve(decision_id, "pass")
+    assert chunk.complete("r1", choice="pass", epoch=1, decision_id=decision_id)["outcome"] == "hub_node_taken"
+    before = (chunk.rows(s.decisions), chunk.rows(s.transitions), chunk.rows(s.artifacts))
+
+    replay = chunk.gate("r1", epoch=1)
+
+    assert replay["outcome"] == first["outcome"]
+    assert chunk.decision_ids() == [decision_id]
+    assert (chunk.rows(s.decisions), chunk.rows(s.transitions), chunk.rows(s.artifacts)) == before
+
+
 def test_a_new_claimant_carries_the_resolved_decision_at_its_own_fence(tmp_path: Path) -> None:
     chunk, decision_id = _resolved_then_reclaimed(build_hub(tmp_path))
     artifacts = chunk.rows(s.artifacts)

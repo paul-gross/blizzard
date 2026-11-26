@@ -432,6 +432,18 @@ def test_follow_latest_lands_on_the_same_named_node_except_into_the_terminal() -
     assert Landing.consult(CHUNK, _review_edge(), _targets(CHUNK, follow=FollowLatest(enabled=False))) is None
 
 
+def test_a_forced_intent_overrides_a_transition_into_the_terminal() -> None:
+    chunk = _with_intent("land")
+    landing = Landing.consult(chunk, Edge("nd_build", "ch_ship", RESERVED_TERMINAL), _targets(chunk))
+    assert landing is not None
+    assert (landing.graph, landing.node_id, landing.source, landing.clear_intent) == (
+        DELIVERY,
+        "nd_d_land",
+        MigrationSource.INTENT,
+        True,
+    )
+
+
 def test_an_authored_edge_lands_on_the_same_named_node_and_repins_its_model() -> None:
     edge = Edge("nd_build", "ch_hand", "graph:delivery", target_graph="delivery", model="opus")
     landing = Landing.authored(edge, DELIVERY, BUILD)
