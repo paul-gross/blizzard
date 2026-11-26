@@ -265,8 +265,8 @@ arrives. Both serve a sweep in either mode, and both refuse a runner's credentia
 | `POST /api/sweeps/{name}/passes`       | One pass of `forge_status`, `event_derivation`, `close_drain` or `cadence` over the request's tenant | A tenant `admin`    |
 | `POST /api/admin/sweeps/{name}/passes` | One pass of any built sweep over every tenant, exactly as a timed pass                               | A hub administrator |
 
-A pass for one tenant reads the same data as a pass over every tenant and acts in its own tenant alone. It skips a
-tenant that is not due, just as a timed pass does, and still answers `completed`.
+A pass for one tenant reads only its own tenant's corpus and acts in that tenant alone; the change probe stays hub-wide.
+It skips a tenant that is not due, just as a timed pass does, and still answers `completed`.
 
 | Answer | Meaning                                                                                                                |
 | ------ | ---------------------------------------------------------------------------------------------------------------------- |

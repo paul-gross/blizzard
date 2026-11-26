@@ -947,7 +947,10 @@ def test_every_sweep_acts_in_each_open_tenant_and_opens_no_closed_one(tmp_path: 
     assert closed.harness.tenant not in repr(spans.batches)
     written = b"".join(path.read_bytes() for path in (tmp_path / "egress").rglob("*") if path.is_file())
     assert closed.harness.tenant.encode() not in written
-    assert not [sql for sql, params in statements if closed.harness.tenant in repr(params)]
+    # The derivation probe counts a closed tenant, so a due set may name it to a corpus read; that read's
+    # closed-tenant exclusion admits none of its rows. No other statement names it.
+    named = [sql for sql, params in statements if closed.harness.tenant in repr(params)]
+    assert not [sql for sql in named if not (sql.startswith("SELECT") and "FROM tenant_deletions" in sql)]
 
     sweeps["tenant_teardown"]()
 

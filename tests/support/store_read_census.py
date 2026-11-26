@@ -2783,22 +2783,28 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadDerivationCorpus, "derivation_signature"): lambda w: w.hub.resolve_hub(
         HubScopedReads
     ).corpus.derivation_signature(),
-    (IReadDerivationCorpus, "candidacy"): lambda w: w.hub.resolve_hub(HubScopedReads).corpus.candidacy(
-        EXTRACTOR_VERSION
+    (IReadDerivationCorpus, "candidacy"): lambda w: (
+        w.hub.resolve_hub(HubScopedReads).corpus.candidacy(EXTRACTOR_VERSION),
+        w.hub.resolve_hub(HubScopedReads).corpus.candidacy(EXTRACTOR_VERSION, [w.hub.tenant]),
     ),
-    (IReadDerivationCorpus, "derived_segment_ids"): lambda w: w.hub.resolve_hub(
-        HubScopedReads
-    ).corpus.derived_segment_ids(),
-    (IReadWorkRefsCorpus, "live_work_refs"): lambda w: w.hub.resolve_hub(HubScopedReads).corpus.live_work_refs(),
+    (IReadDerivationCorpus, "derived_segment_ids"): lambda w: (
+        w.hub.resolve_hub(HubScopedReads).corpus.derived_segment_ids(),
+        w.hub.resolve_hub(HubScopedReads).corpus.derived_segment_ids([w.hub.tenant]),
+    ),
+    (IReadWorkRefsCorpus, "live_work_refs"): lambda w: (
+        w.hub.resolve_hub(HubScopedReads).corpus.live_work_refs(),
+        w.hub.resolve_hub(HubScopedReads).corpus.live_work_refs([w.hub.tenant]),
+    ),
     (IReadWorkRefsCorpus, "live_work_refs_signature"): lambda w: w.hub.resolve_hub(
         HubScopedReads
     ).corpus.live_work_refs_signature(),
     (IReadFlowLinesCorpus, "flow_lines_signature"): lambda w: w.hub.resolve_hub(
         HubScopedReads
     ).corpus.flow_lines_signature(),
-    (IReadCloseIntentCorpus, "pending_close_intents"): lambda w: w.hub.resolve_hub(
-        HubScopedReads
-    ).corpus.pending_close_intents(),
+    (IReadCloseIntentCorpus, "pending_close_intents"): lambda w: (
+        w.hub.resolve_hub(HubScopedReads).corpus.pending_close_intents(),
+        w.hub.resolve_hub(HubScopedReads).corpus.pending_close_intents([w.hub.tenant]),
+    ),
     (IReadOperationalAnalytics, "durations_by_node"): lambda w: (
         w.hub.default_adapter(IReadOperationalAnalytics).durations_by_node(OperationalCriteria()),
         w.hub.default_adapter(IReadOperationalAnalytics).durations_by_node(OperationalCriteria(project=w.project_id)),

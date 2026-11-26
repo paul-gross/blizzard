@@ -78,20 +78,23 @@ MarkedSnapshot = Callable[[str], AbstractContextManager[MarkedRead]]
 _EPHEMERAL_TABLES = ephemeral_tables()
 
 
-def _ephemeral_chunk_ids() -> CompoundSelect[Any]:
-    """Every tenant's grouped-away and deleted chunk ids — gone from every corpus read."""
-    return OPEN_TENANTS.union(*(OPEN_TENANTS.select(t, t.c.chunk_id) for t in _EPHEMERAL_TABLES))
+def _ephemeral_chunk_ids(tenants: Collection[TenantId] | None) -> CompoundSelect[Any]:
+    """The grouped-away and deleted chunk ids — gone from every corpus read — of every open tenant, or of
+    ``tenants`` alone."""
+    return OPEN_TENANTS.union(
+        *(OPEN_TENANTS.within_tenants(OPEN_TENANTS.select(t, t.c.chunk_id), t, tenants) for t in _EPHEMERAL_TABLES)
+    )
 
 
-def _visible_segments() -> Select[Any]:
-    """Every open tenant's visible segments, ``(tenant_id, segment_id)``: final, of a minted chunk,
-    and superseded by no segment of the same tenant."""
+def _visible_segments(tenants: Collection[TenantId] | None) -> Select[Any]:
+    """The visible segments, ``(tenant_id, segment_id)``, of every open tenant, or of ``tenants`` alone: final,
+    of a minted chunk, and superseded by no segment of the same tenant."""
     segment = s.transcript_segments
     successor = segment.alias("successor")
     superseded = OPEN_TENANTS.exists(
         successor, successor.c.supersedes == segment.c.segment_id, successor.c.tenant_id == segment.c.tenant_id
     )
-    return (
+    visible = (
         OPEN_TENANTS.select(segment, segment.c.tenant_id, segment.c.segment_id)
         .where(
             segment.c.final.is_(True),
@@ -100,6 +103,7 @@ def _visible_segments() -> Select[Any]:
         )
         .distinct()
     )
+    return OPEN_TENANTS.within_tenants(visible, segment, tenants)
 
 
 class SweepCorpusReads:
@@ -126,16 +130,18 @@ class SweepCorpusReads:
 
     # --- forge-status annotation ------------------------------------------------------
 
-    def live_work_refs(self) -> list[TenantWorkRef]:
-        """Every open tenant's work-ref rows whose chunk is neither grouped away nor deleted,
-        each with its tenant and chunk; which of them are live is the caller's derivation."""
+    def live_work_refs(self, tenants: Collection[TenantId] | None = None) -> list[TenantWorkRef]:
+        """The work-ref rows whose chunk is neither grouped away nor deleted, each with its tenant and
+        chunk, of every open tenant (``None``) or of the open tenants among ``tenants``; which of them are
+        live is the caller's derivation."""
         refs = s.chunk_work_refs
+        statement = (
+            OPEN_TENANTS.select(refs, refs.c.tenant_id, refs.c.chunk_id, refs.c.source, refs.c.ref)
+            .where(refs.c.chunk_id.not_in(_ephemeral_chunk_ids(tenants)))
+            .order_by(refs.c.id)
+        )
         with self._read("corpus live work refs") as conn:
-            rows = conn.execute(
-                OPEN_TENANTS.select(refs, refs.c.tenant_id, refs.c.chunk_id, refs.c.source, refs.c.ref)
-                .where(refs.c.chunk_id.not_in(_ephemeral_chunk_ids()))
-                .order_by(refs.c.id)
-            ).all()
+            rows = conn.execute(OPEN_TENANTS.within_tenants(statement, refs, tenants)).all()
         return [
             TenantWorkRef(
                 tenant=TenantId(row.tenant_id), chunk_id=row.chunk_id, ref=WorkRef(source=row.source, ref=row.ref)
@@ -230,9 +236,10 @@ class SweepCorpusReads:
 
     # --- close drain ------------------------------------------------------------------
 
-    def pending_close_intents(self) -> list[TenantCloseIntent]:
-        """Every open tenant's unretired close intent whose chunk is neither grouped away nor
-        deleted, with its attempt history, in intent order."""
+    def pending_close_intents(self, tenants: Collection[TenantId] | None = None) -> list[TenantCloseIntent]:
+        """The unretired close intents whose chunk is neither grouped away nor deleted, with their
+        attempt history, in intent order, of every open tenant (``None``) or of the open tenants among
+        ``tenants``."""
         attempt, intent = s.close_intent_attempts, s.close_intents
         of_intent = and_(attempt.c.tenant_id == intent.c.tenant_id, attempt.c.intent_id == intent.c.id)
         spent = attempt.c.outcome != DEFERRED_ATTEMPT
@@ -247,23 +254,24 @@ class SweepCorpusReads:
             .limit(1)
             .scalar_subquery()
         )
+        statement = (
+            OPEN_TENANTS.select(
+                intent,
+                intent.c.tenant_id,
+                intent.c.id,
+                intent.c.chunk_id,
+                intent.c.source,
+                intent.c.ref,
+                attempt_count.label("attempt_count"),
+                last_attempt_at.label("last_attempt_at"),
+                resume_at.label("resume_at"),
+            )
+            .where(intent.c.retired_at.is_(None))
+            .where(intent.c.chunk_id.not_in(_ephemeral_chunk_ids(tenants)))
+            .order_by(intent.c.id)
+        )
         with self._read("corpus pending close intents") as conn:
-            rows = conn.execute(
-                OPEN_TENANTS.select(
-                    intent,
-                    intent.c.tenant_id,
-                    intent.c.id,
-                    intent.c.chunk_id,
-                    intent.c.source,
-                    intent.c.ref,
-                    attempt_count.label("attempt_count"),
-                    last_attempt_at.label("last_attempt_at"),
-                    resume_at.label("resume_at"),
-                )
-                .where(intent.c.retired_at.is_(None))
-                .where(intent.c.chunk_id.not_in(_ephemeral_chunk_ids()))
-                .order_by(intent.c.id)
-            ).all()
+            rows = conn.execute(OPEN_TENANTS.within_tenants(statement, intent, tenants)).all()
         return [
             TenantCloseIntent(
                 tenant=TenantId(row.tenant_id),
@@ -314,35 +322,37 @@ class SweepCorpusReads:
                 into["max_received_at"] = row.max_received_at
         return {TenantId(tenant): DerivationSignature(**values) for tenant, values in merged.items()}
 
-    def candidacy(self, extractor_version: str) -> dict[TenantId, CandidacyRead]:
-        """Each open tenant's visible segments, and which of them disagree with their current
-        ``extractor_version`` marker or carry none — keyed by tenant; a tenant with no visible
-        segment has no entry."""
+    def candidacy(
+        self, extractor_version: str, tenants: Collection[TenantId] | None = None
+    ) -> dict[TenantId, CandidacyRead]:
+        """The visible segments, and which of them disagree with their current ``extractor_version`` marker
+        or carry none, of every open tenant (``None``) or of the open tenants among ``tenants`` — keyed by
+        tenant; a tenant with no visible segment has no entry."""
         segment = s.transcript_segments
-        visible = _visible_segments().subquery()
+        visible = _visible_segments(tenants).subquery()
         marker = s.transcript_event_derivations
+        digests = (
+            OPEN_TENANTS.select(
+                segment,
+                segment.c.tenant_id,
+                segment.c.segment_id,
+                segment.c.content_digest,
+                segment.c.harness_version,
+            )
+            .join(
+                visible,
+                and_(visible.c.tenant_id == segment.c.tenant_id, visible.c.segment_id == segment.c.segment_id),
+            )
+            .order_by(segment.c.tenant_id, segment.c.segment_id, segment.c.turn_range_start)
+        )
+        current = OPEN_TENANTS.select(
+            marker, marker.c.tenant_id, marker.c.segment_id, marker.c.content_fingerprint
+        ).where(marker.c.extractor_version == extractor_version)
         with self._read("corpus candidacy") as conn:
-            digest_rows = conn.execute(
-                OPEN_TENANTS.select(
-                    segment,
-                    segment.c.tenant_id,
-                    segment.c.segment_id,
-                    segment.c.content_digest,
-                    segment.c.harness_version,
-                )
-                .join(
-                    visible,
-                    and_(visible.c.tenant_id == segment.c.tenant_id, visible.c.segment_id == segment.c.segment_id),
-                )
-                .order_by(segment.c.tenant_id, segment.c.segment_id, segment.c.turn_range_start)
-            ).all()
+            digest_rows = conn.execute(OPEN_TENANTS.within_tenants(digests, segment, tenants)).all()
             markers = {
                 (row.tenant_id, row.segment_id): row.content_fingerprint
-                for row in conn.execute(
-                    OPEN_TENANTS.select(
-                        marker, marker.c.tenant_id, marker.c.segment_id, marker.c.content_fingerprint
-                    ).where(marker.c.extractor_version == extractor_version)
-                )
+                for row in conn.execute(OPEN_TENANTS.within_tenants(current, marker, tenants))
             }
         visible_ids: dict[TenantId, set[str]] = {}
         candidates: dict[TenantId, list[str]] = {}
@@ -357,15 +367,17 @@ class SweepCorpusReads:
             for tenant, ids in visible_ids.items()
         }
 
-    def derived_segment_ids(self) -> dict[TenantId, frozenset[str]]:
-        """Each open tenant's segments carrying any derivation marker, keyed by tenant."""
+    def derived_segment_ids(self, tenants: Collection[TenantId] | None = None) -> dict[TenantId, frozenset[str]]:
+        """The segments carrying any derivation marker, of every open tenant (``None``) or of the open
+        tenants among ``tenants``, keyed by tenant."""
         marker = s.transcript_event_derivations
+        statement = (
+            OPEN_TENANTS.select(marker, marker.c.tenant_id, marker.c.segment_id)
+            .distinct()
+            .order_by(marker.c.tenant_id, marker.c.segment_id)
+        )
         with self._read("corpus derived segment ids") as conn:
-            rows = conn.execute(
-                OPEN_TENANTS.select(marker, marker.c.tenant_id, marker.c.segment_id)
-                .distinct()
-                .order_by(marker.c.tenant_id, marker.c.segment_id)
-            ).all()
+            rows = conn.execute(OPEN_TENANTS.within_tenants(statement, marker, tenants)).all()
         return {
             TenantId(tenant_id): frozenset(row.segment_id for row in group)
             for tenant_id, group in itertools.groupby(rows, key=lambda r: r.tenant_id)

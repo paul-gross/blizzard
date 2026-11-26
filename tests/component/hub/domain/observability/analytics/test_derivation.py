@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import zlib
-from collections.abc import Buffer, Sequence
+from collections.abc import Buffer, Collection, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Unpack
@@ -36,6 +36,7 @@ from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.tenancy import TenantId
 from tests.support.chunk_units import chunk_unit
 from tests.support.factory_fields import TranscriptSliceFields
 from tests.support.scaffolding import (
@@ -754,10 +755,10 @@ def test_the_forced_floor_runs_a_full_pass_after_ten_minutes_despite_an_unchange
     calls = 0
     real_candidacy = fixture.corpus.candidacy
 
-    def _counting(extractor_version: str) -> Any:
+    def _counting(extractor_version: str, tenants: Collection[TenantId] | None = None) -> Any:
         nonlocal calls
         calls += 1
-        return real_candidacy(extractor_version)
+        return real_candidacy(extractor_version, tenants)
 
     monkeypatch.setattr(fixture.corpus, "candidacy", _counting)
 
