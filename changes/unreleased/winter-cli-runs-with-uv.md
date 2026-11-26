@@ -7,5 +7,7 @@ a host with a recent `mise` claims work again instead of failing every tick.
 
 ## Upgrade
 
-Make `uv` reachable on the `PATH` the runner host gives its `winter` calls, through the service unit or `[tools]`
-`path_prepend`. A host that reached `uv` only through `mise` fails to prepare environments until you do.
+Make `uv`, and every other tool the workspace's `winter` hooks run (`winter provision` and `winter service down` run
+them), reachable on the `PATH` the runner host gives its `winter` calls, through the service unit or `[tools]`
+`path_prepend`. Tools that `mise` supplied to those calls are no longer added for you; one left off that `PATH` fails
+environment preparation.

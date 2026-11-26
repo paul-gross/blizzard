@@ -49,10 +49,11 @@
    `blizzard runner workspace create workspace-local provider='"basic"'`; until then the runner runs and claims nothing.
    A `winter` workspace that vendors `tools/winter-cli` is run as `uv run`, so `uv` must be on the `PATH` of the host's
    tool children — the unit's own, or `[tools]` `path_prepend`
-   ([worker-spawn.md](./worker-spawn.md#the-worker-environment)). A workspace without that directory runs `winter` from
-   that `PATH`. Then `systemctl enable --now blizzard-runner`: its first start seals the token in the host's store under
-   the key in `/var/lib/blizzard/runner/data/secret-keys/`, which you back up with the store, and later token changes go
-   through `blizzard runner token set` ([runner-auth.md](./runner-auth.md#the-hosts-token-store)).
+   ([worker-spawn.md](./worker-spawn.md#the-worker-environment)) — and so must every other tool the workspace's `winter`
+   hooks run. A workspace without that directory runs `winter` from that `PATH`. Then
+   `systemctl enable --now blizzard-runner`: its first start seals the token in the host's store under the key in
+   `/var/lib/blizzard/runner/data/secret-keys/`, which you back up with the store, and later token changes go through
+   `blizzard runner token set` ([runner-auth.md](./runner-auth.md#the-hosts-token-store)).
 
 ## Configuration and credentials
 
