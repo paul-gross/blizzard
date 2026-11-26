@@ -5,7 +5,7 @@ HTTP shaping ``tests/component/hub/work_sources/internal/test_github_work_source
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import timedelta
 from pathlib import Path
 from typing import cast
@@ -111,8 +111,11 @@ def test_live_work_refs_statement_count_does_not_grow_with_work_ref_count(tmp_pa
 _FLOOR = timedelta(minutes=10)
 
 
-def _reconciler(hub: HubHarness, work_sources: WorkSourceRegistry) -> AnnotationReconciler:
-    """A reconciler over ``hub``'s own store — a fresh one per call, as a restart builds."""
+def _reconciler(
+    hub: HubHarness, work_sources: WorkSourceRegistry, *, tenants: Callable[[], list[TenantId]] | None = None
+) -> AnnotationReconciler:
+    """A reconciler over ``hub``'s own store — a fresh one per call, as a restart builds. ``tenants`` varies the
+    probe set, which is the default tenant alone without it."""
     tenant = TenantAnnotation(
         facts=hub.default_adapter(IReadChunkFactsRepository),
         work_sources=work_sources,
@@ -122,7 +125,7 @@ def _reconciler(hub: HubHarness, work_sources: WorkSourceRegistry) -> Annotation
     )
     return AnnotationReconciler(
         corpus=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
-        tenants=lambda: [default_tenant(hub.engine)],
+        tenants=tenants or (lambda: [default_tenant(hub.engine)]),
         tenant=lambda _tenant: tenant,
         clock=hub.clock,
         full_pass_floor=_FLOOR,
@@ -548,18 +551,21 @@ def test_a_successful_read_re_arms_the_skip_announcement(tmp_path: Path) -> None
 
 
 class _TogglingRegistry(WorkSourceRegistry):
-    """A registry whose source is neither annotating nor clearable while ``active`` is unset."""
+    """A registry whose source stops annotating while ``active`` is unset, staying clearable."""
 
     active = True
 
+    def annotator(self, source: str) -> IWorkAnnotator | None:
+        return super().annotator(source) if self.active else None
+
     def label_clearer(self, source: str) -> IWorkAnnotator | None:
-        return super().label_clearer(source) if self.active else None
+        return super().annotator(source)
 
     def annotating_ids(self) -> list[str]:
         return super().annotating_ids() if self.active else []
 
 
-def test_a_source_that_stops_annotating_mid_outage_is_announced_again_on_return(tmp_path: Path) -> None:
+def test_a_source_that_stops_annotating_mid_outage_is_not_announced_again_on_return(tmp_path: Path) -> None:
     hub, _, _ = _gated(tmp_path)
     registry = _TogglingRegistry({}, {"default": _FlakyRead()})
     reconciler = _reconciler(hub, registry)
@@ -571,6 +577,30 @@ def test_a_source_that_stops_annotating_mid_outage_is_announced_again_on_return(
     registry.active = True
     hub.clock.advance(_FLOOR)
     reconciler.sweep()
+
+    assert len(_skip_events(hub)) == 1
+
+
+def test_a_tenant_that_leaves_the_probe_set_mid_outage_is_announced_again_on_return(tmp_path: Path) -> None:
+    hub, _, _ = _gated(tmp_path)
+    tenants = [default_tenant(hub.engine)]
+    reconciler = _reconciler(hub, WorkSourceRegistry({}, {"default": _FlakyRead()}), tenants=lambda: list(tenants))
+    reconciler.sweep()
+
+    departed = tenants.pop()
+    reconciler.sweep()
+    tenants.append(departed)
+    reconciler.sweep()
+
+    assert len(_skip_events(hub)) == 2
+
+
+def test_a_restart_during_an_outage_announces_the_skip_again(tmp_path: Path) -> None:
+    hub, _, _ = _gated(tmp_path)
+    registry = WorkSourceRegistry({}, {"default": _FlakyRead()})
+    _reconciler(hub, registry).sweep()
+
+    _reconciler(hub, registry).sweep()
 
     assert len(_skip_events(hub)) == 2
 
