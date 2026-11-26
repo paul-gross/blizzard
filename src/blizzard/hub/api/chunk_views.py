@@ -60,8 +60,7 @@ from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
 from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.forge.web import web_links
-from blizzard.hub.work_sources.registry import SelectedWorkSources
-from blizzard.hub.work_sources.source import IWorkSourceRegistry
+from blizzard.hub.work_sources.source import IWorkSourceBindings, IWorkSourceRegistry
 from blizzard.wire.chunk import (
     ArtifactView,
     BlockedView,
@@ -227,7 +226,7 @@ class ChunkView:
     #: Projects by id — the caller's own batched read; ``None`` makes each render read the chunk's own project.
     projects: Mapping[ProjectId, Project] | None = None
     #: Request-scoped source resolution; absent on the single-chunk lazy path.
-    sources: SelectedWorkSources | None = None
+    sources: IWorkSourceBindings | None = None
     #: Flow places by chunk id — the caller's own read; ``None`` makes each render read the chunk's own.
     flow_places: Mapping[str, list[ChunkFlowPlaceView]] | None = None
     #: Submissions by chunk id — the caller's own batched read; ``None`` makes a bounced chunk's render read its own.
@@ -271,7 +270,7 @@ class ChunkView:
         delivery: DeliveryRead | None = None,
         runner_names: Mapping[str, str] | None = None,
         projects: Mapping[ProjectId, Project] | None = None,
-        sources: SelectedWorkSources | None = None,
+        sources: IWorkSourceBindings | None = None,
         flow_places: Mapping[str, list[ChunkFlowPlaceView]] | None = None,
         submissions: Mapping[str, list[SubmissionRecord]] | None = None,
         urgencies: Mapping[UrgencyId, Urgency] | None = None,
@@ -454,10 +453,10 @@ class ChunkView:
         resolves to its own binding by key, so a chunk's pointers need not all share one source. Liveness resolves
         via :meth:`_resolved_live_holders`'s one bulk call."""
         holders = self._resolved_live_holders()
-        sources = self.sources or SelectedWorkSources(self.reads.work_sources, (p.source for p in self.chunk.work_refs))
+        sources = self.sources or self.reads.work_sources.bindings(p.source for p in self.chunk.work_refs)
         views: list[WorkRefView] = []
         for p in self.chunk.work_refs:
-            source = sources.source(p.source)
+            source = sources.get(p.source)
             views.append(
                 WorkRefView(
                     source=p.source,

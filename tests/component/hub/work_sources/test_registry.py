@@ -7,7 +7,7 @@ rebuilt between a write and the next registry call."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import cast
 
@@ -39,6 +39,7 @@ from tests.support.config_inputs import build_hosted_hub_app, init_hub
 from tests.support.forge_auth import sent_header
 from tests.support.scaffolding import (
     OP,
+    FakeWorkSource,
     ForgeDouble,
     forge_state,
     hub_store_connections,
@@ -403,3 +404,166 @@ def test_a_source_whose_credential_the_forge_refuses_at_build_raises_the_annotat
         assert raised.value.refusal is not None
         assert raised.value.refusal.classified == classified
         assert raised.value.refusal.forge_id == record.fields.forge_id
+
+
+# --------------------------------------------------------------------------- #
+# Bindings: a set of sources resolved together answers as the singular lookups do.
+
+
+def _stored_registry(
+    app: FastAPI, build: Callable[[ConfiguredWorkSource], BuiltWorkSource], *, close_forge_writes_enabled: bool = True
+) -> StoreWorkSourceRegistry:
+    """A registry of its own over ``app``'s records and revisions, building through ``build``."""
+    return StoreWorkSourceRegistry(
+        records=tenant_adapter_of(app, IReadWorkSourceRepository),
+        objects=ConfigObjectCache(ConfigRevisionsStore(hub_store_connections(app.state.engine))),
+        build=build,
+        built_in=_sources(app).get("hub"),  # pyright: ignore[reportArgumentType]  # the registry port types its "hub" entry as IWorkSource; it is the built-in source
+        close_forge_writes_enabled=close_forge_writes_enabled,
+    )
+
+
+def _assert_bindings_match(registry: IWorkSourceRegistry, keys: list[str]) -> None:
+    bound = registry.bindings(keys)
+    for key in keys:
+        pointer = WorkRef(source=key, ref="1")
+        assert bound.get(key) is registry.get(key), key
+        assert bound.closer(key) is registry.closer(key), key
+        assert bound.annotator(key) is registry.annotator(key), key
+        assert bound.label_clearer(key) is registry.label_clearer(key), key
+        assert bound.source_label(key) == registry.source_label(key), key
+        assert bound.label(pointer) == registry.label(pointer), key
+
+
+def test_bindings_answer_each_lookup_as_the_singular_one_does(
+    hub: tuple[TestClient, FastAPI], forge: tuple[ForgeDouble, str]
+) -> None:
+    client, app = hub
+    annotating = create(client, app, forge[1], annotate=True)
+    silent = create(client, app, forge[1], slug="gadget", locator="acme/gadget")
+    retired = create(client, app, forge[1], slug="old", locator="acme/old")
+    assert client.post(f"/api/work-sources/{retired}/retire").status_code == 200
+    keys = ["hub", "wsrc_unknown", annotating, silent, retired]
+    sources = _sources(app)
+
+    _assert_bindings_match(sources, keys)
+
+    bound = sources.bindings(keys)
+    assert bound.annotator(annotating) is not None and bound.annotator(silent) is None
+    assert bound.label_clearer(silent) is not None and bound.closer(retired) is not None
+    assert bound.get("wsrc_unknown") is None
+
+
+def test_bindings_read_a_retired_source_that_no_longer_builds_as_absent(
+    hub: tuple[TestClient, FastAPI], forge: tuple[ForgeDouble, str]
+) -> None:
+    client, app = hub
+    source_id = create(client, app, forge[1], annotate=True)
+    assert client.post(f"/api/work-sources/{source_id}/retire").status_code == 200
+    retire_credential(client, "gh")
+    assert client.post("/api/secrets/gh/retire").status_code == 200
+
+    _assert_bindings_match(_sources(app), [source_id])
+
+    bound = _sources(app).bindings([source_id])
+    assert bound.get(source_id) is None
+    assert bound.label(WorkRef(source=source_id, ref="1")) == "widget#1"
+
+
+def test_bindings_seat_no_configured_closer_while_close_writes_are_disabled(
+    hub: tuple[TestClient, FastAPI], forge: tuple[ForgeDouble, str]
+) -> None:
+    client, app = hub
+    source_id = create(client, app, forge[1])
+    registry = _stored_registry(
+        app,
+        lambda record: BuiltWorkSource(record, FakeWorkSource(), lambda: None),
+        close_forge_writes_enabled=False,
+    )
+
+    _assert_bindings_match(registry, ["hub", source_id])
+
+    bound = registry.bindings(["hub", source_id])
+    assert bound.closer(source_id) is None and bound.closer("hub") is not None
+
+
+def test_bindings_raise_a_failing_build_at_that_source_s_call_alone(
+    hub: tuple[TestClient, FastAPI], forge: tuple[ForgeDouble, str]
+) -> None:
+    client, app = hub
+    broken = create(client, app, forge[1])
+    working = create(client, app, forge[1], slug="gadget", locator="acme/gadget")
+
+    def build(record: ConfiguredWorkSource) -> BuiltWorkSource:
+        if record.work_source_id == broken:
+            raise WorkSourceError(f"work source {record.slug} cannot be built")
+        return BuiltWorkSource(record, FakeWorkSource(), lambda: None)
+
+    bound = _stored_registry(app, build).bindings([broken, working])
+
+    assert bound.closer(working) is not None
+    for reach in (bound.get, bound.closer, bound.annotator, bound.label_clearer):
+        with pytest.raises(WorkSourceError):
+            reach(broken)
+
+
+def test_bindings_carry_a_refused_build_as_the_annotation_refusal(
+    hub: tuple[TestClient, FastAPI], forge: tuple[ForgeDouble, str]
+) -> None:
+    client, app = hub
+    source_id = create(client, app, forge[1])
+    classified = ClassifiedRefusal(
+        refusal=AuthRefusal.INSTALLATION_SUSPENDED,
+        diagnostic=ForgeDiagnostic(
+            status=403,
+            operation="mint",
+            endpoint="POST /app/installations/{installation_id}/access_tokens",
+            repository=None,
+            message="This installation has been suspended",
+            documentation_url=None,
+            request_id=None,
+            accepted_permissions=None,
+        ),
+    )
+
+    def refused(record: ConfiguredWorkSource) -> BuiltWorkSource:
+        raise WorkSourceAuthRefused(f"work source {record.slug}", classified)
+
+    bound = _stored_registry(app, refused).bindings([source_id])
+    record = tenant_adapter_of(app, IReadWorkSourceRepository).get(WorkSourceId(source_id))
+    assert record is not None
+
+    for reach in (bound.annotator, bound.label_clearer):
+        with pytest.raises(WorkAnnotateError) as raised:
+            reach(source_id)
+        assert raised.value.refusal is not None
+        assert raised.value.refusal.classified == classified
+        assert raised.value.refusal.forge_id == record.fields.forge_id
+
+
+def test_bindings_render_the_fallback_slug_of_the_record_they_read(
+    hub: tuple[TestClient, FastAPI], forge: tuple[ForgeDouble, str]
+) -> None:
+    client, app = hub
+    source_id = create(client, app, forge[1])
+
+    class Unlabelled(FakeWorkSource):
+        def label(self, pointer: WorkRef) -> None:
+            return None
+
+    registry = _stored_registry(app, lambda record: BuiltWorkSource(record, Unlabelled(), lambda: None))
+    bound = registry.bindings([source_id])
+    _rename(app, source_id, "widget-core")
+    pointer = WorkRef(source=source_id, ref="1")
+
+    assert bound.label(pointer) == "widget#1"
+    assert registry.bindings([source_id]).label(pointer) == "widget-core#1"
+
+
+def test_bindings_refuse_a_source_outside_the_bound_set(hub: tuple[TestClient, FastAPI]) -> None:
+    _client, app = hub
+    bound = _sources(app).bindings([])
+
+    for reach in (bound.get, bound.closer, bound.annotator, bound.label_clearer, bound.source_label):
+        with pytest.raises(KeyError):
+            reach("hub")

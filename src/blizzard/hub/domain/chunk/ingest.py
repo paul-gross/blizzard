@@ -36,7 +36,7 @@ class IWorkItemProjectRead(Protocol):
         ...
 
 
-class IWorkRefLabels(Protocol):
+class IBoundWorkRefLabels(Protocol):
     """How a source and a pointer display."""
 
     def source_label(self, source: str) -> str:
@@ -45,6 +45,14 @@ class IWorkRefLabels(Protocol):
 
     def label(self, pointer: WorkRef) -> str:
         """``pointer`` as displayed."""
+        ...
+
+
+class IWorkRefLabels(IBoundWorkRefLabels, Protocol):
+    """The labels, readable one at a time or over a set of sources resolved together."""
+
+    def bindings(self, sources: Iterable[str]) -> IBoundWorkRefLabels:
+        """The labels of ``sources`` resolved together; a source outside them raises ``KeyError``."""
         ...
 
 
@@ -58,7 +66,7 @@ class IngestConflict(Exception):
         self.existing_chunk_id = existing_chunk_id
         self.pointer = pointer
 
-    def labelled(self, labels: IWorkRefLabels) -> IngestConflict:
+    def labelled(self, labels: IBoundWorkRefLabels) -> IngestConflict:
         """This refusal with its pointer rendered through ``labels``."""
         return IngestConflict(
             existing_chunk_id=self.existing_chunk_id, pointer=self.pointer, label=labels.label(self.pointer)
@@ -92,7 +100,7 @@ class IngestSourceNotLinked(Exception):
         self.source = source
         self.project = project
 
-    def labelled(self, labels: IWorkRefLabels) -> IngestSourceNotLinked:
+    def labelled(self, labels: IBoundWorkRefLabels) -> IngestSourceNotLinked:
         """This refusal with its source rendered through ``labels``."""
         return IngestSourceNotLinked(self.source, self.project, label=labels.source_label(self.source))
 

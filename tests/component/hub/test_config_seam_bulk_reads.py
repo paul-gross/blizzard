@@ -447,6 +447,36 @@ def test_resolve_reads_every_active_source_s_revisions_once(tmp_path: Path) -> N
     assert counts[0] == counts[1]
 
 
+def test_bindings_statements_are_flat_across_source_counts_and_repeated_lookups(tmp_path: Path) -> None:
+    names = [f"src{i}" for i in range(10)]
+    hub = build_hub(tmp_path, work_sources={name: FakeWorkSource(name=name) for name in names})
+    built_in = hub.work_sources.get("hub")
+    assert isinstance(built_in, HubWorkSource)
+    registry = StoreWorkSourceRegistry(
+        records=hub.default_adapter(IReadWorkSourceRepository),
+        objects=ConfigObjectCache(ConfigRevisionsStore(hub_store_connections(hub.engine))),
+        build=lambda record: BuiltWorkSource(record, FakeWorkSource(name=record.name), lambda: None),
+        built_in=built_in,
+    )
+    ids = [_source_id(hub, name) for name in names]
+
+    def look_up(n: int, times: int) -> None:
+        bound = registry.bindings(ids[:n])
+        for _ in range(times):
+            for source in ids[:n]:
+                bound.get(source)
+                bound.closer(source)
+                bound.annotator(source)
+                bound.label_clearer(source)
+                bound.source_label(source)
+                bound.label(WorkRef(source=source, ref="1"))
+
+    look_up(len(ids), 1)  # Builds every source, so the measured calls only read revisions and records.
+    one = count_queries(hub.engine, lambda: look_up(1, 1))
+    assert count_queries(hub.engine, lambda: look_up(len(ids), 1)) == one
+    assert count_queries(hub.engine, lambda: look_up(len(ids), 10)) == one
+
+
 def test_the_graph_mint_s_cross_graph_check_is_flat_across_target_counts(graphs_hub: HubHarness) -> None:
     mint = graphs_hub.default_adapter(GraphMintService)
 

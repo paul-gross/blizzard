@@ -11,12 +11,12 @@ Every source past the edge is named by its key: ``hub``, or a configured source'
 current slug, so a rename reaches every displayed work ref with no stored ref rewritten.
 
 ``resolve``, ``names`` and ``annotating_ids`` read active records; ``get``,
-``annotator``, ``closer``, ``label_clearer`` and labels can read retired records.
+``annotator``, ``closer``, ``label_clearer``, ``bindings`` and labels can read retired records.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from functools import partial
 from typing import Protocol, cast
@@ -37,6 +37,7 @@ from blizzard.hub.work_sources.editor import IWorkEditor
 from blizzard.hub.work_sources.source import (
     IWorkSource,
     IWorkSourceBatchReader,
+    IWorkSourceBindings,
     IWorkSourceRegistry,
     WorkSourceAuthRefused,
     WorkSourceError,
@@ -63,6 +64,30 @@ def label_from_binding(pointer: WorkRef, source: IWorkSource | None, fallback_sl
     """Render the binding's label, resolving its current slug only for a ``None`` label."""
     rendered = source.label(pointer) if source is not None else None
     return rendered if rendered is not None else f"{fallback_slug()}#{pointer.ref}"
+
+
+def _unless_retired(
+    hand_out: Callable[[], BuiltWorkSource | None], record: Callable[[], ConfiguredWorkSource | None]
+) -> BuiltWorkSource | None:
+    """``hand_out()``'s adapter, a build failure of a retired source reading as ``None``."""
+    try:
+        return hand_out()
+    except WorkSourceError:
+        found = record()
+        if found is not None and found.retired:
+            return None
+        raise
+
+
+def _annotate_refusal(exc: WorkSourceAuthRefused, record: ConfiguredWorkSource | None) -> WorkAnnotateError:
+    """The annotation refusal a build the forge refused the credential of is, for a write half."""
+    # The build just read it, and a configured record is never deleted.
+    assert record is not None
+    return WorkAnnotateError(str(exc), refusal=WorkAnnotateRefusal(exc.classified, record.fields.forge_id))
+
+
+def _enabled(close_forge_writes_enabled: bool | Callable[[], bool]) -> bool:
+    return close_forge_writes_enabled() if callable(close_forge_writes_enabled) else close_forge_writes_enabled
 
 
 class StoreWorkSourceRegistry:
@@ -105,13 +130,7 @@ class StoreWorkSourceRegistry:
         )
 
     def _handed(self, source: str, hand_out: Callable[[], BuiltWorkSource | None]) -> BuiltWorkSource | None:
-        try:
-            return hand_out()
-        except WorkSourceError:
-            record = self._records.get(WorkSourceId(source))
-            if record is not None and record.retired:
-                return None
-            raise
+        return _unless_retired(hand_out, lambda: self._records.get(WorkSourceId(source)))
 
     def _build_current(self, source: str) -> BuiltWorkSource:
         record = self._records.get(WorkSourceId(source))
@@ -143,12 +162,7 @@ class StoreWorkSourceRegistry:
         try:
             return self._built(source)
         except WorkSourceAuthRefused as exc:
-            record = self._records.get(WorkSourceId(source))
-            # The build just read it, and a configured record is never deleted.
-            assert record is not None
-            raise WorkAnnotateError(
-                str(exc), refusal=WorkAnnotateRefusal(exc.classified, record.fields.forge_id)
-            ) from exc
+            raise _annotate_refusal(exc, self._records.get(WorkSourceId(source))) from exc
 
     def annotator(self, source: str) -> IWorkAnnotator | None:
         if source == RESERVED_HUB_SOURCE_NAME:
@@ -172,8 +186,7 @@ class StoreWorkSourceRegistry:
     def closer(self, source: str) -> IWorkCloser | None:
         if source == RESERVED_HUB_SOURCE_NAME:
             return self._built_in
-        enabled = self._close_forge_writes_enabled
-        if not (enabled() if callable(enabled) else enabled):
+        if not _enabled(self._close_forge_writes_enabled):
             return None
         built = self._built(source)
         return cast(IWorkCloser, built.source) if built is not None else None
@@ -184,6 +197,22 @@ class StoreWorkSourceRegistry:
     def batch_reader(self, source: str) -> IWorkSourceBatchReader | None:
         bound = self.get(source)
         return bound if isinstance(bound, IWorkSourceBatchReader) else None
+
+    def bindings(self, sources: Iterable[str]) -> IWorkSourceBindings:
+        bound = frozenset(sources)
+        configured = sorted(bound - {RESERVED_HUB_SOURCE_NAME})
+        # Revisions before records: a record a build reads must be no older than the revisions it is cached under.
+        current = self._objects.revisions_for(RecordKind.WORK_SOURCE, configured)
+        records = self._records.get_many([WorkSourceId(source) for source in configured])
+        return WorkSourceBindings(
+            bound,
+            current=current,
+            records={str(key): record for key, record in records.items()},
+            objects=self._objects,
+            build=self._build,
+            built_in=self._built_in,
+            close_forge_writes_enabled=self._close_forge_writes_enabled,
+        )
 
     def resolve(self, token: str) -> WorkRef | None:
         for sep in (":", "#"):
@@ -213,23 +242,92 @@ class StoreWorkSourceRegistry:
 _work_source_registry_conforms: type[IWorkSourceRegistry] = StoreWorkSourceRegistry
 
 
-class SelectedWorkSources:
-    """Request-local bindings for rendered sources, with lazy fallback slugs."""
+class WorkSourceBindings:
+    """:meth:`StoreWorkSourceRegistry.bindings`' answer: ``current`` and ``records`` are the revisions and records of
+    the bound sources as read ahead, a source absent from them unknown. Each adapter is handed out once."""
 
-    def __init__(self, registry: IWorkSourceRegistry, names: Iterable[str]) -> None:
-        self._registry = registry
-        self._sources = {name: registry.get(name) for name in sorted(set(names))}
-        self._fallback_slugs: dict[str, str] = {}
+    def __init__(
+        self,
+        sources: frozenset[str],
+        *,
+        current: Mapping[str, ConfigRevisions],
+        records: Mapping[str, ConfiguredWorkSource],
+        objects: ConfigObjectCache,
+        build: Callable[[ConfiguredWorkSource], BuiltWorkSource],
+        built_in: IBuiltInWorkSource,
+        close_forge_writes_enabled: bool | Callable[[], bool],
+    ) -> None:
+        self._sources = sources
+        self._current = current
+        self._records = records
+        self._objects = objects
+        self._build = build
+        self._built_in = built_in
+        self._close_forge_writes_enabled = close_forge_writes_enabled
+        self._handed: dict[str, BuiltWorkSource | None] = {}
 
-    def source(self, name: str) -> IWorkSource | None:
-        return self._sources[name]
+    def _built(self, source: str) -> BuiltWorkSource | None:
+        """:meth:`StoreWorkSourceRegistry._built` over what was read ahead."""
+        if source not in self._handed:
+            self._handed[source] = _unless_retired(
+                lambda: self._objects.get_under(
+                    RecordKind.WORK_SOURCE,
+                    source,
+                    self._current.get(source),
+                    lambda: self._build(self._records[source]),
+                ),
+                lambda: self._records.get(source),
+            )
+        return self._handed[source]
+
+    def _is_built_in(self, source: str) -> bool:
+        if source not in self._sources:
+            raise KeyError(source)
+        return source == RESERVED_HUB_SOURCE_NAME
+
+    def get(self, source: str) -> IWorkSource | None:
+        if self._is_built_in(source):
+            return self._built_in
+        built = self._built(source)
+        return built.source if built is not None else None
+
+    def source_label(self, source: str) -> str:
+        if self._is_built_in(source):
+            return source
+        record = self._records.get(source)
+        return record.slug if record is not None else source
 
     def label(self, pointer: WorkRef) -> str:
-        source = self.source(pointer.source)
+        source = self.get(pointer.source)
+        return label_from_binding(pointer, source, lambda: self.source_label(pointer.source))
 
-        def fallback_slug() -> str:
-            if pointer.source not in self._fallback_slugs:
-                self._fallback_slugs[pointer.source] = self._registry.source_label(pointer.source)
-            return self._fallback_slugs[pointer.source]
+    def _annotating(self, source: str) -> BuiltWorkSource | None:
+        try:
+            return self._built(source)
+        except WorkSourceAuthRefused as exc:
+            raise _annotate_refusal(exc, self._records.get(source)) from exc
 
-        return label_from_binding(pointer, source, fallback_slug)
+    def annotator(self, source: str) -> IWorkAnnotator | None:
+        if self._is_built_in(source):
+            return None
+        built = self._annotating(source)
+        if built is None or not built.record.fields.annotate:
+            return None
+        return cast(IWorkAnnotator, built.source)
+
+    def label_clearer(self, source: str) -> IWorkAnnotator | None:
+        if self._is_built_in(source):
+            return None
+        built = self._annotating(source)
+        return cast(IWorkAnnotator, built.source) if built is not None else None
+
+    def closer(self, source: str) -> IWorkCloser | None:
+        if self._is_built_in(source):
+            return self._built_in
+        if not _enabled(self._close_forge_writes_enabled):
+            return None
+        built = self._built(source)
+        return cast(IWorkCloser, built.source) if built is not None else None
+
+
+_work_source_bindings_conforms: type[IWorkSourceBindings] = WorkSourceBindings
