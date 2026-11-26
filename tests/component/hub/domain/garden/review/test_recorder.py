@@ -7,6 +7,7 @@ need."""
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from pathlib import Path
 
 from sqlalchemy import select
@@ -26,6 +27,7 @@ from tests.support.scaffolding import (
     build_hub,
     default_project,
     hub_scoped,
+    project_record,
     seed_lease,
     seed_project,
 )
@@ -87,8 +89,11 @@ def test_a_deferred_entry_is_recorded_as_a_review_sourced_finding(tmp_path: Path
 
 def test_a_review_finding_takes_the_reviewed_chunks_project(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    first = default_project(hub.engine)
-    second = seed_project(hub.engine, "second")
+    first = project_record(hub, default_project(hub.engine))
+    second = seed_project(hub.engine, "second", at=first.created_at + timedelta(days=1))
+    third = seed_project(hub.engine, "third", at=first.created_at + timedelta(days=2))
+    # The chunk's project is neither end of the tenant's, by id as by creation time.
+    assert first.project_id < second < third
     chunk_id = seed_chunk(hub, project_id=second)
     record_artifact(hub, chunk_id, content=_delta([_deferred()]))
 
@@ -97,7 +102,6 @@ def test_a_review_finding_takes_the_reviewed_chunks_project(tmp_path: Path) -> N
     assert delivered == Delivered("recorded")
     with hub.engine.begin() as conn:
         project_id = conn.execute(hub_scoped(select(s.findings.c.project_id))).scalar_one()
-    assert second != first
     assert project_id == second
 
 

@@ -546,7 +546,9 @@ def project_record(hub: HubHarness, project_id: str) -> Project:
 _SEEDER = ChangeContext(actor="test", door=Door.API)
 
 
-def _project_authoring(engine: Engine, tenant: TenantId) -> tuple[ProjectAuthoring, ProjectStore]:
+def _project_authoring(
+    engine: Engine, tenant: TenantId, *, at: datetime = _GRAPH_T0
+) -> tuple[ProjectAuthoring, ProjectStore]:
     conns = scoped_connections(engine, tenant)
     projects = ProjectStore(conns)
     links = ProjectLinkStore(conns)
@@ -555,15 +557,15 @@ def _project_authoring(engine: Engine, tenant: TenantId) -> tuple[ProjectAuthori
         links=links,
         positions=ProjectPositionStore(conns, links=links),
         pick=first_color,
-        clock=FixedClock(_GRAPH_T0),
+        clock=FixedClock(at),
     ), projects
 
 
-def seed_project(engine: Engine, slug: str, *, tenant: TenantId | None = None) -> ProjectId:
+def seed_project(engine: Engine, slug: str, *, tenant: TenantId | None = None, at: datetime = _GRAPH_T0) -> ProjectId:
     """Create a project named ``slug`` in ``tenant`` — the store's only tenant when ``None`` — through project
-    authoring, its create change row included, and return its id. Once the tenant holds two projects, a write that
+    authoring at ``at``, its create change row included, and return its id. Once the tenant holds two projects, a write that
     names none is refused: the test names the project on every write it makes from then on."""
-    authoring, _ = _project_authoring(engine, tenant if tenant is not None else default_tenant(engine))
+    authoring, _ = _project_authoring(engine, tenant if tenant is not None else default_tenant(engine), at=at)
     return authoring.create(slug, slug, _SEEDER).project_id
 
 
