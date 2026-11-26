@@ -1198,6 +1198,14 @@ def proxy_forwarding(runner: Path) -> tuple[set[tuple[str, str]], list[str]]:
             node: ast.AST, parents: dict[int, ast.AST] = parents, path: Path = path, tree: ast.Module = tree
         ) -> bool:
             parent = parents.get(id(node))
+            if isinstance(parent, ast.Attribute) and parent.value is node and parent.attr == "config":
+                hub_url = parents.get(id(parent))
+                return (
+                    isinstance(hub_url, ast.Attribute)
+                    and hub_url.value is parent
+                    and hub_url.attr == "hub_url"
+                    and isinstance(hub_url.ctx, ast.Load)
+                )
             if isinstance(parent, ast.Attribute) and parent.value is node and parent.attr in ("get", "post"):
                 call = parents.get(id(parent))
                 return isinstance(call, ast.Call) and call.func is parent
