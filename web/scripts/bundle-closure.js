@@ -145,4 +145,50 @@ function entryFileCosts(meta, initialOutputs) {
     });
 }
 
-module.exports = { HEAVY_PACKAGES, entryFileCosts, lazyEntries, median, sourceClosure, staticOutputs };
+/** The light kit entry, which must reach no heavy package, and the library aggregate no lazy entry may reach. */
+const LIGHT_KIT_ENTRY = `${ENTRIES_DIR}kit.ts`;
+const FLEET_ROOT = 'projects/fleet/src/public-api.ts';
+
+/**
+ * The heavy modules the light kit entry's static source closure first reaches, each with the file that imports it. A build
+ * that holds no light kit entry at all is a violation of its own where `required`, so the check cannot pass vacuously.
+ *
+ * @param {{ inputs: Record<string, any> }} meta
+ * @param {boolean} required
+ */
+function lightKitViolations(meta, required) {
+  if (!meta.inputs[LIGHT_KIT_ENTRY]) {
+    return required ? [{ file: LIGHT_KIT_ENTRY, importer: '<absent from the build>' }] : [];
+  }
+  const { visited, parent } = sourceClosure(meta, LIGHT_KIT_ENTRY);
+  const heavy = (/** @type {string} */ file) => HEAVY_PACKAGES.some((pkg) => file.startsWith(`node_modules/${pkg}/`));
+  // Only the edge into the heavy packages is reported: what a heavy module imports of its own is noise.
+  return [...visited]
+    .filter((file) => heavy(file) && !heavy(parent.get(file) ?? LIGHT_KIT_ENTRY))
+    .sort()
+    .map((file) => ({ file, importer: parent.get(file) ?? LIGHT_KIT_ENTRY }));
+}
+
+/**
+ * Each lazy entry whose static source closure reaches the `fleet` root, with the file that imports the root.
+ *
+ * @param {{ inputs: Record<string, any>, outputs: Record<string, any> }} meta
+ * @param {Set<string>} initialOutputs
+ */
+function rootReachViolations(meta, initialOutputs) {
+  return lazyEntries(meta, initialOutputs).flatMap(({ entry }) => {
+    const { visited, parent } = sourceClosure(meta, entry);
+    return visited.has(FLEET_ROOT) ? [{ entry, importer: parent.get(FLEET_ROOT) ?? entry }] : [];
+  });
+}
+
+module.exports = {
+  HEAVY_PACKAGES,
+  entryFileCosts,
+  lazyEntries,
+  lightKitViolations,
+  median,
+  rootReachViolations,
+  sourceClosure,
+  staticOutputs,
+};

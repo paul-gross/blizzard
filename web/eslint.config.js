@@ -3,6 +3,7 @@ const eslint = require("@eslint/js");
 const { defineConfig } = require("eslint/config");
 const tseslint = require("typescript-eslint");
 const angular = require("angular-eslint");
+const fleetRoot = require("./eslint.fleet-root.js");
 
 // No frontend code reads the wall clock implicitly (`bzh:frontend-formatters`): a time
 // helper takes `now` from `injectNowSignal` (a display that must advance) or
@@ -29,6 +30,7 @@ const CLOCK_SELECTORS = [
 ];
 
 module.exports = defineConfig([
+  ...fleetRoot,
   {
     files: ["**/*.ts"],
     extends: [

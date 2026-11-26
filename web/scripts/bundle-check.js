@@ -23,6 +23,10 @@
  * `transcripts/` folders and `@angular/cdk`'s `menu`/`overlay`/`listbox` bundles in either app, and
  * for the hub also its `garden/`, `graphs/`, or `board/chunk-dock/` folders and `@dagrejs/*`.
  *
+ * It also fails when the light `fleet/kit` entry's source closure reaches `@angular/cdk`, `@angular/aria`, or
+ * `@angular/forms` (and when the hub build holds no such entry), and when a lazy entry's closure reaches the `fleet`
+ * root (`bzh:frontend-weight-class-entries`).
+ *
  * It also prints, per app, every lazy entry's static closure beyond the initial chunk with their median, and each
  * `fleet` entry file's source closure (`bundle-closure.js`).
  *
@@ -33,7 +37,15 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { entryFileCosts, lazyEntries, median, sourceClosure, staticOutputs } = require('./bundle-closure');
+const {
+  entryFileCosts,
+  lazyEntries,
+  lightKitViolations,
+  median,
+  rootReachViolations,
+  sourceClosure,
+  staticOutputs,
+} = require('./bundle-closure');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -56,6 +68,7 @@ const APPS = [
   {
     name: 'hub',
     main: 'projects/hub/src/main.ts',
+    requiresLightKit: true,
     forbidden: [
       ...SHARED_FORBIDDEN,
       { name: 'hub chunk-dock/', test: (f) => f.startsWith('projects/hub/src/app/board/chunk-dock/') },
@@ -64,7 +77,7 @@ const APPS = [
       { name: '@dagrejs/*', test: (f) => f.startsWith('node_modules/@dagrejs/') },
     ],
   },
-  { name: 'runner', main: 'projects/runner/src/main.ts', forbidden: SHARED_FORBIDDEN },
+  { name: 'runner', main: 'projects/runner/src/main.ts', requiresLightKit: false, forbidden: SHARED_FORBIDDEN },
 ];
 
 /** Areas named in the printed per-area breakdown, most-material first. Informational only —
@@ -190,6 +203,79 @@ function assertBundleCompositionDetectorWorks() {
   if (hit?.importer !== 'projects/hub/src/app/shell/app.ts') {
     throw new Error(`bundle-composition detector attributed the wrong importer: ${hit?.importer}`);
   }
+  assertLightKitDetectorWorks();
+  assertRootReachDetectorWorks();
+}
+
+/** The light-kit condition: a heavy module reached through the entry is caught, a type-only edge to one passes, and
+ * a build without the entry fails where the entry is required. */
+function assertLightKitDetectorWorks() {
+  const entry = 'projects/fleet/src/entries/kit.ts';
+  const part = 'projects/fleet/src/lib/kit/kit-button.ts';
+  const build = (/** @type {object[]} */ imports) => ({
+    inputs: {
+      [entry]: { bytes: 1, imports: [{ path: part, kind: 'import-statement' }] },
+      [part]: { bytes: 1, imports },
+    },
+  });
+  for (const pkg of ['cdk', 'aria', 'forms']) {
+    const heavy = `node_modules/@angular/${pkg}/fesm2022/x.mjs`;
+    const found = lightKitViolations(build([{ path: heavy, kind: 'import-statement' }]), true);
+    if (found.length !== 1 || found[0].file !== heavy || found[0].importer !== part) {
+      throw new Error(`bundle-composition detector missed @angular/${pkg} in the light kit: ${JSON.stringify(found)}`);
+    }
+  }
+  const passing = build([
+    { path: 'node_modules/@angular/forms/fesm2022/x.mjs', kind: 'import-statement', external: true },
+    { path: 'node_modules/@angular/cdk/fesm2022/x.mjs', kind: 'dynamic-import' },
+    { path: 'node_modules/@angular/core/fesm2022/x.mjs', kind: 'import-statement' },
+  ]);
+  if (lightKitViolations(passing, true).length !== 0) {
+    throw new Error('bundle-composition detector false-positived on a type-only, lazy, or light import in the light kit');
+  }
+  if (lightKitViolations({ inputs: {} }, true).length !== 1) {
+    throw new Error('bundle-composition detector passed a build with no light kit entry');
+  }
+  if (lightKitViolations({ inputs: {} }, false).length !== 0) {
+    throw new Error('bundle-composition detector required the light kit entry of a build that owes none');
+  }
+}
+
+/** The root condition: a lazy entry reaching the `fleet` root through any file is caught, naming the importer; one
+ * reaching an entry, or only lazily importing the root's importer, passes. */
+function assertRootReachDetectorWorks() {
+  const root = 'projects/fleet/src/public-api.ts';
+  const helper = 'projects/hub/src/app/helper.ts';
+  const bad = 'projects/hub/src/app/bad.ts';
+  const good = 'projects/hub/src/app/good.ts';
+  const meta = {
+    inputs: {
+      [bad]: { imports: [{ path: helper, kind: 'import-statement' }] },
+      [helper]: { imports: [{ path: root, kind: 'import-statement' }] },
+      [good]: {
+        imports: [
+          { path: 'projects/fleet/src/entries/kit.ts', kind: 'import-statement' },
+          { path: bad, kind: 'dynamic-import' },
+        ],
+      },
+      [root]: { imports: [] },
+    },
+    outputs: {
+      'main.js': {
+        bytes: 1,
+        imports: [
+          { path: 'bad.js', kind: 'dynamic-import' },
+          { path: 'good.js', kind: 'dynamic-import' },
+        ],
+      },
+      'bad.js': { bytes: 1, entryPoint: bad, imports: [] },
+      'good.js': { bytes: 1, entryPoint: good, imports: [] },
+    },
+  };
+  const found = rootReachViolations(meta, new Set(['main.js']));
+  if (found.length !== 1 || found[0].entry !== bad || found[0].importer !== helper) {
+    throw new Error(`bundle-composition detector misjudged which lazy entry reaches the fleet root: ${JSON.stringify(found)}`);
+  }
 }
 
 /**
@@ -257,7 +343,7 @@ function assertLazyClosureReportWorks() {
 }
 
 /** Build one app and check its initial chunk; resolves to whether it passed.
- * @param {{ name: string, main: string, forbidden: { name: string, test: (f: string) => boolean }[] }} app */
+ * @param {{ name: string, main: string, requiresLightKit: boolean, forbidden: { name: string, test: (f: string) => boolean }[] }} app */
 function checkApp(app) {
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), `bundle-check-${app.name}-`));
   let buildFailed = false;
@@ -293,6 +379,19 @@ function checkApp(app) {
       if (bytes > 0) console.log(`  ${name}: ${formatBytes(bytes)}`);
     }
 
+    const heavyKit = lightKitViolations(meta, app.requiresLightKit);
+    const rootReach = rootReachViolations(meta, initialOutputs);
+    if (heavyKit.length > 0) {
+      console.error(`\nbundle-check: the light fleet/kit entry reaches a heavy module in the ${app.name} build:\n`);
+      for (const v of heavyKit) console.error(`  ${v.file} — imported by ${v.importer}`);
+      console.error('\nMove the part to the fleet/kit/<family> entry that shares its footprint (bzh:frontend-weight-class-entries).');
+    }
+    if (rootReach.length > 0) {
+      console.error(`\nbundle-check: lazy ${app.name} entries reach the fleet root:\n`);
+      for (const v of rootReach) console.error(`  ${v.entry} — ${v.importer} imports it`);
+      console.error('\nImport a fleet/<entry> path instead (bzh:frontend-weight-class-entries).');
+    }
+
     if (violations.length > 0) {
       console.error(`\nbundle-check: forbidden module(s) reachable from the ${app.name} initial chunk:\n`);
       for (const v of violations) console.error(`  ${v.file} (${v.pattern}) — imported by ${v.importer}`);
@@ -307,6 +406,8 @@ function checkApp(app) {
       console.error(`bundle-check: ${app.name} build failed — see the build output above.`);
       return false;
     }
+
+    if (heavyKit.length > 0 || rootReach.length > 0) return false;
 
     console.log(`bundle-check: ${app.name} initial chunk carries no forbidden module.`);
     return true;
