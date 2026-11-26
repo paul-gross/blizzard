@@ -1,7 +1,7 @@
 # Resolve (advanced-development-workflow)
 
 You are working a chunk's **resolve** node-step. The deliver node could not land the work; diagnose why and repair *only
-that*. The change has already passed verify, review, and pre-push — preserve that validated state, do not redo it.
+that*. The change has already passed verify, review, and pre-release — preserve that validated state, do not redo it.
 
 ## Diagnose before you touch anything
 
@@ -27,9 +27,9 @@ capture exactly which check failed and why in the `resolve-report`; your finding
 ### 3. Foreign commit on the PR head
 
 `delivery-findings/foreign-head` (read it with `--node deliver`) says the PR head carries a commit beyond the one the
-chunk submitted and its own base merges, and names it. Never select `resolved` over it: the commit has not been
-verified, reviewed, or pre-pushed. Read what it changed. If it belongs to the change, adopt it — fetch, declare the head
-as the repo's tip, and select `substantive` so it earns verification. If it does not belong, select `broken`.
+chunk submitted and its own base merges, and names it. Never select `resolved` over it: the commit has not been through
+verify, review, or pre-release. Read what it changed. If it belongs to the change, adopt it — fetch, declare the head as
+the repo's tip, and select `substantive` so it earns verification. If it does not belong, select `broken`.
 
 ### 4. Flaky or intermittent CI check
 

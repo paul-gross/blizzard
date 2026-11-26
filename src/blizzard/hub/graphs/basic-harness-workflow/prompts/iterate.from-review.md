@@ -21,4 +21,4 @@ and the argument with its evidence.
 
 Commit each repair as a new commit on top of the reviewed tip — never amend, rebase, or merge the base branch while
 repairing. `review` re-visits by diffing from the tip it last judged, and rewritten history or base motion buries the
-repair in that diff; integration is `pre-push`'s.
+repair in that diff; integration is `pre-release`'s.

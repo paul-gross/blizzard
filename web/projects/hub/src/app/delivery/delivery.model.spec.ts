@@ -166,21 +166,21 @@ describe('a row\'s stage', () => {
 });
 
 describe('a row\'s bounce', () => {
-  const ENVELOPE = JSON.stringify({ cause: 'failure', detail: 'pre-push checks failed in `lint`', unlanded: [] });
+  const ENVELOPE = JSON.stringify({ cause: 'failure', detail: 'pre-release checks failed in `lint`', unlanded: [] });
   const bounced = (minutesAgo: number, fields: Partial<DeliveryChunk> & { status?: KnownLaneStatus } = {}) =>
     chunk('ch_1', { latest_bounce: domainBounce({ cause: 'failure', envelope: ENVELOPE, recorded_at: fixtureInstant(-minutesAgo * MIN) }), bounce_count: 2, ...fields });
 
   it('reads the hub\'s latest bounce, its reason without code ticks, and the chunk\'s bounce count', () => {
     const row = only(inputs([bounced(50, { open_prs: [domainPr()] })]));
-    expect(row.bounce).toMatchObject({ cause: 'failure', reason: 'pre-push checks failed in lint', count: 2, at: fixtureInstant(-50 * MIN) });
-    expect(row.bounce?.title).toContain('failure\npre-push checks failed in lint');
+    expect(row.bounce).toMatchObject({ cause: 'failure', reason: 'pre-release checks failed in lint', count: 2, at: fixtureInstant(-50 * MIN) });
+    expect(row.bounce?.title).toContain('failure\npre-release checks failed in lint');
     expect(row.statusColor).toBe(toneColor('stale'));
   });
 
   it('reads the bounce, not the turn that wrote it a moment later, as the row\'s one bounce', () => {
     const turnEnd = { ...fact('fl_a', 'ch_1', 'turn-ended', 0, 'failure'), at: new Date(Date.parse(fixtureInstant(-50 * MIN)) + 3).toISOString() };
     const row = only(inputs([bounced(50, { bounce_count: 1, open_prs: [domainPr()] })], { facts: [turnEnd] }));
-    expect(row.bounce).toMatchObject({ cause: 'failure', reason: 'pre-push checks failed in lint', count: 1 });
+    expect(row.bounce).toMatchObject({ cause: 'failure', reason: 'pre-release checks failed in lint', count: 1 });
     expect(row.bounce?.title).not.toContain('No bounce recorded');
   });
 

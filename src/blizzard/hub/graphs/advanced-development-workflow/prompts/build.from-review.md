@@ -10,7 +10,7 @@ should-fix is deferred at landing into a hub finding that a later chunk repairs 
 for another pass.
 
 Do not rebase or merge the base branch while repairing: verify and review re-visit by diffing from the tip they last
-judged, and base motion folded into that delta buries the repair in it. Integration is `pre-push`'s.
+judged, and base motion folded into that delta buries the repair in it. Integration is `pre-release`'s.
 
 A finding that raises a surviving mutant follows the project's survivor classification. To close a real gap, add the
 assertion that kills the mutant and name that mutant in the commit that adds it — never in the code, since mutant names

@@ -101,7 +101,7 @@ def test_adv_dwf_keeps_verify_off_the_pool_build_resumes() -> None:
     assert build is not None and verify is not None
     assert build.session_source != verify.session_source
     assert {n.name for n in doc.nodes if n.session_source == "code"} == {"build"}
-    assert {n.name for n in doc.nodes if n.session_source == "integration"} == {"pre-push", "resolve"}
+    assert {n.name for n in doc.nodes if n.session_source == "integration"} == {"pre-release", "resolve"}
     assert {n.name for n in doc.nodes if n.session_source == "verification"} == {"verify"}
 
 
@@ -133,7 +133,7 @@ def test_adv_dwf_routes_verify_pass_straight_to_review() -> None:
                 "verify": (SessionMode.RESUME, "verification"),
                 "review": (SessionMode.FRESH, "gate"),
                 # Its own lineage, so integration does not re-read the build conversation.
-                "pre-push": (SessionMode.RESUME, "integration"),
+                "pre-release": (SessionMode.RESUME, "integration"),
                 "resolve": (SessionMode.RESUME, "integration"),
                 # Cold and tier-pinned: a bare `resume` declares no model, so an entry that
                 # minted instead of resuming ran on the harness's own default.
@@ -153,7 +153,7 @@ def test_adv_dwf_routes_verify_pass_straight_to_review() -> None:
             {
                 "build": (SessionMode.RESUME, "code"),
                 "review": (SessionMode.FRESH, "gate"),
-                "pre-push": (SessionMode.RESUME, "integration"),
+                "pre-release": (SessionMode.RESUME, "integration"),
                 "retrospective": (SessionMode.FRESH, "retro"),
             },
         ),

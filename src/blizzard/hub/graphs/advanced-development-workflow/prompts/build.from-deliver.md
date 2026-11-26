@@ -6,12 +6,12 @@ same check is already red on the base itself, and a one-time re-run did not turn
 each one's re-run signature.
 
 Your commits are intact on the declared branch (`blizzard runner artifact get branch --node plan --content`); nothing
-about the change itself is in question, so verify/review/pre-push need no second pass here — only the repair does.
+about the change itself is in question, so verify/review/pre-release need no second pass here — only the repair does.
 Repair the base failure as its own commit, separate from the chunk's feature commits, so the landing stays reviewable
 and revertable on its own; do not fold it into an existing commit.
 
 Another chunk blocked on the same base failure may repair it first — that race is expected, not a problem. If your
-repair commit later rebases to empty at pre-push because the fix already landed, that is a success.
+repair commit later rebases to empty at pre-release because the fix already landed, that is a success.
 
 **Loop bound.** Read `blizzard runner chunk history` first. If `deliver` has already routed here on this exact signature
 — the same repo, check, and head sha named in `delivery-findings`, with no `git_commit` artifact declared since —

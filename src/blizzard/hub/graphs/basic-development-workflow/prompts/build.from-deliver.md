@@ -9,7 +9,7 @@ the chunk's feature commits, so the landing stays reviewable and revertable on i
 commit.
 
 Another chunk blocked on the same base failure may repair it first — that race is expected, not a problem. If your
-repair commit later rebases to empty at pre-push because the fix already landed, that is a success.
+repair commit later rebases to empty at pre-release because the fix already landed, that is a success.
 
 **Loop bound.** Read `blizzard runner chunk history` first. If `deliver` has already routed here on this exact signature
 — the same repo, check, and head sha named in `delivery-findings`, with no `git_commit` artifact declared since —

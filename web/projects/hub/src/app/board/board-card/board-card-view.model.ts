@@ -113,9 +113,9 @@ export type BoardCardSurface = 'card' | 'row';
  * alone, and the blocked marking names the blocker's own status only when exactly one chunk blocks this one — a count
  * names no single chunk.
  *
- * A node step is prefixed with its graph's name (`adv-dwf/pre-push`) when the hub names that graph. On the card, whose
+ * A node step is prefixed with its graph's name (`adv-dwf/pre-release`) when the hub names that graph. On the card, whose
  * step row is the only place the holder is named, the holding runner follows it as the mobile card writes it
- * (`adv-dwf/pre-push · xps/r-claude`); the list row names the holder in a cell of its own.
+ * (`adv-dwf/pre-release · xps/r-claude`); the list row names the holder in a cell of its own.
  */
 export function boardCardView(card: BoardCard, surface: BoardCardSurface = 'card'): ChunkCardView {
   const { runnerId, runnerName, hostName } = card;

@@ -3,7 +3,7 @@
 Judge the work as it now stands rather than only this turn's output — an increment an earlier attempt completed still
 counts. The criteria are:
 
-- every review finding is answered, by fix or by refutation on the record — or, on a re-entry from `pre-push`'s
+- every review finding is answered, by fix or by refutation on the record — or, on a re-entry from `pre-release`'s
   `significant` edge, the rebased result has actually been read back and revalidated, not merely re-pushed unchanged;
 - the work is committed, pushed, and declared with `blizzard runner artifact commit` for every repo touched.
 

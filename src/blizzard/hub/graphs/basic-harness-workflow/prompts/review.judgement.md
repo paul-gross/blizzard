@@ -9,15 +9,15 @@ the path of each criteria document read per axis, every finding with its severit
 
 A `blocking` finding blocks on every round. A `should-fix` blocks only on a first round — no `review-findings` asset
 from an earlier round — and only when tagged `in-diff`: a defect in what this change itself wrote is repaired while the
-iterate session still holds the context. On a re-visit — any round with one, re-entry after `pre-push` included — no
+iterate session still holds the context. On a re-visit — any round with one, re-entry after `pre-release` included — no
 should-fix blocks, a still-open round-one `in-diff` one included: it is deferred on `pass`, so the loop converges after
 one repair round. Severity describes the defect and the round decides whether a should-fix blocks — never re-grade or
 re-tag a finding to steer the verdict.
 
 Record `pass` when the work meets the work item's intent, is well-formed against the review axes applied, and nothing
 blocks — on a re-visit, judged over the delta and the prior round's findings it resolved; the chunk then goes to the
-`pre-push` node. Record `fail` when anything blocks — the `review-findings` asset rides back into the `iterate` node's
-envelope.
+`pre-release` node. Record `fail` when anything blocks — the `review-findings` asset rides back into the `iterate`
+node's envelope.
 
 ## The review-finding-delta asset
 

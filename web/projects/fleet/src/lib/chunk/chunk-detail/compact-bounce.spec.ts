@@ -1,7 +1,7 @@
 import { compactBounce } from './compact-bounce';
 
 const repo = { repo: 'org/repo', branch: 'work', commit: 'abc', pr: { number: 42, url: 'https://example.test/pull/42' } };
-const action = { name: 'pre-push', choice: 'failure', log_artifact: 'artifact-1' };
+const action = { name: 'pre-release', choice: 'failure', log_artifact: 'artifact-1' };
 const envelope = (detail: string, cause = 'failure') => JSON.stringify({ cause, detail, unlanded: [repo], action });
 
 describe('compactBounce', () => {
@@ -32,10 +32,10 @@ describe('compactBounce', () => {
     expect(compactBounce(envelope('lint found 3 errors'), 'poll-timeout').full).toBe('lint found 3 errors');
   });
   it.each([
-    'PR #42 in org/repo did not land: pre-push answered failure',
-    'pre-push answered failure',
+    'PR #42 in org/repo did not land: pre-release answered failure',
+    'pre-release answered failure',
   ])('compacts only the known producer wrapper: %s', (detail) => {
-    expect(compactBounce(envelope(detail))).toEqual({ identity: 'org/repo · PR #42', reason: 'Pre-push: failure', full: detail });
+    expect(compactBounce(envelope(detail))).toEqual({ identity: 'org/repo · PR #42', reason: 'Pre-release: failure', full: detail });
   });
 
   it('keeps a distinct cause when detail is empty instead of replacing it with the action choice', () => {
@@ -45,18 +45,18 @@ describe('compactBounce', () => {
   });
 
   it('uses the action only when neither detail nor cause gives an account', () => {
-    expect(compactBounce(envelope('', '')).reason).toBe('Pre-push: failure');
+    expect(compactBounce(envelope('', '')).reason).toBe('Pre-release: failure');
   });
 
-  it.each(['lint found 3 errors', 'PR #42 in org/repo did not land: pre-push answered failure: permission denied'])('keeps unknown diagnostics: %s', (detail) => {
+  it.each(['lint found 3 errors', 'PR #42 in org/repo did not land: pre-release answered failure: permission denied'])('keeps unknown diagnostics: %s', (detail) => {
     expect(compactBounce(envelope(detail))).toEqual({ identity: 'org/repo · PR #42', reason: detail, full: detail });
   });
 
   it('recognizes the legacy single-PR wrapper without swallowing a diagnostic suffix', () => {
-    expect(compactBounce('PR #42 in org/repo did not land: `pre-push` answered failure')).toEqual({
-      identity: 'org/repo · PR #42', reason: 'Pre-push: failure', full: 'PR #42 in org/repo did not land: `pre-push` answered failure',
+    expect(compactBounce('PR #42 in org/repo did not land: `pre-release` answered failure')).toEqual({
+      identity: 'org/repo · PR #42', reason: 'Pre-release: failure', full: 'PR #42 in org/repo did not land: `pre-release` answered failure',
     });
-    const raw = 'PR #42 in org/repo did not land: pre-push answered failure: connection reset';
+    const raw = 'PR #42 in org/repo did not land: pre-release answered failure: connection reset';
     expect(compactBounce(raw)).toEqual({ identity: null, reason: raw, full: raw });
   });
 
@@ -73,13 +73,13 @@ describe('compactBounce', () => {
 
     it('derives identity, reason and explanation from the facts', () => {
       expect(compactBounce(fact({}))).toEqual({
-        identity: 'org/repo · PR #42', reason: 'Pre-push: failure', full: 'PR #42 in org/repo did not land: Pre-push answered failure',
+        identity: 'org/repo · PR #42', reason: 'Pre-release: failure', full: 'PR #42 in org/repo did not land: Pre-release answered failure',
       });
     });
 
     it('never runs the wrapper match: a wrapper-shaped detail beside a known diagnostic is not unwrapped', () => {
-      const detail = 'PR #42 in org/repo did not land: `pre-push` answered failure';
-      expect(compactBounce(fact({ detail, diagnostic: detail })).reason).toBe('PR #42 in org/repo did not land: pre-push answered failure');
+      const detail = 'PR #42 in org/repo did not land: `pre-release` answered failure';
+      expect(compactBounce(fact({ detail, diagnostic: detail })).reason).toBe('PR #42 in org/repo did not land: pre-release answered failure');
     });
 
     it('leads with a differing cause over the action choice', () => {
@@ -96,7 +96,7 @@ describe('compactBounce', () => {
       const other = { repo: 'org/two', branch: 'work', commit: 'def', pr: null };
       const out = compactBounce(fact({ unlanded: [repo, other], action: { ...action, log_artifact: null } }));
       expect(out.identity).toBe('org/repo · PR #42; org/two');
-      expect(out.full).toBe('PR #42 in org/repo, org/two did not land: Pre-push answered failure');
+      expect(out.full).toBe('PR #42 in org/repo, org/two did not land: Pre-release answered failure');
     });
 
     it('falls back to the cause, then the recorded cause, then bounced when there is no action', () => {
@@ -106,9 +106,9 @@ describe('compactBounce', () => {
     });
 
     it('treats a malformed diagnostic as an unknown record', () => {
-      const raw = fact({ detail: 'PR #42 in org/repo did not land: pre-push answered failure', diagnostic: 42 });
-      expect(compactBounce(raw).reason).toBe('Pre-push: failure');
-      expect(compactBounce(raw).full).toBe('PR #42 in org/repo did not land: pre-push answered failure');
+      const raw = fact({ detail: 'PR #42 in org/repo did not land: pre-release answered failure', diagnostic: 42 });
+      expect(compactBounce(raw).reason).toBe('Pre-release: failure');
+      expect(compactBounce(raw).full).toBe('PR #42 in org/repo did not land: pre-release answered failure');
     });
   });
 });

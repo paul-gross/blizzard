@@ -1,6 +1,6 @@
-# Pre-push rebase — judgement
+# Pre-release rebase — judgement
 
-Render the integration verdict. The `pre-push-summary` asset must be published before it.
+Render the integration verdict. The `pre-release-summary` asset must be published before it.
 
 - `clean` — the rebase applied with no conflicts, or only trivial mechanical ones, and lint plus the targeted unit tests
   are green. The chunk proceeds to delivery.

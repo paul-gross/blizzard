@@ -9,7 +9,7 @@ Declare done only once every condition the rest of this prompt states holds.
 
 ## What this visit answers
 
-Most visits answer `review`'s findings — fix or refute each, per the arrival addendum. A visit from `pre-push`'s
+Most visits answer `review`'s findings — fix or refute each, per the arrival addendum. A visit from `pre-release`'s
 `significant` edge carries no findings at all: it exists because a rebase needed semantic choices or reshaped the
 change, and with no `verify` node in this lane, this is the only station left to revalidate the result. On that path,
 read the rebased code back the same way `build` and `review` do — does the rule say what it means, does the routing to

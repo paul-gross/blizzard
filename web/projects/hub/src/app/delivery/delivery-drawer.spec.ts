@@ -111,16 +111,16 @@ describe('DeliveryDrawer', () => {
   });
 
   it('keeps the full bounce hover, repository PR and action log links beside the concise failure', async () => {
-    const full = 'PR #42 in org/repo did not land: pre-push answered failure';
+    const full = 'PR #42 in org/repo did not land: pre-release answered failure';
     const pr = prView({ repo: 'org/repo', number: 42, url: 'https://example.test/pull/42' });
     configure(chunkDetail({
       chunk_id: CHUNK, history: [], open_prs: [pr],
       bounces: [bounceView({ recorded_at: fixtureInstant(-60), envelope: JSON.stringify({
         cause: 'failure', detail: full,
         unlanded: [{ repo: 'org/repo', branch: 'work', commit: 'abc', pr }],
-        action: { name: 'pre-push', choice: 'failure', log_artifact: 'pre-push-log' },
+        action: { name: 'pre-release', choice: 'failure', log_artifact: 'pre-release-log' },
       }) })],
-      artifacts: [assetArtifactView({ name: 'pre-push-log', key: 'log-key', recorded_at: fixtureInstant(-60) })],
+      artifacts: [assetArtifactView({ name: 'pre-release-log', key: 'log-key', recorded_at: fixtureInstant(-60) })],
     }));
     const fixture = create();
     await settle(fixture);

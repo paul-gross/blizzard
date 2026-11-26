@@ -88,7 +88,7 @@ export class GlanceView {
   protected readonly hasCostFigure = hasCostFigure;
   protected readonly showsNodeStrip = showsNodeStrip;
 
-  /** A card's step, named with its graph when the hub names it (`adv-dwf/pre-push`). */
+  /** A card's step, named with its graph when the hub names it (`adv-dwf/pre-release`). */
   protected stepLabel(row: GlanceRow): string {
     return graphStepLabel(row.graphName, row.node);
   }

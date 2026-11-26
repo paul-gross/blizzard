@@ -61,7 +61,9 @@ export function stepRefParams(ref: StepRef | null): { chunk: string | null; step
 }
 
 /** The node order a delivery graph usually runs in, palest shade first. */
-const NODE_SHADE_ORDER = ['plan', 'plan-review', 'build', 'verify', 'review', 'resolve', 'pre-push', 'deliver'];
+const NODE_SHADE_ORDER = ['plan', 'plan-review', 'build', 'verify', 'review', 'resolve', 'pre-release', 'deliver'];
+/** Earlier names of an ordered node, which chunks pinned to an older graph mint still carry. */
+const NODE_SHADE_ALIASES: Readonly<Record<string, string>> = { 'pre-push': 'pre-release' };
 /** How many shades the node ramp carries (`node-shades.css`'s `tk-n0`…`tk-n7`). */
 const SHADES = 8;
 
@@ -70,7 +72,7 @@ const SHADES = 8;
  * any node not listed hashed onto the ramp so its shade is at least stable.
  */
 export function nodeShade(nodeName: string): number {
-  const ordered = NODE_SHADE_ORDER.indexOf(nodeName);
+  const ordered = NODE_SHADE_ORDER.indexOf(NODE_SHADE_ALIASES[nodeName] ?? nodeName);
   if (ordered >= 0) return ordered;
   let hash = 0;
   for (const ch of nodeName) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
