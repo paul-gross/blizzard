@@ -62,6 +62,7 @@ from tests.support.flow_driver_world import (
     World,
     _HeldLanding,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.flow_driver_world
 )
+from tests.support.hub_node_artifacts import record_no_code
 from tests.support.scaffolding import (
     TEST_HUB_ACTIONS,
     build_hub,
@@ -130,6 +131,16 @@ def _submitted_once(world: World, chunk_id: str) -> Submission:
     subs = world.submissions(chunk_id)
     assert len(subs) == 1 and subs[0].closed is None
     return subs[0]
+
+
+def test_a_repository_resolved_without_code_is_submitted_to_no_flow(world: World) -> None:
+    chunk_id = world.at_merge()
+    node_id = world.detail(chunk_id)["current_node_id"]
+    record_no_code(world.hub, chunk_id, node_id=node_id, node_name="merge", repo=_REPO, branch="b", commit="a" * 40)
+
+    sub = _submitted_once(world, chunk_id)
+
+    assert sub.flows == ()
 
 
 # --- every path in -----------------------------------------------------------------------------------------------
