@@ -6,6 +6,7 @@ HTTP shaping ``tests/component/hub/work_sources/internal/test_github_work_source
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from typing import cast
@@ -23,15 +24,18 @@ from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.chunk.ports.work_sources import IWorkAnnotator, WorkAnnotateError, WorkAnnotateRefusal
 from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
+from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource
 from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
-from blizzard.hub.domain.observability.forge_status import AnnotationReconciler, TenantAnnotation
+from blizzard.hub.domain.observability.forge_status import AnnotationReconciler, AnnotationTally, TenantAnnotation
 from blizzard.hub.domain.operations.queue import GroupService
 from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.tenancy import TenantId
+from blizzard.hub.work_sources.registry import BuiltWorkSource
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.registry_statements import registry_statements, stored_registry
 from tests.support.scaffolding import (
     FakeAnnotator,
     FakeWorkSource,
@@ -832,3 +836,41 @@ def test_a_source_whose_build_is_refused_records_the_refusal_beside_the_skip(tmp
     assert event.detail["forge_id"] == "frg_example"
     assert event.detail["refusal"] == "credential-invalid"
     assert len(_skip_events(hub)) == 1
+
+
+class _AnnotatingSource(FakeWorkSource):
+    def set_status(self, pointer: WorkRef, marker: WorkStatusMarker) -> None:
+        return None
+
+    def clear_status(self, pointer: WorkRef) -> None:
+        return None
+
+    def marked_refs(self) -> dict[WorkRef, frozenset[WorkStatusMarker]]:
+        return {}
+
+
+def test_a_reconcile_s_registry_statements_are_flat_across_annotating_sources(tmp_path: Path) -> None:
+    def annotating(record: ConfiguredWorkSource) -> BuiltWorkSource:
+        opted_in = replace(record, fields=replace(record.fields, annotate=True))
+        return BuiltWorkSource(opted_in, _AnnotatingSource(), lambda: None)
+
+    counts: list[int] = []
+    for n in (1, 3):
+        (tmp_path / str(n)).mkdir()
+        names = [f"src{i}" for i in range(n)]
+        hub = build_hub(tmp_path / str(n), work_sources={name: FakeWorkSource(name=name) for name in names})
+        tenant = TenantAnnotation(
+            facts=hub.default_adapter(IReadChunkFactsRepository),
+            work_sources=stored_registry(hub, annotating),
+            memory=ForgeAnnotationStore(hub_store_connections(hub.engine)),
+            events=hub.default_adapter(EventLogService),
+            clock=hub.clock,
+        )
+
+        def reconcile(tenant: TenantAnnotation = tenant, names: list[str] = names, hub: HubHarness = hub) -> None:
+            assert tenant.reconcile(default_tenant(hub.engine), names, lambda: [], AnnotationTally(), set())
+
+        reconcile()  # Builds every source, so the measured pass only reads revisions and records.
+        counts.append(registry_statements(hub, reconcile))
+
+    assert counts[0] == counts[1] > 0

@@ -5,7 +5,7 @@ every tenant; and every statement the group issues carries the hub-scoped marker
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -275,7 +275,7 @@ def test_closing_candidates_are_the_open_tenants_chunks(world: _World) -> None:
     assert set(candidates.chunk_ids) == {_live(world.carried), _live(_OPEN)}
 
 
-def _tenant_label(tenant: TenantId) -> WorkRefLabel:
+def _tenant_label(tenant: TenantId, sources: Collection[str]) -> WorkRefLabel:
     """A label that names the tenant it was asked for beside the ref, so a test sees whose rendered it."""
     return lambda ref: f"{tenant}:{ref.ref}"
 

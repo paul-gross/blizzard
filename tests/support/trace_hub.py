@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -10,6 +10,7 @@ from typing import Any
 import sqlalchemy as sa
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.hub.domain.chunk.ingest import IWorkRefLabels
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, Node
 from blizzard.hub.domain.observability.tracing.repository import StepHydration
@@ -69,8 +70,28 @@ nodes:
 """
 
 
-def label(ref: WorkRef) -> str | None:
+def label(ref: WorkRef) -> str:
     return f"{ref.source}#{ref.ref}"
+
+
+class FnWorkRefLabels:
+    """Work-ref labels answered by two functions, bound or not."""
+
+    def __init__(self, label: Callable[[WorkRef], str], source_label: Callable[[str], str]) -> None:
+        self._label = label
+        self._source_label = source_label
+
+    def label(self, pointer: WorkRef) -> str:
+        return self._label(pointer)
+
+    def source_label(self, source: str) -> str:
+        return self._source_label(source)
+
+    def bindings(self, sources: Iterable[str]) -> FnWorkRefLabels:
+        return self
+
+
+_fn_work_ref_labels_conforms: type[IWorkRefLabels] = FnWorkRefLabels
 
 
 def trace_store(hub: HubHarness, *, hydration: Callable[[TenantId], StepHydration] | None = None) -> TraceStore:
@@ -82,8 +103,7 @@ def trace_store(hub: HubHarness, *, hydration: Callable[[TenantId], StepHydratio
             graphs=hub.resolve(tenant, IReadGraphRepository),
             names=hub.resolve(tenant, IReadRunnerRegistry),
             projects=ProjectLabels(hub.resolve(tenant, IReadProjectRepository)),
-            label=label,
-            source_label=hub.resolve(tenant, IWorkSourceRegistry).source_label,
+            work_refs=FnWorkRefLabels(label, hub.resolve(tenant, IWorkSourceRegistry).source_label),
         )
 
     return TraceStore(

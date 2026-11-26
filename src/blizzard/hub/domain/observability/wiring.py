@@ -14,11 +14,10 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
-from blizzard.hub.domain.chunk.model import WorkRefLabel
+from blizzard.hub.domain.chunk.ingest import IWorkRefLabels
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadWorkRefsCorpus
-from blizzard.hub.domain.chunk.ports.work_sources import IWorkAnnotators
 from blizzard.hub.domain.graph.model import IReadManyGraphs
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.observability.analytics.derivation import (
@@ -222,11 +221,10 @@ def step_hydration(
     graphs: IReadManyGraphs,
     names: IReadRunnerRegistry,
     projects: IReadProjectLabels,
-    label: WorkRefLabel,
-    sources: IWorkAnnotators,
+    work_refs: IWorkRefLabels,
 ) -> StepHydration:
     """The tenant's reads a chunk's step facts are completed through."""
-    return StepHydration(graphs=graphs, names=names, projects=projects, label=label, source_label=sources.source_label)
+    return StepHydration(graphs=graphs, names=names, projects=projects, work_refs=work_refs)
 
 
 def trace_export_sweep(

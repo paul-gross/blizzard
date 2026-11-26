@@ -8,13 +8,14 @@ name beside them."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Generator, Iterable, Sequence
+from collections.abc import Callable, Collection, Generator, Iterable, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime
 
 from sqlalchemy import ColumnElement, insert
 
+from blizzard.hub.domain.chunk.ingest import IBoundWorkRefLabels
 from blizzard.hub.domain.chunk.model import WorkRef, WorkRefLabel
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.observability.hub_events import HubEventKind, IReadHubEventLog
@@ -97,12 +98,12 @@ class TraceStore:
     def _completed(
         self,
         chunk_ids: Sequence[str],
-        complete: Callable[[TenantId, StepHydration, dict[str, StepFacts]], dict[str, StepFacts]],
+        complete: Callable[[TenantId, StepHydration, IBoundWorkRefLabels, dict[str, StepFacts]], dict[str, StepFacts]],
     ) -> dict[str, StepFacts]:
         """The corpus's facts grouped by tenant and completed per open tenant by ``complete``, in the corpus's order;
         a tenant closed since the corpus read contributes nothing."""
         opened = _Opened(self._hydration)
-        corpus = self._corpus.step_facts_for(chunk_ids, opened.label)
+        corpus = self._corpus.step_facts_for(chunk_ids, opened.bind)
         by_tenant: dict[TenantId, dict[str, StepFacts]] = {}
         for chunk_id, facts in corpus.items():
             if facts.tenant is not None:
@@ -111,11 +112,11 @@ class TraceStore:
         for tenant, tenant_facts in by_tenant.items():
             reads = opened.reads(tenant)
             if reads is not None:
-                built.update(complete(tenant, reads, tenant_facts))
+                built.update(complete(tenant, reads, opened.bound(tenant), tenant_facts))
         return {chunk_id: built[chunk_id] for chunk_id in corpus if chunk_id in built}
 
     def _complete_graphs(
-        self, tenant: TenantId, reads: StepHydration, tenant_facts: dict[str, StepFacts]
+        self, tenant: TenantId, reads: StepHydration, labels: IBoundWorkRefLabels, tenant_facts: dict[str, StepFacts]
     ) -> dict[str, StepFacts]:
         graphs = reads.graphs.get_many(sorted({g for facts in tenant_facts.values() for g in _graph_ids(facts)}))
         return {
@@ -124,14 +125,14 @@ class TraceStore:
         }
 
     def _complete_whole(
-        self, tenant: TenantId, reads: StepHydration, tenant_facts: dict[str, StepFacts]
+        self, tenant: TenantId, reads: StepHydration, labels: IBoundWorkRefLabels, tenant_facts: dict[str, StepFacts]
     ) -> dict[str, StepFacts]:
         graphs = reads.graphs.get_many(sorted({g for facts in tenant_facts.values() for g in _graph_ids(facts)}))
         names = reads.names.names_for(sorted({r for facts in tenant_facts.values() for r in _runner_ids(facts)}))
         projects = reads.projects.labels_for(sorted({f.project for f in tenant_facts.values() if f.project}))
         name = self._tenant_name(tenant)
         return {
-            chunk_id: _with_reads(facts, graphs, names, projects, name, reads.source_label)
+            chunk_id: _with_reads(facts, graphs, names, projects, name, labels)
             for chunk_id, facts in tenant_facts.items()
         }
 
@@ -203,12 +204,12 @@ def _with_reads(
     names: dict[str, str],
     projects: dict[str, ProjectLabel],
     tenant_name: str | None,
-    source_label: Callable[[str], str],
+    labels: IBoundWorkRefLabels,
 ) -> StepFacts:
     project = projects.get(facts.project) if facts.project is not None else None
     return replace(
         facts,
-        work_sources=tuple(dict.fromkeys(source_label(source) for source in facts.work_sources)),
+        work_sources=tuple(dict.fromkeys(labels.source_label(source) for source in facts.work_sources)),
         graphs={g: graphs[g] for g in _graph_ids(facts) if g in graphs},
         runner_names={r: names[r] for r in _runner_ids(facts) if r in names},
         tenant_name=tenant_name,
@@ -229,11 +230,13 @@ class ProjectLabels:
 
 
 class _Opened:
-    """One read's tenants' hydration reads, each opened once; ``None`` for a tenant closed since the corpus read."""
+    """One read's tenants' hydration reads, each opened once; ``None`` for a tenant closed since the corpus read.
+    Each open tenant's work-ref labels are bound once, over the sources the corpus read names for it."""
 
     def __init__(self, hydration: Callable[[TenantId], StepHydration]) -> None:
         self._hydration = hydration
         self._opened: dict[TenantId, StepHydration | None] = {}
+        self._bound: dict[TenantId, IBoundWorkRefLabels] = {}
 
     def reads(self, tenant: TenantId) -> StepHydration | None:
         if tenant not in self._opened:
@@ -243,9 +246,16 @@ class _Opened:
                 self._opened[tenant] = None
         return self._opened[tenant]
 
-    def label(self, tenant: TenantId) -> WorkRefLabel:
+    def bind(self, tenant: TenantId, sources: Collection[str]) -> WorkRefLabel:
         reads = self.reads(tenant)
-        return reads.label if reads is not None else _unrendered
+        if reads is None:
+            return _unrendered
+        self._bound[tenant] = reads.work_refs.bindings(sources)
+        return self._bound[tenant].label
+
+    def bound(self, tenant: TenantId) -> IBoundWorkRefLabels:
+        """``tenant``'s binding, for an open tenant :meth:`bind` was asked for."""
+        return self._bound[tenant]
 
 
 def _unrendered(ref: WorkRef) -> str | None:

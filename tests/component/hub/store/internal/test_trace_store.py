@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -41,19 +42,30 @@ from blizzard.hub.store.internal import corpus_rows
 from blizzard.hub.store.internal.fact_families import FactTable
 from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
 from blizzard.hub.tenancy import TenantId
+from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
 from tests.support.chunk_units import chunk_unit
 from tests.support.hub_event_rows import hub_event_log_of
+from tests.support.registry_statements import registry_statements, stored_registry
 from tests.support.scaffolding import (
     SEEDED_CAPABILITIES,
+    FakeWorkSource,
     HubHarness,
     added_runner,
     chunk_stores,
     count_queries,
     default_tenant,
     hub_store_connections,
+    ingest,
     seed_runner,
 )
-from tests.support.trace_hub import seed_open_tenant_chunk, stop, trace_hub, trace_store, transitioned_and_stopped
+from tests.support.trace_hub import (
+    FnWorkRefLabels,
+    seed_open_tenant_chunk,
+    stop,
+    trace_hub,
+    trace_store,
+    transitioned_and_stopped,
+)
 
 
 def test_hydrated_facts_identify_the_same_steps_as_a_hand_built_fixture(tmp_path: Path) -> None:
@@ -114,8 +126,7 @@ def test_a_rows_work_refs_and_sources_render_each_sources_slug_as_of_its_read(tm
             graphs=hub.resolve(tenant, IReadGraphRepository),
             names=hub.resolve(tenant, IReadRunnerRegistry),
             projects=ProjectLabels(hub.resolve(tenant, IReadProjectRepository)),
-            label=lambda ref: f"{slugs[ref.source]}#{ref.ref}",
-            source_label=lambda source: slugs[source],
+            work_refs=FnWorkRefLabels(lambda ref: f"{slugs[ref.source]}#{ref.ref}", lambda source: slugs[source]),
         )
 
     store = trace_store(hub, hydration=hydration)
@@ -513,3 +524,28 @@ def test_closing_step_facts_skip_the_completion_reads_and_the_oldest_unsent_stay
     oldest = oldest_unsent(store, since, until)
     assert oldest is not None
     assert oldest.key == read_window(store, since, until, 1000).items[0].key
+
+
+def test_a_windows_registry_statements_are_flat_across_chunks_and_refs(tmp_path: Path) -> None:
+    counts: list[int] = []
+    for n in (1, 10):
+        (tmp_path / str(n)).mkdir()
+        hub, _ = trace_hub(tmp_path / str(n))
+        chunk_ids = [ingest(hub, [{"source": "default", "ref": f"{c}-{r}"} for r in range(n)]) for c in range(n)]
+        registry = stored_registry(hub, lambda record: BuiltWorkSource(record, FakeWorkSource(), lambda: None))
+
+        def hydration(
+            tenant: TenantId, hub: HubHarness = hub, registry: StoreWorkSourceRegistry = registry
+        ) -> StepHydration:
+            return StepHydration(
+                graphs=hub.resolve(tenant, IReadGraphRepository),
+                names=hub.resolve(tenant, IReadRunnerRegistry),
+                projects=ProjectLabels(hub.resolve(tenant, IReadProjectRepository)),
+                work_refs=registry,
+            )
+
+        store = trace_store(hub, hydration=hydration)
+        store.step_facts_for(chunk_ids)  # Builds the adapter, so the measured read only reads revisions and records.
+        counts.append(registry_statements(hub, partial(store.step_facts_for, chunk_ids)))
+
+    assert counts[0] == counts[1] > 0

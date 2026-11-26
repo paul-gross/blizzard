@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Collection, Iterable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
@@ -10,6 +10,7 @@ from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.hub.domain.chunk.ingest import IWorkRefLabels
 from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.graph.model import IReadManyGraphs
 from blizzard.hub.domain.observability.hub_events import HubEventKind
@@ -70,14 +71,13 @@ class IReadProjectLabels(Protocol):
 @dataclass(frozen=True)
 class StepHydration:
     """One tenant's reads a chunk's step facts are completed through: the graphs, runner names and
-    projects the facts name, how the tenant renders a work ref, and the handle each of its work sources displays
-    under — a configured source's current slug, keyed by the source a ref stores."""
+    projects the facts name, and how the tenant renders a work ref and names the work source behind it — a
+    configured source's current slug, keyed by the source a ref stores."""
 
     graphs: IReadManyGraphs
     names: IReadRunnerNames
     projects: IReadProjectLabels
-    label: WorkRefLabel
-    source_label: Callable[[str], str]
+    work_refs: IWorkRefLabels
 
 
 class StepHydrations:
@@ -126,11 +126,11 @@ class IReadStepCorpus(Protocol):
         ...
 
     def step_facts_for(
-        self, chunk_ids: Sequence[str], label: Callable[[TenantId], WorkRefLabel]
+        self, chunk_ids: Sequence[str], bind: Callable[[TenantId, Collection[str]], WorkRefLabel]
     ) -> dict[str, StepFacts]:
-        """Each existing chunk of an open tenant's :class:`StepFacts`, tagged with that tenant and its work
-        refs rendered through ``label`` of that tenant, keyed by chunk id; ``graphs`` and ``runner_names``
-        are left unread."""
+        """Each existing chunk of an open tenant's :class:`StepFacts`, tagged with that tenant, keyed by chunk
+        id. Its work refs render through ``bind``'s answer for that tenant, asked once a tenant with every
+        source its chunks' refs name. ``graphs`` and ``runner_names`` are left unread."""
         ...
 
 

@@ -15,7 +15,8 @@ yields shares one."""
 from __future__ import annotations
 
 import itertools
-from collections.abc import Callable, Generator, Sequence
+from collections import defaultdict
+from collections.abc import Callable, Collection, Generator, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from datetime import datetime
 from typing import Any
@@ -377,15 +378,19 @@ class SweepCorpusReads:
             return corpus_rows.closing_candidates(conn, since, until, limit)
 
     def step_facts_for(
-        self, chunk_ids: Sequence[str], label: Callable[[TenantId], WorkRefLabel]
+        self, chunk_ids: Sequence[str], bind: Callable[[TenantId, Collection[str]], WorkRefLabel]
     ) -> dict[str, StepFacts]:
-        """Each chunk's facts, its work refs rendered by its own tenant's ``label`` once the read is done."""
+        """Each chunk's facts, its work refs rendered by its own tenant's binding once the read is done."""
         if not chunk_ids:
             return {}
         with self._consistent_read("corpus step facts") as conn:
             read = corpus_rows.step_facts_for(conn, chunk_ids)
+        sources: dict[TenantId, set[str]] = defaultdict(set)
+        for tenant, _, refs in read.values():
+            sources[tenant].update(ref.source for ref in refs)
+        labels = {tenant: bind(tenant, names) for tenant, names in sources.items()}
         return {
-            chunk_id: corpus_rows.with_work_refs(facts, refs, label(tenant))
+            chunk_id: corpus_rows.with_work_refs(facts, refs, labels[tenant])
             for chunk_id, (tenant, facts, refs) in read.items()
         }
 

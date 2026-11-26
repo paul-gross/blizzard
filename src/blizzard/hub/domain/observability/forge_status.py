@@ -29,6 +29,7 @@ from blizzard.hub.domain.chunk.ports.work_refs import (
     live_work_ref_statuses,
 )
 from blizzard.hub.domain.chunk.ports.work_sources import (
+    IBoundWorkAnnotators,
     IWorkAnnotator,
     IWorkAnnotators,
     WorkAnnotateError,
@@ -182,37 +183,38 @@ class TenantAnnotation:
             return True
         self._remember(AnnotationMemoryChange.on_entry(remembered, annotating))
         desired = live_work_ref_statuses(rows(), {tenant: self._facts.load_live_statuses()})
+        work_sources = self._work_sources.bindings({*annotating, *leaving})
         skipped_before = len(tally.sources_skipped)
         failed_before = tally.failed
         for name in annotating:
             try:
-                annotator = self._work_sources.annotator(name)
+                annotator = work_sources.annotator(name)
             except WorkAnnotateError as exc:
-                self._refused_build(name, exc)
-                self._skipped(name, outages, tally)
+                self._refused_build(work_sources, name, exc)
+                self._skipped(work_sources, name, outages, tally)
                 continue
             if annotator is None:  # pragma: no cover - annotating_ids() only names built ones
                 continue
-            if _reconcile(name, annotator, desired, tally, partial(self._refused, name)) is None:
-                self._skipped(name, outages, tally)
+            if _reconcile(name, annotator, desired, tally, partial(self._refused, work_sources, name)) is None:
+                self._skipped(work_sources, name, outages, tally)
             else:
                 outages.discard(name)
         unfinished: list[str] = []
         for name in leaving:
             try:
-                clearer = self._work_sources.label_clearer(name)
+                clearer = work_sources.label_clearer(name)
             except WorkAnnotateError as exc:
-                self._refused_build(name, exc)
-                self._skipped(name, outages, tally)
+                self._refused_build(work_sources, name, exc)
+                self._skipped(work_sources, name, outages, tally)
                 unfinished.append(name)
                 continue
             if clearer is None:
                 _log.warning("forge-status source left config; its labels are not cleared", source=name)
                 outages.discard(name)
                 continue
-            failed = _reconcile(name, clearer, {}, tally, partial(self._refused, name))
+            failed = _reconcile(name, clearer, {}, tally, partial(self._refused, work_sources, name))
             if failed is None:
-                self._skipped(name, outages, tally)
+                self._skipped(work_sources, name, outages, tally)
             else:
                 outages.discard(name)
             if failed != 0:
@@ -220,22 +222,24 @@ class TenantAnnotation:
         self._remember(AnnotationMemoryChange.on_departure(leaving, unfinished))
         return len(tally.sources_skipped) == skipped_before and tally.failed == failed_before and not unfinished
 
-    def _refused_build(self, name: str, exc: WorkAnnotateError) -> None:
+    def _refused_build(self, work_sources: IBoundWorkAnnotators, name: str, exc: WorkAnnotateError) -> None:
         """Record the refusal of the credential the source keyed ``name`` is built on; any other failure is the
         pass's fault."""
         if exc.refusal is None:
             raise exc
-        self._refused(name, exc.refusal)
+        self._refused(work_sources, name, exc.refusal)
 
-    def _skipped(self, name: str, outages: set[str], tally: AnnotationTally) -> None:
+    def _skipped(
+        self, work_sources: IBoundWorkAnnotators, name: str, outages: set[str], tally: AnnotationTally
+    ) -> None:
         tally.sources_skipped.append(name)
         if name not in outages:
-            self._announce_skipped(name)
+            self._announce_skipped(work_sources, name)
             outages.add(name)
 
-    def _announce_skipped(self, name: str) -> None:
+    def _announce_skipped(self, work_sources: IBoundWorkAnnotators, name: str) -> None:
         """Record the first skip of an outage of the source keyed ``name`` in this tenant's event log."""
-        label = self._work_sources.source_label(name)
+        label = work_sources.source_label(name)
         self._events.record(
             kind=_SOURCE_SKIPPED,
             runner_id=None,
@@ -248,9 +252,9 @@ class TenantAnnotation:
             at=self._clock.now(),
         )
 
-    def _refused(self, name: str, refusal: WorkAnnotateRefusal) -> None:
+    def _refused(self, work_sources: IBoundWorkAnnotators, name: str, refusal: WorkAnnotateRefusal) -> None:
         """Record that the forge refused the credential of the source keyed ``name`` in this tenant's event log."""
-        label = self._work_sources.source_label(name)
+        label = work_sources.source_label(name)
         self._events.record(
             kind=_AUTH_REFUSED,
             runner_id=None,
