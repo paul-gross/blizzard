@@ -24,8 +24,10 @@ from tests.support.review_recorder_world import (
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
+    default_project,
     hub_scoped,
     seed_lease,
+    seed_project,
 )
 
 
@@ -81,6 +83,22 @@ def test_a_deferred_entry_is_recorded_as_a_review_sourced_finding(tmp_path: Path
     assert row.severity == "should-fix"
     assert row.raised_by_chunk_id == chunk_id
     assert row.routine_name is None
+
+
+def test_a_review_finding_takes_the_reviewed_chunks_project(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    first = default_project(hub.engine)
+    second = seed_project(hub.engine, "second")
+    chunk_id = seed_chunk(hub, project_id=second)
+    record_artifact(hub, chunk_id, content=_delta([_deferred()]))
+
+    delivered = deliver(hub, chunk_id)
+
+    assert delivered == Delivered("recorded")
+    with hub.engine.begin() as conn:
+        project_id = conn.execute(hub_scoped(select(s.findings.c.project_id))).scalar_one()
+    assert second != first
+    assert project_id == second
 
 
 def test_fixed_and_refuted_entries_mint_nothing(tmp_path: Path) -> None:
