@@ -5,9 +5,10 @@ from __future__ import annotations
 
 from typing import Final, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from blizzard.wire.base import WireModel
+from blizzard.wire.forge import DEPRECATED_FIELD
 from blizzard.wire.problem import ProblemDetails
 
 
@@ -50,7 +51,8 @@ class AnswerRequest(BaseModel):
     """The body of ``POST /questions/{id}/answer`` — the human's answer."""
 
     answer: str
-    answered_by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    answered_by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
 
 
 class AnswerResult(BaseModel):

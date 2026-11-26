@@ -1389,7 +1389,7 @@ export const hubAdvanceApiFleetChunksChunkIdHubAdvancePost = <ThrowOnError exten
  * Pause Chunk
  *
  * Pause the chunk with a runner's own bearer token — the same transition as the
- * operator route, ``by`` defaulting to ``operator``.
+ * operator route, recorded as ``operator``.
  */
 export const pauseChunkApiFleetChunksChunkIdPausePost = <ThrowOnError extends boolean = false>(options: Options<PauseChunkApiFleetChunksChunkIdPausePostData, ThrowOnError>): RequestResult<PauseChunkApiFleetChunksChunkIdPausePostResponses, PauseChunkApiFleetChunksChunkIdPausePostErrors, ThrowOnError> => (options.client ?? client).post<PauseChunkApiFleetChunksChunkIdPausePostResponses, PauseChunkApiFleetChunksChunkIdPausePostErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/pause', ...options });
 

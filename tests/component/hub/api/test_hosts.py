@@ -459,7 +459,7 @@ def test_retire_revokes_the_credential_and_a_retired_hosts_token_is_refused(tmp_
 
     assert retired.status_code == 200, retired.text
     assert retired.json()["host"]["retired"] is True
-    assert retired.json()["host"]["retired_by"] == "op"
+    assert retired.json()["host"]["retired_by"] == "operator"
     assert rerun.status_code == 200
     assert hub.client.get("/api/fleet/host", headers=headers).status_code == 401
     assert hub.client.post(f"/api/hosts/{host_id}/enrollments").status_code == 409

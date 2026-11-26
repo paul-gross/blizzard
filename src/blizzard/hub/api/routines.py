@@ -662,7 +662,7 @@ def retire_routine(
     404 on an unknown id, 409 on a stale `If-Match`."""
     routine = _routine_or_404(routine_id, routines)
     try:
-        retired = lifecycle.retire(routine, change_context(identity, door), by=request.by, if_match=if_match)
+        retired = lifecycle.retire(routine, change_context(identity, door), by=identity.username, if_match=if_match)
     except ConfigRevisionConflict as exc:
         raise _revision_conflict(exc) from exc
     return _labelled(retired, projects, urgencies, cadences)
@@ -686,7 +686,7 @@ def enable_routine(
     unknown id, 409 on a stale `If-Match`."""
     routine = _routine_or_404(routine_id, routines)
     try:
-        enabled = lifecycle.enable(routine, change_context(identity, door), by=request.by, if_match=if_match)
+        enabled = lifecycle.enable(routine, change_context(identity, door), by=identity.username, if_match=if_match)
     except ConfigRevisionConflict as exc:
         raise _revision_conflict(exc) from exc
     return _labelled(enabled, projects, urgencies, cadences)

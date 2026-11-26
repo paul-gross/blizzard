@@ -204,7 +204,7 @@ def test_the_move_is_a_durable_fact_distinguishable_from_a_transition(tmp_path: 
     assert len(detail["restarts"]) == 1
     move = detail["restarts"][0]
     assert move["to_node_name"] == "build"
-    assert move["restarted_by"] == "ada"
+    assert move["restarted_by"] == "operator"
     assert move["epoch"] == 2
 
 

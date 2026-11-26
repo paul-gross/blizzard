@@ -5,11 +5,12 @@ from __future__ import annotations
 
 from typing import Annotated, Final, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.forge import DEPRECATED_FIELD
 from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.urgency import UrgencyRef
 from blizzard.wire.vocabulary import OPEN
@@ -71,9 +72,10 @@ class RoutineEditRequest(BaseModel):
 
 
 class RoutineLifecycleRequest(BaseModel):
-    """A request to retire or re-enable a routine; ``by`` names who the change is attributed to."""
+    """A request to retire or re-enable a routine; the change is attributed to the authenticated caller."""
 
-    by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
 
 
 class KeptByView(WireModel):

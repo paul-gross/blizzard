@@ -778,7 +778,9 @@ class HttpHostHubClient:
 
     def retire_runner(self, runner_id: str, *, force: bool = False) -> RetiredHostRunner | HostRefused:
         path = f"{_HOST_API}/runners/{runner_id}/retire"
-        resp = self._send("POST", path, RunnerRetireRequest(force=force).model_dump(mode="json"), refused=_retire_held)
+        resp = self._send(
+            "POST", path, RunnerRetireRequest(force=force).model_dump(mode="json", exclude={"by"}), refused=_retire_held
+        )
         if isinstance(resp, HostRefused):
             return resp
         retired = _validated(RunnerRetireResponse, resp, path)

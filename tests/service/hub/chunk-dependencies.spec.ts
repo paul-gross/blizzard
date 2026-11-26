@@ -10,7 +10,7 @@ test('releasing a dependency removes the block and permits a claim', async ({ ap
   const data = { prerequisite_chunk_id: prerequisite };
   const declared = await api.post(path, { data: { ...data, by: 'alice' } });
   expect(declared.status).toBe(202);
-  expect(declared.body).toMatchObject({ dependent_chunk_id: dependent, prerequisite_chunk_id: prerequisite, declared_by: 'alice', released_at: null });
+  expect(declared.body).toMatchObject({ dependent_chunk_id: dependent, prerequisite_chunk_id: prerequisite, declared_by: 'operator', released_at: null });
   const replay = await api.post(path, { data: { ...data, by: 'bob' } });
   expect(replay.status).toBe(202);
   expect(replay.body.dependency_id).toBe(declared.body.dependency_id);
@@ -26,7 +26,7 @@ test('releasing a dependency removes the block and permits a claim', async ({ ap
 
   const released = await api.post(`${path}/release`, { data: { ...data, by: 'carol' } });
   expect(released.status).toBe(202);
-  expect(released.body).toMatchObject({ dependency_id: declared.body.dependency_id, released_by: 'carol' });
+  expect(released.body).toMatchObject({ dependency_id: declared.body.dependency_id, released_by: 'operator' });
   expect(released.body.released_at).toBeTruthy();
   const repeated = await api.post(`${path}/release`, { data: { ...data, by: 'dave' } });
   expect(repeated.status).toBe(409);

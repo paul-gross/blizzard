@@ -139,7 +139,7 @@ def _set_retired(
     scope = _scope_or_404(project, slug, scopes)
     verb = lifecycle.retire if retire else lifecycle.enable
     try:
-        changed = verb(scope, change_context(identity, door), by=request.by, if_match=if_match)
+        changed = verb(scope, change_context(identity, door), by=identity.username, if_match=if_match)
     except ConfigRevisionConflict as exc:
         raise _revision_conflict(exc) from exc
     return _labelled(changed, project)

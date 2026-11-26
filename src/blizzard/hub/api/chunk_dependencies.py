@@ -6,6 +6,7 @@ here."""
 from __future__ import annotations
 
 from functools import partial
+from typing import Annotated
 
 from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Request, status
@@ -17,6 +18,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problem_rendering import problem_response
+from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.chunk.dependencies import (
     DependencyService,
     DependencyWouldCloseCycle,
@@ -92,7 +94,6 @@ def _edge_view(edge: DependencyEdge) -> ChunkDependencyEdgeView:
     "/chunks/{chunk_id}/dependencies",
     response_model=ChunkDependencyEdgeView,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 @inject_sync
 def declare_dependency(
@@ -102,6 +103,7 @@ def declare_dependency(
     records: FromDishka[IReadChunkRecordRepository],
     lifecycle: FromDishka[IReadChunkLifecycleRepository],
     dependencies: FromDishka[DependencyService],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> object:
     """Declare that CHUNK depends on ``prerequisite_chunk_id``.
 
@@ -111,7 +113,7 @@ def declare_dependency(
     dependent = _resolve_dependent(records, chunk_id)
     prerequisite = resolve_prerequisite(records, lifecycle, request.prerequisite_chunk_id)
     try:
-        edge = dependencies.declare(dependent, prerequisite, by=request.by)
+        edge = dependencies.declare(dependent, prerequisite, by=identity.username)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except DependentNotEditable as exc:
@@ -133,7 +135,6 @@ def declare_dependency(
     "/chunks/{chunk_id}/dependencies/release",
     response_model=ChunkDependencyEdgeView,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 @inject_sync
 def release_dependency(
@@ -142,6 +143,7 @@ def release_dependency(
     records: FromDishka[IReadChunkRecordRepository],
     edges: FromDishka[IReadChunkDependenciesRepository],
     dependencies: FromDishka[DependencyService],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> object:
     """Release CHUNK's standing dependency on ``prerequisite_chunk_id``
     — recorded, never deleted. Admitted whenever the edge stands, whatever the
@@ -149,7 +151,7 @@ def release_dependency(
     dependent = _resolve_dependent(records, chunk_id)
     try:
         edge = _resolve_standing_edge(edges, dependent, request.prerequisite_chunk_id)
-        released = dependencies.release(edge, by=request.by)
+        released = dependencies.release(edge, by=identity.username)
     except NoStandingDependencyToRelease as exc:
         raise ProblemHTTPException(
             partial(problems.no_standing_dependency_problem, exc.dependent_chunk_id, exc.prerequisite_chunk_id)

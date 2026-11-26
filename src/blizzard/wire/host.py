@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, StringConstraints
 from blizzard.foundation.runner_connection import RunnerConnection
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.forge import DEPRECATED_FIELD
 from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.runner import RunnerSubscriptionDeclaration, SubscriptionUsageView
 from blizzard.wire.vocabulary import OPEN
@@ -138,20 +139,23 @@ class HostRegistryListResponse(WireModel):
 class HostRunnersRequest(BaseModel):
     """Place runners under a host, or return them to standing alone — records who did it."""
 
-    by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
     runner_ids: Annotated[list[str], Field(min_length=1)]
 
 
 class HostLifecycleRequest(BaseModel):
     """Revoke a host's token — records who did it."""
 
-    by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
 
 
 class HostRetireRequest(BaseModel):
     """Retire a host and every runner under it — ``force`` releases every chunk they still hold."""
 
-    by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
     force: bool = False
 
 

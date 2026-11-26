@@ -268,7 +268,7 @@ def test_a_runner_adopted_before_the_retire_lands_is_retired_and_published(
 def test_a_roster_runner_retired_before_the_loop_reaches_it_interrupts_the_retire(
     hub: HubHarness, hosted: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    retire_runner = lambda: _ok(hub.client.post("/api/runners/rn_a/retire", json={"by": "other"}))  # noqa: E731
+    retire_runner = lambda: _ok(hub.client.post("/api/runners/rn_a/retire", json={}))  # noqa: E731
     # The host's own holdings read is the first; the second is the loop's retire of rn_a deciding, just before it
     # writes.
     _once_before(monkeypatch, hub.default_adapter(FleetService), "holdings", retire_runner, nth=2)
@@ -292,7 +292,7 @@ def test_a_runner_retire_that_loses_its_fact_write_is_refused(
     added = _add_host(hub)
     headers = {"Authorization": f"Bearer {added['token']}"}
     runner_id = _ok(hub.client.post("/api/fleet/host/runners", json={"name": "r"}, headers=headers), 201)["runner_id"]
-    competitor = lambda: _ok(hub.client.post(f"/api/runners/{runner_id}/retire", json={"by": "other"}))  # noqa: E731
+    competitor = lambda: _ok(hub.client.post(f"/api/runners/{runner_id}/retire", json={}))  # noqa: E731
     # The retire's holdings read is the last read it decides on before its fact write.
     _once_before(monkeypatch, hub.default_adapter(FleetService), "holdings", competitor)
 
@@ -302,7 +302,7 @@ def test_a_runner_retire_that_loses_its_fact_write_is_refused(
         refused = hub.client.post(f"/api/fleet/host/runners/{runner_id}/retire", json={"by": "box"}, headers=headers)
 
     assert refused.status_code == 409, refused.text
-    assert _runner(hub, runner_id).retired_by == "other"
+    assert _runner(hub, runner_id).retired_by == "operator"
 
 
 def test_a_release_naming_a_runner_moved_to_another_host_meanwhile_releases_none(

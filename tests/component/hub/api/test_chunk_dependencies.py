@@ -100,7 +100,7 @@ def test_declare_stores_the_edge_and_answers_202(tmp_path: Path) -> None:
     body = resp.json()
     assert body["dependent_chunk_id"] == dependent_id
     assert body["prerequisite_chunk_id"] == prerequisite_id
-    assert body["declared_by"] == "user:alice"
+    assert body["declared_by"] == "operator"
     assert body["released_at"] is None
     assert len(_rows(hub)) == 1
 
@@ -198,7 +198,7 @@ def test_release_of_an_already_released_edge_is_refused_and_the_row_is_untouched
 
     assert resp.status_code == 409, resp.text
     assert _rows(hub) == before
-    assert before[0]["released_by"] == "user:bob"
+    assert before[0]["released_by"] == "operator"
 
 
 def test_release_is_admitted_when_the_prerequisite_was_since_deleted(tmp_path: Path) -> None:
@@ -213,7 +213,7 @@ def test_release_is_admitted_when_the_prerequisite_was_since_deleted(tmp_path: P
     resp = _release(hub, dependent_id, prerequisite_id, by="user:bob")
 
     assert resp.status_code == 202, resp.text
-    assert resp.json()["released_by"] == "user:bob"
+    assert resp.json()["released_by"] == "operator"
     assert _rows(hub)[0]["released_at"] is not None
 
 

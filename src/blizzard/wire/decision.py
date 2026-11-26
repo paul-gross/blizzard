@@ -8,10 +8,11 @@ from __future__ import annotations
 
 from typing import Final, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from blizzard.wire.base import WireModel
 from blizzard.wire.completion import CheckResult, SubmittedArtifact
+from blizzard.wire.forge import DEPRECATED_FIELD
 from blizzard.wire.problem import ProblemDetails
 
 
@@ -87,7 +88,8 @@ class DecisionResolutionRequest(BaseModel):
     every later session on the chunk; a blank note is no note."""
 
     choice: str
-    resolved_by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    resolved_by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
     note: str | None = None
 
 

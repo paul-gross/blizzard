@@ -132,7 +132,7 @@ def test_pause_returns_200_writes_a_fact_and_the_detail_carries_it(tmp_path: Pat
     assert detail["status"] == "paused"
     # Pinned field by field against the clock the hub was built with, not itself;
     # `set_at` carries an explicit UTC offset (`bzh:utc-instants`).
-    assert detail["pause"] == {"by": "alice", "set_at": iso_utc(hub.clock.now())}
+    assert detail["pause"] == {"by": "operator", "set_at": iso_utc(hub.clock.now())}
     assert_all_timestamps_utc(detail)
 
 
@@ -244,7 +244,7 @@ def test_pause_view_is_carried_even_when_the_status_hides_the_pause(tmp_path: Pa
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "waiting_on_human", "the human gate still outranks the pause"
     assert detail["pause"] is not None, "the pause fact must stay legible behind the status — P4 reads this"
-    assert detail["pause"]["by"] == "alice"
+    assert detail["pause"]["by"] == "operator"
 
 
 def test_resume_clears_the_pause_view_behind_a_hiding_status(tmp_path: Path) -> None:

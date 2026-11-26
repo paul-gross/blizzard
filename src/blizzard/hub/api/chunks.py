@@ -690,7 +690,6 @@ def requeue_chunk(
     "/chunks/{chunk_id}/restart",
     response_model=ChunkSummary,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 @inject_sync
 def restart_chunk(
@@ -702,6 +701,7 @@ def restart_chunk(
     frames: Frames,
     events: Events,
     views: Views,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> ChunkSummary:
     """Force a chunk onto a node now, on a freshly minted session.
 
@@ -718,7 +718,7 @@ def restart_chunk(
     change = chunk_events.ChunkChanged.before(frames, chunk_id)
     try:
         restarted = restarts.restart(
-            chunk, graph, node_name=request.node, by=request.by, to_graph=to_graph, note=request.note
+            chunk, graph, node_name=request.node, by=identity.username, to_graph=to_graph, note=request.note
         )
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
@@ -769,7 +769,6 @@ def detach_chunk(
     "/chunks/{chunk_id}/pause",
     response_model=ChunkSummary,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 @inject_sync
 def pause_chunk(
@@ -780,9 +779,10 @@ def pause_chunk(
     frames: Frames,
     events: Events,
     views: Views,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> ChunkSummary:
     """Set a chunk's operator pause brake — the claim is kept, unlike detach."""
-    return paused(chunk_id, request.by, records, pauses, frames, events, views)
+    return paused(chunk_id, identity.username, records, pauses, frames, events, views)
 
 
 def paused(
@@ -814,7 +814,6 @@ def paused(
     "/chunks/{chunk_id}/resume",
     response_model=ChunkSummary,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 @inject_sync
 def resume_chunk(
@@ -825,9 +824,10 @@ def resume_chunk(
     frames: Frames,
     events: Events,
     views: Views,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> ChunkSummary:
     """Clear a chunk's operator pause brake — idempotent, never refused."""
-    return resumed(chunk_id, request.by, records, pauses, frames, events, views)
+    return resumed(chunk_id, identity.username, records, pauses, frames, events, views)
 
 
 def resumed(
@@ -854,7 +854,6 @@ def resumed(
     "/chunks/{chunk_id}/stop",
     response_model=ChunkSummary,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 @inject_sync
 def stop_chunk(
@@ -865,6 +864,7 @@ def stop_chunk(
     frames: Frames,
     events: Events,
     views: Views,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> ChunkSummary:
     """Terminally abandon CHUNK — the operator's last-resort verb.
 
@@ -876,7 +876,7 @@ def stop_chunk(
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     change = chunk_events.ChunkChanged.before(frames, chunk_id)
     try:
-        stopped = stops.stop(chunk, by=request.by)
+        stopped = stops.stop(chunk, by=identity.username)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except ChunkNotStoppable as exc:
@@ -891,7 +891,6 @@ def stop_chunk(
     "/chunks/{chunk_id}/complete",
     response_model=ChunkSummary,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 @inject_sync
 def complete_chunk(
@@ -902,6 +901,7 @@ def complete_chunk(
     frames: Frames,
     events: Events,
     views: Views,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> ChunkSummary:
     """Manually complete CHUNK, from any non-``done`` status, including ``stopped``.
     Records the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route,
@@ -913,7 +913,7 @@ def complete_chunk(
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     change = chunk_events.ChunkChanged.before(frames, chunk_id)
     try:
-        completed = completions.complete(chunk, by=request.by)
+        completed = completions.complete(chunk, by=identity.username)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     key = f"chunk_completed:{completed.fact_id}" if completed is not None else None
@@ -1085,7 +1085,6 @@ def patch_chunk(
     "/chunks/{chunk_id}",
     response_model=ChunkDeleteResponse,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 @inject_sync
 def delete_chunk(
@@ -1095,6 +1094,7 @@ def delete_chunk(
     deletes: FromDishka[DeleteService],
     frames: Frames,
     events: Events,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> ChunkDeleteResponse:
     """Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds
     in the same write. 404 for an unknown chunk or one a race deletes
@@ -1106,14 +1106,14 @@ def delete_chunk(
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     change = chunk_events.ChunkChanged.before(frames, chunk_id)
     try:
-        deleted_id = deletes.delete(chunk, by=request.by)
+        deleted_id = deletes.delete(chunk, by=identity.username)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except ChunkNotDeletable as exc:
         raise ProblemHTTPException(partial(problems_chunks.chunk_not_deletable_problem, str(exc))) from exc
     except ChunkHasDependents as exc:
         raise ProblemHTTPException(partial(problems_chunks.chunk_has_dependents_problem, str(exc))) from exc
-    change.publish(cause="deleted", key=f"chunk_deleted:{deleted_id}", by=request.by, status=change.prev_status)
+    change.publish(cause="deleted", key=f"chunk_deleted:{deleted_id}", by=identity.username, status=change.prev_status)
     events.publish_queue_changed()  # a deleted chunk is never offered for claim again
     return ChunkDeleteResponse(chunk_id=chunk_id)
 

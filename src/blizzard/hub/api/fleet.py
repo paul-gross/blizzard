@@ -130,7 +130,6 @@ from blizzard.wire.analytics import AnalyticsCountsResponse, AnalyticsSpendRespo
 from blizzard.wire.attachments import ArtifactCheckRequest, ArtifactCheckResponse
 from blizzard.wire.chunk import (
     ChunkDetail,
-    ChunkPauseRequest,
     ChunkStatusView,
     ChunkSummary,
     HubAdvanceResponse,
@@ -435,8 +434,8 @@ def pause_chunk(
     views: FromDishka[ChunkViewReads],
 ) -> ChunkSummary:
     """Pause the chunk with a runner's own bearer token — the same transition as the
-    operator route, ``by`` defaulting to ``operator``."""
-    return chunks_api.paused(chunk_id, ChunkPauseRequest().by, records, pauses, frames, events, views)
+    operator route, recorded as ``operator``."""
+    return chunks_api.paused(chunk_id, "operator", records, pauses, frames, events, views)
 
 
 @router.post("/chunks/{chunk_id}/resume", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
@@ -451,7 +450,7 @@ def resume_chunk(
 ) -> ChunkSummary:
     """Resume the chunk with a runner's own bearer token. Takes no body, so the
     resume is always recorded as ``operator``."""
-    return chunks_api.resumed(chunk_id, ChunkPauseRequest().by, records, pauses, frames, events, views)
+    return chunks_api.resumed(chunk_id, "operator", records, pauses, frames, events, views)
 
 
 @router.get("/summary", response_model=FleetSummaryView)

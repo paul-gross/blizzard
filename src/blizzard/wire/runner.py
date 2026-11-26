@@ -16,6 +16,7 @@ from blizzard.foundation.runner_version import RunnerVersionStanding, VersionRef
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.forge import DEPRECATED_FIELD
 from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
@@ -446,20 +447,23 @@ class RunnerRegistryListResponse(WireModel):
 class RunnerPauseRequest(BaseModel):
     """Set a runner's pause brake — records who flipped it."""
 
-    by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
 
 
 class RunnerRetireRequest(BaseModel):
     """Retire a runner — ``force`` releases every chunk it still holds."""
 
-    by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
     force: bool = False
 
 
 class RunnerLifecycleRequest(BaseModel):
     """Reinstate a runner, or revoke its token — records who did it."""
 
-    by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
 
 
 class RunnerRetireResponse(WireModel):

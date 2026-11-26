@@ -327,8 +327,8 @@ def test_every_runner_changed_publish_site_names_its_kind(tmp_path: Path) -> Non
         {"runner_id": "r1", "runner_name": "r1", "kind": "registered"},
         {"runner_id": "r1", "runner_name": "r1", "kind": "heartbeat"},
         # The pause family each names its own fact's identity.
-        {"runner_id": "r1", "runner_name": "r1", "kind": "paused", "by": "alice", "key": "runner_pause_facts:1"},
-        {"runner_id": "r1", "runner_name": "r1", "kind": "resumed", "by": "alice", "key": "runner_pause_facts:2"},
+        {"runner_id": "r1", "runner_name": "r1", "kind": "paused", "by": "operator", "key": "runner_pause_facts:1"},
+        {"runner_id": "r1", "runner_name": "r1", "kind": "resumed", "by": "operator", "key": "runner_pause_facts:2"},
         {
             "runner_id": "r1",
             "runner_name": "r1",
