@@ -16,6 +16,7 @@ from blizzard.hub.domain.garden.review.materialize import ReviewFindingsOutcome
 from blizzard.hub.domain.garden.review.service import ReviewFindingsRecorder
 from blizzard.hub.domain.garden.review.validation import ReviewFindingsRejected
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, Node
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.graph_store import GraphStore
 from tests.support.hub_node_artifacts import record_hub_asset
@@ -47,7 +48,8 @@ def _record_findings_node(node_id: str = NODE_ID, *, graph_id: str = "gr_record_
     )
 
 
-def seed_chunk(hub: HubHarness) -> str:
+def seed_chunk(hub: HubHarness, *, project_id: ProjectId | None = None) -> str:
+    """A chunk resting on the ``record-findings`` graph, in ``project_id`` — the tenant's only project when ``None``."""
     store_connections = hub_store_connections(hub.engine)
     node = _record_findings_node()
     graph = Graph(
@@ -60,7 +62,11 @@ def seed_chunk(hub: HubHarness) -> str:
     )
     GraphStore(store_connections).mint(graph, definition_yaml="", at=hub.clock.now())
     item = seed_work_item(
-        store_connections, graph_id="gr_record_findings", author=WorkItemAuthor.user("u_1"), at=hub.clock.now()
+        store_connections,
+        graph_id="gr_record_findings",
+        author=WorkItemAuthor.user("u_1"),
+        at=hub.clock.now(),
+        project_id=project_id,
     )
     return f"ch_{item.ref}"
 

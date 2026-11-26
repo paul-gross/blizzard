@@ -7,6 +7,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from sqlalchemy import insert
 
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalOrigin
@@ -69,13 +70,20 @@ def _seed_finding(
 
 
 def _seed_proposal(
-    hub: HubHarness, proposal_id: str = "gprop_1", *, findings: list[str] | None = None, closed: bool = False
+    hub: HubHarness,
+    proposal_id: str = "gprop_1",
+    *,
+    findings: list[str] | None = None,
+    closed: bool = False,
+    origin: GardenProposalOrigin = GardenProposalOrigin.ROUTINE_RUN,
 ) -> None:
+    by_operator = origin is GardenProposalOrigin.OPERATOR
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         proposal_id,
         project_id=default_project(hub.engine),
-        origin=GardenProposalOrigin.ROUTINE_RUN,
-        routine_name="nightly",
+        origin=origin,
+        routine_name=None if by_operator else "nightly",
+        created_by="operator" if by_operator else None,
         class_="fix-the-source",
         title="Author a docstring standard",
         body="the case",
@@ -94,6 +102,21 @@ def _seed_proposal(
                 item_outcome=None,
                 pointer=None,
             )
+
+
+_EXISTING_STATES = ("open", "passed", "accepted")
+_EXISTING_ORIGINS = (GardenProposalOrigin.ROUTINE_RUN, GardenProposalOrigin.OPERATOR)
+
+
+def _seed_existing_link(hub: HubHarness, finding_id: str, *, state: str, origin: GardenProposalOrigin) -> None:
+    """Link ``finding_id`` to a proposal of ``origin`` and leave that proposal ``state``."""
+    _seed_proposal(hub, "gprop_existing", findings=[finding_id], closed=state == "passed", origin=origin)
+    if state == "accepted":
+        accepted = hub.client.post("/api/garden-proposals/gprop_existing/accept", json={"mint_work_item": False})
+        assert accepted.status_code == 200, accepted.text
+    existing = hub.client.get("/api/garden-proposals/gprop_existing").json()
+    assert existing["origin"] == origin.value
+    assert (existing["closure"] or {"closure": "open"})["closure"] == state
 
 
 # --------------------------------------------------------------------------- #
@@ -212,6 +235,25 @@ def test_create_a_finding_from_a_different_routine_and_scope_than_the_named_rout
 
     assert resp.status_code == 201, resp.text
     assert resp.json()["findings"] == ["fin_1"]
+
+
+@pytest.mark.parametrize("origin", _EXISTING_ORIGINS)
+@pytest.mark.parametrize("state", _EXISTING_STATES)
+def test_create_naming_a_finding_already_linked_to_another_proposal_is_allowed(
+    tmp_path: Path, state: str, origin: GardenProposalOrigin
+) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub)
+    _seed_finding(hub, "fin_1")
+    _seed_existing_link(hub, "fin_1", state=state, origin=origin)
+
+    resp = hub.client.post(
+        "/api/garden-proposals", json={"title": "t", "class": "c", "body": "b", "findings": ["fin_1"]}
+    )
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["findings"] == ["fin_1"]
+    assert hub.client.get("/api/garden-proposals/gprop_existing").json()["findings"] == ["fin_1"]
 
 
 # --------------------------------------------------------------------------- #
@@ -422,17 +464,22 @@ def test_attach_the_same_finding_named_twice_is_422(tmp_path: Path) -> None:
     assert resp.status_code == 422, resp.text
 
 
-def test_attach_to_a_finding_already_linked_to_another_proposal_is_allowed(tmp_path: Path) -> None:
+@pytest.mark.parametrize("origin", _EXISTING_ORIGINS)
+@pytest.mark.parametrize("state", _EXISTING_STATES)
+def test_attach_to_a_finding_already_linked_to_another_proposal_is_allowed(
+    tmp_path: Path, state: str, origin: GardenProposalOrigin
+) -> None:
     hub = build_hub(tmp_path)
     _seed_scope(hub)
     _seed_finding(hub, "fin_1")
-    _seed_proposal(hub, "gprop_1", findings=["fin_1"])
+    _seed_existing_link(hub, "fin_1", state=state, origin=origin)
     _seed_proposal(hub, "gprop_2", findings=[])
 
     resp = hub.client.post("/api/garden-proposals/gprop_2/attach", json={"findings": ["fin_1"]})
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["findings"] == ["fin_1"]
+    assert hub.client.get("/api/garden-proposals/gprop_existing").json()["findings"] == ["fin_1"]
 
 
 # --------------------------------------------------------------------------- #
