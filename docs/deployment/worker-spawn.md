@@ -451,13 +451,21 @@ bounds, and the harness set — an opaque string passed straight through to Clau
 fleet-driven invocation (spawn, judge, resume-with-message). Whether a harness restores a resumed session's compaction
 window is unmeasured, so the runner never bets on stickiness: it stamps the resolved window on the lease at mint and
 reasserts it from that stamp on every resume, as it does effort; an unrecognized or empty value is dropped with one log
-line, never failing a spawn. OpenCode accepts `auto` without overriding native configuration. For a numeric window it
-resolves the model's local catalog limits and merged worker configuration, then sets that model's input limit to the
-window plus the effective compaction reserve. The per-model override also carries the effective context and output
-limits, using the catalog values when no model override supplies them. An explicit `compaction.reserved` wins; otherwise
-the reserve is the lesser of 20,000 and the effective output limit. Output limits and the automatic-compaction switch
-are not changed. If the model, catalog limits or effective configuration cannot be resolved, the runner warns and
-launches unchanged; inspect the runner log rather than assuming the threshold was applied.
+line, never failing a spawn. Both OpenCode major versions accept `auto` without overriding native configuration, and
+apply a numeric window differently.
+
+For a numeric window, OpenCode 1 resolves the model's local catalog limits and merged worker configuration, then sets
+that model's input limit to the window plus the effective compaction reserve. The per-model override also carries the
+effective context and output limits, using the catalog values when no model override supplies them. An explicit
+`compaction.reserved` wins; otherwise the reserve is the lesser of 20,000 and the effective output limit. Output limits
+and the automatic-compaction switch are not changed. If the model, catalog limits or effective configuration cannot be
+resolved, the runner warns and launches unchanged; inspect the runner log rather than assuming the threshold was
+applied.
+
+For a numeric window, OpenCode 2's driver asks the service to compact once a turn's context reaches the window, even
+when your compaction configuration has compaction disabled; `auto` leaves the service's own compaction alone. It watches
+and compacts only the worker's own session, so the window does not compact a subagent's session. It needs no input
+limit, so there is no fallback warning, and it does not change the model's output cap.
 
 The window-versus-rotation ordering is the whole authoring decision: set below `rotate.max_context_tokens` — the only
 rotation bound a window is commensurable with — the window fires repeatedly inside one long node, costing the worker its

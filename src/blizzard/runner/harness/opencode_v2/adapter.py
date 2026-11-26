@@ -123,6 +123,8 @@ class OpenCodeTwoAdapter:
         self._price_catalog = price_catalog
         self._orphaner = orphaner
         self._observer = observer
+        self._unrecognized_compaction_windows: set[str] = set()
+
         # The version launches are held to: the one last observed, which is the one the runner advertises.
         self._advertised: str | None = None
 
@@ -200,9 +202,14 @@ class OpenCodeTwoAdapter:
         return value if value in _EFFORT_ORDINAL else None
 
     def resolve_compaction_window(self, value: str | None) -> str | None:
-        if not isinstance(harness_shared.parse_compaction_window(value), harness_shared.CompactionWindow):
+        if value is None:
             return None
-        return value
+        if isinstance(harness_shared.parse_compaction_window(value), harness_shared.CompactionWindow):
+            return value
+        if value not in self._unrecognized_compaction_windows:
+            self._unrecognized_compaction_windows.add(value)
+            _log.info("unrecognized compaction window; ignoring", compaction_window=value)
+        return None
 
     def resolvable_tier_ids(self) -> tuple[str, ...]:
         return harness_shared.resolvable_tier_ids({}, self._model_aliases)
