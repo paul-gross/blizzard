@@ -49,9 +49,9 @@ PathFlow = Annotated[FlowOverview, Depends(_overview)]
 def list_flows(reads: FromDishka[FlowLineReads], active: Annotated[bool, Query()] = False) -> FlowListView:
     """The tenant's flows in resource order, each with its open turn, its line, and the newest of its record. With
     ``active``, only those with an open submission or a fact in the last 48 hours."""
-    overviews = reads.flow_views.flow_overviews()
+    since = reads.clock.now() - BOARD_DONE_WINDOW
+    overviews = reads.flow_views.active_flow_overviews(since=since) if active else reads.flow_views.flow_overviews()
     read = FlowLineRead.of(reads, reads.flow_views.open_submissions_on([o.flow.flow_id for o in overviews]))
-    since = read.now - BOARD_DONE_WINDOW
     return FlowListView(
         flows=[
             read.flow_view(overview)
