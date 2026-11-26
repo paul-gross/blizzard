@@ -129,7 +129,7 @@ for (const [name, container, release, hostCard] of [
 
       const calls = stub.forRoute('/api/hosts/h1/retire', 'POST');
       expect(calls).toHaveLength(1);
-      expect(calls[0].body).toEqual({ by: 'operator', force: false });
+      expect(calls[0].body).toEqual({ force: false });
       expectRefetch(invalidate);
     });
 
@@ -159,8 +159,8 @@ for (const [name, container, release, hostCard] of [
 
       const calls = stub.forRoute('/api/hosts/h1/retire', 'POST');
       expect(calls.map((call) => call.body)).toEqual([
-        { by: 'operator', force: false },
-        { by: 'operator', force: true },
+        { force: false },
+        { force: true },
       ]);
       expect(el.querySelector('[data-testid="host-force-retire"]')).toBeNull();
     });

@@ -76,7 +76,7 @@ export function injectAnswerQuestionMutation() {
     mutationFn: async (vars: AnswerVars): Promise<AnswerResult> => {
       const { data, error } = await answerQuestionApiQuestionsQuestionIdAnswersPost({
         path: { question_id: vars.questionId },
-        body: { answer: vars.answer, answered_by: 'operator' },
+        body: { answer: vars.answer },
         throwOnError: false,
       });
       if (error) throw error;
@@ -142,7 +142,7 @@ export function injectResolveDecisionMutation() {
     mutationFn: async (vars: ResolveVars): Promise<DecisionResolutionResponse> => {
       const { data, error } = await resolveDecisionApiDecisionsDecisionIdResolutionsPost({
         path: { decision_id: vars.decisionId },
-        body: { choice: vars.choice, resolved_by: 'operator', ...(vars.note ? { note: vars.note } : {}) },
+        body: { choice: vars.choice, ...(vars.note ? { note: vars.note } : {}) },
         throwOnError: false,
       });
       if (error) throw error;

@@ -28,7 +28,7 @@ export function injectCadenceLifecycleMutation() {
       const { error } = await call({
         path: { cadence_id: vars.cadenceId },
         headers: { 'if-match': vars.revision },
-        body: { by: 'operator' },
+        body: {},
         throwOnError: false,
       });
       if (error) throw error;

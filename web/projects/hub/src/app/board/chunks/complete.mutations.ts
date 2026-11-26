@@ -11,7 +11,7 @@ export interface CompleteVars {
 }
 
 /**
- * `POST /api/chunks/{id}/complete` as `operator`, through the generated client
+ * `POST /api/chunks/{id}/complete`, through the generated client
  * (bzh:generated-client). A refusal throws; it settles by re-reading the fleet list,
  * the ready queue, and the chunk detail.
  */
@@ -22,7 +22,7 @@ export function injectCompleteChunkMutation() {
     mutationFn: async (vars: CompleteVars): Promise<void> => {
       const { error } = await completeChunkApiChunksChunkIdCompletePost({
         path: { chunk_id: vars.chunkId },
-        body: { by: 'operator' },
+        body: {},
         throwOnError: false,
       });
       if (error) throw error;

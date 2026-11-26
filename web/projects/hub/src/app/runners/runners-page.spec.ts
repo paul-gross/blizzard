@@ -109,7 +109,7 @@ describe('RunnersPage (mobile Fleet screen)', () => {
 
       const calls = stub.forRoute('/api/runners/rn_online/pause', 'POST');
       expect(calls).toHaveLength(1);
-      expect(calls[0].body).toEqual({ by: 'operator' });
+      expect(calls[0].body).toEqual({});
     });
 
     it('withholds the toggles for a contributor (no runner:pause) — the runners still render', async () => {

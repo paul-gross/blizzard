@@ -16,8 +16,8 @@ export interface RoutineLifecycleVars {
 /**
  * `POST /api/routines/{routine_id}/retire|enable` with `If-Match: <revision>` when the routine has one — routed by the desired `retired`
  * state (`injectScopeLifecycleMutation`'s own shape), through the generated client
- * (bzh:generated-client). On success it re-reads the routine list. `by` defaults to
- * `operator` server-side.
+ * (bzh:generated-client). On success it re-reads the routine list. The hub records
+ * the signed-in caller as the actor.
  */
 export function injectRoutineLifecycleMutation() {
   const queryClient = inject(QueryClient);
@@ -28,7 +28,7 @@ export function injectRoutineLifecycleMutation() {
       const { error } = await call({
         path: { routine_id: vars.routineId },
         ...(vars.revision === null ? {} : { headers: { 'if-match': vars.revision } }),
-        body: { by: 'operator' },
+        body: {},
         throwOnError: false,
       });
       if (error) throw error;

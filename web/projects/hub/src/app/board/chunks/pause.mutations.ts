@@ -24,7 +24,7 @@ export function injectChunkPauseMutation() {
       const call = vars.paused ? pauseChunkApiChunksChunkIdPausePost : resumeChunkApiChunksChunkIdResumePost;
       const { error } = await call({
         path: { chunk_id: vars.chunkId },
-        body: { by: 'operator' },
+        body: {},
         throwOnError: false,
       });
       if (error) throw error;

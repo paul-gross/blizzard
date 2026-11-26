@@ -2,14 +2,14 @@
 
 A chunk can name another chunk it depends on: the dependent, and the prerequisite it names.
 `POST /api/chunks/{chunk_id}/dependencies` declares the edge and `POST /api/chunks/{chunk_id}/dependencies/release`
-releases a standing one; both are `CHUNK_CONTROL`-gated, take a JSON body of
-`{"prerequisite_chunk_id": "..."}`, record the signed-in caller as who declared or released the edge, and answer `202 Accepted`
-with a `ChunkDependencyEdgeView` — the written or already-standing edge's `dependency_id`, both chunk ids,
-`declared_at`/`declared_by`, and nullable `released_at`/`released_by` — the only way to learn an edge's minted id, since
-neither route addresses one by it. A declare mints a fresh row only when no edge for the pair currently stands — an
-already-standing pair is an idempotent no-op, below — so the same pair may accumulate several rows over time, one per
-declare-after-a-release, none ever revived. Releasing a row is recorded on it, not a deletion — `released_at`/
-`released_by` are set together, once, and the row is never removed.
+releases a standing one; both are `CHUNK_CONTROL`-gated, take a JSON body of `{"prerequisite_chunk_id": "..."}`, record
+the signed-in caller as who declared or released the edge, and answer `202 Accepted` with a `ChunkDependencyEdgeView` —
+the written or already-standing edge's `dependency_id`, both chunk ids, `declared_at`/`declared_by`, and nullable
+`released_at`/`released_by` — the only way to learn an edge's minted id, since neither route addresses one by it. A
+declare mints a fresh row only when no edge for the pair currently stands — an already-standing pair is an idempotent
+no-op, below — so the same pair may accumulate several rows over time, one per declare-after-a-release, none ever
+revived. Releasing a row is recorded on it, not a deletion — `released_at`/ `released_by` are set together, once, and
+the row is never removed.
 
 ## Declaring an edge
 

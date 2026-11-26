@@ -18,8 +18,8 @@ export interface ScopeLifecycleVars {
 /**
  * `POST /api/projects/{project}/scopes/{slug}/retire|enable`, inside the lensed project — routed by the desired `retired` state
  * (`injectGraphLifecycleMutation`'s own shape), through the generated client
- * (bzh:generated-client). On success it re-reads the scope list. `by` defaults to
- * `operator` server-side.
+ * (bzh:generated-client). On success it re-reads the scope list. The hub records
+ * the signed-in caller as the actor.
  */
 export function injectScopeLifecycleMutation() {
   const queryClient = inject(QueryClient);
@@ -32,7 +32,7 @@ export function injectScopeLifecycleMutation() {
         : enableProjectScopeApiProjectsProjectScopesSlugEnablePost;
       const { error } = await call({
         path: { project: gardenProject(project()), slug: vars.slug },
-        body: { by: 'operator' },
+        body: {},
         throwOnError: false,
       });
       if (error) throw error;

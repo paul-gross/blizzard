@@ -31,7 +31,7 @@ describe('injectRoutineLifecycleMutation', () => {
 
     const calls = stub.forRoute('/api/routines/rtn_1/retire', 'POST');
     expect(calls).toHaveLength(1);
-    expect(calls[0].body).toEqual({ by: 'operator' });
+    expect(calls[0].body).toEqual({});
     expect(stub.forRoute('/api/routines/rtn_1/enable', 'POST')).toHaveLength(0);
   });
 
@@ -42,7 +42,7 @@ describe('injectRoutineLifecycleMutation', () => {
 
     const calls = stub.forRoute('/api/routines/rtn_1/enable', 'POST');
     expect(calls).toHaveLength(1);
-    expect(calls[0].body).toEqual({ by: 'operator' });
+    expect(calls[0].body).toEqual({});
     expect(stub.forRoute('/api/routines/rtn_1/retire', 'POST')).toHaveLength(0);
   });
 
