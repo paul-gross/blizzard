@@ -5,7 +5,7 @@ import { applicationConfig } from '@storybook/angular-vite';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { TenantContext } from '../../core/auth/tenant-context';
 import type { Meta, StoryObj } from '@storybook/angular-vite';
-import type { Urgency as UrgencyRecord } from 'fleet';
+import type { Urgency as UrgencyRecord } from 'fleet/core';
 import { boardDonePolicy } from '../../core/board-done-policy.model';
 import { glanceListGroups, glanceVitals } from './glance-board.model';
 import { GlanceView } from './glance-view';

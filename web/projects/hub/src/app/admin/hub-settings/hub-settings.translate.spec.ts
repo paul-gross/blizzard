@@ -35,7 +35,7 @@ describe('hubSettingRefusal', () => {
 });
 
 import { toHubSettings, toHubSettingsHistoryPage } from './hub-settings.translate';
-import type { hubApi, HubSettingRow as WireHubSettingRow, HubSettingsChange } from 'fleet';
+import type { hubApi, HubSettingRow as WireHubSettingRow, HubSettingsChange } from 'fleet/hub-api';
 
 it('preserves settings and history fields including cursors and field values', () => {
   const settings = { revision: 7, settings: [{ key: 'key', value: { a: 1 }, lifetime: 'pass' as const, source: 'default' as const, revision: null, written_at: null, written_by: null }] };

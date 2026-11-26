@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { compactRef, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectList, KitSelectRow, FleetWhen } from 'fleet';
+import { compactRef, FleetWhen } from 'fleet/core';
+import { KitAsyncState, type KitAsyncStateValue, KitPanel } from 'fleet/kit';
+import { KitSelectList, KitSelectRow } from 'fleet/kit/select-list';
 
 /** One row of the proposal docket list — just enough to pick a proposal (`hub
  * garden-proposal list` is the read this list serves). `waiting` is the row's own

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubClient } from 'fleet';
+import { hubClient } from 'fleet/hub-api';
 import { settle } from 'fleet/testing';
 import { injectHubFleetSpendDomainQuery } from './fleet-spend.query';
 

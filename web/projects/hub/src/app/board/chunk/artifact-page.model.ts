@@ -1,4 +1,4 @@
-import { type ChunkArtifact } from 'fleet';
+import { type ChunkArtifact } from 'fleet/chunk-detail';
 
 /** The artifact `key` names among `artifacts`, or `undefined` when there is no key or it names nothing. */
 export function artifactByKey(artifacts: readonly ChunkArtifact[], key: string | null): ChunkArtifact | undefined {

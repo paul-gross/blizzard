@@ -10,7 +10,7 @@ import {
   KitPanel,
   KitPanelHeader,
   KitSectionHead,
-} from 'fleet';
+} from 'fleet/kit';
 
 import { branchMarkerTone, builtInTone } from '../../core/lifecycle-tone';
 import type { LandingPosition } from './project-landing-order.domain';

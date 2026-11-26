@@ -1,4 +1,5 @@
-import { readRefusal, type SaveOutcome } from 'fleet';
+import { readRefusal } from 'fleet/core';
+import { type SaveOutcome } from 'fleet/forms';
 
 import { injectAcceptGardenProposalMutation } from './garden-proposal.mutations';
 import { DECLINE_REASON_REQUIRED, isDeclineReasonMissing, type ProposalAcceptanceDraft } from './proposal-acceptance.domain';

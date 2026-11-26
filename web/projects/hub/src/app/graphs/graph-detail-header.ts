@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 
-import { KitBadge, KitButton, KitConfirmDialog } from 'fleet';
+import { KitBadge, KitButton } from 'fleet/kit';
+import { KitConfirmDialog } from 'fleet/kit/dialog';
 
 import { lifecycleTone } from '../core/lifecycle-tone';
 

@@ -1,4 +1,4 @@
-import type { hubApi } from 'fleet';
+import type { hubApi } from 'fleet/hub-api';
 
 export const BUILD: hubApi.EnvTimelinePlacedStepView = {
   environment_id: 'env_a',

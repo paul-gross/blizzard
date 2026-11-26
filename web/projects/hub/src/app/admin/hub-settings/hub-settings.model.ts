@@ -1,4 +1,4 @@
-import { settingValueText } from 'fleet';
+import { settingValueText } from 'fleet/core';
 import type { HubSettingRow, HubSettingsChange } from './hub-settings.domain';
 import type { ChangeEntryVm } from '../changes/changes.model';
 import type { ConfigFieldView } from '../config-field-tree.model';

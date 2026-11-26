@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type EventView, listEventsApiEventsGet, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
+import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/core';
+import { type EventView, listEventsApiEventsGet } from 'fleet/hub-api';
 import type { EventLogEntry, KnownEventSeverity } from './event-log.domain';
 import { fromEventView, toEventLogSeverity } from './event-log.translate';
 import { hubEventsKey, lensedKey } from '../core/query-keys';

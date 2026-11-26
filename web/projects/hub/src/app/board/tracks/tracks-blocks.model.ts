@@ -1,4 +1,4 @@
-import { compactRef, formatHeldFor } from 'fleet';
+import { compactRef, formatHeldFor } from 'fleet/core';
 
 import type { EnvTimelineHost } from './env-timeline.model';
 import {

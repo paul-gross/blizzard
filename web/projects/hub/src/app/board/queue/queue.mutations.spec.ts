@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type QueuePeekResponse } from 'fleet';
+import { type QueuePeekResponse } from 'fleet/hub-api';
 import {
   type RequestClientStub,
   type StubDetailBody,

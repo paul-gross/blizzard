@@ -1,4 +1,4 @@
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import { toDraft as urgencyFormValues } from './urgency.translate';
 import { urgencyActions, urgencyCliCommand, urgencyDestinations, urgencyRecordVm } from './urgency-detail.model';
 

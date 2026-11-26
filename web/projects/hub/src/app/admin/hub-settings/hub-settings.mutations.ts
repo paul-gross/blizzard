@@ -1,6 +1,6 @@
 import { inject } from '@angular/core';
 import { injectMutation, QueryClient } from '@tanstack/angular-query-experimental';
-import { patchSettingsApiAdminSettingsPatch } from 'fleet';
+import { patchSettingsApiAdminSettingsPatch } from 'fleet/hub-api';
 import { hubSettingsHistoryKey, hubSettingsKey } from '../../core/query-keys';
 
 export function injectHubSettingsMutation() {

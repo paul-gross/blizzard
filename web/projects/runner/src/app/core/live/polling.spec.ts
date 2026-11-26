@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, injectQuery, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, injectChunkDetailQuery, runnerClient } from 'fleet';
+import { injectChunkDetailQuery } from 'fleet/chunk-page';
+import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/core';
+import { runnerClient } from 'fleet/runner-api';
 import { type RequestClientStub, runnerDashboardView, stubRunnerClient } from 'fleet/testing';
 import { vi } from 'vitest';
 

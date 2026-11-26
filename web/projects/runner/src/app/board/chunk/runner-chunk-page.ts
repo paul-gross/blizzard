@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { ChunkPageRoute, KitAsyncState, provideChunkPageDaemon } from 'fleet';
+import { provideChunkPageDaemon } from 'fleet/chunk-page';
+import { ChunkPageRoute } from 'fleet/chunk-page/view';
+import { KitAsyncState } from 'fleet/kit';
 
 import { ChunkOwner } from './chunk-owner';
 

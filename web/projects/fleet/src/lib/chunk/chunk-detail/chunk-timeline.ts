@@ -7,7 +7,7 @@ import { harnessName } from '../../core/harness-name';
 import { injectRunnerHostNames, injectRunnerNames, runnerBoardLabel, runnerBoardParts } from '../../core/runner-display-name';
 import { SessionEfficiency } from '../../core/session-efficiency-view';
 import { formatCost } from '../../core/cost-format';
-import { injectNowSignal } from '../../core/now-signal';
+import { injectNowSignal } from '../../core/now-signal/now-signal';
 import { KitAsyncState } from '../../kit/kit-async-state';
 import { KitSectionHead } from '../../kit/kit-section-head';
 import {

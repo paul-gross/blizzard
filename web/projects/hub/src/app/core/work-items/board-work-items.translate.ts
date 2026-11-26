@@ -1,4 +1,4 @@
-import type { WorkItemsView } from 'fleet';
+import type { WorkItemsView } from 'fleet/hub-api';
 import type { BoardWorkItems } from './board-work-items.domain';
 
 export function fromBoardWorkItems(view: WorkItemsView): BoardWorkItems {

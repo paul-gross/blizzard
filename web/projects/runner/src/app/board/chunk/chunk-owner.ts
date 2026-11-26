@@ -1,7 +1,9 @@
 import { Injectable, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { type DaemonTarget, type KitAsyncStateValue, runnerClient } from 'fleet';
+import { type DaemonTarget } from 'fleet/core';
+import { type KitAsyncStateValue } from 'fleet/kit';
+import { runnerClient } from 'fleet/runner-api';
 
 import { injectPanelLeases, injectPanelRunners } from '../../core/panel-reads';
 import type { RunnerOwner } from '../../core/panel-reads.model';

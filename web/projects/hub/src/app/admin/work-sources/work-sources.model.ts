@@ -1,4 +1,4 @@
-import type { ViewportMode } from 'fleet';
+import type { ViewportMode } from 'fleet/viewport';
 
 import { builtInTone, lifecycleTone } from '../../core/lifecycle-tone';
 import type { ConfigFieldOption } from '../config-edit.model';

@@ -1,6 +1,7 @@
 // exemplar: bzh:frontend-domain-boundary, bzh:frontend-open-vocabulary.
 
-import { openLookup, PermitState as WireState, PermitVerb as WireVerb, type PermitView } from 'fleet';
+import { openLookup } from 'fleet/core';
+import { PermitState as WireState, PermitVerb as WireVerb, type PermitView } from 'fleet/hub-api';
 import type { Permit, PermitState, PermitVerb } from './permits.domain';
 
 const stateOf = openLookup<WireState, PermitState>({

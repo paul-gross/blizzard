@@ -10,7 +10,7 @@ import {
   type UrgencyCreateRequest,
   type UrgencyPatchRequest,
   type UrgencyPositionRequest,
-} from 'fleet';
+} from 'fleet/hub-api';
 import { hubConfigKey } from '../../core/query-keys';
 
 export const urgencyPositionMutationKey = ['hub', 'urgencies', 'position'] as const;

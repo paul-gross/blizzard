@@ -7,17 +7,12 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import {
-  WorkRefLink,
-  type ChunkDetailAggregate,
-  type ChunkControl,
-  runnerDisplayName,
-  runnerTitle,
-  KitCloseButton,
-  KitSwatch,
-  ChunkActionsMenu,
-  ChunkUrgency,
-} from 'fleet';
+import { WorkRefLink } from 'fleet/chunk-card';
+import { type ChunkControl, ChunkUrgency } from 'fleet/chunk-detail';
+import { ChunkActionsMenu } from 'fleet/chunk-detail/actions';
+import { type ChunkDetailAggregate } from 'fleet/chunk-page';
+import { runnerDisplayName, runnerTitle } from 'fleet/core';
+import { KitCloseButton, KitSwatch } from 'fleet/kit';
 import { AppLink } from 'fleet/shell';
 
 type ChunkHeaderDetail = Pick<ChunkDetailAggregate, 'chunk_id' | 'project_name' | 'work_refs' | 'pause' | 'route' | 'terminal' | 'urgency' |

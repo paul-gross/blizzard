@@ -3,9 +3,10 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { commands, page, userEvent } from 'vitest/browser';
 
-import { type ChunkDetailAggregate, ChunkTimeline } from 'fleet';
+import { ChunkCard } from 'fleet/chunk-card';
+import { ChunkTimeline } from 'fleet/chunk-detail';
+import { type ChunkDetailAggregate } from 'fleet/chunk-page';
 import { assetChunkArtifact, chunkArtifactStore, domainChunkDetail, commitChunkArtifact, domainTransition } from 'fleet/testing';
-import { ChunkCard } from 'fleet';
 import { type BoardCard, boardCardView } from './board-card/board-card-view.model';
 import { ChunkArtifacts } from './chunk-dock/chunk-artifacts';
 

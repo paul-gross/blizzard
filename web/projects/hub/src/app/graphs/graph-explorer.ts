@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { KitAsyncState, type KitAsyncStateValue, KitPanel, asyncState } from 'fleet';
+import { asyncState } from 'fleet/core';
+import { KitAsyncState, type KitAsyncStateValue, KitPanel } from 'fleet/kit';
 import { GraphExplorerList } from './graph-explorer-list';
 import { injectHubGraphsQuery } from './graphs.query';
 import type { GraphSummary } from './graph.domain';

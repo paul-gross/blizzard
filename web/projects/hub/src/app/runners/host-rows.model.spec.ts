@@ -1,4 +1,4 @@
-import type { HostFact } from 'fleet';
+import type { HostFact } from 'fleet/core';
 import type { HubRunner } from '../core/runners.domain';
 import { hubRunner } from '../core/runners.builders';
 import { runnerClaimChunk } from './runner-claims.builders';

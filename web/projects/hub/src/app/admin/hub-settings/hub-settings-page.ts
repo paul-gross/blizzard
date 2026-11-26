@@ -1,7 +1,8 @@
 import type { HubSettingRow } from './hub-settings.domain';
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 import { apply, form } from '@angular/forms/signals';
-import { asyncState, createRefusalState, submitForm } from 'fleet';
+import { asyncState } from 'fleet/core';
+import { createRefusalState, submitForm } from 'fleet/forms';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { ConfigFieldTreeDialog } from '../config-field-tree-dialog';
 import type { HubSettingBaseline, HubSettingDraft } from './hub-settings.domain';

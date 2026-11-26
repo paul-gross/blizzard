@@ -7,7 +7,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { assetArtifactView, chunkDetail, chunkSummary, OPERATOR_ME_RESPONSE, type RequestClientStub, stubHubClient } from 'fleet/testing';
 
-import { FLEET_CLOCK } from 'fleet';
+import { FLEET_CLOCK } from 'fleet/core';
 import { readDemoConfig } from './demo-config';
 import { DemoDirector } from './demo-director';
 import { DEMO_RANDOM } from './demo-random';

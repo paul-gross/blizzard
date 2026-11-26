@@ -1,6 +1,6 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { KitBadge, KitSectionHead } from 'fleet';
+import { KitBadge, KitSectionHead } from 'fleet/kit';
 
 import type { CredentialCheckVm } from './credentials.model';
 

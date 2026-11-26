@@ -2,7 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import type { ChunkDetailAggregate as ChunkDetail, WorkItemsState } from 'fleet';
+import type { WorkItemsState } from 'fleet/chunk-detail';
+import type { ChunkDetailAggregate as ChunkDetail } from 'fleet/chunk-page';
 import { chunkControlStub, domainChunkDetail as chunkDetail, domainDecision as decisionView, domainQuestion as questionView, recordingAwaitingHumanActions, workItem } from 'fleet/testing';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 

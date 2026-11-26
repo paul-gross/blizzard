@@ -13,7 +13,7 @@ export { HubEventKind, hubEventTypeName, type HubEventType, type HubEventData, t
 export { translateHubEvent, translateHubEventType } from './lib/sse/hub-events.translate';
 export { openLookup } from './lib/core/open-lookup';
 export { chunkDetailKey, chunkWorkItemsKey } from './lib/core/query-keys';
-export { FLEET_CLOCK, injectNowSignal } from './lib/core/now-signal';
+export { FLEET_CLOCK, injectNowSignal } from './lib/core/now-signal/now-signal';
 export { RUNNER_HOST_NAMES, RUNNER_NAMES } from './lib/core/runner-display-name';
 export { FlagStore, provideFlags, type FlagsRead } from './lib/core/flags/flag-store';
 export { flagGuard } from './lib/core/flags/flag-guard';

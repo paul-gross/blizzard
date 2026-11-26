@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type LaneStatus, domainStatusTone, compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectList, KitSelectRow, FleetWhen } from 'fleet';
+import { type LaneStatus, domainStatusTone, compactRef, FleetWhen } from 'fleet/core';
+import { KitAsyncState, type KitAsyncStateValue, KitBadge } from 'fleet/kit';
+import { KitSelectList, KitSelectRow } from 'fleet/kit/select-list';
 
 /** A run's finding counts, summed across every set it delivered — `null` when it
  * delivered none, so the row renders no triple rather than a misleading `+0`. */

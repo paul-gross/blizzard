@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import type { ChunkArtifactStore } from 'fleet';
+import type { ChunkArtifactStore } from 'fleet/chunk-detail';
 import { assetChunkArtifact, chunkArtifactStore, commitChunkArtifact } from 'fleet/testing';
 import { ChunkArtifacts } from './chunk-artifacts';
 

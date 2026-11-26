@@ -1,5 +1,6 @@
 // bzh:frontend-domain-boundary — the one place the delivery wire is read.
-import { type ChunkSummary, fromBounceView, fromChunkFlowPlaceView, type FlowView, type RepositorySummary } from 'fleet';
+import { fromBounceView, fromChunkFlowPlaceView } from 'fleet/chunk-page';
+import { type ChunkSummary, type FlowView, type RepositorySummary } from 'fleet/hub-api';
 import { laneStatus } from 'fleet/shell';
 
 import type { DeliveryChunk, DeliveryFlow, DeliveryRepository } from './delivery.domain';

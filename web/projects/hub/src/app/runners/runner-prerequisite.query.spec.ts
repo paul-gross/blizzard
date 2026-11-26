@@ -1,7 +1,7 @@
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { injectHubChunkDetailQuery } from 'fleet';
+import { injectHubChunkDetailQuery } from 'fleet/chunk-page';
 import { chunkDetail, settle, stubHubClient } from 'fleet/testing';
 import { hubChunkKey } from '../core/query-keys';
 import { injectPrerequisiteStatuses } from './runner-next-claim.query';

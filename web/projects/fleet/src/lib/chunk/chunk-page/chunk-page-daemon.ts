@@ -1,7 +1,7 @@
 import { InjectionToken, type Provider, type Signal } from '@angular/core';
 
 import type { ChunkControl } from '../chunk-detail/chunk-control';
-import type { AwaitingHumanFormActions } from '../awaiting-human';
+import type { AwaitingHumanFormActions } from '../awaiting-human/awaiting-human.domain';
 import type { DaemonTarget } from '../../core/daemon-target/daemon-target';
 
 /**

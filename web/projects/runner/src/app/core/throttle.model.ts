@@ -1,4 +1,4 @@
-import { formatAbsolute } from 'fleet';
+import { formatAbsolute } from 'fleet/core';
 
 import type { Throttle, ThrottleLever } from './throttle.domain';
 

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { KitAsyncState, type KitAsyncStateValue, KitPanel } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitPanel } from 'fleet/kit';
 
 /** One origin/class pair's garden-proposal counts over the panel's window,
  * already scoped to the one selected routine by the query's own

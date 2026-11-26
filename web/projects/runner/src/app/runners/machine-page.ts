@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { KitPanel } from 'fleet';
+import { KitPanel } from 'fleet/kit';
 
 import { LocalPauseControl } from './app-pause-control';
 import { LocalSelftest } from './selftest';

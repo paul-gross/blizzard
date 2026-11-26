@@ -3,7 +3,9 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ChunkPage, ChunkPageRoute, formatWhen, ViewportService } from 'fleet';
+import { ChunkPage, ChunkPageRoute } from 'fleet/chunk-page/view';
+import { formatWhen } from 'fleet/core';
+import { ViewportService } from 'fleet/viewport';
 import { APP_SCOPE, type InAppLink } from 'fleet/shell';
 import {
   assetArtifactView,

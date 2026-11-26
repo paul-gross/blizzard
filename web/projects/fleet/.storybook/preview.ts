@@ -6,7 +6,7 @@ import '../../hub/src/styles.css';
 import { provideRouter, withDisabledInitialNavigation } from '@angular/router';
 import { applicationConfig, type Preview } from '@storybook/angular-vite';
 
-import { FLEET_CLOCK } from 'fleet';
+import { FLEET_CLOCK } from 'fleet/core';
 import { FIXTURE_NOW } from 'fleet/testing';
 
 // Initial navigation is off: the iframe's own URL (`iframe.html`) matches no route and would log NG04002 on every story.

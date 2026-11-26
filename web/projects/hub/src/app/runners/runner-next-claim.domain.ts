@@ -1,4 +1,4 @@
-import type { LaneStatus, UnknownHostValue, UrgencyReference } from 'fleet';
+import type { LaneStatus, UnknownHostValue, UrgencyReference } from 'fleet/core';
 
 /** Why a runner's walk passed a chunk; `UnknownHostValue` carries a reason this build cannot name. */
 export type KnownClaimPassReason = 'blocked' | 'ineligible';

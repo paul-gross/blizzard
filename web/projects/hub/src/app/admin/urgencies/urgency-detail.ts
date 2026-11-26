@@ -2,7 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { form } from '@angular/forms/signals';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { asyncState, errorMessage, restingAsyncState, ViewportService, submitForm, type EditBaseline } from 'fleet';
+import { asyncState, errorMessage, restingAsyncState } from 'fleet/core';
+import { submitForm, type EditBaseline } from 'fleet/forms';
+import { ViewportService } from 'fleet/viewport';
 import { map } from 'rxjs';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';

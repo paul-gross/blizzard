@@ -4,13 +4,13 @@ import {
   injectMutation,
 } from '@tanstack/angular-query-experimental';
 
+import { problemType } from 'fleet/core';
 import {
   enrollHostApiHostsHostIdEnrollmentsPost,
   hubApi,
-  problemType,
   retireHostApiHostsHostIdRetirePost,
   revokeHostTokenApiHostsHostIdTokenRevocationsPost,
-} from 'fleet';
+} from 'fleet/hub-api';
 import {
   hostEnrollMutationKey,
   hostRetireMutationKey,

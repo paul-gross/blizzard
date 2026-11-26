@@ -1,4 +1,4 @@
-import type { hubApi } from 'fleet';
+import type { hubApi } from 'fleet/hub-api';
 import { expandTimeline, fromStepExecutor, fromInvocationKind, fromTimelineStep } from './timeline.translate';
 
 const at = (hhmm: string): string => `2026-07-01T${hhmm}:00Z`;

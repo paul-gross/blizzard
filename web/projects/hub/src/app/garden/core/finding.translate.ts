@@ -1,6 +1,13 @@
 // bzh:frontend-domain-boundary — the one place the finding wire is read; an unforeseen vocabulary value becomes an
 // `Unlisted` here and renders as itself (bzh:frontend-open-vocabulary).
-import { type FindingDetailView, type FindingFactView, type FindingsPageView, type FindingView, hubApi, openLookup } from 'fleet';
+import { openLookup } from 'fleet/core';
+import {
+  type FindingDetailView,
+  type FindingFactView,
+  type FindingsPageView,
+  type FindingView,
+  hubApi,
+} from 'fleet/hub-api';
 
 import type {
   Finding,

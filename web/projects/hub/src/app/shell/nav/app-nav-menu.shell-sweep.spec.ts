@@ -1,7 +1,8 @@
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { BoardHeader, type LaneCounts } from 'fleet';
+import { BoardHeader } from 'fleet/chrome';
+import { type LaneCounts } from 'fleet/core';
 import { OPERATOR_ME_RESPONSE, stubHubClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 

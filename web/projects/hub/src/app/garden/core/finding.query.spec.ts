@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubClient } from 'fleet';
+import { hubClient } from 'fleet/hub-api';
 import { gardenFindingDetailView, settle, type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
 import { injectHubFindingQuery, injectHubFindingsBucketQuery, injectHubFindingsQuery } from './finding.query';
 

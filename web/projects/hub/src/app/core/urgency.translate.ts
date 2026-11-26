@@ -1,4 +1,5 @@
-import type { Urgency, UrgencyRef, UrgencyReference, UrgencyView } from 'fleet';
+import type { Urgency, UrgencyReference } from 'fleet/core';
+import type { UrgencyRef, UrgencyView } from 'fleet/hub-api';
 
 export function fromUrgencyRef(wire: UrgencyRef): UrgencyReference {
   return { id: wire.urgency_id, slug: wire.slug };

@@ -1,6 +1,6 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
-import { runnerApi } from 'fleet';
+import { runnerApi } from 'fleet/runner-api';
 
 import { chunkRequeueMutationKey } from '../../core/mutation-keys';
 import { runnerChunkDetailKey, runnerDashboardKey, runnerLeasesKey } from '../../core/query-keys';

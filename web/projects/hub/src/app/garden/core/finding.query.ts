@@ -10,7 +10,7 @@ import {
   type FindingView,
   type FindingsPageView,
   hubApi,
-} from 'fleet';
+} from 'fleet/hub-api';
 import { hubFindingKey, hubFindingClassesKey, hubFindingsBucketKey, hubFindingsKey, lensedKey } from '../../core/query-keys';
 import { injectProjectFilter } from '../../core/project-filter';
 import type { Finding, FindingDetail, FindingPage } from './finding.domain';

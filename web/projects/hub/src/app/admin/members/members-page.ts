@@ -1,7 +1,9 @@
 import type { Member, MemberRole } from './members.domain';
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 
-import { asyncState, injectPendingMutationVariables, KitConfirmDialog, KitErrorLine } from 'fleet';
+import { asyncState, injectPendingMutationVariables } from 'fleet/core';
+import { KitErrorLine } from 'fleet/kit';
+import { KitConfirmDialog } from 'fleet/kit/dialog';
 import { injectMeQuery } from '../../core/auth/me.query';
 import { memberRoleMutationKey, revokeMemberMutationKey } from '../../core/mutation-keys';
 import { MembersTable } from './members-table';

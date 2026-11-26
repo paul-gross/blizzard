@@ -1,6 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 
-import { type ChunkDetailAggregate, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, injectRunnerHostNames, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, asyncState, type WorkItemsState } from 'fleet';
+import { type WorkItemsState } from 'fleet/chunk-detail';
+import { type ChunkDetailAggregate, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery } from 'fleet/chunk-page';
+import { injectRunnerHostNames, injectPendingMutationVariables, asyncState } from 'fleet/core';
+import { KitAsyncState, type KitAsyncStateValue } from 'fleet/kit';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectProjectDomainsQuery } from '../../core/projects.query';
 import { type CompleteVars } from '../chunks/complete.mutations';

@@ -1,5 +1,5 @@
 // bzh:frontend-domain-boundary — the one place the work item wire is read for the garden.
-import type { WorkItemView } from 'fleet';
+import type { WorkItemView } from 'fleet/hub-api';
 
 import type { WorkItem } from './work-item.domain';
 

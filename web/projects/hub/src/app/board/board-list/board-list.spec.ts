@@ -1,6 +1,6 @@
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { TenantContext } from '../../core/auth/tenant-context';
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import { CdkDropList, type CdkDragDrop } from '@angular/cdk/drag-drop';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';

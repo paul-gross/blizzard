@@ -1,4 +1,4 @@
-import type { Tone } from 'fleet';
+import type { Tone } from 'fleet/kit';
 
 import type { Lease } from './lease.domain';
 import { deriveLeaseStatus } from './lease-status';

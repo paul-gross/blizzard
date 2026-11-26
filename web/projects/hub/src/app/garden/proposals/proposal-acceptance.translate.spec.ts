@@ -1,4 +1,4 @@
-import { readRefusal } from 'fleet';
+import { readRefusal } from 'fleet/core';
 
 import { acceptanceDraftFor } from './proposal-acceptance.domain';
 import { PROPOSAL_ACCEPTANCE_REFUSALS, toAcceptVars } from './proposal-acceptance.translate';

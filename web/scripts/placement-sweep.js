@@ -11,10 +11,9 @@
  * file that imports from an app project — `fleet` never depends on its consumers.
  *
  * Reach is resolved **to the symbol**, not the file, with the TypeScript compiler: an
- * imported name is followed through the `fleet` / `fleet/shell` barrels and every
- * sub-barrel to the file that declares it, and that file's own imports are followed the
- * same way. Resolving to the file instead would mark every sub-barrel re-exported from
- * `public-api.ts` as reached and the sweep could never fail.
+ * imported name is followed through the `fleet/*` entry points to the file that declares it, and that file's own imports are followed the
+ * same way. Resolving to the file instead would mark every file an entry re-exports as reached
+ * and the sweep could never fail.
  *
  * Mixed folders (`kit/`, `core/viewport/`, `sse/`, `chunk/chunk-detail/`) pass at the folder level:
  * one shared file reached by both apps carries the unit.
@@ -44,12 +43,10 @@ const FLEET_LIB = 'projects/fleet/src/lib';
  *
  * - `testing/` is spec support behind its own `fleet/testing` entry; only specs and stories
  *   reach it, and their reach does not count.
- * - `core/format/` is a declaration-free re-export barrel over top-level modules; reach lands on
- *   those modules, which are units of their own, never on the barrel.
  * - `core/zones` is the zone options for the kit combobox; only the hub's cadence form reaches it
  *   today; a runner surface reaching it removes this entry.
  */
-const PLACEMENT_EXEMPT_UNITS = ['testing', 'core/format', 'core/zones'];
+const PLACEMENT_EXEMPT_UNITS = ['testing', 'core/zones'];
 
 /** Folders that only group units: a file under one belongs to the unit named by its first two segments. */
 const GROUPING_FOLDERS = ['core', 'chunk', 'shell'];
@@ -85,6 +82,15 @@ function walkTs(dir) {
   return out;
 }
 
+/** The `paths` map `web/tsconfig.json` declares: the one owner of the `fleet/*` specifiers, read for every
+ * program, a fixture's included, with each target relative to that program's `root`.
+ * @returns {Record<string, string[]>} */
+function workspacePaths() {
+  const { config, error } = ts.readConfigFile(path.join(ROOT, 'tsconfig.json'), ts.sys.readFile);
+  if (error) throw new Error(`placement sweep could not read tsconfig.json: ${ts.flattenDiagnosticMessageText(error.messageText, '\n')}`);
+  return config.compilerOptions.paths;
+}
+
 /**
  * A program over `rootNames`, resolving only modules inside `root` — third-party imports
  * stay unresolved, since placement never reaches past the workspace's own projects.
@@ -97,12 +103,7 @@ function createProgram(root, rootNames, memory) {
   /** @type {ts.CompilerOptions} */
   const options = {
     baseUrl: root,
-    paths: {
-      fleet: ['./projects/fleet/src/public-api.ts'],
-      'fleet/shell': ['./projects/fleet/src/shell-api.ts'],
-      'fleet/runner-shell': ['./projects/fleet/src/runner-shell-api.ts'],
-      'fleet/testing': ['./projects/fleet/src/lib/testing/public-api.ts'],
-    },
+    paths: workspacePaths(),
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.Preserve,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
@@ -297,17 +298,17 @@ function sweepPlacement({ root, memory = null }) {
 /**
  * Prove the placement detector can still fail, before trusting it over the tree
  * (`bzh:case-pins-its-own-name`): a unit only one app reaches and a `fleet` file importing
- * an app must each be caught, and a unit both apps reach — through the `fleet` barrel and a
- * sub-barrel, the shape a file-level resolver gets wrong — must pass. A grouping folder's
+ * an app must each be caught, and a unit both apps reach — through an entry and a
+ * re-export, the shape a file-level resolver gets wrong — must pass. A grouping folder's
  * children are judged one by one: a child one app reaches is caught beside a sibling both reach.
  */
 function assertPlacementDetectorWorks() {
   const root = '/placement-fixture';
   const memory = new Map([
     [
-      `${root}/projects/fleet/src/public-api.ts`,
-      "export * from './lib/shared';\nexport * from './lib/hub-only';\n" +
-        "export * from './lib/core/hub-tool';\nexport * from './lib/core/both-tool';\nexport * from './lib/runner-only';\n",
+      `${root}/projects/fleet/src/entries/core.ts`,
+      "export * from '../lib/shared';\nexport * from '../lib/hub-only';\n" +
+        "export * from '../lib/core/hub-tool';\nexport * from '../lib/core/both-tool';\nexport * from '../lib/runner-only';\n",
     ],
     // A grouping folder's children are units of their own: `core/hub-tool` is caught though
     // its sibling `core/both-tool` reaches both apps.
@@ -327,27 +328,27 @@ function assertPlacementDetectorWorks() {
     [`${root}/projects/hub/src/app/app-thing.ts`, 'export const appThing = 2;\n'],
     [
       `${root}/projects/hub/src/main.ts`,
-      "import { sharedThing, hubThing, hubTool, bothTool } from 'fleet';\n" +
+      "import { sharedThing, hubThing, hubTool, bothTool } from 'fleet/core';\n" +
         'export const used = [sharedThing, hubThing, hubTool, bothTool];\n',
     ],
     [
       `${root}/projects/runner/src/main.ts`,
-      "import { sharedThing, bothTool } from 'fleet';\nexport const used = [sharedThing, bothTool];\n",
+      "import { sharedThing, bothTool } from 'fleet/core';\nexport const used = [sharedThing, bothTool];\n",
     ],
     [
       `${root}/projects/runner/src/main.spec.ts`,
-      "import { hubThing } from 'fleet';\nexport const specOnly = hubThing;\n",
+      "import { hubThing } from 'fleet/core';\nexport const specOnly = hubThing;\n",
     ],
-    // A hub story's `fleet` import adds no hub reach, as a hub spec's does not: `runner-only`
+    // A hub story's `fleet/core` import adds no hub reach, as a hub spec's does not: `runner-only`
     // stays reached by the runner alone.
     [`${root}/projects/fleet/src/lib/runner-only/index.ts`, 'export const runnerThing = 5;\n'],
     [
       `${root}/projects/runner/src/runner-main.ts`,
-      "import { runnerThing } from 'fleet';\nexport const used = runnerThing;\n",
+      "import { runnerThing } from 'fleet/core';\nexport const used = runnerThing;\n",
     ],
     [
       `${root}/projects/hub/src/app/hub.stories.ts`,
-      "import { runnerThing } from 'fleet';\nexport const storyOnly = runnerThing;\n",
+      "import { runnerThing } from 'fleet/core';\nexport const storyOnly = runnerThing;\n",
     ],
   ]);
   const { units, appImports } = sweepPlacement({ root, memory });
@@ -409,6 +410,8 @@ module.exports = {
   placementViolations,
   sweepPlacement,
   createProgram,
+  unitOf,
+  workspacePaths,
   walkTs,
   moduleSpecifiers,
   isUnder,

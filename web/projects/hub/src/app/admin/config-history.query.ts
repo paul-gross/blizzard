@@ -1,10 +1,7 @@
 import { toConfigChange, toWireRecordKind } from './config-history.translate';
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import {
-  type ConfigChangeView,
-  listChangesApiConfigChangesGet,
-} from 'fleet';
+import { type ConfigChangeView, listChangesApiConfigChangesGet } from 'fleet/hub-api';
 import type { ConfigRecordKind } from './config-history.domain';
 import { hubConfigHistoryKey } from '../core/query-keys';
 

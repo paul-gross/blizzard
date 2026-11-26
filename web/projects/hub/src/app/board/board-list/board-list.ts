@@ -1,11 +1,11 @@
 import { UrgencyPill } from '../../core/urgency-pill';
 import { urgencyPill } from '../../core/urgencies.model';
-import type { Urgency } from 'fleet';
+import { ChunkListRow, LaneIcon } from 'fleet/chunk-card';
+import type { Urgency } from 'fleet/core';
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { CdkDrag, type CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 import { NgTemplateOutlet } from '@angular/common';
 
-import { ChunkListRow, LaneIcon } from 'fleet';
 
 import { type BoardDonePolicy, boardDonePolicy } from '../../core/board-done-policy.model';
 import { type BoardCard, boardCardView } from '../board-card/board-card-view.model';

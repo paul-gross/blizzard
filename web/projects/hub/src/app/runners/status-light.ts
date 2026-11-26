@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { KitBeacon } from 'fleet';
+import { KitBeacon } from 'fleet/kit';
 import type { ConnectionLight } from './connection-status.model';
 
 /**

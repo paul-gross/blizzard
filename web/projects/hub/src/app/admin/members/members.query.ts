@@ -1,6 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type MemberView, listMembersApiMembersGet } from 'fleet';
+import { type MemberView, listMembersApiMembersGet } from 'fleet/hub-api';
 import { fromMemberView } from './members.translate';
 import { hubMembersKey } from '../../core/query-keys';
 

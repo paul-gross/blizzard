@@ -1,4 +1,4 @@
-import type { ActivityView } from 'fleet';
+import type { ActivityView } from 'fleet/hub-api';
 import { HubEventKind, openLookup, type ActivityFact, type HubEventType } from 'fleet/shell';
 
 const activityTypes = openLookup<ActivityView['type'], HubEventType>({

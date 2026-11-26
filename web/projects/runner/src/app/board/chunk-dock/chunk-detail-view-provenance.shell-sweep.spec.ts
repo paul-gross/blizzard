@@ -1,6 +1,6 @@
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { KitPanel } from 'fleet';
+import { KitPanel } from 'fleet/kit';
 import type { Escalation } from '../../core/escalation.domain';
 import { commands, page } from 'vitest/browser';
 

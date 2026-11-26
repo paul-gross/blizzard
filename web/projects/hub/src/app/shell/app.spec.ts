@@ -3,19 +3,15 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import {
-  EVENT_SOURCE_FACTORY,
-  ViewportService,
-  hubClient,
-  type EventSourceFactory,
-  type FleetEventSource,
-} from 'fleet';
+import { FLEET_CLOCK } from 'fleet/core';
+import { hubClient } from 'fleet/hub-api';
+import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource } from 'fleet/sse';
+import { ViewportService } from 'fleet/viewport';
 import { provideAuthInterceptor } from '../core/auth/auth.interceptor';
 import { LAST_TENANT_KEY, TAB_TENANT_KEY, TenantContext } from '../core/auth/tenant-context';
 import { provideTenantInterceptor } from '../core/auth/tenant.interceptor';
 import { OPERATOR_ME_RESPONSE, chunkCountsView, flagsResponse, meResponse, meTenant, providerSummary, fleetSpendView, projectView, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 import { vi } from 'vitest';
-import { FLEET_CLOCK } from 'fleet';
 
 import { App } from './app';
 import { routes } from './app.routes';

@@ -1,4 +1,4 @@
-import type { UnknownHostValue } from 'fleet';
+import type { UnknownHostValue } from 'fleet/core';
 
 export type KnownLeaseState = 'running' | 'stale' | 'parked' | 'backing-off' | 'spawning' | 'exited' | 'closed';
 /** A lease's read-time-derived state; `UnknownHostValue` carries one this build cannot name. */

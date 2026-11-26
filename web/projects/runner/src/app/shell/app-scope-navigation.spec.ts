@@ -3,7 +3,9 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource, runnerClient, ViewportService } from 'fleet';
+import { runnerClient } from 'fleet/runner-api';
+import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource } from 'fleet/sse';
+import { ViewportService } from 'fleet/viewport';
 import {
   chunkDetail,
   chunkNeighborView,

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { ChunkCard, ChunkListRow } from 'fleet';
+import { ChunkCard, ChunkListRow } from 'fleet/chunk-card';
 
 import type { MachineChunkRow } from '../../core/chunk-rows.model';
 import { WorkerLine } from '../../runners/worker-line';

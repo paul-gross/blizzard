@@ -1,4 +1,4 @@
-import { type SubscriptionLine, subscriptionLine, type SubscriptionPace } from 'fleet';
+import { type SubscriptionLine, subscriptionLine, type SubscriptionPace } from 'fleet/host';
 
 import { fleetIdOf } from '../core/runners.domain';
 import { type ConnectionLight, runnerLight } from './connection-status.model';

@@ -1,4 +1,4 @@
-import type { AsyncStateQuery } from 'fleet';
+import type { AsyncStateQuery } from 'fleet/core';
 import { describe, expect, it } from 'vitest';
 import type { Graph, GraphNode, GraphSummary } from '../../graphs/graph.domain';
 import { fixtureInstant } from 'fleet/testing';

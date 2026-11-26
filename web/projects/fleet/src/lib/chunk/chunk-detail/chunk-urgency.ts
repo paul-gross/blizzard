@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import type { ChunkDetail } from '../chunk-page/chunk-detail.model';
-import type { Urgency } from '../../core/urgency';
+import type { Urgency } from '../../core/urgency/urgency.domain';
 import { isHexColor, legibleOnDark, projectColorValue } from '../../kit/kit-swatch-color';
 import type { ChunkControl } from './chunk-control';
 

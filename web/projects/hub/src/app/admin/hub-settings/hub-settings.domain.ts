@@ -1,5 +1,5 @@
 // The hub settings domain: what an edit of one setting holds. No wire and no Angular.
-import type { EditBaseline } from 'fleet';
+import type { EditBaseline } from 'fleet/forms';
 
 /** What the edit dialog holds: the value as typed, and whether the key takes its default instead. */
 export interface HubSettingDraft {

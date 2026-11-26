@@ -1,5 +1,6 @@
-import type { hubApi } from 'fleet';
-import { fromFlowState, unlisted } from 'fleet';
+import { fromFlowState } from 'fleet/chunk-page';
+import { unlisted } from 'fleet/core';
+import type { hubApi } from 'fleet/hub-api';
 import { laneStatus } from 'fleet/shell';
 import type { BoardPageMetadata, BoardSummary, GraphProgressNode, GraphProgressState, RunnerClaimChunk } from './chunks.domain';
 import { fromUrgencyRef } from './urgency.translate';

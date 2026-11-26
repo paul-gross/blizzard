@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
-import { type KitAsyncStateValue, injectRunnerHostNames } from 'fleet';
+import { injectRunnerHostNames } from 'fleet/core';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import { ACTIVITY_LIMIT, injectHubActivityQuery } from './activity.query';
 import { ActivityFeedView, type ActivityRow } from './activity-view';
 import { activityPanelState, activityRows, backfillEvents, mergeActivityFeeds } from './activity-panel.model';

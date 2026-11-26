@@ -1,6 +1,6 @@
 // bzh:frontend-domain-boundary — the one place the routine trend, sweeps, and proposal-counts wire is read; an
 // unforeseen proposal origin becomes an `Unlisted` here (bzh:frontend-open-vocabulary).
-import type { GardenProposalCountsView, GardenSweepsView, TrendView } from 'fleet';
+import type { GardenProposalCountsView, GardenSweepsView, TrendView } from 'fleet/hub-api';
 
 import { proposalOriginOf } from './proposal.translate';
 import type { RoutineProposalCounts, RoutineSweeps, RoutineTrend } from './routine-read.domain';

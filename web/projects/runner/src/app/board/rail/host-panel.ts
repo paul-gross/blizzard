@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { asyncState, asyncStateOf, injectNowSignal, KitAsyncState, runnerSubscriptionLines, type SubscriptionLine } from 'fleet';
+import { asyncState, asyncStateOf, injectNowSignal } from 'fleet/core';
+import { runnerSubscriptionLines, type SubscriptionLine } from 'fleet/host';
+import { KitAsyncState } from 'fleet/kit';
 
 import { PanelFilters } from '../../core/panel-filters';
 import { injectPanelDashboards, injectPanelProjects } from '../../core/panel-reads';

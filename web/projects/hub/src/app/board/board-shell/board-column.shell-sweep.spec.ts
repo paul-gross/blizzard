@@ -1,12 +1,12 @@
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { TenantContext } from '../../core/auth/tenant-context';
-import type { Urgency } from 'fleet';
+import { type Urgency, LANES, type Lane, laneTone } from 'fleet/core';
+import { toneColor } from 'fleet/kit';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { commands, page } from 'vitest/browser';
 
 import type { BoardCard } from '../board-card/board-card-view.model';
-import { LANES, type Lane, laneTone, toneColor } from 'fleet';
 import { BoardColumn } from './board-column';
 
 /** The board column's layout under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep. */

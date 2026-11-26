@@ -5,7 +5,7 @@ import {
   listProjectScopesApiProjectsProjectScopesGet,
   listScopesApiScopesGet,
   type ScopeView,
-} from 'fleet';
+} from 'fleet/hub-api';
 import type { Scope } from './scope.domain';
 import { fromScopeView } from './scope.translate';
 import { hubScopeRoutinesKey, hubScopesKey, lensedKey } from '../../core/query-keys';

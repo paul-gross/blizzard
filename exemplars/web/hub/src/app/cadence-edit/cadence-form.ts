@@ -3,7 +3,9 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
 
-import { type KitChipOption, KitField, KitForm, KitSelect, KitTextInput } from 'fleet';
+import { KitField, KitForm, KitTextInput } from 'fleet/kit';
+import { type KitChipOption } from 'fleet/kit/chips';
+import { KitSelect } from 'fleet/kit/select';
 import { CADENCE_ANCHORS, type CadenceDraft } from './cadence.domain';
 
 const ANCHOR_OPTIONS: readonly KitChipOption[] = [

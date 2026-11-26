@@ -1,4 +1,4 @@
-import { ageMs } from 'fleet';
+import { ageMs } from 'fleet/core';
 
 /** The DONE window `listChunksApiChunksGet` keeps under `board_window`: chunks finished in the last
  * `BOARD_DONE_WINDOW_HOURS`, plus the newest few however old. */

@@ -1,4 +1,4 @@
-import { readRefusal } from 'fleet';
+import { readRefusal } from 'fleet/core';
 
 import { ANSWER_REFUSALS, DECISION_NOTE_REFUSALS, toAnswerVars, toResolveVars } from './awaiting-human.translate';
 

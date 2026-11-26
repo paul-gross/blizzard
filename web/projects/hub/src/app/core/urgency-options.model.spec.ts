@@ -1,4 +1,4 @@
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import { defaultUrgencyName, urgencyOptions } from './urgency-options.model';
 
 const live = { id: 'u1', slug: 'live', name: 'Live', retired: false } as Urgency;

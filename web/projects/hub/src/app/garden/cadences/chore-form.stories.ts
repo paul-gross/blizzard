@@ -1,5 +1,5 @@
 import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite';
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 
 import { ChoreFormStoryHost } from './chore-form.story-host';
 

@@ -1,14 +1,14 @@
 // bzh:frontend-domain-boundary — the one place the graph wire is read.
+import { openLookup } from 'fleet/core';
 import {
   hubApi,
-  openLookup,
   type GraphChoiceView,
   type GraphLifecycle as WireGraphLifecycle,
   type GraphNodeView,
   type GraphSessionView,
   type GraphSummaryView,
   type GraphView,
-} from 'fleet';
+} from 'fleet/hub-api';
 
 import type {
   ChoiceTargetKind,

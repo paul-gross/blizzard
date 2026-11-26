@@ -1,4 +1,4 @@
-import type { ViewportMode } from 'fleet';
+import type { ViewportMode } from 'fleet/viewport';
 
 /** The write controls a record's detail renders. */
 export interface ConfigActionsVm {

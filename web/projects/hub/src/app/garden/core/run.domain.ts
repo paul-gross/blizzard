@@ -1,5 +1,5 @@
 // bzh:frontend-domain-boundary — a routine run as its form states it and as the hub reads it back; no wire, no Angular.
-import type { LaneStatus } from 'fleet';
+import type { LaneStatus } from 'fleet/core';
 
 import type { Vocabulary } from './vocabulary.domain';
 

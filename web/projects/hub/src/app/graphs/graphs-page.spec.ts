@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
+import { hubClient } from 'fleet/hub-api';
 import { BehaviorSubject, NEVER } from 'rxjs';
 import { vi } from 'vitest';
 

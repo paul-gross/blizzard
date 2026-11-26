@@ -1,4 +1,4 @@
-import { type KitChipOption } from 'fleet';
+import { type KitChipOption } from 'fleet/kit/chips';
 import type { Proposal } from '../core/proposal.domain';
 import type { Routine } from '../core/routine.domain';
 import { routineDisplayName } from '../core/routine-display-name';

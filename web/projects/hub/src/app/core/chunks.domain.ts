@@ -1,4 +1,5 @@
-import type { ChunkDetailAggregate, LaneStatus, UrgencyReference } from 'fleet';
+import type { ChunkDetailAggregate } from 'fleet/chunk-page';
+import type { LaneStatus, UrgencyReference } from 'fleet/core';
 
 /** A node's latest visit in a chunk's graph. Unknown states retain the server's value. */
 export type GraphProgressState =

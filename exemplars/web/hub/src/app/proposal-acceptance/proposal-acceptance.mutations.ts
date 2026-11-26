@@ -3,7 +3,10 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { acceptGardenProposalApiGardenProposalsProposalIdAcceptPost, type GardenProposalAcceptResponse } from 'fleet';
+import {
+  acceptGardenProposalApiGardenProposalsProposalIdAcceptPost,
+  type GardenProposalAcceptResponse,
+} from 'fleet/hub-api';
 import { acceptGardenProposalMutationKey } from '../core/mutation-keys';
 import { hubGardenProposalKey, hubGardenProposalsKey, hubRoutineProposalCountsPrefixKey } from '../core/query-keys';
 

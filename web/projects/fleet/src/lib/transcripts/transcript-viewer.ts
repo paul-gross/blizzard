@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { injectNowSignal } from '../core/now-signal';
+import { injectNowSignal } from '../core/now-signal/now-signal';
 import { formatAbsolute, formatLocalClockWithDay, type LocalClockWithDay } from '../core/when';
 import { KitButton } from '../kit/kit-button';
 import type { TranscriptSidechain, TranscriptTool, TranscriptTurn } from './transcript-turn';

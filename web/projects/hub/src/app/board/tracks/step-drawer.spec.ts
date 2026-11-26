@@ -6,7 +6,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 
 import { vi } from 'vitest';
 
-import { FLEET_CLOCK, formatHeldFor } from 'fleet';
+import { FLEET_CLOCK, formatHeldFor } from 'fleet/core';
 import { assetArtifactView, chunkDetail, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 import { StepDrawer } from './step-drawer';
 import { BUILD, VIEW, unlistedStep } from './step-fixtures.translate';

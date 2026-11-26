@@ -1,5 +1,6 @@
 import { computed, type Signal } from '@angular/core';
-import { parseSettingText, type SaveOutcome } from 'fleet';
+import { parseSettingText } from 'fleet/core';
+import { type SaveOutcome } from 'fleet/forms';
 
 import type { HubSettingBaseline, HubSettingDraft } from './hub-settings.domain';
 import { injectHubSettingsMutation } from './hub-settings.mutations';

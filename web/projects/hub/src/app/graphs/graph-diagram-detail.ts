@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { KitFactList, type KitFact, KitPanel, KitProseBlock, unlisted } from 'fleet';
+import { unlisted } from 'fleet/core';
+import { KitFactList, type KitFact, KitPanel, KitProseBlock } from 'fleet/kit';
 import {
   type DiagramSelection,
   type ResolvedChoiceSelection,

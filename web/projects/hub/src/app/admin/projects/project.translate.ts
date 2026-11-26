@@ -1,4 +1,6 @@
-import { readRefusal, type RefusalMap, type SaveOutcome, type ProjectCreateRequest, type ProjectPatchRequest, type ProjectView } from 'fleet';
+import { readRefusal } from 'fleet/core';
+import { type RefusalMap, type SaveOutcome } from 'fleet/forms';
+import { type ProjectCreateRequest, type ProjectPatchRequest, type ProjectView } from 'fleet/hub-api';
 import { fromProjectView } from '../../core/project.translate';
 import { normalizedProjectDraft, type ProjectDraft } from './project.domain';
 

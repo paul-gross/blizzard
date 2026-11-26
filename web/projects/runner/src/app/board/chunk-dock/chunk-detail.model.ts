@@ -1,4 +1,5 @@
-import { ageMs, compactRef, type DaemonTarget, formatAge, runnerClient } from 'fleet';
+import { ageMs, compactRef, type DaemonTarget, formatAge } from 'fleet/core';
+import { runnerClient } from 'fleet/runner-api';
 
 import type { Lease } from '../../core/lease.domain';
 import type { PanelLease } from '../../core/panel-reads.model';

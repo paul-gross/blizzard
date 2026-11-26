@@ -1,5 +1,6 @@
 // bzh:frontend-domain-boundary — the one place a scope's wire is read and its description edit written and refused.
-import type { RefusalMap, RoutineView, RunRowView, ScopeView } from 'fleet';
+import type { RefusalMap } from 'fleet/forms';
+import type { RoutineView, RunRowView, ScopeView } from 'fleet/hub-api';
 
 import type { Scope, ScopeDescriptionDraft, ScopeRoutine, ScopeSweep } from './scope.domain';
 

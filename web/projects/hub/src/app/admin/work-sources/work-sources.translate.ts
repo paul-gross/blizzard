@@ -1,4 +1,4 @@
-import type { WorkSourceSummary } from 'fleet';
+import type { WorkSourceSummary } from 'fleet/hub-api';
 import type { ProjectWorkSource } from './work-sources.domain';
 
 export function toProjectWorkSource(

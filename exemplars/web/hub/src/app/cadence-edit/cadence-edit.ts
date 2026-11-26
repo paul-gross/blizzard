@@ -3,7 +3,8 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 import { form } from '@angular/forms/signals';
 
-import { type EditBaseline, KitButton, submitForm } from 'fleet';
+import { type EditBaseline, submitForm } from 'fleet/forms';
+import { KitButton } from 'fleet/kit';
 import { injectRouteParam } from '../core/route-state';
 import { CadenceEditForm } from './cadence-form';
 import { cadenceBySlug, whileEditing } from './cadence-edit.model';

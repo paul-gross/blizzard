@@ -1,4 +1,5 @@
-import { type EditBaseline, parseSettingText, type SaveOutcome } from 'fleet';
+import { parseSettingText } from 'fleet/core';
+import { type EditBaseline, type SaveOutcome } from 'fleet/forms';
 
 import type { SettingDraft, SettingsTarget, SettingWrite } from './settings.domain';
 import { injectSettingsWriteMutation } from './settings.mutations';

@@ -9,7 +9,7 @@ import {
   resumePermitApiPermitsPermitIdResumePost,
   revokePermitApiPermitsPermitIdRevokePost,
   suspendPermitApiPermitsPermitIdSuspendPost,
-} from 'fleet';
+} from 'fleet/hub-api';
 import type { PermitMove } from './permits.domain';
 import { hubPermitKey, hubPermitsKey } from '../core/query-keys';
 import { permitMoveMutationKey, permitRevokeMutationKey } from '../core/mutation-keys';

@@ -1,4 +1,4 @@
-import { formatAbsolute, formatWhen, openLookup } from 'fleet';
+import { formatAbsolute, formatWhen, openLookup } from 'fleet/core';
 
 import type { FindingFact, FindingFactKind } from '../core/finding.domain';
 import { type Vocabulary, vocabularyText } from '../core/vocabulary.domain';

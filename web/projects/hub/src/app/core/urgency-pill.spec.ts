@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type Urgency } from 'fleet';
+import { type Urgency } from 'fleet/core';
 import { vi } from 'vitest';
 import { TenantContext } from './auth/tenant-context';
 import { UrgencyPill } from './urgency-pill';

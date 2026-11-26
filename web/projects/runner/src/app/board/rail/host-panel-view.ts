@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { KitAsyncState, KitBadge, KitBeacon, KitGlyph, KitSlotBar, SubscriptionBlocks, type KitAsyncStateValue, type SubscriptionLine } from 'fleet';
+import { SubscriptionBlocks, type SubscriptionLine } from 'fleet/host';
+import { KitAsyncState, KitBadge, KitBeacon, KitGlyph, KitSlotBar, type KitAsyncStateValue } from 'fleet/kit';
 
 import type { HostPanelPool } from '../../core/host-pools.model';
 import type { HostPanelRunner } from './host-panel.model';

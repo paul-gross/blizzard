@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
-import { KitAsyncState, asyncStateOf } from 'fleet';
+import { asyncStateOf } from 'fleet/core';
+import { KitAsyncState } from 'fleet/kit';
 
 import { ProjectLens } from '../../core/project-lens';
 import { injectProjectDomainsQuery } from '../../core/projects.query';

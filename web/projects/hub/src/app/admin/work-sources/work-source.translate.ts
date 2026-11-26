@@ -1,12 +1,11 @@
 // bzh:frontend-domain-boundary — the one place the work-source wire is read and written.
+import { type EditBaseline, type RefusalMap } from 'fleet/forms';
 import {
-  type EditBaseline,
   RecordKind,
-  type RefusalMap,
   type WorkSourceCreateRequest,
   type WorkSourcePatchRequest,
   type WorkSourceSummary,
-} from 'fleet';
+} from 'fleet/hub-api';
 
 import type { ConfigRecordRef } from '../config-history.domain';
 import type { WorkSource, WorkSourceDraft } from './work-source.domain';

@@ -6,7 +6,8 @@ import {
 } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { EVENT_SOURCE_FACTORY, hubClient, meApiMeGet } from 'fleet';
+import { hubClient, meApiMeGet } from 'fleet/hub-api';
+import { EVENT_SOURCE_FACTORY } from 'fleet/sse';
 import { TAB_TENANT_KEY, TENANT_HEADER, TenantContext } from './tenant-context';
 import { provideTenantInterceptor } from './tenant.interceptor';
 import { readUrgencyIcon } from '../urgency-icon.query';

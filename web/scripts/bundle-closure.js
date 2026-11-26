@@ -112,12 +112,10 @@ function lazyEntries(meta, initialOutputs) {
     .sort((a, b) => b.bytes - a.bytes || a.entry.localeCompare(b.entry));
 }
 
-/** Is `file` a `fleet` entry file: a public surface an app imports `fleet` through, or a barrel under `lib/`.
+/** Is `file` a `fleet` entry file: a public surface an app imports `fleet` through.
  * @param {string} file */
 function isEntryFile(file) {
-  if (file.startsWith(ENTRIES_DIR)) return true;
-  if (/^projects\/fleet\/src\/[\w-]*(public-api|shell-api)\.ts$/.test(file)) return true;
-  return file.startsWith(FLEET_LIB) && !file.startsWith(`${FLEET_LIB}api/`) && file.endsWith('/index.ts');
+  return file.startsWith(ENTRIES_DIR) || /^projects\/fleet\/src\/(runner-)?shell-api\.ts$/.test(file);
 }
 
 /**

@@ -1,13 +1,8 @@
 // exemplar: bzh:frontend-domain-boundary, bzh:frontend-edit-baseline, bzh:frontend-mutation-settles-on-refresh.
 
-import {
-  type CadenceEditRequest,
-  type CadenceView,
-  CadenceAnchor as WireCadenceAnchor,
-  type EditBaseline,
-  openLookup,
-  type RefusalMap,
-} from 'fleet';
+import { openLookup } from 'fleet/core';
+import { type EditBaseline, type RefusalMap } from 'fleet/forms';
+import { type CadenceEditRequest, type CadenceView, CadenceAnchor as WireCadenceAnchor } from 'fleet/hub-api';
 
 import type { Cadence, CadenceAnchor, CadenceDraft, UnlistedAnchor } from './cadence.domain';
 

@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideTanStackQuery, QueryClient } from '@tanstack/angular-query-experimental';
-import { runnerApi, runnerClient } from 'fleet';
+import { runnerApi, runnerClient } from 'fleet/runner-api';
 import { runnerAuthSessionView, runnerLeaseView, type StubDetailBody, type StubHttpError, stubError, stubRunnerClient } from 'fleet/testing';
 import { vi } from 'vitest';
 

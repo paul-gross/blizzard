@@ -1,4 +1,4 @@
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import type { Project } from '../../core/project.domain';
 import { projectOptions, urgencyOptions } from './new-hub-item.model';
 

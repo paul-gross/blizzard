@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import type { TranscriptHistoryStep } from './transcript-turn';
-import { asyncState, restingAsyncState } from '../core/query-state';
+import { asyncState, restingAsyncState } from '../core/query-state/query-state';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
 import type { DaemonTarget } from '../core/daemon-target/daemon-target';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';

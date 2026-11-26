@@ -1,4 +1,5 @@
-import { domainStatusTone, type LaneStatus, toneColor } from 'fleet';
+import { domainStatusTone, type LaneStatus } from 'fleet/core';
+import { toneColor } from 'fleet/kit';
 import { domainBounce, domainLandedRepo, domainPr, FIXTURE_NOW, fixtureInstant } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 

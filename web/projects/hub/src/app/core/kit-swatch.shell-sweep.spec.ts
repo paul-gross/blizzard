@@ -1,7 +1,7 @@
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import { KitSwatch } from 'fleet';
+import { KitSwatch } from 'fleet/kit';
 import { PROJECT_COLORS } from './project-color.translate';
 
 const COLORS: readonly string[] = PROJECT_COLORS;

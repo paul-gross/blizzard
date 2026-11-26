@@ -1,7 +1,8 @@
 import { Component, input, signal } from '@angular/core';
 import { form, submit } from '@angular/forms/signals';
 
-import type { KitAsyncStateValue, Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
+import type { KitAsyncStateValue } from 'fleet/kit';
 
 import { EMPTY_RUN_DRAFT, type RoutineBaseline, type RunDraft } from '../core/run.domain';
 import type { Scope } from '../core/scope.domain';

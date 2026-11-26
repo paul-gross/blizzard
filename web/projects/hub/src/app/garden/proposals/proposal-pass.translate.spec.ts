@@ -1,4 +1,4 @@
-import { readRefusal } from 'fleet';
+import { readRefusal } from 'fleet/core';
 
 import { PROPOSAL_PASS_REFUSALS, toPassVars } from './proposal-pass.translate';
 

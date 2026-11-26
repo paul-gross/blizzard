@@ -1,5 +1,15 @@
-import type { CredentialBindingView, CredentialCheckView, CredentialCreateRequest, CredentialDocument as WireDocument, CredentialListItem as WireListItem, CredentialPatchRequest, CredentialSummary, EditBaseline, ForgeBindingsView, RefusalMap } from 'fleet';
-import { openLookup } from 'fleet';
+import { openLookup } from 'fleet/core';
+import type { EditBaseline, RefusalMap } from 'fleet/forms';
+import type {
+  CredentialBindingView,
+  CredentialCheckView,
+  CredentialCreateRequest,
+  CredentialDocument as WireDocument,
+  CredentialListItem as WireListItem,
+  CredentialPatchRequest,
+  CredentialSummary,
+  ForgeBindingsView,
+} from 'fleet/hub-api';
 import { type Credential, type CredentialBinding, type CredentialCheck, type CredentialDocument, type CredentialDraft, type CredentialForgeBindings, type CredentialListItem, type CredentialSettingKind, POSITIVE_INTEGER_MESSAGE, readPositiveInteger, settingDrafts } from './credential.domain';
 
 export function fromCredentialSummary(wire: CredentialSummary): Credential {

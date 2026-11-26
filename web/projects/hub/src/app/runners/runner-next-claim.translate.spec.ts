@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { hubApi } from 'fleet';
+import type { hubApi } from 'fleet/hub-api';
 import { toNextClaim, toPrerequisiteStatus } from './runner-next-claim.translate';
 
 const entry: hubApi.NextClaimEntry = { chunk_id: 'ch_next', graph_id: 'gr_1', position: 3, project_id: 'p', project_name: 'Example', project_slug: 'example', urgency: { urgency_id: 'u', slug: 'urgent' } };

@@ -1,5 +1,6 @@
 import { computed, type Signal } from '@angular/core';
-import { type EditBaseline, readRefusal, type SaveOutcome } from 'fleet';
+import { readRefusal } from 'fleet/core';
+import { type EditBaseline, type SaveOutcome } from 'fleet/forms';
 import { urgencyMarkError, type UrgencyDraft } from './urgency.domain';
 import { toCreateRequest, toEditRequest, URGENCY_REFUSALS } from './urgency.translate';
 import { injectCreateUrgencyMutation, injectEditUrgencyMutation } from './urgencies.mutations';

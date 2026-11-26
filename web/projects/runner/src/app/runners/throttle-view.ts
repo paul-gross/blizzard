@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { KitAsyncState, KitButton, KitConfirmDialog, type KitAsyncStateValue, KitErrorLine, KitFactList, type KitFact } from 'fleet';
+import { KitAsyncState, KitButton, type KitAsyncStateValue, KitErrorLine, KitFactList, type KitFact } from 'fleet/kit';
+import { KitConfirmDialog } from 'fleet/kit/dialog';
 
 import type { Throttle } from '../core/throttle.domain';
 import { throttleLines, throttleSummary } from '../core/throttle.model';

@@ -7,7 +7,7 @@ import {
   enableSecretApiSecretsNameEnablePost,
   replaceSecretApiSecretsNameValuePut,
   retireSecretApiSecretsNameRetirePost,
-} from 'fleet';
+} from 'fleet/hub-api';
 import {
   createSecretMutationKey,
   replaceSecretMutationKey,

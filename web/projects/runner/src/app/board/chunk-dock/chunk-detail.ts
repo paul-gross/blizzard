@@ -1,17 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
+import { type ChunkPause, type ChunkWorkRef, injectChunkDetailQuery } from 'fleet/chunk-page';
 import {
-  type ChunkPause,
-  type ChunkWorkRef,
   type DaemonTarget,
   errorMessage,
-  injectChunkDetailQuery,
   injectNowSignal,
   injectPendingMutationVariables,
   isPendingFor,
-  KitPanel,
-  KitPanelHeader,
-  KitErrorLine,
-} from 'fleet';
+} from 'fleet/core';
+import { KitPanel, KitPanelHeader, KitErrorLine } from 'fleet/kit';
 
 import type { Escalation } from '../../core/escalation.domain';
 import { injectChunkPauseMutation } from './chunk-pause.mutations';

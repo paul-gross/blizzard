@@ -1,345 +1,37 @@
 /*
- * Public API of the `fleet` shared library.
- *
- * The fleet views, the SSE transport + live-update spine, the reads/mutations, and
- * the generated API clients live here once so both the hub app and the runner
- * app compose them. The two generated clients are re-exported under namespaces because
- * the hub and runner SDKs share operation names (e.g. `healthApiHealthGet`).
- *
- * This barrel is deliberately thin: every feature directory under `lib/`
- * owns its own `index.ts` sub-barrel — including the domain view types it re-exports
- * from the generated hub client — and is re-exported here one line each, so two
- * features landing in parallel touch different sub-barrels instead of colliding on
- * this file (`architecture/frontend-structure/disjoint-diffs.md`). Only
- * what has no single feature owner — the query-key registry and the generated-client
- * surface itself — stays exported directly at root.
+ * The library build's aggregate (`ng-package.json`'s entry file): one `export *` line per weight-class entry
+ * under `entries/`. No code imports it — apps, specs, stories, and exemplars import a `fleet/<entry>`
+ * (`bzh:frontend-weight-class-entries`).
  */
 
-export * from './lib/kit';
-export * from './lib/shell/app-shell';
-export * from './lib/chunk/chunk-page';
-export * from './lib/core/design';
-export * from './lib/core/forms';
-export * from './lib/core/format';
-export * from './lib/core/zones';
-export * from './lib/core/when-display';
-export * from './lib/core/now-signal';
-export * from './lib/core/clipboard';
-export * from './lib/shell/board-header';
-export * from './lib/chunk/chunk-detail';
-export * from './lib/chunk/awaiting-human';
-export * from './lib/chunk/chunk-artifacts-panel';
-export * from './lib/chunk/chunk-issue-list';
-export * from './lib/chunk/work-ref-link';
-export * from './lib/chunk/chunk-card';
-export * from './lib/sse';
-export * from './lib/core/mutation-pending';
-export * from './lib/transcripts';
-export * from './lib/host';
-export * from './lib/core/url-selection';
-export * from './lib/core/viewport';
-export * from './lib/core/query-state';
-export * from './lib/core/polling';
-export * from './lib/core/daemon-target';
-export * from './lib/core/flags';
-export * from './lib/core/forms';
-export * from './lib/shell/mobile-chrome';
-
-export {
-  chunkDetailKey,
-  chunkWorkItemsKey,
-  chunkTranscriptsKey,
-  chunkTranscriptSegmentKey,
-  type TranscriptPlane,
-} from './lib/core/query-keys';
-
-export * as hubApi from './lib/api/hub';
-export * as runnerApi from './lib/api/runner';
-
-/*
- * The client instances themselves. The generated `index.ts` re-exports the SDK
- * functions and types but not the client, so a consumer outside this library has no
- * handle to configure its transport or stub it in a test.
- */
-export { client as runnerClient } from './lib/api/runner/client.gen';
-export { client as hubClient } from './lib/api/hub/client.gen';
-export type { Client } from './lib/api/hub/client';
-export type {
-  RepositoryCreateRequest,
-  ForgeCreateRequest,
-  ForgePatchRequest,
-  ForgeSummary,
-  ForgeDetail,
-  CredentialBindingView,
-  CredentialCreateRequest,
-  CredentialDocument,
-  CredentialListItem,
-  CredentialPatchRequest,
-  CredentialReferenceView,
-  CredentialSettingView,
-  CredentialSummary,
-  CredentialsListView,
-  CredentialCheckRequest, CredentialCheckView, OperationResultView, UseResultView,
-  ForgeBindingsView,
-  SecretCreateRequestWritable,
-  SecretReplaceRequest,
-  RepositoryPatchRequest,
-  WorkSourceCreateRequest,
-  WorkSourcePatchRequest,
-  OldFieldWarning,
-  ActivityView,
-  AnswerResult,
-  ConfigChangeView,
-  ConfigChangesPage,
-  FieldChangeView,
-  RecordRefView,
-  RepositorySummary,
-  SecretView,
-  WorkSourceSummary,
-  BacklogPeekEntry,
-  BacklogPeekResponse,
-  ChunkCountsView,
-  ChunkStatus,
-  ChunkSummary,
-  ChunksPageView,
-  DecisionResolutionConflict,
-  DecisionResolutionResponse,
-  DecisionView,
-  EventView,
-  ExternalSubscriptionUsageWindowView,
-  FindingDetailView,
-  FindingFactView,
-  FindingView,
-  FindingsPageView,
-  FleetSpendView,
-  GardenProposalAcceptResponse,
-  GardenProposalClosureView,
-  GardenProposalCountsView,
-  GardenProposalView,
-  GardenSweepsView,
-  GraphChoiceView,
-  GraphNodeView,
-  GraphSessionView,
-  GraphSummaryView,
-  GraphView,
-  LandedRepoView,
-  MeResponse,
-  PauseView,
-  PrView,
-  ProviderSummary,
-  QuestionView,
-  QueuePeekEntry,
-  QueuePeekResponse,
-  RouteView,
-  RoutineBaselineView,
-  RoutineRunResponse,
-  RoutineView,
-  RunDeltaView,
-  RunRowView,
-  RunnerCapability,
-  ProjectView,
-  ProjectsListView,
-  RunnerDecliningView,
-  RunnerRegistryView,
-  UnenforceableGateView,
-  HostRegistryView,
-  ChunkFlowPlaceView,
-  FlowChangedPayload,
-  FlowFactView,
-  FlowListView,
-  FlowPlaceView,
-  FlowRecordPage,
-  FlowView,
-  ServedProjectView,
-  RunnerView,
-  ScopeView,
-  TrendView,
-  MemberView,
-  WorkItemView,
-  WorkRefView,
-} from './lib/api/hub';
-export {
-  createProjectApiProjectsPost,
-  getProjectApiProjectsProjectGet,
-  linkRepositoryApiProjectsProjectRepositoryLinksRepositoryPut,
-  linkSourceApiProjectsProjectSourceLinksSourcePut,
-  listProjectsApiProjectsGet,
-  listRepositoryLinksApiProjectsProjectRepositoryLinksGet,
-  listSourceLinksApiProjectsProjectSourceLinksGet,
-  patchProjectApiProjectsProjectPatch,
-  patchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatch,
-  positionRepositoryApiProjectsProjectLandingOrderPositionPost,
-  unlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePost,
-  unlinkSourceApiProjectsProjectSourceLinksSourceRetirePost,
-} from './lib/api/hub';
-export {
-  ChunkDeleteRefusal,
-  DeclaredLever,
-  GraphLifecycle,
-  ProjectColor,
-  RecordKind,
-  RunnerConnection,
-  RunnerVersionStanding,
-  VersionRefusalReason,
-  createRepositoryApiRepositoriesPost,
-  listForgesApiForgesGet,
-  createForgeApiForgesPost,
-  getForgeApiForgesForgeGet,
-  patchForgeApiForgesForgePatch,
-  retireForgeApiForgesForgeRetirePost,
-  enableForgeApiForgesForgeEnablePost,
-  listCredentialsApiCredentialsGet,
-  createCredentialApiCredentialsPost,
-  getCredentialApiCredentialsCredentialGet,
-  patchCredentialApiCredentialsCredentialPatch,
-  retireCredentialApiCredentialsCredentialRetirePost,
-  enableCredentialApiCredentialsCredentialEnablePost, checkCredentialApiCredentialsCredentialChecksPost,
-  createSecretApiSecretsPost,
-  createWorkSourceApiWorkSourcesPost,
-  enableRepositoryApiRepositoriesRepositoryEnablePost,
-  enableSecretApiSecretsNameEnablePost,
-  enableWorkSourceApiWorkSourcesSourceEnablePost,
-  patchRepositoryApiRepositoriesRepositoryPatch,
-  patchWorkSourceApiWorkSourcesSourcePatch,
-  replaceSecretApiSecretsNameValuePut,
-  retireRepositoryApiRepositoriesRepositoryRetirePost,
-  retireSecretApiSecretsNameRetirePost,
-  retireWorkSourceApiWorkSourcesSourceRetirePost,
-  getRepositoryApiRepositoriesRepositoryGet,
-  getSecretApiSecretsNameGet,
-  getWorkSourceApiWorkSourcesSourceGet,
-  listChangesApiConfigChangesGet,
-  listRepositoriesApiRepositoriesGet,
-  listSecretsApiSecretsGet,
-  listWorkSourcesApiWorkSourcesGet,
-  acceptGardenProposalApiGardenProposalsProposalIdAcceptPost,
-  answerQuestionApiQuestionsQuestionIdAnswersPost,
-  grantMembershipApiMembersUserIdPut,
-  chunkCountsApiChunkCountsGet,
-  completeChunkApiChunksChunkIdCompletePost,
-  confirmGoneFindingsApiFindingsConfirmGonePost,
-  deleteChunkApiChunksChunkIdDelete,
-  detachChunkApiChunksChunkIdDetachPost,
-  enableGraphApiGraphsGraphIdEnablePost,
-  enableRoutineApiRoutinesRoutineIdEnablePost,
-  envTimelineApiEnvTimelineGet,
-  envTimelineStepApiEnvTimelineStepGet,
-  envTimelineStepTranscriptApiEnvTimelineStepTranscriptGet,
-  fleetSpendApiSpendGet,
-  getBacklogApiBacklogGet,
-  getFindingApiFindingsFindingIdGet,
-  getGraphApiGraphsGraphIdGet,
-  getQueueApiQueueGet,
-  getBulkWorkItemsApiWorkItemsGet,
-  getWorkItemsApiChunksChunkIdWorkItemsGet,
-  getWorkItemApiWorkSourcesSourceItemsRefGet,
-  healthApiHealthGet,
-  listActivityApiActivityGet,
-  listChunksApiChunksGet,
-  listEventsApiEventsGet,
-  listFindingsApiFindingsGet,
-  listFindingClassesApiFindingsClassesGet,
-  listGardenProposalsApiGardenProposalsGet,
-  listGraphsApiGraphsGet,
-  listOpenQuestionsApiQuestionsGet,
-  listProvidersApiAuthProvidersGet,
-  listRoutineScopesApiRoutinesRoutineIdScopesGet,
-  listRoutinesApiRoutinesGet,
-  listRunnersApiRunnersGet,
-  listHostsApiHostsGet,
-  listFlowsApiFlowsGet,
-  getFlowApiFlowsFlowIdGet,
-  getFlowRecordApiFlowsFlowIdRecordGet,
-  enrollHostApiHostsHostIdEnrollmentsPost,
-  releaseRunnersApiHostsHostIdReleasesPost,
-  retireHostApiHostsHostIdRetirePost,
-  revokeHostTokenApiHostsHostIdTokenRevocationsPost,
-  listRunsApiRunsGet,
-  listScopesApiScopesGet,
-  listMembersApiMembersGet,
-  revokeMembershipApiMembersUserIdDelete,
-  logoutApiAuthLogoutPost,
-  meApiMeGet,
-  notAFindingFindingsApiFindingsNotAFindingPost,
-  passGardenProposalApiGardenProposalsProposalIdPassPost,
-  patchChunkApiChunksChunkIdPatch,
-  pauseChunkApiChunksChunkIdPausePost,
-  pauseRunnerApiRunnersRunnerIdPausePost,
-  promoteChunkApiChunksChunkIdPromotePost, demoteChunkApiChunksChunkIdDemotePost,
-  reopenFindingsApiFindingsReopenPost,
-  repositionBacklogApiBacklogPositionPost,
-  repositionQueueApiQueuePositionPost,
-  resolveDecisionApiDecisionsDecisionIdResolutionsPost,
-  resolveFindingsApiFindingsResolvePost,
-  resumeChunkApiChunksChunkIdResumePost,
-  resumeRunnerApiRunnersRunnerIdResumePost,
-  retireGraphApiGraphsGraphIdRetirePost,
-  editRoutineApiRoutinesRoutineIdPatch,
-  retireRoutineApiRoutinesRoutineIdRetirePost,
-  routineBaselinesApiRoutinesRoutineIdBaselinesGet,
-  routineProposalCountsApiRoutinesProposalCountsGet,
-  routineSweepsApiRoutinesRoutineIdSweepsGet,
-  routineTrendApiRoutinesTrendGet,
-  runDeltaApiRunsChunkIdGet,
-  runRoutineApiRoutinesRoutineIdRunPost,
-  supersedeFindingsApiFindingsSupersedePost,
-  wontFixFindingsApiFindingsWontFixPost,
-} from './lib/api/hub';
-export type { ChunkDetail, ChunkWorkItemsView, WorkItemsView } from './lib/api/hub';
-export type {
-  LandingPositionRequest,
-  ProjectCreateRequest,
-  ProjectPatchRequest,
-  RepositoryLinkView,
-  SourceLinkView,
-} from './lib/api/hub';
-// A project's garden: its nested reads and its scopes' by-slug verbs, each addressed inside the project.
-export {
-  editProjectScopeApiProjectsProjectScopesSlugPatch,
-  enableProjectScopeApiProjectsProjectScopesSlugEnablePost,
-  getGardenProposalApiGardenProposalsProposalIdGet,
-  listProjectFindingsApiProjectsProjectFindingsGet,
-  listProjectFindingClassesApiProjectsProjectFindingsClassesGet,
-  listProjectGardenProposalsApiProjectsProjectGardenProposalsGet,
-  listProjectRoutinesApiProjectsProjectRoutinesGet,
-  listProjectRunsApiProjectsProjectRunsGet,
-  listProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGet,
-  listProjectScopesApiProjectsProjectScopesGet,
-  projectRunDeltaApiProjectsProjectRunsChunkIdGet,
-  retireProjectScopeApiProjectsProjectScopesSlugRetirePost,
-} from './lib/api/hub';
-// A project's cadences: the list read in the project, and each cadence's own verbs, addressed by its id.
-export {
-  AttentionReason,
-  CadenceAnchor,
-  ErrandState,
-  RunMode,
-  WaitKind,
-  createProjectCadenceApiProjectsProjectCadencesPost,
-  editCadenceApiCadencesCadenceIdPatch,
-  enableCadenceApiCadencesCadenceIdEnablePost,
-  listCadenceErrandsApiCadencesCadenceIdErrandsGet,
-  listCadencesApiCadencesGet,
-  listProjectCadencesApiProjectsProjectCadencesGet,
-  retireCadenceApiCadencesCadenceIdRetirePost,
-} from './lib/api/hub';
-export type {
-  CadenceAttentionView,
-  CadenceCreateRequest,
-  CadenceEditRequest,
-  CadenceErrandView,
-  CadenceView,
-  ChoreDocument,
-  ChoreView,
-  ErrandRunView,
-  RunCadenceView,
-} from './lib/api/hub';
-export { listUrgenciesApiUrgenciesGet, getUrgencyApiUrgenciesKeyGet, getUrgencyIconApiUrgenciesKeyIconGet } from './lib/api/hub/sdk.gen';
-export type { UrgencyRef, UrgencyView } from './lib/api/hub/types.gen';
-export { createUrgencyApiUrgenciesPost, patchUrgencyApiUrgenciesKeyPatch, enableUrgencyApiUrgenciesKeyEnablePost, retireUrgencyApiUrgenciesKeyRetirePost, positionUrgencyApiUrgenciesOrderPositionPost, getSettingsApiSettingsGet, patchSettingsApiSettingsPatch } from './lib/api/hub/sdk.gen';
-export type { UrgencyCreateRequest, UrgencyPatchRequest, UrgencyPositionRequest, SettingsView } from './lib/api/hub/types.gen';
-export { changesApiAdminSettingsChangesGet, getSettingsApiAdminSettingsGet, patchSettingsApiAdminSettingsPatch } from './lib/api/hub/sdk.gen';
-export type { HubSettingRow, HubSettingsChange } from './lib/api/hub/types.gen';
-
-export { createWorkItemApiWorkSourcesSourceItemsPost, type WorkItemCreateResponse } from './lib/api/hub';
-export type { Urgency, UrgencyReference } from './lib/core/urgency';
+export * from './entries/awaiting-human';
+export * from './entries/chrome';
+export * from './entries/chrome/titlebar';
+export * from './entries/chunk-card';
+export * from './entries/chunk-card/issue-list';
+export * from './entries/chunk-detail';
+export * from './entries/chunk-detail/actions';
+export * from './entries/chunk-detail/panes';
+export * from './entries/chunk-page';
+export * from './entries/chunk-page/view';
+export * from './entries/core';
+export * from './entries/forms';
+export * from './entries/host';
+export * from './entries/hub-api';
+export * from './entries/kit';
+export * from './entries/kit/accordion';
+export * from './entries/kit/chips';
+export * from './entries/kit/combobox';
+export * from './entries/kit/dialog';
+export * from './entries/kit/grid';
+export * from './entries/kit/menu';
+export * from './entries/kit/select';
+export * from './entries/kit/select-list';
+export * from './entries/kit/tabs';
+export * from './entries/kit/tooltip';
+export * from './entries/runner-api';
+export * from './entries/sse';
+export * from './entries/transcripts';
+export * from './entries/transcripts/tab';
+export * from './entries/viewport';
+export * from './entries/viewport/menu';

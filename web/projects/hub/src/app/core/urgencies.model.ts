@@ -1,4 +1,4 @@
-import type { UrgencyReference, Urgency } from 'fleet';
+import type { UrgencyReference, Urgency } from 'fleet/core';
 
 export function resolveUrgency(ref: UrgencyReference | null | undefined, urgencies: readonly Urgency[] | undefined): Urgency | null {
   return ref == null ? null : urgencies?.find((urgency) => urgency.id === ref.id) ?? null;

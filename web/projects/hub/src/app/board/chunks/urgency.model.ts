@@ -1,4 +1,4 @@
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import type { ChunkUrgencyVars } from './urgency.mutations';
 
 /** Show each chunk's most recently requested urgency while its write settles. */

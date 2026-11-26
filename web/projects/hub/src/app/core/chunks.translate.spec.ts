@@ -1,4 +1,4 @@
-import type { hubApi } from 'fleet';
+import type { hubApi } from 'fleet/hub-api';
 import { chunkSummary } from 'fleet/testing';
 import { fromBoardPage, fromBoardSummary, fromGraphProgressNode, fromGraphProgressState } from './chunks.translate';
 

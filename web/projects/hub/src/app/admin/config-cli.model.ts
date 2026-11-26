@@ -1,4 +1,4 @@
-import type { ViewportMode } from 'fleet';
+import type { ViewportMode } from 'fleet/viewport';
 
 /** The record kinds the admin surfaces own — the ones a detail here shows a command for. */
 export type AdminRecordKind = 'work_source' | 'repository' | 'forge' | 'credential' | 'secret';

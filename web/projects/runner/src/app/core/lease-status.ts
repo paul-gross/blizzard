@@ -1,4 +1,5 @@
-import { type Tone, unlisted } from 'fleet';
+import { unlisted } from 'fleet/core';
+import { type Tone } from 'fleet/kit';
 
 import type { Lease } from './lease.domain';
 

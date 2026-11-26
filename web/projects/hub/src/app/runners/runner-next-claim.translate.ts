@@ -1,4 +1,5 @@
-import type { ChunkDetail, hubApi, UnknownHostValue } from 'fleet';
+import type { UnknownHostValue } from 'fleet/core';
+import type { ChunkDetail, hubApi } from 'fleet/hub-api';
 import { laneStatus, openLookup } from 'fleet/shell';
 import { fromUrgencyRef } from '../core/urgency.translate';
 import type {

@@ -20,7 +20,7 @@
  * Fails when a source file reachable that eagerly is one esbuild cannot drop from the
  * initial chunk even when nothing on the eager path uses its exports (the barrel-leak
  * failure mode this check exists to catch): the fleet `chunk/chunk-detail/`, `chunk/awaiting-human/`, or
- * `transcripts/` sub-barrels and `@angular/cdk`'s `menu`/`overlay`/`listbox` bundles in either app, and
+ * `transcripts/` folders and `@angular/cdk`'s `menu`/`overlay`/`listbox` bundles in either app, and
  * for the hub also its `garden/`, `graphs/`, or `board/chunk-dock/` folders and `@dagrejs/*`.
  *
  * It also prints, per app, every lazy entry's static closure beyond the initial chunk with their median, and each
@@ -39,7 +39,7 @@ const ROOT = path.resolve(__dirname, '..');
 
 /** Forbidden initial-chunk module patterns, each a predicate over a metafile-relative path
  * (forward slashes, no leading `./`, e.g. `projects/hub/src/app/garden/garden-page.ts`).
- * The fleet sub-barrels and the CDK stack are shared; the rest is per app. */
+ * The fleet folders and the CDK stack are shared; the rest is per app. */
 const SHARED_FORBIDDEN = [
   { name: 'fleet chunk-detail/', test: (f) => f.startsWith('projects/fleet/src/lib/chunk/chunk-detail/') },
   { name: 'fleet awaiting-human/', test: (f) => f.startsWith('projects/fleet/src/lib/chunk/awaiting-human/') },

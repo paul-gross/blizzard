@@ -1,33 +1,34 @@
 import { urgencyPill } from '../../core/urgencies.model';
-import type { Urgency } from 'fleet';
-import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
-import { NgTemplateOutlet } from '@angular/common';
-import { RouterLink } from '@angular/router';
-
+import { type WorkLine, LaneIcon } from 'fleet/chunk-card';
+import { ChunkUrgency } from 'fleet/chunk-detail';
 import {
+  type Urgency,
   DONE_LANE,
-  ChunkUrgency,
   FleetWhen,
-  KitAsyncState,
-  KitBadge,
-  KitPanel,
-  KitSkeleton,
   domainStatusTone,
-  projectTint,
   laneTone,
-  toneColor,
   type LaneStatus,
   formatCost,
   formatSeenTag,
   injectNowSignal,
   hasCostFigure,
+} from 'fleet/core';
+import {
+  KitAsyncState,
+  KitBadge,
+  KitPanel,
+  KitSkeleton,
+  projectTint,
+  toneColor,
   type KitAsyncStateValue,
   type KitCountCell,
   KitCountStrip,
   KitCountStripSkeleton,
-  type WorkLine,
-  LaneIcon,
-} from 'fleet';
+} from 'fleet/kit';
+import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { RouterLink } from '@angular/router';
+
 import { AppLink } from 'fleet/shell';
 
 import { FleetSpend } from '../fleet-spend/fleet-spend';

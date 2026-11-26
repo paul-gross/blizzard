@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import { FleetFindingList, type FindingListRowVm } from './finding-list';
-import type { KitAsyncStateValue } from 'fleet';
+import type { KitAsyncStateValue } from 'fleet/kit';
 
 const LIVE_ROW: FindingListRowVm = {
   findingId: 'fin_01M1KANH0RZEABSD44RCEH6G9B',

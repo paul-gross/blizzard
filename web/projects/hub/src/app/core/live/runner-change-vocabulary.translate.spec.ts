@@ -1,4 +1,4 @@
-import { hubApi } from 'fleet';
+import { hubApi } from 'fleet/hub-api';
 
 describe('runner change wire vocabulary', () => {
   it('pins the activity and stream kinds exercised by the live update spec', () => {

@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ViewportService } from 'fleet';
+import { ViewportService } from 'fleet/viewport';
 import { TAB_TENANT_KEY } from '../../core/auth/tenant-context';
 import { configChangesPage, OPERATOR_ME_RESPONSE, settle, stubError, stubHubClient, type RequestClientStub } from 'fleet/testing';
 import { UrgencyDetail } from './urgency-detail';

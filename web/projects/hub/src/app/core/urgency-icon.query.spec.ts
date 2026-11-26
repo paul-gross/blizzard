@@ -1,7 +1,7 @@
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
+import { hubClient } from 'fleet/hub-api';
 import { vi } from 'vitest';
 import { TenantContext } from './auth/tenant-context';
 import {

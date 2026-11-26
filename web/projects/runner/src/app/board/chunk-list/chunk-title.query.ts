@@ -1,5 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
-import { fromWorkItemsView, runnerApi } from 'fleet';
+import { fromWorkItemsView } from 'fleet/chunk-page';
+import { runnerApi } from 'fleet/runner-api';
 
 import { runnerChunkWorkItemsKey } from '../../core/query-keys';
 

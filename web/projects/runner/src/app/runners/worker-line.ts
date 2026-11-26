@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, booleanAttribute, computed, input } from '@angular/core';
-import { KitBadge } from 'fleet';
+import { KitBadge } from 'fleet/kit';
 
 import type { Lease } from '../core/lease.domain';
 import { deriveLeaseStatus } from '../core/lease-status';

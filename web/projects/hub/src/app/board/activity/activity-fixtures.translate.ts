@@ -1,4 +1,4 @@
-import type { ActivityView } from 'fleet';
+import type { ActivityView } from 'fleet/hub-api';
 
 /** A backfill HTTP row for transport stubs. */
 export const activityView = (overrides: Partial<ActivityView>): ActivityView => ({

@@ -1,6 +1,19 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type ChunkArtifact, type ChunkControl, type ChunkDetailAggregate, type AwaitingHumanFormActions, ChunkAwaitingHuman, ChunkDelivery, ChunkEscalation, ChunkFacts, ChunkIssuePane, ChunkTimeline, hasDelivery, type WorkItemsState, KitErrorLine, KitPanel } from 'fleet';
+import { type AwaitingHumanFormActions, ChunkAwaitingHuman } from 'fleet/awaiting-human';
+import {
+  type ChunkArtifact,
+  type ChunkControl,
+  ChunkDelivery,
+  ChunkEscalation,
+  ChunkFacts,
+  ChunkTimeline,
+  hasDelivery,
+  type WorkItemsState,
+} from 'fleet/chunk-detail';
+import { ChunkIssuePane } from 'fleet/chunk-detail/panes';
+import { type ChunkDetailAggregate } from 'fleet/chunk-page';
+import { KitErrorLine, KitPanel } from 'fleet/kit';
 import { ChunkArtifacts } from './chunk-artifacts';
 import { ChunkDetailHeader } from '../../core/chunk-detail-header/chunk-detail-header';
 

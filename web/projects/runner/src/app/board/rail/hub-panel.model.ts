@@ -1,4 +1,4 @@
-import type { Tone } from 'fleet';
+import type { Tone } from 'fleet/kit';
 
 import type { RunnerDashboard } from '../../core/panel-reads.model';
 import { identityRefusal } from '../../core/runner-health.model';

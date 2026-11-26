@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { type ChunkArtifact as ArtifactModel, asyncState, compactRef, injectHubChunkDetailQuery } from 'fleet';
+import { type ChunkArtifact as ArtifactModel } from 'fleet/chunk-detail';
+import { injectHubChunkDetailQuery } from 'fleet/chunk-page';
+import { asyncState, compactRef } from 'fleet/core';
 
 import { ArtifactView } from './artifact-view';
 import { artifactByKey } from './artifact-page.model';

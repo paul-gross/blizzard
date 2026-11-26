@@ -8,8 +8,8 @@ import {
   viewChild,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { FleetWhen } from 'fleet/core';
 import {
-  FleetWhen,
   KitAsyncState,
   type KitAsyncStateValue,
   KitBadge,
@@ -18,7 +18,7 @@ import {
   type KitFact,
   KitFactList,
   KitSectionHead,
-} from 'fleet';
+} from 'fleet/kit';
 
 import type { ConfigActionsVm } from './config-actions.model';
 import type { LastChangeVm, RevisionRowVm } from './config-history.model';

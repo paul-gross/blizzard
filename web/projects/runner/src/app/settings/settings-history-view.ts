@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { FleetWhen, KitAsyncState, type KitAsyncStateValue, KitButton, KitErrorLine, KitPanel } from 'fleet';
+import { FleetWhen } from 'fleet/core';
+import { KitAsyncState, type KitAsyncStateValue, KitButton, KitErrorLine, KitPanel } from 'fleet/kit';
 
 import type { SettingsChangeVm } from './settings.model';
 

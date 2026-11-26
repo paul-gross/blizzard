@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { grantMembershipApiMembersUserIdPut, revokeMembershipApiMembersUserIdDelete } from 'fleet';
+import { grantMembershipApiMembersUserIdPut, revokeMembershipApiMembersUserIdDelete } from 'fleet/hub-api';
 import { type Member, type MemberRole } from './members.domain';
 import { fromMemberView, toMemberRoleRequest } from './members.translate';
 import { memberRoleMutationKey, revokeMemberMutationKey } from '../../core/mutation-keys';

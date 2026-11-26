@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
-import { asyncState, errorMessage, injectPendingMutationVariables } from 'fleet';
+import { asyncState, errorMessage, injectPendingMutationVariables } from 'fleet/core';
 
 import { selftestStartMutationKey } from '../core/mutation-keys';
 import { injectRunnerDashboardStatusQuery } from '../core/status.query';

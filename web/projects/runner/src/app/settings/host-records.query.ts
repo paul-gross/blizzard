@@ -1,5 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
-import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet';
+import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/core';
+import { runnerApi } from 'fleet/runner-api';
 
 import { hostSubscriptionRecordsKey, hostWorkspaceRecordsKey } from '../core/query-keys';
 import { runnerSubscription } from '../core/host-subscription.translate';

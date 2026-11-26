@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { pauseRunnerApiRunnersRunnerIdPausePost, resumeRunnerApiRunnersRunnerIdResumePost } from 'fleet';
+import { pauseRunnerApiRunnersRunnerIdPausePost, resumeRunnerApiRunnersRunnerIdResumePost } from 'fleet/hub-api';
 import { runnerPauseMutationKey } from '../core/mutation-keys';
 import { hubRunnersKey } from '../core/query-keys';
 

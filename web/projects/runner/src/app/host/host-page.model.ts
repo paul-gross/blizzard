@@ -1,4 +1,4 @@
-import { compactRef } from 'fleet';
+import { compactRef } from 'fleet/core';
 
 import { type RunnerProjects, servesProject } from '../core/panel-reads.model';
 import type { HostEnvGroup } from './host-environments.model';

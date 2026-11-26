@@ -2,7 +2,8 @@ import { Component, computed, type Type, provideZonelessChangeDetection } from '
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { form, FormField, required, schema } from '@angular/forms/signals';
-import { KitField, KitTextInput, type SaveOutcome, submitForm } from 'fleet';
+import { type SaveOutcome, submitForm } from 'fleet/forms';
+import { KitField, KitTextInput } from 'fleet/kit';
 
 import { ConfigFieldTreeDialog } from './config-field-tree-dialog';
 import type { ConfigFieldView } from './config-field-tree.model';

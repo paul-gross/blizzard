@@ -1,6 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { listRepositoriesApiRepositoriesGet, type RepositorySummary } from 'fleet';
+import { listRepositoriesApiRepositoriesGet, type RepositorySummary } from 'fleet/hub-api';
 import { hubConfigListKey } from './query-keys';
 
 /** `GET /api/repositories` — the tenant's live repositories, which the Delivery page joins a flow onto to name the

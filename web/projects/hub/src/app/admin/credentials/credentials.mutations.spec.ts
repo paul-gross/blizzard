@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
-import { type CredentialCheckView } from 'fleet';
+import { type CredentialCheckView } from 'fleet/hub-api';
 import { credentialSummary, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { injectCheckCredentialMutation, injectCreateCredentialMutation, injectCredentialLifecycleMutation, injectEditCredentialMutation } from './credentials.mutations';
 import { hubConfigKey } from '../../core/query-keys';

@@ -1,4 +1,4 @@
-import type { MemberView, hubApi } from 'fleet';
+import type { MemberView, hubApi } from 'fleet/hub-api';
 import { memberRoleLabel, type Member } from './members.domain';
 
 /** Encode a domain fixture as a served row for transport stubs. */

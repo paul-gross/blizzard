@@ -1,6 +1,6 @@
 import { type InfiniteData, injectInfiniteQuery } from '@tanstack/angular-query-experimental';
 
-import { type ConfigChangesPage, listChangesApiConfigChangesGet } from 'fleet';
+import { type ConfigChangesPage, listChangesApiConfigChangesGet } from 'fleet/hub-api';
 import type { ConfigChangePage } from '../config-history.domain';
 import { toConfigChangePage } from '../config-history.translate';
 import { hubConfigChangesKey, lensedKey } from '../../core/query-keys';

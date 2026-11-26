@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ChunkCard, type WorkItem } from 'fleet';
+import { ChunkCard } from 'fleet/chunk-card';
+import { type WorkItem } from 'fleet/chunk-detail';
 import { workItem } from 'fleet/testing';
 
 import { type MachineChunkRow, machineChunkRows } from '../../core/chunk-rows.model';

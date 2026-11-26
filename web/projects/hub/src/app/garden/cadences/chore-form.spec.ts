@@ -2,7 +2,7 @@ import { Component, input, provideZonelessChangeDetection, signal } from '@angul
 import { TestBed } from '@angular/core/testing';
 import { form } from '@angular/forms/signals';
 
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import { type ChoreDraft, EMPTY_CHORE_DRAFT } from '../core/cadence.domain';
 import { choreAddRules, choreEditRules } from './chore.form';
 import { FleetChoreForm } from './chore-form';

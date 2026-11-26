@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { type KitAsyncStateValue, KitBackBar, KitButton } from 'fleet';
+import { type KitAsyncStateValue, KitBackBar, KitButton } from 'fleet/kit';
 
 import type { Escalation } from '../core/escalation.domain';
 import { type BoardLayout, ChunkBoard } from './chunk-list/chunk-board';

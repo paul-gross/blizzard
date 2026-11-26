@@ -1,4 +1,4 @@
-import { compactRef, runnerDisplayName } from 'fleet';
+import { compactRef, runnerDisplayName } from 'fleet/core';
 import { type LoggedEvent } from '../../core/live/hub-live-updates';
 
 /** A `chunk-changed` frame shaped into the Activity feed's two-line block. */

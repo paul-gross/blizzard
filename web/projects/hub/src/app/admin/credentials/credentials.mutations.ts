@@ -8,7 +8,7 @@ import {
   retireCredentialApiCredentialsCredentialRetirePost,
   type CredentialCreateRequest,
   type CredentialPatchRequest,
-} from 'fleet';
+} from 'fleet/hub-api';
 
 import type { CredentialCheckTarget } from './credential.domain';
 import { fromCredentialCheck } from './credential.translate';

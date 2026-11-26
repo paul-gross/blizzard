@@ -2,11 +2,7 @@
 
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import {
-  type PermitView,
-  getPermitApiPermitsPermitIdGet,
-  listPermitsApiPermitsGet,
-} from 'fleet';
+import { type PermitView, getPermitApiPermitsPermitIdGet, listPermitsApiPermitsGet } from 'fleet/hub-api';
 import { DRAIN_LIMIT, drainPages } from '../core/paginated-read';
 import { injectProjectFilter } from '../core/project-filter';
 import { fromPermitView } from './permits.translate';

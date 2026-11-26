@@ -1,7 +1,7 @@
 import { Component, input, signal } from '@angular/core';
 import { form, submit } from '@angular/forms/signals';
 
-import type { KitAsyncStateValue } from 'fleet';
+import type { KitAsyncStateValue } from 'fleet/kit';
 
 import { type ScopeDescriptionDraft, scopeDescriptionDraft } from '../core/scope.domain';
 import { FleetScopePanel, type ScopePanelVm } from './scope-panel';

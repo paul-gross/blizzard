@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { apply, form } from '@angular/forms/signals';
-import { createRefusalState, type EditBaseline, KitConfirmDialog, type SaveOutcome, submitForm } from 'fleet';
+import { createRefusalState, type EditBaseline, type SaveOutcome, submitForm } from 'fleet/forms';
+import { KitConfirmDialog } from 'fleet/kit/dialog';
 
 import { blankRecordDraft, type HostRecord, type RecordDraft, recordFields } from './host-records.domain';
 import { recordFormRules } from './host-records.form';

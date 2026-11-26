@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { harnessName, KitAsyncState, KitBadge, type Tone } from 'fleet';
+import { harnessName } from 'fleet/core';
+import { KitAsyncState, KitBadge, type Tone } from 'fleet/kit';
 import type { RunnerCapabilityFact } from '../core/runners.domain';
 
 /**

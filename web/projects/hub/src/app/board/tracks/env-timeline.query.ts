@@ -1,7 +1,8 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectQuery, keepPreviousData } from '@tanstack/angular-query-experimental';
 
-import { FLEET_CLOCK, envTimelineApiEnvTimelineGet } from 'fleet';
+import { FLEET_CLOCK } from 'fleet/core';
+import { envTimelineApiEnvTimelineGet } from 'fleet/hub-api';
 import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 
 import {

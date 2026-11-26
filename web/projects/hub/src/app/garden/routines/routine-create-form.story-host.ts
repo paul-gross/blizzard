@@ -1,7 +1,7 @@
 import { Component, input, signal } from '@angular/core';
 import { form, submit } from '@angular/forms/signals';
 
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 
 import { EMPTY_ROUTINE_CREATE_DRAFT, type RoutineCreateDraft } from '../core/routine.domain';
 import { RoutineCreateForm } from './routine-create-form';

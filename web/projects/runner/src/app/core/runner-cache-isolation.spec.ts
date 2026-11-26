@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { injectChunkDetailQuery, runnerClient } from 'fleet';
+import { injectChunkDetailQuery } from 'fleet/chunk-page';
+import { runnerClient } from 'fleet/runner-api';
 import {
   chunkDetail,
   hostRunnerView,

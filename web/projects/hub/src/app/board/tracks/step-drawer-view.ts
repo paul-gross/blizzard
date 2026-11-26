@@ -3,9 +3,15 @@ import { RouterLink } from '@angular/router';
 
 import {
   ChunkDelivery,
-  type ChunkDetailAggregate, type ChunkArtifactStore,
+  type ChunkArtifactStore,
   ChunkFacts,
-  ChunkIssuePane,
+  type WorkItemsState,
+  hasDelivery,
+} from 'fleet/chunk-detail';
+import { ChunkIssuePane } from 'fleet/chunk-detail/panes';
+import { type ChunkDetailAggregate } from 'fleet/chunk-page';
+import { SessionEfficiency, compactRef, formatAbsolute } from 'fleet/core';
+import {
   KitAsyncState,
   type KitAsyncStateValue,
   KitBadge,
@@ -16,13 +22,8 @@ import {
   KitSectionHead,
   KitSkeleton,
   KitSwatch,
-  SessionEfficiency,
-  TranscriptViewer,
-  type WorkItemsState,
-  compactRef,
-  formatAbsolute,
-  hasDelivery,
-} from 'fleet';
+} from 'fleet/kit';
+import { TranscriptViewer } from 'fleet/transcripts';
 import { AppLink } from 'fleet/shell';
 
 import { ChunkArtifacts } from '../chunk-dock/chunk-artifacts';

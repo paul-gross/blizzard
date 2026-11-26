@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { compactRef, KitAsyncState, type KitAsyncStateValue, KitProseBlock, EscalationTakeover, FleetWhen } from 'fleet';
+import { EscalationTakeover } from 'fleet/chunk-detail';
+import { compactRef, FleetWhen } from 'fleet/core';
+import { KitAsyncState, type KitAsyncStateValue, KitProseBlock } from 'fleet/kit';
 import { AppLink } from 'fleet/shell';
 
 /** One `add` op a delivered set's artifact published — `findingClass` rather than

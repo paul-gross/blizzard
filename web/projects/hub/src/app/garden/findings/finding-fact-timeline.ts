@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { KitAsyncState, injectNowSignal } from 'fleet';
+import { injectNowSignal } from 'fleet/core';
+import { KitAsyncState } from 'fleet/kit';
 
 import type { FindingFact } from '../core/finding.domain';
 import { deriveFactTimelineRows, type FindingFactRow } from './finding-fact-timeline-rows';

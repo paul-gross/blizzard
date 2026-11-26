@@ -1,4 +1,4 @@
-import { ageMs, compactRef, formatHeldFor } from 'fleet';
+import { ageMs, compactRef, formatHeldFor } from 'fleet/core';
 
 import type { PanelAsk } from '../core/panel-reads.model';
 

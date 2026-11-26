@@ -1,13 +1,12 @@
+import type { EditBaseline, RefusalMap } from 'fleet/forms';
 import type {
   CredentialSummary,
-  EditBaseline,
   ForgeSummary,
   hubApi,
-  RefusalMap,
   RepositoryCreateRequest,
   RepositoryPatchRequest,
   RepositorySummary,
-} from 'fleet';
+} from 'fleet/hub-api';
 
 import {
   type CredentialChoice,

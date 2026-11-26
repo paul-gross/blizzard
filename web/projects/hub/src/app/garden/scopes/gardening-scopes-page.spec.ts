@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ViewportService } from 'fleet';
+import { ViewportService } from 'fleet/viewport';
 import { gardenScopeView, type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 
 import { GardeningScopesPage } from './gardening-scopes-page';

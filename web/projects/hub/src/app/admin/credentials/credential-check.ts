@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { KitButton, KitErrorLine } from 'fleet';
+import { KitButton, KitErrorLine } from 'fleet/kit';
 
 import { CredentialCheckTable } from './credential-check-table';
 import { checkFailure, type CredentialCheckTarget, isCheckFor, shownCheckVm } from './credentials.model';

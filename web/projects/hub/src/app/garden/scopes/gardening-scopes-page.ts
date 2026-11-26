@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
-import { FLEET_CLOCK, asyncState, KitMasterDetail, KitPanel, type KitAsyncStateValue, ViewportService } from 'fleet';
+import { FLEET_CLOCK, asyncState } from 'fleet/core';
+import { KitMasterDetail, KitPanel, type KitAsyncStateValue } from 'fleet/kit';
+import { ViewportService } from 'fleet/viewport';
 import { FleetScopeList, type ScopeRowVm } from './scope-list';
 import { injectHubScopesQuery } from '../core/scopes.query';
 

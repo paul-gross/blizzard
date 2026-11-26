@@ -2,7 +2,16 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, u
 import { apply, form } from '@angular/forms/signals';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { FLEET_CLOCK, asyncStateOf, createRefusalState, errorMessage, injectPendingMutationVariables, isPendingFor, restingAsyncState, submitForm, type KitAsyncStateValue } from 'fleet';
+import {
+  FLEET_CLOCK,
+  asyncStateOf,
+  errorMessage,
+  injectPendingMutationVariables,
+  isPendingFor,
+  restingAsyncState,
+} from 'fleet/core';
+import { createRefusalState, submitForm } from 'fleet/forms';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import { FleetScopePanel, type RelatedRoutineVm, type ScopePanelVm } from './scope-panel';
 import { relatedRoutineRows, sameSlugProjects, scopeBySlug, scopeOverrideRetired, scopePanelVm } from './gardening-scope-detail.model';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';

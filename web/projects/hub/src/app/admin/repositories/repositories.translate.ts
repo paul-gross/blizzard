@@ -1,4 +1,4 @@
-import type { RepositorySummary } from 'fleet';
+import type { RepositorySummary } from 'fleet/hub-api';
 import type { ProjectRepository } from './repositories.domain';
 
 export function toProjectRepository(

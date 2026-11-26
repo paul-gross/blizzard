@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import type { ChunkDetailAggregate as ChunkDetail } from 'fleet';
+import type { ChunkDetailAggregate as ChunkDetail } from 'fleet/chunk-page';
 import { chunkControlStub, domainChunkDetail as chunkDetail } from 'fleet/testing';
 import { ChunkDetailHeader } from './chunk-detail-header';
 

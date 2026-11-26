@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { apply, form } from '@angular/forms/signals';
-import { asyncState, createRefusalState, submitForm } from 'fleet';
+import { asyncState } from 'fleet/core';
+import { createRefusalState, submitForm } from 'fleet/forms';
 
 import { blankRecordDraft, type HostRecordKind, type RecordDraft, recordFields } from './host-records.domain';
 import { recordFormRules } from './host-records.form';

@@ -9,7 +9,7 @@ import {
   provideTanStackQuery,
 } from '@tanstack/angular-query-experimental';
 
-import type { ChunkSummary, hubApi } from 'fleet';
+import type { ChunkSummary, hubApi } from 'fleet/hub-api';
 import {
   chunkSummary,
   settle,

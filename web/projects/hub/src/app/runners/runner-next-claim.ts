@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { asyncState } from 'fleet';
+import { asyncState } from 'fleet/core';
 import { injectDomainUrgenciesQuery } from '../core/urgencies.query';
 import { claimUrgencyIcons, prerequisiteIds } from './runner-next-claim.model';
 import { injectPrerequisiteStatuses, injectRunnerNextClaimQuery } from './runner-next-claim.query';

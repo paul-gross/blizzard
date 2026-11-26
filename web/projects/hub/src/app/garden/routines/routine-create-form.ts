@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
-import { KitField, KitForm, KitSelect, KitTextInput, type Urgency } from 'fleet';
+import { type Urgency } from 'fleet/core';
+import { KitField, KitForm, KitTextInput } from 'fleet/kit';
+import { KitSelect } from 'fleet/kit/select';
 
 import { defaultUrgencyName, urgencyOptions } from '../../core/urgency-options.model';
 import type { RoutineCreateDraft } from '../core/routine.domain';

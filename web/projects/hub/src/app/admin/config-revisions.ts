@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { FleetWhen, KitAsyncState, type KitAsyncStateValue } from 'fleet';
+import { FleetWhen } from 'fleet/core';
+import { KitAsyncState, type KitAsyncStateValue } from 'fleet/kit';
 
 import type { RevisionRowVm } from './config-history.model';
 

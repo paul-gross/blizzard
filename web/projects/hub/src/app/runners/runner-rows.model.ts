@@ -1,15 +1,14 @@
 import {
   type LaneStatus,
   type HostFact,
-  type SubscriptionPace,
   compactRef,
   formatSeenAgo,
   formatSeenTag,
   formatWhen,
-  hubSubscriptionPaces,
-  type Tone,
   unlisted,
-} from 'fleet';
+} from 'fleet/core';
+import { type SubscriptionPace, hubSubscriptionPaces } from 'fleet/host';
+import { type Tone } from 'fleet/kit';
 import {
   type HubRunner,
   type RunnerDeclining,

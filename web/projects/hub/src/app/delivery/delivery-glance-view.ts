@@ -2,7 +2,16 @@ import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { formatSeenTag, KitAsyncState, type KitAsyncStateValue, type KitCountCell, KitCountStrip, KitCountStripSkeleton, KitSkeleton, LaneIcon } from 'fleet';
+import { LaneIcon } from 'fleet/chunk-card';
+import { formatSeenTag } from 'fleet/core';
+import {
+  KitAsyncState,
+  type KitAsyncStateValue,
+  type KitCountCell,
+  KitCountStrip,
+  KitCountStripSkeleton,
+  KitSkeleton,
+} from 'fleet/kit';
 import { AppLink } from 'fleet/shell';
 import { cardStageColor, cardStageLabel, deliveredRecently, type DeliveryList, type DeliveryRow } from './delivery.model';
 

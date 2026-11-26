@@ -3,7 +3,8 @@
 import { ChangeDetectionStrategy, Component, type TemplateRef, computed, input, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { type KitAsyncStateValue, type KitFact, FleetWhen, KitAsyncState, KitFactList, KitPanel } from 'fleet';
+import { FleetWhen } from 'fleet/core';
+import { type KitAsyncStateValue, type KitFact, KitAsyncState, KitFactList, KitPanel } from 'fleet/kit';
 import { AppLink } from 'fleet/shell';
 import { permitStateLabel, type Permit } from './permits.domain';
 import { permitProjectLabel } from './permits-page.model';

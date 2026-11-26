@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import { FleetRunDelta, type RunDeltaVm } from './run-delta';
-import type { KitAsyncStateValue } from 'fleet';
+import type { KitAsyncStateValue } from 'fleet/kit';
 
 const VM: RunDeltaVm = {
   chunkId: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',

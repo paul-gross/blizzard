@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { asyncState, KitAsyncState } from 'fleet';
+import { asyncState } from 'fleet/core';
+import { KitAsyncState } from 'fleet/kit';
 
 import { FactLogView } from './fact-log-view';
 import { injectPanelFacts } from '../core/panel-reads';

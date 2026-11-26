@@ -1,5 +1,7 @@
 // bzh:frontend-domain-boundary — the hub settings wire read into the edit's domain.
-import { readRefusal, type RefusalMap, type SaveOutcome, settingValueText } from 'fleet';
+import { settingValueText, openLookup, readRefusal } from 'fleet/core';
+import { type RefusalMap, type SaveOutcome } from 'fleet/forms';
+import { type hubApi, type HubSettingRow as WireHubSettingRow, type HubSettingsChange } from 'fleet/hub-api';
 
 import type { HubSettingBaseline, HubSettingDraft, HubSettingRow } from './hub-settings.domain';
 
@@ -21,7 +23,6 @@ export function hubSettingRefusal(error: unknown): SaveOutcome<HubSettingDraft> 
   return readRefusal(error, HUB_SETTING_REFUSALS, 'Save failed.');
 }
 
-import { openLookup, type hubApi, type HubSettingRow as WireHubSettingRow, type HubSettingsChange } from 'fleet';
 import type { HubSettingLifetime, HubSettingSource, HubSettings, HubSettingsDoor, HubSettingsHistoryPage, HubSettingsOperation, UnknownHubSettingValue } from './hub-settings.domain';
 
 const unknown = (raw: string): UnknownHubSettingValue => ({ kind: 'unknown', raw });

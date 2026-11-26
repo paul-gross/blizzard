@@ -1,6 +1,6 @@
 import { Component, input, signal } from '@angular/core';
 import { apply, disabled, form, required, schema, validate } from '@angular/forms/signals';
-import { createRefusalState, type SaveOutcome, submitForm } from 'fleet';
+import { createRefusalState, type SaveOutcome, submitForm } from 'fleet/forms';
 
 import { applyShownWhen } from './config-field-tree.form';
 import type { ConfigFieldView } from './config-field-tree.model';

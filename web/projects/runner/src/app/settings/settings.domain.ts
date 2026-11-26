@@ -1,4 +1,4 @@
-import type { UnknownHostValue } from 'fleet';
+import type { UnknownHostValue } from 'fleet/core';
 
 /** Which settings record a read or a write names: the host's own, or one hosted runner's. */
 export type SettingsTarget = { readonly kind: 'host' } | { readonly kind: 'runner'; readonly runnerId: string };

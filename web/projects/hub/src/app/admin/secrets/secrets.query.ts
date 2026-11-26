@@ -1,6 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { getSecretApiSecretsNameGet, listSecretsApiSecretsGet } from 'fleet';
+import { getSecretApiSecretsNameGet, listSecretsApiSecretsGet } from 'fleet/hub-api';
 import { hubConfigListKey, hubConfigRecordKey } from '../../core/query-keys';
 import type { Secret } from './secret.domain';
 import { fromSecretView } from './secret.translate';

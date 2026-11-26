@@ -1,4 +1,4 @@
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import type { NextClaim, NextClaimPassed } from './runner-next-claim.domain';
 import { claimUrgencyIcons, nextClaimSummary, prerequisiteIds, prerequisiteStatuses } from './runner-next-claim.model';
 

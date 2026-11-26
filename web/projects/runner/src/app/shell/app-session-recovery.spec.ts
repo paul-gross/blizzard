@@ -2,14 +2,15 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource, runnerApi, runnerClient } from 'fleet';
+import { provideFlags } from 'fleet/core';
+import { runnerApi, runnerClient } from 'fleet/runner-api';
+import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource } from 'fleet/sse';
 import { settle, stubError, stubRunnerClient } from 'fleet/testing';
 import { SessionRecovery } from '../core/identity/session-recovery';
 import { vi } from 'vitest';
 
 import { App } from './app';
 import { routes } from './app.routes';
-import { provideFlags } from 'fleet';
 import { runnerFlagsRead } from '../core/flags.query';
 
 /** A do-nothing EventSource so `RunnerLiveUpdates` can open

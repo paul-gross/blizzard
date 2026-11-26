@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { ChunkIssueList } from '../chunk-issue-list';
+import { ChunkIssueList } from '../chunk-issue-list/chunk-issue-list';
 import { KitAsyncState, type KitAsyncStateValue } from '../../kit/kit-async-state';
 import { KitSkeleton } from '../../kit/kit-skeleton';
 import { type WorkItemsState } from './work-items-state';

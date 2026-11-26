@@ -1,4 +1,4 @@
-import type { ChunkDetailAggregate as ChunkDetail } from 'fleet';
+import type { ChunkDetailAggregate as ChunkDetail } from 'fleet/chunk-page';
 import { assetChunkArtifact as assetArtifactView, domainBounce as bounceView, domainChunkDetail as chunkDetail, FIXTURE_NOW, fixtureInstant, domainLandedRepo as landedRepoView, domainPr as prView, domainTransition as transitionView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 

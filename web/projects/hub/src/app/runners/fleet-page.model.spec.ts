@@ -1,4 +1,4 @@
-import type { WorkspaceRow } from 'fleet';
+import type { WorkspaceRow } from 'fleet/host';
 
 import { firstFleetId, fleetList, resolveSelection } from './fleet-page.model';
 import type { HostCard, HostGroups } from './host-rows.model';

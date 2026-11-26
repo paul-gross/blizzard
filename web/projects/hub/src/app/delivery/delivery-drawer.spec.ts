@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { FLEET_CLOCK } from 'fleet';
+import { FLEET_CLOCK } from 'fleet/core';
 import { assetArtifactView, bounceView, chunkDetail, FIXTURE_NOW, fixtureInstant, prView, type RequestClientStub, settle, stubError, stubHubClient, type StubHttpError } from 'fleet/testing';
 import { DeliveryDrawer } from './delivery-drawer';
 

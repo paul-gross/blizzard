@@ -1,4 +1,5 @@
-import type { UnenforceableGate, UnknownHostValue } from 'fleet';
+import type { UnknownHostValue } from 'fleet/core';
+import type { UnenforceableGate } from 'fleet/host';
 
 import type { PauseState } from './pause-state.domain';
 import type { Throttle } from './throttle.domain';

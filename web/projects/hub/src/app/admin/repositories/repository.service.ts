@@ -1,6 +1,7 @@
 import { computed, type Signal } from '@angular/core';
 
-import { type EditBaseline, readRefusal, type SaveOutcome } from 'fleet';
+import { readRefusal } from 'fleet/core';
+import { type EditBaseline, type SaveOutcome } from 'fleet/forms';
 import { injectCreateRepositoryMutation, injectEditRepositoryMutation } from './repositories.mutations';
 import type { RepositoryDraft } from './repository.domain';
 import { REPOSITORY_REFUSALS, toCreateRequest, toEditRequest } from './repository.translate';

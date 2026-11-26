@@ -1,4 +1,5 @@
-import type { KitChipOption, Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
+import type { KitChipOption } from 'fleet/kit/chips';
 
 /** How a picker treats retired urgencies: drop them, keep them, or keep only
  * the one its current value names (by id or by slug). */

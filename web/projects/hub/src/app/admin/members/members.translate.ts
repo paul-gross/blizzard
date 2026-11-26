@@ -1,4 +1,5 @@
-import { type MemberView, type hubApi, openLookup } from 'fleet';
+import { openLookup } from 'fleet/core';
+import { type MemberView, type hubApi } from 'fleet/hub-api';
 import type { HeldMemberRole, Member, MemberRole } from './members.domain';
 
 const roleOf = openLookup<hubApi.Role, HeldMemberRole>(

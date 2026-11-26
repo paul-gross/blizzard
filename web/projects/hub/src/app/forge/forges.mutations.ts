@@ -7,7 +7,7 @@ import {
   retireForgeApiForgesForgeRetirePost,
   type ForgeCreateRequest,
   type ForgePatchRequest,
-} from 'fleet';
+} from 'fleet/hub-api';
 import { hubConfigKey } from '../core/query-keys';
 
 export interface ForgeEditVars {

@@ -1,9 +1,5 @@
-import {
-  asyncState,
-  isPendingFor,
-  type AsyncStateQuery,
-  type KitAsyncStateValue,
-} from 'fleet';
+import { asyncState, isPendingFor, type AsyncStateQuery } from 'fleet/core';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import type { Finding } from '../core/finding.domain';
 import type { Proposal, ProposalClosure } from '../core/proposal.domain';
 import type { Routine } from '../core/routine.domain';

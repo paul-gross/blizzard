@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { runnerApi, runnerClient } from 'fleet';
+import { runnerApi, runnerClient } from 'fleet/runner-api';
 import {
   type RequestClientStub,
   stubError,

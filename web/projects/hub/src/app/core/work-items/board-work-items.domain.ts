@@ -1,4 +1,4 @@
-import type { WorkItem } from 'fleet';
+import type { WorkItem } from 'fleet/chunk-detail';
 
 /** The work-item facts a board card uses to label and link its references. */
 export interface BoardWorkItems {

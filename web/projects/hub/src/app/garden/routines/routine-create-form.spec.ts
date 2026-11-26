@@ -2,7 +2,7 @@ import { Component, input, provideZonelessChangeDetection, signal } from '@angul
 import { TestBed } from '@angular/core/testing';
 import { form } from '@angular/forms/signals';
 
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import { EMPTY_ROUTINE_CREATE_DRAFT, type RoutineCreateDraft } from '../core/routine.domain';
 import { RoutineCreateForm } from './routine-create-form';
 import { routineCreateRules } from './routine.form';

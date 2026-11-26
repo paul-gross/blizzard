@@ -1,4 +1,4 @@
-import { readWholeNumber } from 'fleet';
+import { readWholeNumber } from 'fleet/core';
 
 /** The landing policies this build knows, in the hub's declared order. */
 export const KNOWN_LANDING_POLICIES = ['merge-on-checks', 'fast-forward', 'park'] as const;

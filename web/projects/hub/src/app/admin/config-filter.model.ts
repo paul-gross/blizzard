@@ -1,4 +1,4 @@
-import type { KitChipOption } from 'fleet';
+import type { KitChipOption } from 'fleet/kit/chips';
 
 /** Which records a config list shows — the board's own filter over the wire's
  * `retired` flag, not a backend vocabulary. */

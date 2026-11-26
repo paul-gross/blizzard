@@ -1,6 +1,7 @@
 // bzh:frontend-domain-boundary — the one place the garden proposal wire is read; an unforeseen vocabulary value
 // becomes an `Unlisted` here and renders as itself (bzh:frontend-open-vocabulary).
-import { type GardenProposalClosureView, type GardenProposalView, hubApi, openLookup } from 'fleet';
+import { openLookup } from 'fleet/core';
+import { type GardenProposalClosureView, type GardenProposalView, hubApi } from 'fleet/hub-api';
 
 import type { Proposal, ProposalClosure, ProposalClosureKind, ProposalItemOutcome, ProposalOrigin } from './proposal.domain';
 import { unlisted, type Vocabulary } from './vocabulary.domain';

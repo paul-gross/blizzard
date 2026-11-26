@@ -1,5 +1,6 @@
 import type { UrgencyIconDataUrlState } from '../../core/urgency-icon.query';
-import type { Urgency, ViewportMode } from 'fleet';
+import type { Urgency } from 'fleet/core';
+import type { ViewportMode } from 'fleet/viewport';
 import { configActions, type ConfigActionsVm } from '../config-actions.model';
 import type { UrgencyDraft } from './urgency.domain';
 import type { ConfigRecordVm } from '../config-record-panel';

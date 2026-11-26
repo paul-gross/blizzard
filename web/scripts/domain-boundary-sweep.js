@@ -301,8 +301,8 @@ function clientCalls(source, names) {
 function assertClientCallPlacementDetectorWorks() {
   const names = ["listChunksApiChunksGet", "getStatusStatusGet"];
   const hits = [
-    "import { listChunksApiChunksGet } from 'fleet';",
-    "import { foo,\n  listChunksApiChunksGet as list } from 'fleet';",
+    "import { listChunksApiChunksGet } from 'fleet/hub-api';",
+    "import { foo,\n  listChunksApiChunksGet as list } from 'fleet/hub-api';",
     "const r = await runnerApi.getStatusStatusGet({ throwOnError: true });",
     "const fns = { list: listChunksApiChunksGet }; // listChunksApiChunksGet",
     "export { listChunksApiChunksGet as listChunks } from './sdk.gen';",
@@ -525,10 +525,10 @@ function assertDomainBoundaryDiskEnumerationWorks() {
     const projects = path.join(root, "projects");
     const files = {
       "fleet/src/lib/api/hub/types.gen.ts": "export type ChunkDetail = { id: string };",
-      "fleet/src/public-api.ts": "export type { ChunkDetail as Detail } from './lib/api/hub/types.gen';",
+      "fleet/src/entries/hub-api.ts": "export type { ChunkDetail as Detail } from '../lib/api/hub/types.gen';",
       "fleet/src/lib/testing/transport/stub.ts": "export const stub = 1;",
       "fleet/src/lib/testing/public-api.ts": "export { stub } from './transport/stub';",
-      "fleet/.storybook/indirect.ts": "import type { Detail } from 'fleet'; export let d: Detail;",
+      "fleet/.storybook/indirect.ts": "import type { Detail } from 'fleet/hub-api'; export let d: Detail;",
       "fleet/.storybook/transport.ts": "import { stub } from 'fleet/testing'; export const x = stub;",
       "fleet/node_modules/ignored.ts": "export const x = 1;",
       "fleet/.angular/ignored.ts": "export const x = 1;",
@@ -568,9 +568,9 @@ function assertDomainBoundaryDetectorWorks() {
     ],
     ["fleet/src/lib/api/hub/index.ts", "export * from './types.gen';\n"],
     [
-      "fleet/src/public-api.ts",
-      "export type { ChunkDetail } from './lib/api/hub/types.gen';\nexport * from './lib/api/hub/index';\n" +
-        "export * as hubApi from './lib/api/hub/index';\n",
+      "fleet/src/entries/hub-api.ts",
+      "export type { ChunkDetail } from '../lib/api/hub/types.gen';\nexport * from '../lib/api/hub/index';\n" +
+        "export * as hubApi from '../lib/api/hub/index';\n",
     ],
     ["fleet/src/shell-api.ts", ""],
     // The test transport, its focused spec, a builder barrel leaking a generated type, and a helper over transport.
@@ -596,30 +596,30 @@ function assertDomainBoundaryDetectorWorks() {
     // An ordinary test helper outside the transport boundary.
     ["fleet/src/lib/testing/settle.ts", "import type { RunnerView } from '../api/hub/types.gen';\nexport let v: RunnerView;\n"],
     // A second barrel over `fleet`, and a domain declaration sharing a generated type's name.
-    ["hub/src/app/core/wire-barrel.ts", "export { ChunkDetail as Detail } from 'fleet';\n"],
+    ["hub/src/app/core/wire-barrel.ts", "export { ChunkDetail as Detail } from 'fleet/hub-api';\n"],
     ["hub/src/app/core/domain.ts", "export type ChunkDetail = { title: string };\n"],
     ["hub/src/app/core/index.ts", "export * from './domain';\n"],
     // Must-catch consumers outside the boundary.
     ["hub/src/app/alpha/direct.ts", `import type { ChunkDetail } from '${wire}';\nexport let d: ChunkDetail;\n`],
     ["hub/src/app/alpha/aliased.ts", `import type { ChunkDetail as Shape } from '${wire}';\nexport let d: Shape;\n`],
-    ["hub/src/app/alpha/via-fleet-named.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
-    ["hub/src/app/alpha/via-fleet-star.ts", "import type { RunnerView } from 'fleet';\nexport let r: RunnerView;\n"],
+    ["hub/src/app/alpha/via-fleet-named.ts", "import type { ChunkDetail } from 'fleet/hub-api';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/alpha/via-fleet-star.ts", "import type { RunnerView } from 'fleet/hub-api';\nexport let r: RunnerView;\n"],
     ["hub/src/app/alpha/via-second-barrel.ts", "import type { Detail } from '../core/wire-barrel';\nexport let d: Detail;\n"],
-    ["hub/src/app/alpha/via-namespace-type.ts", "import type { hubApi } from 'fleet';\nexport let s: hubApi.ChunkStatus;\n"],
-    ["hub/src/app/alpha/via-namespace-value.ts", "import { hubApi } from 'fleet';\nexport const s = hubApi.ChunkStatus.READY;\n"],
-    ["hub/src/app/alpha/via-namespace-import.ts", "import * as fleet from 'fleet';\nexport let s: fleet.RunnerView;\n"],
-    ["hub/src/app/alpha/via-import-type.ts", "export let d: import('fleet').ChunkDetail;\n"],
-    ["hub/src/app/alpha/alpha-view.spec.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/alpha/via-namespace-type.ts", "import type { hubApi } from 'fleet/hub-api';\nexport let s: hubApi.ChunkStatus;\n"],
+    ["hub/src/app/alpha/via-namespace-value.ts", "import { hubApi } from 'fleet/hub-api';\nexport const s = hubApi.ChunkStatus.READY;\n"],
+    ["hub/src/app/alpha/via-namespace-import.ts", "import * as fleet from 'fleet/hub-api';\nexport let s: fleet.RunnerView;\n"],
+    ["hub/src/app/alpha/via-import-type.ts", "export let d: import('fleet/hub-api').ChunkDetail;\n"],
+    ["hub/src/app/alpha/alpha-view.spec.ts", "import type { ChunkDetail } from 'fleet/hub-api';\nexport let d: ChunkDetail;\n"],
     ["hub/src/app/alpha/alpha.model.spec.ts", `import type { RunnerView } from '${wire}';\nexport let r: RunnerView;\n`],
     ["hub/src/app/alpha/alpha.stories.ts", "import type { ChunkDetail } from 'fleet/testing';\nexport let d: ChunkDetail;\n"],
     // Must-pass: a same-name domain type through a barrel, the boundary files and their focused specs.
     ["hub/src/app/beta/same-name.ts", "import type { ChunkDetail } from '../core';\nexport let d: ChunkDetail;\n"],
-    ["hub/src/app/beta/beta.query.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
-    ["hub/src/app/beta/beta.mutations.ts", "import { hubApi } from 'fleet';\nexport const s = hubApi.ChunkStatus.READY;\n"],
+    ["hub/src/app/beta/beta.query.ts", "import type { ChunkDetail } from 'fleet/hub-api';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/beta/beta.mutations.ts", "import { hubApi } from 'fleet/hub-api';\nexport const s = hubApi.ChunkStatus.READY;\n"],
     ["hub/src/app/beta/beta.translate.ts", `import type { RunnerView } from '${wire}';\nexport let r: RunnerView;\n`],
-    ["hub/src/app/beta/beta.query.spec.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
-    ["hub/src/app/beta/beta.mutations.spec.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
-    ["hub/src/app/beta/beta.translate.spec.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/beta/beta.query.spec.ts", "import type { ChunkDetail } from 'fleet/hub-api';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/beta/beta.mutations.spec.ts", "import type { ChunkDetail } from 'fleet/hub-api';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/beta/beta.translate.spec.ts", "import type { ChunkDetail } from 'fleet/hub-api';\nexport let d: ChunkDetail;\n"],
     // Must-pass: a story using a builder, not a generated type; a spec reaching the transport.
     ["hub/src/app/beta/beta.stories.ts", "import { chunkDetail } from 'fleet/testing';\nexport const c = chunkDetail();\n"],
     ["hub/src/app/beta/beta-view.spec.ts", "import { stubRequestClient } from 'fleet/testing';\nexport const s = stubRequestClient;\n"],
@@ -628,19 +628,19 @@ function assertDomainBoundaryDetectorWorks() {
     ["hub/src/app/beta/reach-entry.ts", "import { stubRequestClient } from 'fleet/testing';\nexport const s = stubRequestClient;\n"],
     ["hub/src/app/beta/reach-helper.stories.ts", "import { viaHelper } from 'fleet/testing';\nexport const s = viaHelper;\n"],
     // An exempted unit, and an exempt unit that consumes nothing.
-    ["hub/src/app/gamma/g.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/gamma/g.ts", "import type { ChunkDetail } from 'fleet/hub-api';\nexport let d: ChunkDetail;\n"],
     ["hub/src/app/delta/d.ts", "export const d = 1;\n"],
     ["hub/src/app/admin/projects/view.ts", "import type { Detail as Shape } from '../../core/wire-barrel';\nexport let d: Shape;\n"],
-    ["hub/src/app/admin/projects/view.spec.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
-    ["hub/src/app/admin/projects/project.query.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
-    ["hub/src/app/admin/projects/project.query.spec.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
-    ["hub/src/app/admin/projects/project.mutations.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
-    ["hub/src/app/admin/projects/project.mutations.spec.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
-    ["hub/src/app/admin/projects/project.translate.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
-    ["hub/src/app/admin/projects/project.translate.spec.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
-    ["hub/src/app/admin/sibling/view.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
-    ["hub/src/app/admin/stem.model.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
-    ["hub/src/app/admin/other.model.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/projects/view.spec.ts", "import type { ChunkDetail } from 'fleet/hub-api';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/projects/project.query.ts", "import type { ChunkDetail } from 'fleet/hub-api';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/projects/project.query.spec.ts", "import type { ChunkDetail } from 'fleet/hub-api';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/projects/project.mutations.ts", "import type { ChunkDetail } from 'fleet/hub-api';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/projects/project.mutations.spec.ts", "import type { ChunkDetail } from 'fleet/hub-api';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/projects/project.translate.ts", "import type { ChunkDetail } from 'fleet/hub-api';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/projects/project.translate.spec.ts", "import type { ChunkDetail } from 'fleet/hub-api';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/sibling/view.ts", "import type { ChunkDetail } from 'fleet/hub-api';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/stem.model.ts", "import type { ChunkDetail } from 'fleet/hub-api';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/other.model.ts", "import type { ChunkDetail } from 'fleet/hub-api';\nexport let d: ChunkDetail;\n"],
   ];
   const memory = new Map(tree.map(([rel, text]) => [`${p}/${rel}`, text]));
   /** @param {string} rel */

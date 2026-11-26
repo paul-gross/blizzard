@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 
-import { injectChunkUrlSelection } from 'fleet';
+import { injectChunkUrlSelection } from 'fleet/core';
 import { injectDeliveryData } from './delivery-data';
 import { DeliveryDrawer } from './delivery-drawer';
 import { DeliveryList } from './delivery-list';

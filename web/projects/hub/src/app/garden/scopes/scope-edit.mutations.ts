@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { editProjectScopeApiProjectsProjectScopesSlugPatch } from 'fleet';
+import { editProjectScopeApiProjectsProjectScopesSlugPatch } from 'fleet/hub-api';
 import { editScopeMutationKey } from '../../core/mutation-keys';
 import { gardenProject } from '../core/garden-project';
 import { hubScopesKey } from '../../core/query-keys';

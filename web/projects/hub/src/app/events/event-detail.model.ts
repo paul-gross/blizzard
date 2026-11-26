@@ -1,4 +1,5 @@
-import { asyncState, type AsyncStateQuery, type KitAsyncStateValue } from 'fleet';
+import { asyncState, type AsyncStateQuery } from 'fleet/core';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import { eventSeverityText, type EventLogEntry } from './event-log.domain';
 
 /** Stable JSON for wire payloads, independent of object key order. */

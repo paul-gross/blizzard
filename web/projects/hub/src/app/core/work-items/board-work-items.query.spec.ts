@@ -10,7 +10,9 @@ import {
   provideTanStackQuery,
 } from '@tanstack/angular-query-experimental';
 
-import { FLEET_CLOCK, fromWorkItemsView, type ChunkWorkItemsView, type WorkItemsView } from 'fleet';
+import { fromWorkItemsView } from 'fleet/chunk-page';
+import { FLEET_CLOCK } from 'fleet/core';
+import { type ChunkWorkItemsView, type WorkItemsView } from 'fleet/hub-api';
 import {
   type RequestClientStub,
   settle,

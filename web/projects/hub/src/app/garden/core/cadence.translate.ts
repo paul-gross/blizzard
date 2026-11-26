@@ -1,5 +1,7 @@
 // bzh:frontend-domain-boundary — the one place the cadence wire is read and written; an unforeseen vocabulary value
 // becomes an `Unlisted` here and is resent as itself (bzh:frontend-open-vocabulary).
+import { openLookup } from 'fleet/core';
+import { type EditBaseline, type RefusalMap } from 'fleet/forms';
 import {
   AttentionReason,
   CadenceAnchor as WireCadenceAnchor,
@@ -10,12 +12,9 @@ import {
   type CadenceView,
   type ChoreDocument,
   type ChoreView,
-  type EditBaseline,
   ErrandState as WireErrandState,
-  openLookup,
-  type RefusalMap,
   RunMode,
-} from 'fleet';
+} from 'fleet/hub-api';
 
 import {
   type Cadence,

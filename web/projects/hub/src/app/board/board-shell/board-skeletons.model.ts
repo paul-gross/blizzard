@@ -1,4 +1,4 @@
-import { DONE_LANE, LANES } from 'fleet';
+import { DONE_LANE, LANES } from 'fleet/core';
 
 /** The most card skeletons a loading lane may show — a lane absent here shows up to 4. BACKLOG and
  * DONE run longest in a working fleet, so they stand in with more. */

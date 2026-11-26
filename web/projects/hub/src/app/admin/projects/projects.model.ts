@@ -1,4 +1,4 @@
-import type { KitAsyncStateValue, Tone } from 'fleet';
+import type { KitAsyncStateValue, Tone } from 'fleet/kit';
 
 import type { Project } from '../../core/project.domain';
 import { servingProjectRunners, type ProjectRunner } from '../../core/runners.domain';

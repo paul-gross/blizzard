@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
-import { errorMessage, injectPendingMutationVariables, KitBadge, KitButton, KitErrorLine } from 'fleet';
+import { errorMessage, injectPendingMutationVariables } from 'fleet/core';
+import { KitBadge, KitButton, KitErrorLine } from 'fleet/kit';
 
 import { localPauseMutationKey } from '../core/mutation-keys';
 import { injectLocalPauseMutation, injectRunnerDashboardStatusQuery, type LocalPauseVars } from '../core/status.query';

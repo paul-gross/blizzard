@@ -1,4 +1,4 @@
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import { laneStatusWord, type NextClaim, type NextClaimWalk, type PrerequisiteStatus } from './runner-next-claim.domain';
 
 /** Presentation of the hub's bounded walk, without making a claimability judgment. */

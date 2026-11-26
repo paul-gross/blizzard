@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { KitUrgencyPill, type Urgency } from 'fleet';
+import { type Urgency } from 'fleet/core';
+import { KitUrgencyPill } from 'fleet/kit/tooltip';
 import { injectUrgencyIconUrl } from './urgency-icon.query';
 
 /** Presents an urgency using the authenticated icon when it has no emoji. */

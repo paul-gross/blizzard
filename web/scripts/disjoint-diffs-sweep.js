@@ -3,18 +3,18 @@
  * The disjoint-diffs sweep — the tooled half of `bzh:frontend-disjoint-diffs`, run inside
  * `web:structural-gate` (`structural-gate.js`'s `main` calls it like any other sweep).
  *
- * Two checks keep the `fleet` root barrel thin, so two features landing in parallel touch
- * different sub-barrels instead of colliding on `public-api.ts`:
+ * Two checks keep the `fleet` entry points a feature's only shared edit, one export line apiece:
  *
- * - **Unconsumed sub-barrel export.** Every export of a fleet sub-barrel — each
- *   `fleet/src/lib/**` `index.ts` outside `lib/api/` — needs a consumer outside that sub-barrel's own
- *   directory. Consumption is judged per symbol: a file outside the directory imports a name that
- *   resolves, through any alias chain, to the same declaration, by whichever route (`fleet`,
- *   `fleet/shell`, a sub-barrel, a deep relative path). A re-export is not consumption, a spec
- *   counts as a consumer, and a namespace or dynamic `import()` of a module consumes all its exports.
- * - **Root direct export.** A `public-api.ts` statement re-exports only from a sub-barrel, save the
- *   sources in `ROOT_DIRECT_EXPORT_ALLOWED`. `shell-api.ts` is not read: its deep named
- *   re-exports are what `bzh:frontend-eager-shell-entry` requires.
+ * - **Unconsumed entry export.** Every export of an entry file (`fleet/src/entries/**`) needs a
+ *   consumer outside the placement unit that declares it. Consumption is judged per symbol: a file
+ *   outside the unit imports a name that resolves, through any alias chain, to the same declaration,
+ *   by whichever route (an entry, `fleet/shell`, a deep relative path). A re-export is not
+ *   consumption, a spec counts as a consumer, and a namespace or dynamic `import()` of a module
+ *   consumes all its exports. A name declared in the generated `lib/api/` has no feature owner and
+ *   is not judged.
+ * - **Library aggregate.** A `public-api.ts` statement re-exports only from an entry file.
+ *   `shell-api.ts` is not read: its deep named re-exports are what `bzh:frontend-eager-shell-entry`
+ *   requires.
  *
  * Resolution reuses the placement sweep's compiler-API program. Run through
  * `npm run structural-gate`; this module only exports.
@@ -22,37 +22,17 @@
 
 const path = require('node:path');
 const ts = require('typescript');
-const { createProgram, walkTs, isUnder, toPosix } = require('./placement-sweep');
+const { createProgram, unitOf, walkTs, isUnder, toPosix } = require('./placement-sweep');
 
 const ROOT = path.resolve(__dirname, '..');
 
 const FLEET_SRC = 'projects/fleet/src';
 const FLEET_LIB = `${FLEET_SRC}/lib`;
-const ROOT_BARREL = `${FLEET_SRC}/public-api.ts`;
+const ENTRIES = `${FLEET_SRC}/entries`;
+const AGGREGATE = `${FLEET_SRC}/public-api.ts`;
 
 /**
- * Sources the root barrel may re-export directly (paths under `fleet/src/lib/`), each with a reason:
- *
- * - `api/` is the generated client surface; it has no feature owner and is regenerated, not edited.
- * - `core/query-keys` holds the plane-root chunk and transcript key helpers both daemons read; they have no single feature owner.
- */
-const ROOT_DIRECT_EXPORT_ALLOWED = [
-  { path: 'api', reason: 'the generated client surface has no feature owner' },
-  { path: 'core/query-keys.ts', reason: 'the plane-root chunk and transcript key helpers both daemons read have no single feature owner' },
-];
-
-/**
- * Is `file` a fleet sub-barrel, an `index.ts` under `lib/` outside the generated `lib/api/`?
- *
- * @param {string} file absolute
- * @param {string} fleetLib absolute
- */
-function isSubBarrel(file, fleetLib) {
-  return isUnder(file, fleetLib) && path.posix.basename(file) === 'index.ts' && !isUnder(file, `${fleetLib}/api`);
-}
-
-/**
- * The symbol an import binding or barrel export finally resolves to.
+ * The symbol an import binding or entry export finally resolves to.
  *
  * @param {ts.TypeChecker} checker
  * @param {ts.Symbol} symbol
@@ -92,6 +72,8 @@ function recordImports(checker, sf, consumers) {
       const bindings = clause?.namedBindings;
       if (bindings && ts.isNamespaceImport(bindings)) addWholeModule(node.moduleSpecifier);
       else if (bindings && ts.isNamedImports(bindings)) for (const el of bindings.elements) add(checker.getSymbolAtLocation(el.name));
+    } else if (ts.isImportTypeNode(node) && node.qualifier) {
+      add(checker.getSymbolAtLocation(ts.isIdentifier(node.qualifier) ? node.qualifier : node.qualifier.right));
     } else if (
       ts.isCallExpression(node) &&
       node.expression.kind === ts.SyntaxKind.ImportKeyword &&
@@ -106,7 +88,7 @@ function recordImports(checker, sf, consumers) {
 }
 
 /**
- * For each name a barrel exports, the 1-based line of the statement that exports it.
+ * For each name an entry exports, the 1-based line of the statement that exports it.
  *
  * @param {ts.TypeChecker} checker
  * @param {ts.SourceFile} sf
@@ -137,14 +119,15 @@ function exportLines(checker, sf) {
  * Run the sweep over the tree at `root`.
  *
  * @param {{ root: string, memory?: Map<string, string> | null }} opts
- * @returns {{ unconsumed: { file: string, line: number, name: string }[], rootDirect: { file: string, line: number, source: string }[] }}
- *   every sub-barrel export no file outside the barrel's directory imports, and every root
- *   re-export that bypasses a sub-barrel
+ * @returns {{ unconsumed: { file: string, line: number, name: string }[], aggregate: { file: string, line: number, source: string }[] }}
+ *   every entry export no file outside its declaring unit imports, and every aggregate
+ *   re-export that bypasses the entries
  */
 function sweepDisjointDiffs({ root, memory = null }) {
   const abs = (/** @type {string} */ rel) => toPosix(path.join(root, rel));
   const rel = (/** @type {string} */ file) => path.relative(root, file);
   const fleetLib = abs(FLEET_LIB);
+  const entries = abs(ENTRIES);
   const files = memory ? [...memory.keys()] : walkTs(abs('projects'));
   const program = createProgram(root, files, memory);
   const checker = program.getTypeChecker();
@@ -158,81 +141,83 @@ function sweepDisjointDiffs({ root, memory = null }) {
 
   /** @type {{ file: string, line: number, name: string }[]} */
   const unconsumed = [];
-  for (const file of files.filter((f) => isSubBarrel(f, fleetLib)).sort()) {
+  for (const file of files.filter((f) => isUnder(f, entries)).sort()) {
     const sf = program.getSourceFile(file);
     const moduleSymbol = sf && checker.getSymbolAtLocation(sf);
     if (!sf || !moduleSymbol) continue;
-    const dir = path.posix.dirname(file);
     const lines = exportLines(checker, sf);
     for (const exported of checker.getExportsOfModule(moduleSymbol)) {
-      const users = consumers.get(resolveAlias(checker, exported));
-      if (users && [...users].some((user) => !isUnder(user, dir))) continue;
+      const target = resolveAlias(checker, exported);
+      const declared = target.declarations?.[0]?.getSourceFile().fileName;
+      if (!declared || isUnder(toPosix(declared), `${fleetLib}/api`)) continue;
+      const unit = unitOf(toPosix(declared), fleetLib);
+      const users = consumers.get(target);
+      if (users && [...users].some((user) => unitOf(user, fleetLib) !== unit)) continue;
       unconsumed.push({ file: rel(file), line: lines.get(exported.name) ?? 1, name: exported.name });
     }
   }
 
   /** @type {{ file: string, line: number, source: string }[]} */
-  const rootDirect = [];
-  const rootFile = abs(ROOT_BARREL);
-  const rootSf = program.getSourceFile(rootFile);
-  for (const stmt of rootSf?.statements ?? []) {
+  const aggregate = [];
+  const aggregateFile = abs(AGGREGATE);
+  const aggregateSf = program.getSourceFile(aggregateFile);
+  for (const stmt of aggregateSf?.statements ?? []) {
     if (!ts.isExportDeclaration(stmt) || !stmt.moduleSpecifier || !ts.isStringLiteralLike(stmt.moduleSpecifier)) continue;
     const moduleSymbol = checker.getSymbolAtLocation(stmt.moduleSpecifier);
     const target = moduleSymbol?.declarations?.[0]?.getSourceFile().fileName;
-    const inLib = target && isUnder(toPosix(target), fleetLib) ? toPosix(target).slice(fleetLib.length + 1) : null;
-    if (inLib !== null && (isSubBarrel(toPosix(target ?? ''), fleetLib) || ROOT_DIRECT_EXPORT_ALLOWED.some((a) => inLib === a.path || inLib.startsWith(`${a.path}/`)))) {
-      continue;
-    }
-    const line = /** @type {ts.SourceFile} */ (rootSf).getLineAndCharacterOfPosition(stmt.getStart()).line + 1;
-    rootDirect.push({ file: rel(rootFile), line, source: stmt.moduleSpecifier.text });
+    if (target && isUnder(toPosix(target), entries)) continue;
+    const line = /** @type {ts.SourceFile} */ (aggregateSf).getLineAndCharacterOfPosition(stmt.getStart()).line + 1;
+    aggregate.push({ file: rel(aggregateFile), line, source: stmt.moduleSpecifier.text });
   }
 
-  return { unconsumed, rootDirect };
+  return { unconsumed, aggregate };
 }
 
 /**
  * Prove the sweep can still fail, before trusting it over the tree (`bzh:case-pins-its-own-name`):
- * an export nothing outside its directory imports, and a root line bypassing a sub-barrel, must
- * each be caught; an export reached through `fleet` or a deep relative path, from an outside spec,
- * or by a namespace or dynamic import must pass, and so must the root's allow-listed sources.
+ * an export nothing outside its unit imports, and an aggregate line bypassing the entries, must
+ * each be caught; an export reached through an entry or a deep relative path, from an outside spec,
+ * by an `import()` type, or by a namespace or dynamic import must pass, and so must a generated name.
  */
 function assertDisjointDiffsDetectorWorks() {
   const root = '/disjoint-fixture';
   const lib = `${root}/projects/fleet/src/lib`;
+  const entries = `${root}/projects/fleet/src/entries`;
   const baseFiles = (/** @type {string} */ publicApi) => [
     [`${root}/projects/fleet/src/public-api.ts`, publicApi],
-    [`${lib}/core/query-keys.ts`, 'export const someKey = 1;\n'],
     [`${lib}/api/hub/index.ts`, 'export const unreadApi = 1;\n'],
   ];
 
   const main = new Map([
-    ...baseFiles(
-      "export * from './lib/feat-a';\nexport * from './lib/feat-b';\n" +
-        "export { loose } from './lib/loose';\nexport { someKey } from './lib/core/query-keys';\n" +
-        "export * as hubApi from './lib/api/hub';\n" +
-        "export { extraKey } from './lib/core/query-keys-extra';\n",
-    ),
+    ...baseFiles("export * from './entries/core';\nexport * from './entries/hub-api';\nexport { loose } from './lib/loose';\n"),
+    [`${entries}/hub-api.ts`, "export { unreadApi } from '../lib/api/hub';\n"],
+    [
+      `${entries}/core.ts`,
+      "export { usedByApp, unusedAnywhere, usedInsideOnly } from '../lib/feat-a/a';\n" +
+        "export { usedByDeepImport, usedBySpec, type UsedByImportType } from '../lib/feat-b/b';\n",
+    ],
     [`${lib}/loose.ts`, 'export const loose = 1;\n'],
-    [`${lib}/core/query-keys-extra.ts`, 'export const extraKey = 1;\n'],
-    [`${lib}/feat-a/index.ts`, "export { usedByApp, unusedAnywhere, usedInsideOnly } from './a';\n"],
     [
       `${lib}/feat-a/a.ts`,
       'export const usedByApp = 1;\nexport const unusedAnywhere = 2;\nexport const usedInsideOnly = 3;\n',
     ],
     [`${lib}/feat-a/b.ts`, "import { usedInsideOnly } from './a';\nexport const inside = usedInsideOnly;\n"],
-    [`${lib}/feat-b/index.ts`, "export { usedByDeepImport, usedBySpec } from './b';\n"],
-    [`${lib}/feat-b/b.ts`, 'export const usedByDeepImport = 1;\nexport const usedBySpec = 2;\n'],
+    [
+      `${lib}/feat-b/b.ts`,
+      'export const usedByDeepImport = 1;\nexport const usedBySpec = 2;\nexport type UsedByImportType = string;\n',
+    ],
     [
       `${lib}/feat-a/c.ts`,
       "import { usedByDeepImport } from '../feat-b/b';\nexport const deep = usedByDeepImport;\n",
     ],
     [
       `${root}/projects/hub/src/main.ts`,
-      "import { usedByApp } from 'fleet';\nexport const used = usedByApp;\n",
+      "import { usedByApp } from 'fleet/core';\nexport const used = usedByApp;\n" +
+        "export let t: import('fleet/core').UsedByImportType;\n",
     ],
     [
       `${root}/projects/hub/src/main.spec.ts`,
-      "import { usedBySpec } from 'fleet';\nexport const used = usedBySpec;\n",
+      "import { usedBySpec } from 'fleet/core';\nexport const used = usedBySpec;\n",
     ],
   ]);
   const found = sweepDisjointDiffs({ root, memory: main });
@@ -242,10 +227,8 @@ function assertDisjointDiffsDetectorWorks() {
       `disjoint-diffs self-test: expected exactly the unconsumed and inside-only exports to be caught, saw [${names}]`,
     );
   }
-  if (found.rootDirect.map((r) => r.source).join(',') !== './lib/loose,./lib/core/query-keys-extra') {
-    throw new Error(
-      'disjoint-diffs self-test: expected only the direct root re-exports to be caught — a path sharing the query-keys prefix is one; sub-barrel, query-keys, and api lines pass',
-    );
+  if (found.aggregate.map((r) => r.source).join(',') !== './lib/loose') {
+    throw new Error('disjoint-diffs self-test: expected only the aggregate line bypassing the entries to be caught');
   }
 
   // A namespace or dynamic import consumes every export of its module; an unrelated import consumes none.
@@ -253,17 +236,17 @@ function assertDisjointDiffsDetectorWorks() {
     sweepDisjointDiffs({
       root,
       memory: new Map([
-        ...baseFiles("export * from './lib/feat';\n"),
-        [`${lib}/feat/index.ts`, "export { thing } from './thing';\n"],
+        ...baseFiles("export * from './entries/core';\n"),
+        [`${entries}/core.ts`, "export { thing } from '../lib/feat/thing';\n"],
         [`${lib}/feat/thing.ts`, 'export const thing = 1;\n'],
         [`${root}/projects/hub/src/main.ts`, consumer],
       ]),
     }).unconsumed.length;
-  if (wholeModule("import * as f from 'fleet';\nexport const all = f;\n") !== 0) {
-    throw new Error('disjoint-diffs self-test: a namespace import of the package entry was not read as consuming its exports');
+  if (wholeModule("import * as f from 'fleet/core';\nexport const all = f;\n") !== 0) {
+    throw new Error('disjoint-diffs self-test: a namespace import of an entry was not read as consuming its exports');
   }
-  if (wholeModule("export const all = import('fleet');\n") !== 0) {
-    throw new Error('disjoint-diffs self-test: a dynamic import of the package entry was not read as consuming its exports');
+  if (wholeModule("export const all = import('fleet/core');\n") !== 0) {
+    throw new Error('disjoint-diffs self-test: a dynamic import of an entry was not read as consuming its exports');
   }
   if (wholeModule('export const all = 1;\n') !== 1) {
     throw new Error('disjoint-diffs self-test: an export with no importer at all was not caught');
@@ -276,14 +259,14 @@ function assertDisjointDiffsDetectorWorks() {
  * @returns {string[]} violation lines, empty when clean
  */
 function disjointDiffsViolations() {
-  const { unconsumed, rootDirect } = sweepDisjointDiffs({ root: ROOT });
+  const { unconsumed, aggregate } = sweepDisjointDiffs({ root: ROOT });
   /** @type {string[]} */
   const lines = [];
   for (const u of unconsumed) {
-    lines.push(`  ${u.file}:${u.line}: ${u.name} — no consumer outside its sub-barrel's directory`);
+    lines.push(`  ${u.file}:${u.line}: ${u.name} — no consumer outside the unit that declares it`);
   }
-  for (const r of rootDirect) {
-    lines.push(`  ${r.file}:${r.line}: re-exports ${r.source} directly — export it through a sub-barrel`);
+  for (const r of aggregate) {
+    lines.push(`  ${r.file}:${r.line}: re-exports ${r.source} directly — export it through an entry`);
   }
   return lines;
 }

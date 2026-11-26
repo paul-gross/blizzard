@@ -1,4 +1,4 @@
-import type { RunnerSubscription } from 'fleet';
+import type { RunnerSubscription } from 'fleet/core';
 
 import type { HostRecordFacts } from './host-record.domain';
 

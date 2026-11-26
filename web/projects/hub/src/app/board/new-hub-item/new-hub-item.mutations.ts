@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { createWorkItemApiWorkSourcesSourceItemsPost } from 'fleet';
+import { createWorkItemApiWorkSourcesSourceItemsPost } from 'fleet/hub-api';
 import { createHubItemMutationKey } from '../../core/mutation-keys';
 import { hubBacklogKey, hubChunksKey } from '../../core/query-keys';
 

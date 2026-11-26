@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
-import { type KitAsyncStateValue, asyncState, injectRunnerHostNames, ViewportService } from 'fleet';
+import { asyncState, injectRunnerHostNames } from 'fleet/core';
+import { type KitAsyncStateValue } from 'fleet/kit';
+import { ViewportService } from 'fleet/viewport';
 import { injectQueryFilters } from '../core/route-state';
 import { injectHostFactsQuery } from '../core/hosts.query';
 import { EventsView } from './events-view';

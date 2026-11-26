@@ -14,7 +14,7 @@ import {
   type RepositoryLinkView,
   unlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePost,
   unlinkSourceApiProjectsProjectSourceLinksSourceRetirePost,
-} from 'fleet';
+} from 'fleet/hub-api';
 import {
   createProjectMutationKey,
   editProjectMutationKey,

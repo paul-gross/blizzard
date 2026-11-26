@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
-import { KitButton, KitDialog, KitErrorLine, KitField, KitTextInput } from 'fleet';
+import { KitButton, KitErrorLine, KitField, KitTextInput } from 'fleet/kit';
+import { KitDialog } from 'fleet/kit/dialog';
 
 import type { RecordDraft, RecordField } from './host-records.domain';
 

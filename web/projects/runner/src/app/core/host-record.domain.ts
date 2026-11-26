@@ -1,4 +1,4 @@
-import type { UnknownHostValue } from 'fleet';
+import type { UnknownHostValue } from 'fleet/core';
 
 /** Whether a host record — a workspace or a subscription — is in force or retired; an unknown state is one this build
  * cannot name. */

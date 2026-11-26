@@ -2,7 +2,7 @@
 
 import { ChangeDetectionStrategy, Component, computed, input, type OnInit, output, signal } from '@angular/core';
 import { apply, form } from '@angular/forms/signals';
-import { createRefusalState, submitForm } from 'fleet';
+import { createRefusalState, submitForm } from 'fleet/forms';
 
 import { injectDomainUrgenciesQuery } from '../core/urgencies.query';
 import { defaultUrgencyName, urgencyOptions } from '../core/urgency-options.model';

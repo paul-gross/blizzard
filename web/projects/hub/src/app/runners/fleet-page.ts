@@ -2,7 +2,7 @@ import { DOCUMENT } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 
-import { errorMessage, injectPendingMutationVariables } from 'fleet';
+import { errorMessage, injectPendingMutationVariables } from 'fleet/core';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { runnerPauseMutationKey } from '../core/mutation-keys';
 import { ProjectLens } from '../core/project-lens';

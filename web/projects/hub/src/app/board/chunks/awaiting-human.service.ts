@@ -1,5 +1,6 @@
 import { inject } from '@angular/core';
-import { type AwaitingHumanFormActions, FLEET_CLOCK, readRefusal } from 'fleet';
+import { type AwaitingHumanFormActions } from 'fleet/awaiting-human';
+import { FLEET_CLOCK, readRefusal } from 'fleet/core';
 
 import { ANSWER_REFUSALS, DECISION_NOTE_REFUSALS, toAnswerVars, toResolveVars } from './awaiting-human.translate';
 import { injectAnswerQuestionMutation, injectResolveDecisionMutation, readAnswerFailure, readDecisionFailure } from './human.mutations';

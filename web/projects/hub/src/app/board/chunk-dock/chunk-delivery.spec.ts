@@ -2,7 +2,8 @@ import { provideZonelessChangeDetection, type Type } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import { type ChunkDetailAggregate as ChunkDetail, ChunkGeneralTab } from 'fleet';
+import { type ChunkDetailAggregate as ChunkDetail } from 'fleet/chunk-page';
+import { ChunkGeneralTab } from 'fleet/chunk-page/view';
 import { domainChunkDetail as chunkDetail } from 'fleet/testing';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 

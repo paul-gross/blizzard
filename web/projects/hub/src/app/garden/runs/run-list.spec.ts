@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import { FleetRunList, type RunListRowVm } from './run-list';
-import type { KitAsyncStateValue } from 'fleet';
+import type { KitAsyncStateValue } from 'fleet/kit';
 
 const ROWS: readonly RunListRowVm[] = [
   {

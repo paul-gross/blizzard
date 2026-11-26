@@ -1,4 +1,4 @@
-import type { BacklogPeekEntry, QueuePeekEntry } from 'fleet';
+import type { BacklogPeekEntry, QueuePeekEntry } from 'fleet/hub-api';
 import type { BoardOrderEntry } from './queue.domain';
 
 export function fromBoardOrderEntry(entry: QueuePeekEntry | BacklogPeekEntry): BoardOrderEntry {

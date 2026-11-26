@@ -1,4 +1,4 @@
-import type { LaneStatus } from 'fleet';
+import type { LaneStatus } from 'fleet/core';
 
 /** A board chunk as the runner registry reads it: who holds it, where it sits, and what it holds. `runner_id` is set
  * only while the chunk is in progress, so a set one *is* a live claim. */

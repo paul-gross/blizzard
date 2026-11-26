@@ -1,6 +1,16 @@
 import { ChangeDetectionStrategy, Component, type TemplateRef, computed, input, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { GateBadgeGroup, FleetWhen, KitAsyncState, KitBadge, KitBeacon, type KitAsyncStateValue, type KitFact, KitFactList, KitSwatch } from 'fleet';
+import { FleetWhen } from 'fleet/core';
+import { GateBadgeGroup } from 'fleet/host';
+import {
+  KitAsyncState,
+  KitBadge,
+  KitBeacon,
+  type KitAsyncStateValue,
+  type KitFact,
+  KitFactList,
+  KitSwatch,
+} from 'fleet/kit';
 
 import type { HostRunnerRow } from './host-runner-row.model';
 

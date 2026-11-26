@@ -3,7 +3,9 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { type KitAsyncStateValue, openLookup, FleetWhen, KitAsyncState, KitButton, KitDialog, KitPanel, KitTextInput } from 'fleet';
+import { openLookup, FleetWhen } from 'fleet/core';
+import { type KitAsyncStateValue, KitAsyncState, KitButton, KitPanel, KitTextInput } from 'fleet/kit';
+import { KitDialog } from 'fleet/kit/dialog';
 import { AppLink } from 'fleet/shell';
 import { type PermitRow, permitProjectLabel } from './permits-page.model';
 import type { PermitMove } from './permits.domain';

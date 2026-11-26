@@ -1,7 +1,10 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { enableRoutineApiRoutinesRoutineIdEnablePost, retireRoutineApiRoutinesRoutineIdRetirePost } from 'fleet';
+import {
+  enableRoutineApiRoutinesRoutineIdEnablePost,
+  retireRoutineApiRoutinesRoutineIdRetirePost,
+} from 'fleet/hub-api';
 import { routineLifecycleMutationKey } from '../../core/mutation-keys';
 import { hubRoutinesKey } from '../../core/query-keys';
 

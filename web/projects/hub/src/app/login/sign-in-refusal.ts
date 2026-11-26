@@ -1,4 +1,4 @@
-import { unlisted } from 'fleet';
+import { unlisted } from 'fleet/core';
 
 import type { SignInRefusal } from './sign-in-refusal.domain';
 import { fromRefusalCode } from './sign-in-refusal.translate';

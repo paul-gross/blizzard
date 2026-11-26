@@ -6,7 +6,7 @@ import {
   listCadenceErrandsApiCadencesCadenceIdErrandsGet,
   listCadencesApiCadencesGet,
   listProjectCadencesApiProjectsProjectCadencesGet,
-} from 'fleet';
+} from 'fleet/hub-api';
 import { injectProjectFilter } from '../../core/project-filter';
 import { lensedKey } from '../../core/query-keys';
 import type { Cadence, CadenceErrand } from './cadence.domain';

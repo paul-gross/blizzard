@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { SessionEfficiency } from 'fleet';
+import { SessionEfficiency } from 'fleet/core';
 import type { FleetSpend as FleetSpendData } from './fleet-spend.domain';
 
 /**

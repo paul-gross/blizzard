@@ -1,21 +1,23 @@
 import {
   blockedLabel,
   cardShowsStatus,
-  type UrgencyReference,
   type ChunkCardView,
-  type ChunkDetailAggregate,
-  type LaneStatus,
   finishedWord,
+  stepLabel,
+  type WorkLine,
+} from 'fleet/chunk-card';
+import { type ChunkDetailAggregate } from 'fleet/chunk-page';
+import {
+  type UrgencyReference,
+  type LaneStatus,
   formatCost,
   hasCostFigure,
   runnerBoardParts,
   runnerTitle,
   domainStatusLane,
   domainStatusTone,
-  stepLabel,
-  type WorkLine,
   runnerBoardLabel,
-} from 'fleet';
+} from 'fleet/core';
 import type { FlowPlaceLine } from '../../core/flow-place.model';
 import type { GraphProgressNode } from '../../core/chunks.domain';
 import { graphStepLabel, STEP_RUNNER_SEP } from '../../core/step-label';

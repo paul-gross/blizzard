@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { KitAsyncState, type KitAsyncStateValue, KitPanel } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitPanel } from 'fleet/kit';
 
 /** One rendered Activity feed row — the logged frame plus its display strings.
  * `detail` is the row's optional second line. */

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import { KitButton, KitConfirmDialog, KitDialog } from 'fleet';
+import { KitButton } from 'fleet/kit';
+import { KitConfirmDialog, KitDialog } from 'fleet/kit/dialog';
 import { type HostVerbEvent, type HostVerbsVm, NO_HOST_VERBS } from './host-verbs.model';
 
 /** A gesture awaiting the operator's confirm, and the event it emits once confirmed. */

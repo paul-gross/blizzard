@@ -4,7 +4,7 @@ import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import type { InAppLink } from 'fleet/shell';
-import { ViewportService } from 'fleet';
+import { ViewportService } from 'fleet/viewport';
 import {
   chunkCountsView,
   OPERATOR_ME_RESPONSE,

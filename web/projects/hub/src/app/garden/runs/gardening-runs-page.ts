@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
 import { FleetRunList } from './run-list';
-import { KitMasterDetail, KitPanel, ViewportService } from 'fleet';
+import { KitMasterDetail, KitPanel } from 'fleet/kit';
+import { ViewportService } from 'fleet/viewport';
 
 import { injectChildRouteParam } from '../../core/route-state';
 import { GardeningRunsState } from './gardening-runs-state';

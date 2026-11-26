@@ -1,24 +1,20 @@
+import { type WorkLine, workLines } from 'fleet/chunk-card';
+import { compactBounce } from 'fleet/chunk-detail';
 import {
   ageMs,
   type AsyncStateQuery,
   asyncStateOf,
-  compactBounce,
   domainChunkLane,
   compactRef,
   formatAbsolute,
   formatWhenParts,
-  type KitAsyncStateValue,
-  projectTint,
   runnerBoardParts,
   shortCommitHash,
   domainStatusTone,
   type LaneStatus,
-  toneColor,
-  type Tone,
-  type WorkLine,
-  workLines,
   runnerBoardLabel,
-} from 'fleet';
+} from 'fleet/core';
+import { type KitAsyncStateValue, projectTint, toneColor, type Tone } from 'fleet/kit';
 
 import { withinDoneWindow } from '../core/done-window';
 import { ordinal, placeInLine } from '../core/flow-place.model';

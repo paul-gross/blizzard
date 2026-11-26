@@ -1,4 +1,4 @@
-import { type GardenProposalClosureView, type GardenProposalView } from 'fleet';
+import { type GardenProposalClosureView, type GardenProposalView } from 'fleet/hub-api';
 import { gardenProposalClosureView, gardenProposalView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 

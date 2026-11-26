@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 
-import { KitSkeleton } from 'fleet';
+import { KitSkeleton } from 'fleet/kit';
 
 /**
  * A board card's loading stand-in, shaped and sized like a one-item card: a work-ref line, a

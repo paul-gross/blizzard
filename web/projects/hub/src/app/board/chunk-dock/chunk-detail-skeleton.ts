@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 
-import { KitSkeleton } from 'fleet';
+import { KitSkeleton } from 'fleet/kit';
 
 /**
  * The chunk dock's loading stand-in, shaped like {@link ChunkDetailPanel}: the dock's own frame, a

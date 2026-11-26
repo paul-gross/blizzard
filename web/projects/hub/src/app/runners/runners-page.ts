@@ -1,7 +1,8 @@
 import { DOCUMENT } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { errorMessage, injectPendingMutationVariables, KitAsyncState, KitBackBar, KitErrorLine } from 'fleet';
+import { errorMessage, injectPendingMutationVariables } from 'fleet/core';
+import { KitAsyncState, KitBackBar, KitErrorLine } from 'fleet/kit';
 import { AppLink } from 'fleet/shell';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { runnerPauseMutationKey } from '../core/mutation-keys';

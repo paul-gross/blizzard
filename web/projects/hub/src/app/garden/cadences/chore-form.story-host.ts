@@ -1,7 +1,7 @@
 import { Component, input, signal } from '@angular/core';
 import { form, submit } from '@angular/forms/signals';
 
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 
 import { type ChoreDraft, EMPTY_CHORE_DRAFT } from '../core/cadence.domain';
 import { choreAddRules, choreEditRules } from './chore.form';

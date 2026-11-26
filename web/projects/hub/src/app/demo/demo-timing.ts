@@ -1,5 +1,5 @@
 import { InjectionToken, inject } from '@angular/core';
-import { FLEET_CLOCK } from 'fleet';
+import { FLEET_CLOCK } from 'fleet/core';
 
 /**
  * Demo mode's waiting primitives.

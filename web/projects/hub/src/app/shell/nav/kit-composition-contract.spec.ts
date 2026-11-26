@@ -1,6 +1,6 @@
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { KitChip, KitChipGroup, KitChipOptionDirective, KitToolbar, KitToolbarWidget } from 'fleet';
+import { KitChip, KitChipGroup, KitChipOptionDirective, KitToolbar, KitToolbarWidget } from 'fleet/kit/chips';
 
 @Component({
   imports: [KitChip, KitChipGroup, KitChipOptionDirective, KitToolbar, KitToolbarWidget],

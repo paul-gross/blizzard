@@ -1,4 +1,4 @@
-import type { UnknownHostValue } from 'fleet';
+import type { UnknownHostValue } from 'fleet/core';
 
 export type KnownHostRegistrationState =
   | 'unregistered'

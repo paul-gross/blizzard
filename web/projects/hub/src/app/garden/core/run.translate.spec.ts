@@ -1,4 +1,4 @@
-import { RunMode } from 'fleet';
+import { RunMode } from 'fleet/hub-api';
 import {
   deliveredSetDeltaView,
   deliveredSetView,

@@ -1,4 +1,4 @@
-import { openLookup } from 'fleet';
+import { openLookup } from 'fleet/core';
 import type { ConfigRecordKind, ConfigRecordRef } from './config-history.domain';
 
 import type { ConfigLinkVm } from './config-record-panel';

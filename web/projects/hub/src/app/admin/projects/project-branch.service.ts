@@ -1,4 +1,4 @@
-import type { SaveOutcome } from 'fleet';
+import type { SaveOutcome } from 'fleet/forms';
 import { projectBranchError, type ProjectBranchBaseline, type ProjectBranchDraft } from './project-branch.domain';
 import { projectBranchRefusal, toProjectBranch } from './project-branch.translate';
 import { injectRepositoryBranchMutation } from './projects.mutations';

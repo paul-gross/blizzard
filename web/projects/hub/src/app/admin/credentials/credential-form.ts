@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
-import { KitField, KitNumberInput, KitSelect, KitTextInput } from 'fleet';
+import { KitField, KitNumberInput, KitTextInput } from 'fleet/kit';
+import { KitSelect } from 'fleet/kit/select';
 
 import { ConfigFieldTreeDialog } from '../config-field-tree-dialog';
 import { type ConfigFieldTreeMode, type ConfigFieldView } from '../config-field-tree.model';

@@ -1,4 +1,4 @@
-import type { UrgencyView } from 'fleet';
+import type { UrgencyView } from 'fleet/hub-api';
 import { domainUrgencyQueryOptions } from './urgencies.query';
 
 it('projects the detail over the existing cache and polling options', () => {

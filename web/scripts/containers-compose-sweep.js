@@ -389,7 +389,7 @@ export class Kinds {
 `,
   'app/src/composing.ts': `
 import { Component, computed as derive } from '@angular/core';
-import { asyncState } from 'fleet';
+import { asyncState } from 'fleet/core';
 import { injectRowsQuery } from './rows.query';
 @Component({ selector: 'app-composing', template: '' })
 export class Composing {

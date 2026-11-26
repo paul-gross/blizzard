@@ -2,7 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import { formatAbsolute, type KitAsyncStateValue } from 'fleet';
+import { formatAbsolute } from 'fleet/core';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import { domainBounce, FIXTURE_NOW, fixtureInstant, settle } from 'fleet/testing';
 import { deliveryChunk } from './delivery.builders';
 import { DeliveryGlanceView } from './delivery-glance-view';

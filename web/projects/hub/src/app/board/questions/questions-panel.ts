@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, output } from '@angular/core';
 
-import { type KitAsyncStateValue, asyncState, injectRunnerHostNames } from 'fleet';
+import { asyncState, injectRunnerHostNames } from 'fleet/core';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import { QuestionsPanelView } from './questions-view';
 import { injectBoardQuestionsQuery } from './questions.query';
 

@@ -1,4 +1,4 @@
-import { type AsyncStateQuery } from 'fleet';
+import { type AsyncStateQuery } from 'fleet/core';
 import { HubEventKind as HubEventType, type ActivityFact } from 'fleet/shell';
 import { describe, expect, it } from 'vitest';
 

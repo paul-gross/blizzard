@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
 
-import { KitCheckbox, KitField, KitForm, KitOption, KitOptionGroup, KitSelect, KitTextInput, type Urgency } from 'fleet';
+import { type Urgency } from 'fleet/core';
+import { KitCheckbox, KitField, KitForm, KitOption, KitOptionGroup, KitTextInput } from 'fleet/kit';
+import { KitSelect } from 'fleet/kit/select';
 
 import type { ChoreDraft } from '../core/cadence.domain';
 import { urgencyOptions } from '../../core/urgency-options.model';

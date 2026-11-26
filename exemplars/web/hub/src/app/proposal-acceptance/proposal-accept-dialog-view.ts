@@ -2,16 +2,10 @@
 
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
-import {
-  KitDialog,
-  KitField,
-  KitForm,
-  KitOption,
-  KitOptionGroup,
-  KitSelect,
-  KitTextInput,
-  type KitChipOption,
-} from 'fleet';
+import { KitField, KitForm, KitOption, KitOptionGroup, KitTextInput } from 'fleet/kit';
+import { type KitChipOption } from 'fleet/kit/chips';
+import { KitDialog } from 'fleet/kit/dialog';
+import { KitSelect } from 'fleet/kit/select';
 
 import type { ProposalAcceptanceDraft } from './proposal-acceptance.domain';
 

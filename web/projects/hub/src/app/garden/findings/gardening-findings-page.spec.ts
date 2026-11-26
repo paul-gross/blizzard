@@ -3,7 +3,7 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ViewportService } from 'fleet';
+import { ViewportService } from 'fleet/viewport';
 import { injectReopenFindingsMutation, injectResolveFindingsMutation } from '../core/finding.mutations';
 import {
   gardenFindingView,

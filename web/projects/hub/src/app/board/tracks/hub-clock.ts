@@ -1,6 +1,6 @@
 import { type Signal, computed, effect, inject, signal, untracked } from '@angular/core';
 
-import { FLEET_CLOCK } from 'fleet';
+import { FLEET_CLOCK } from 'fleet/core';
 import { injectNowSignal } from 'fleet/shell';
 
 /**

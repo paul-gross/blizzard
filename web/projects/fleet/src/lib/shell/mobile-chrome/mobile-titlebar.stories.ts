@@ -4,7 +4,8 @@ import {
   type StoryObj,
 } from '@storybook/angular-vite';
 
-import { KitMenuItem, KitMenuPanel } from '../../kit';
+import { KitMenuPanel } from '../../kit/kit-menu';
+import { KitMenuItem } from '../../kit/kit-menu-item';
 import { MobileTitlebar } from './mobile-titlebar';
 
 const meta: Meta<MobileTitlebar> = {

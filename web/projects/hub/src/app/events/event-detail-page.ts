@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, resource } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { injectRunnerHostNames, KitBackBar, ViewportService } from 'fleet';
+import { injectRunnerHostNames } from 'fleet/core';
+import { KitBackBar } from 'fleet/kit';
+import { ViewportService } from 'fleet/viewport';
 import { AppLink } from 'fleet/shell';
 import { injectQueryFilters, injectRouteParam } from '../core/route-state';
 import { injectHostFactsQuery } from '../core/hosts.query';

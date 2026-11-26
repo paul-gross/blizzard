@@ -4,7 +4,8 @@ import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type ChunkControl, formatWhen } from 'fleet';
+import { type ChunkControl } from 'fleet/chunk-detail';
+import { formatWhen } from 'fleet/core';
 import {
   settle,
   OPERATOR_ME_RESPONSE,

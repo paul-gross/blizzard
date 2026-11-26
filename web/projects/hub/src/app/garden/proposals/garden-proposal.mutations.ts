@@ -6,7 +6,7 @@ import {
   passGardenProposalApiGardenProposalsProposalIdPassPost,
   type GardenProposalAcceptResponse,
   type GardenProposalView,
-} from 'fleet';
+} from 'fleet/hub-api';
 import { acceptGardenProposalMutationKey, passGardenProposalMutationKey } from '../../core/mutation-keys';
 import { hubGardenProposalKey, hubGardenProposalsKey, hubRoutineProposalCountsPrefixKey } from '../../core/query-keys';
 

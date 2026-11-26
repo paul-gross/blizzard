@@ -1,6 +1,6 @@
 // exemplar: bzh:frontend-containers-compose, bzh:frontend-pending-override, bzh:frontend-open-vocabulary — the derivations the page composes.
 
-import { openLookup } from 'fleet';
+import { openLookup } from 'fleet/core';
 import type { Permit, PermitVerb } from './permits.domain';
 import { permitStateLabel } from './permits.domain';
 import type { PermitMoveVars, PermitRevokeVars } from './permits.mutations';

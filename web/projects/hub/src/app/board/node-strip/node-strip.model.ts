@@ -1,4 +1,5 @@
-import { type LaneStatus, domainStatusLane, type Tone, toneColor, toneDimColor } from 'fleet';
+import { type LaneStatus, domainStatusLane } from 'fleet/core';
+import { type Tone, toneColor, toneDimColor } from 'fleet/kit';
 import type { GraphProgressNode, GraphProgressState } from '../../core/chunks.domain';
 
 /** One drawn block: a node of the chunk's graph and how the chunk's visits left it — the hub's

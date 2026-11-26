@@ -1,5 +1,5 @@
 import { computed } from '@angular/core';
-import { injectNowSignal } from 'fleet';
+import { injectNowSignal } from 'fleet/core';
 
 import { startOfLocalDayIso, startOfPreviousLocalDayIso } from '../../core/local-day';
 import { injectHubFleetSpendDomainQuery } from './fleet-spend.query';

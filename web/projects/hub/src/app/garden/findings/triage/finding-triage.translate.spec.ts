@@ -1,4 +1,4 @@
-import { readRefusal } from 'fleet';
+import { readRefusal } from 'fleet/core';
 
 import { type FindingTriageVerb } from '../../core/finding-triage-verb.domain';
 import { type FindingTriageDraft } from './finding-triage.domain';

@@ -6,11 +6,9 @@ import {
 } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import {
-  EVENT_SOURCE_FACTORY,
-  FLEET_CLOCK,
-  chunkCountsApiChunkCountsGet,
-} from 'fleet';
+import { FLEET_CLOCK } from 'fleet/core';
+import { chunkCountsApiChunkCountsGet } from 'fleet/hub-api';
+import { EVENT_SOURCE_FACTORY } from 'fleet/sse';
 import {
   meResponse,
   meTenant,

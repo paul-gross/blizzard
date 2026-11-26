@@ -1,7 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
 import { acceptGardenProposalMutationKey, passGardenProposalMutationKey } from '../../core/mutation-keys';
-import { asyncState, injectPendingMutationVariables, KitMasterDetail, KitChips, KitSelect, type KitAsyncStateValue, type KitChipOption, ViewportService } from 'fleet';
+import { asyncState, injectPendingMutationVariables } from 'fleet/core';
+import { KitMasterDetail, type KitAsyncStateValue } from 'fleet/kit';
+import { KitChips, type KitChipOption } from 'fleet/kit/chips';
+import { KitSelect } from 'fleet/kit/select';
+import { ViewportService } from 'fleet/viewport';
 import { FleetProposalList, type ProposalListRowVm } from './proposal-list';
 import { type GardenProposalAcceptVars, type GardenProposalPassVars } from './garden-proposal.mutations';
 import { injectHubGardenProposalsQuery } from './garden-proposals.query';

@@ -3,7 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
-import { type ChunkDetailAggregate as ChunkDetail, ChunkGeneralTab } from 'fleet';
+import { type ChunkDetailAggregate as ChunkDetail } from 'fleet/chunk-page';
+import { ChunkGeneralTab } from 'fleet/chunk-page/view';
 import { domainChunkDetail as chunkDetail } from 'fleet/testing';
 import { boardChunk } from '../board.fixture';
 import { BoardShell } from '../board-shell/board-shell';

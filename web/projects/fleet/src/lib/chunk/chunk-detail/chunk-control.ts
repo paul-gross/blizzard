@@ -1,4 +1,4 @@
-import type { Urgency } from '../../core/urgency';
+import type { Urgency } from '../../core/urgency/urgency.domain';
 import type { Signal } from '@angular/core';
 
 /** The chunk-control port behind a chunk header's ⋮ menu ({@link ChunkActionsMenu}) —

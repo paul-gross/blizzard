@@ -1,4 +1,4 @@
-import type { SubscriptionPace } from 'fleet';
+import type { SubscriptionPace } from 'fleet/host';
 
 import type { HostCard, HostGroups } from './host-rows.model';
 import { agentGauges, envGauges, railVm, subscriptionLines } from './runner-rail.model';

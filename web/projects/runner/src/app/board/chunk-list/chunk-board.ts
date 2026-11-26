@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabContent, KitTabGroup, KitTabPanel, KitTabs, type KitTabOption, toneColor } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, toneColor } from 'fleet/kit';
+import { KitTabContent, KitTabGroup, KitTabPanel, KitTabs, type KitTabOption } from 'fleet/kit/tabs';
 
 import { BOARD_LANES, type BoardLane, type MachineChunkRow } from '../../core/chunk-rows.model';
 import { rankedRows } from '../app-panel.model';

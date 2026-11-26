@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, ageMs, formatAge, injectNowSignal } from 'fleet';
+import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, ageMs, formatAge, injectNowSignal } from 'fleet/core';
 
 /**
  * Heartbeat freshness as a draining bar: 100% for any age at or under

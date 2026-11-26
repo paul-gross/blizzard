@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 import { QueryClient } from '@tanstack/angular-query-experimental';
-import { type KitAsyncStateValue } from 'fleet';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import { injectShowProjectColors } from '../../core/project-lens-colors';
 import { injectDomainBoardChunksQuery } from '../../core/chunks.query';
 import { injectProjectDomainsQuery } from '../../core/projects.query';

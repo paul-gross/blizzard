@@ -1,4 +1,4 @@
-import type { WorkItemCreateResponse } from 'fleet';
+import type { WorkItemCreateResponse } from 'fleet/hub-api';
 
 export const CREATED_ITEM: WorkItemCreateResponse = {
   author: { kind: 'user', user_id: 'operator', login: 'operator', chunk_id: null, node_name: null, runner_id: null, runner_name: null },

@@ -1,6 +1,6 @@
 import { type Signal, computed, signal } from '@angular/core';
 
-import { errorMessage, injectPendingMutationVariables, unlisted } from 'fleet';
+import { errorMessage, injectPendingMutationVariables, unlisted } from 'fleet/core';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import {
   hostEnrollMutationKey,

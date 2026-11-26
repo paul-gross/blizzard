@@ -1,6 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type FlowView, listFlowsApiFlowsGet } from 'fleet';
+import { type FlowView, listFlowsApiFlowsGet } from 'fleet/hub-api';
 import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 import { hubFlowsKey } from './query-keys';
 

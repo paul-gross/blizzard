@@ -1,4 +1,5 @@
-import { compactRef, runnerClient } from 'fleet';
+import { compactRef } from 'fleet/core';
+import { runnerClient } from 'fleet/runner-api';
 
 import type { PanelLease } from '../../core/panel-reads.model';
 import {

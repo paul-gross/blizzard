@@ -1,5 +1,5 @@
-import type { hubApi } from 'fleet';
-import { unlisted } from 'fleet';
+import { unlisted } from 'fleet/core';
+import type { hubApi } from 'fleet/hub-api';
 import type { EnvTimelineSegment, EnvTimelineStep, EnvTimelineView, InvocationKind, PlacedStep, StepExecutor } from './timeline.domain';
 
 export function fromStepExecutor(value: hubApi.Executor | null): StepExecutor | null {

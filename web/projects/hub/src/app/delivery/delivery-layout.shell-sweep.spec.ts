@@ -4,7 +4,7 @@ import { provideRouter, Router, RouterOutlet } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { commands, page, userEvent } from 'vitest/browser';
 
-import { FLEET_CLOCK, formatAbsolute } from 'fleet';
+import { FLEET_CLOCK, formatAbsolute } from 'fleet/core';
 import { bounceView, chunkDetail, domainBounce, chunkSummary, FIXTURE_NOW, fixtureInstant, prView, settle, stubHubClient } from 'fleet/testing';
 import { DeliveryPage } from './delivery-page';
 import { DeliveryChunkPage } from './delivery-chunk-page';

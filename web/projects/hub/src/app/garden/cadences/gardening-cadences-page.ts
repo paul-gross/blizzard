@@ -1,16 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { form } from '@angular/forms/signals';
 import { Router, RouterOutlet } from '@angular/router';
-import {
-  asyncState,
-  FlagStore,
-  KitButton,
-  KitMasterDetail,
-  KitPanel,
-  type KitAsyncStateValue,
-  submitForm,
-  ViewportService,
-} from 'fleet';
+import { asyncState, FlagStore } from 'fleet/core';
+import { submitForm } from 'fleet/forms';
+import { KitButton, KitMasterDetail, KitPanel, type KitAsyncStateValue } from 'fleet/kit';
+import { ViewportService } from 'fleet/viewport';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { firstRowToOpen } from '../../core/first-row';

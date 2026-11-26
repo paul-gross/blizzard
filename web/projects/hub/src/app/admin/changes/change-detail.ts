@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { type KitAsyncStateValue, restingAsyncState } from 'fleet';
+import { restingAsyncState } from 'fleet/core';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import { map } from 'rxjs';
 
 import { changesOfPages } from '../config-history.model';

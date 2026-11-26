@@ -2,7 +2,8 @@
 
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 
-import { type KitAsyncStateValue, asyncState, errorMessage, injectPendingMutationVariables } from 'fleet';
+import { asyncState, errorMessage, injectPendingMutationVariables } from 'fleet/core';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import { permitMoveMutationKey, permitRevokeMutationKey } from '../core/mutation-keys';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { injectQueryFilters } from '../core/route-state';

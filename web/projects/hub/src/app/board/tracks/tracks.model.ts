@@ -1,11 +1,5 @@
-import {
-  type AsyncStateQuery,
-  type KitAsyncStateValue,
-  asyncState,
-  compactRef,
-  formatHeldFor,
-  projectTint,
-} from 'fleet';
+import { type AsyncStateQuery, asyncState, compactRef, formatHeldFor } from 'fleet/core';
+import { type KitAsyncStateValue, projectTint } from 'fleet/kit';
 
 import { projectColorMap } from '../../core/project-lens-colors';
 import type { Project } from '../../core/project.domain';

@@ -1,6 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { listActivityApiActivityGet } from 'fleet';
+import { listActivityApiActivityGet } from 'fleet/hub-api';
 import type { ActivityFact } from 'fleet/shell';
 import { hubActivityKey, lensedKey } from '../../core/query-keys';
 import { injectProjectFilter } from '../../core/project-filter';

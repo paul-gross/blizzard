@@ -1,4 +1,4 @@
-import type { hubApi } from 'fleet';
+import type { hubApi } from 'fleet/hub-api';
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { listChunksApiChunksGet, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';

@@ -1,6 +1,6 @@
 import dagre from '@dagrejs/dagre';
 
-import { unlisted } from 'fleet';
+import { unlisted } from 'fleet/core';
 import { LABEL_HEIGHT, type TextMeasurer, labelBoxWidth, migrationBox, nodeBox } from './graph-box-sizing';
 import { type EdgeKind, type EdgeTarget, type ResolvedEdge, resolveEdges } from './graph-edge-target';
 import type { Graph, GraphNode } from './graph.domain';

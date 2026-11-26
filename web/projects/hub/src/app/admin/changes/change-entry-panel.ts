@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { FleetWhen, KitAsyncState, type KitAsyncStateValue, KitSectionHead } from 'fleet';
+import { FleetWhen } from 'fleet/core';
+import { KitAsyncState, type KitAsyncStateValue, KitSectionHead } from 'fleet/kit';
 
 import { ConfigFieldDiff } from '../config-field-diff';
 import type { ChangeEntryVm } from './changes.model';

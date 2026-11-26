@@ -1,12 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import {
-  type ChunkArtifact as ArtifactModel,
-  ChunkArtifactBody,
-  KitAsyncState,
-  type KitAsyncStateValue,
-  KitBackBar,
-} from 'fleet';
+import { type ChunkArtifact as ArtifactModel, ChunkArtifactBody } from 'fleet/chunk-detail';
+import { KitAsyncState, type KitAsyncStateValue, KitBackBar } from 'fleet/kit';
 import { AppLink } from 'fleet/shell';
 
 /**

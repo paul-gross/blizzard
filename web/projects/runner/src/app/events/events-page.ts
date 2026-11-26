@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { KitPanel } from 'fleet';
+import { KitPanel } from 'fleet/kit';
 import { FactLog } from './fact-log';
 
 /**

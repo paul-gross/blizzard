@@ -1,4 +1,4 @@
-import { errorMessage } from 'fleet';
+import { errorMessage } from 'fleet/core';
 import { type Member, type MemberRole } from './members.domain';
 
 /** A refused membership change's message through `errorMessage` (its 422 handling included), a generic failure line

@@ -4,7 +4,7 @@ import {
   type CredentialsListView,
   getCredentialApiCredentialsCredentialGet,
   listCredentialsApiCredentialsGet,
-} from 'fleet';
+} from 'fleet/hub-api';
 import { hubConfigListKey, hubConfigRecordKey } from '../../core/query-keys';
 import type { CredentialChoice } from '../repositories/repository.domain';
 import { fromCredentialSummary } from '../repositories/repository.translate';

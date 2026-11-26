@@ -1,4 +1,4 @@
-import type { AsyncStateQuery } from 'fleet';
+import type { AsyncStateQuery } from 'fleet/core';
 import type { GraphSummary } from '../../graphs/graph.domain';
 import { describe, expect, it } from 'vitest';
 

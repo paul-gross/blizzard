@@ -1,5 +1,6 @@
 // bzh:frontend-domain-boundary — the one place the routine wire is read and written.
-import { type EditBaseline, type hubApi, type RefusalMap, type RoutineView, type UrgencyRef } from 'fleet';
+import { type EditBaseline, type RefusalMap } from 'fleet/forms';
+import { type hubApi, type RoutineView, type UrgencyRef } from 'fleet/hub-api';
 
 import type { Routine, RoutineCreateDraft, RoutineEditDraft, RoutineKeeper, RoutineUrgency } from './routine.domain';
 

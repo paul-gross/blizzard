@@ -2,20 +2,19 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { type FieldTree, FormField } from '@angular/forms/signals';
 import { RouterLink } from '@angular/router';
 
+import { FleetWhen, type Urgency } from 'fleet/core';
 import {
-  FleetWhen,
   KitAsyncState,
   KitButton,
-  KitDialog,
   KitErrorLine,
   KitField,
   KitOption,
   KitOptionGroup,
-  KitSelect,
   KitTextInput,
   type KitAsyncStateValue,
-  type Urgency,
-} from 'fleet';
+} from 'fleet/kit';
+import { KitDialog } from 'fleet/kit/dialog';
+import { KitSelect } from 'fleet/kit/select';
 import { AppLink } from 'fleet/shell';
 
 import type { RoutineBaseline, RunDraft, RunResponse } from '../core/run.domain';

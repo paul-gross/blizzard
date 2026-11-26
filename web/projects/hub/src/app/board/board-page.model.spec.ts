@@ -1,6 +1,6 @@
 import { boardChunk } from './board.fixture';
 import type { BoardChunk } from '../core/chunks.model';
-import type { LaneStatus } from 'fleet';
+import type { LaneStatus } from 'fleet/core';
 type KnownLaneStatus = Exclude<LaneStatus['kind'], 'unknown'>;
 import { describe, expect, it } from 'vitest';
 

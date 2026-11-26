@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { FleetWhen, KitBadge, domainStatusTone, toneColor } from 'fleet';
+import { FleetWhen, domainStatusTone } from 'fleet/core';
+import { KitBadge, toneColor } from 'fleet/kit';
 
 import type { hubLink } from '../../core/runner-health.model';
 import type { FleetSummary } from '../../core/runner-status.domain';

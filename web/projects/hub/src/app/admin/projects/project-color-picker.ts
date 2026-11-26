@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { KitChip, KitChipGroup, KitChipOptionDirective, KitColorInput, KitSwatch } from 'fleet';
+import { KitColorInput, KitSwatch } from 'fleet/kit';
+import { KitChip, KitChipGroup, KitChipOptionDirective } from 'fleet/kit/chips';
 
 /**
  * The palette as a row of choice chips, each a swatch followed by its color name as text, the project's current color

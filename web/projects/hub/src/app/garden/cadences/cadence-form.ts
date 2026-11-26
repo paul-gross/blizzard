@@ -1,7 +1,11 @@
 import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
 
-import { FLEET_CLOCK, type KitChipOption, KitCombobox, KitField, KitForm, KitSelect, KitTextInput, zoneOptions } from 'fleet';
+import { FLEET_CLOCK, zoneOptions } from 'fleet/core';
+import { KitField, KitForm, KitTextInput } from 'fleet/kit';
+import { type KitChipOption } from 'fleet/kit/chips';
+import { KitCombobox } from 'fleet/kit/combobox';
+import { KitSelect } from 'fleet/kit/select';
 
 import { CADENCE_ANCHORS, type CadenceDraft } from '../core/cadence.domain';
 

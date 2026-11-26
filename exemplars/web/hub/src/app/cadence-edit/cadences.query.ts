@@ -2,7 +2,7 @@
 
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type CadenceView, listCadencesApiCadencesGet } from 'fleet';
+import { type CadenceView, listCadencesApiCadencesGet } from 'fleet/hub-api';
 import { hubCadenceEditListKey } from '../core/query-keys';
 import type { Cadence } from './cadence.domain';
 import { fromCadenceView } from './cadence.translate';

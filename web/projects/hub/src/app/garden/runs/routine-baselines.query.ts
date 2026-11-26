@@ -1,6 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type RoutineBaselineView, routineBaselinesApiRoutinesRoutineIdBaselinesGet } from 'fleet';
+import { type RoutineBaselineView, routineBaselinesApiRoutinesRoutineIdBaselinesGet } from 'fleet/hub-api';
 import { hubRoutineBaselinesKey } from '../../core/query-keys';
 import type { RoutineBaseline } from '../core/run.domain';
 import { fromRoutineBaselineView } from '../core/run.translate';

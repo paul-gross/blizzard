@@ -2,7 +2,9 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { EVENT_SOURCE_FACTORY, ViewportService, type EventSourceFactory, type FleetEventSource } from 'fleet';
+import { provideFlags } from 'fleet/core';
+import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource } from 'fleet/sse';
+import { ViewportService } from 'fleet/viewport';
 import {
   capacitiesView,
   hostEnvironmentView,
@@ -20,7 +22,6 @@ import {
 
 import { App } from './app';
 import { routes } from './app.routes';
-import { provideFlags } from 'fleet';
 import { runnerFlagsRead } from '../core/flags.query';
 import { PanelFilters } from '../core/panel-filters';
 
