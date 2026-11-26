@@ -8,13 +8,14 @@ name beside them."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Generator, Iterable, Sequence
+from collections.abc import Callable, Collection, Generator, Iterable, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime
 
 from sqlalchemy import ColumnElement, insert
 
+from blizzard.hub.domain.chunk.ingest import IBoundWorkRefLabels
 from blizzard.hub.domain.chunk.model import WorkRef, WorkRefLabel
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.observability.hub_events import HubEventKind, IReadHubEventLog
@@ -97,41 +98,43 @@ class TraceStore:
     def _completed(
         self,
         chunk_ids: Sequence[str],
-        complete: Callable[[TenantId, StepHydration, dict[str, StepFacts]], dict[str, StepFacts]],
+        complete: Callable[[TenantId, _Tenant, dict[str, StepFacts]], dict[str, StepFacts]],
     ) -> dict[str, StepFacts]:
         """The corpus's facts grouped by tenant and completed per open tenant by ``complete``, in the corpus's order;
         a tenant closed since the corpus read contributes nothing."""
         opened = _Opened(self._hydration)
-        corpus = self._corpus.step_facts_for(chunk_ids, opened.label)
+        corpus = self._corpus.step_facts_for(chunk_ids, opened.bind)
         by_tenant: dict[TenantId, dict[str, StepFacts]] = {}
         for chunk_id, facts in corpus.items():
             if facts.tenant is not None:
                 by_tenant.setdefault(facts.tenant, {})[chunk_id] = facts
         built: dict[str, StepFacts] = {}
         for tenant, tenant_facts in by_tenant.items():
-            reads = opened.reads(tenant)
-            if reads is not None:
-                built.update(complete(tenant, reads, tenant_facts))
+            found = opened.tenant(tenant)
+            if found is not None:
+                built.update(complete(tenant, found, tenant_facts))
         return {chunk_id: built[chunk_id] for chunk_id in corpus if chunk_id in built}
 
     def _complete_graphs(
-        self, tenant: TenantId, reads: StepHydration, tenant_facts: dict[str, StepFacts]
+        self, tenant: TenantId, opened: _Tenant, tenant_facts: dict[str, StepFacts]
     ) -> dict[str, StepFacts]:
-        graphs = reads.graphs.get_many(sorted({g for facts in tenant_facts.values() for g in _graph_ids(facts)}))
+        graphs = opened.reads.graphs.get_many(sorted({g for facts in tenant_facts.values() for g in _graph_ids(facts)}))
         return {
             chunk_id: replace(facts, graphs={g: graphs[g] for g in _graph_ids(facts) if g in graphs})
             for chunk_id, facts in tenant_facts.items()
         }
 
     def _complete_whole(
-        self, tenant: TenantId, reads: StepHydration, tenant_facts: dict[str, StepFacts]
+        self, tenant: TenantId, opened: _Tenant, tenant_facts: dict[str, StepFacts]
     ) -> dict[str, StepFacts]:
+        reads = opened.reads
+        labels = opened.labels({source for facts in tenant_facts.values() for source in facts.work_sources})
         graphs = reads.graphs.get_many(sorted({g for facts in tenant_facts.values() for g in _graph_ids(facts)}))
         names = reads.names.names_for(sorted({r for facts in tenant_facts.values() for r in _runner_ids(facts)}))
         projects = reads.projects.labels_for(sorted({f.project for f in tenant_facts.values() if f.project}))
         name = self._tenant_name(tenant)
         return {
-            chunk_id: _with_reads(facts, graphs, names, projects, name, reads.source_label)
+            chunk_id: _with_reads(facts, graphs, names, projects, name, labels)
             for chunk_id, facts in tenant_facts.items()
         }
 
@@ -203,12 +206,12 @@ def _with_reads(
     names: dict[str, str],
     projects: dict[str, ProjectLabel],
     tenant_name: str | None,
-    source_label: Callable[[str], str],
+    labels: IBoundWorkRefLabels,
 ) -> StepFacts:
     project = projects.get(facts.project) if facts.project is not None else None
     return replace(
         facts,
-        work_sources=tuple(dict.fromkeys(source_label(source) for source in facts.work_sources)),
+        work_sources=tuple(dict.fromkeys(labels.source_label(source) for source in facts.work_sources)),
         graphs={g: graphs[g] for g in _graph_ids(facts) if g in graphs},
         runner_names={r: names[r] for r in _runner_ids(facts) if r in names},
         tenant_name=tenant_name,
@@ -228,24 +231,38 @@ class ProjectLabels:
         return {p.project_id: ProjectLabel(p.slug, p.name) for p in found.values()}
 
 
+class _Tenant:
+    """One open tenant's hydration reads, and its work-ref labels bound once over the sources asked of them."""
+
+    def __init__(self, reads: StepHydration) -> None:
+        self.reads = reads
+        self._bound: tuple[frozenset[str], IBoundWorkRefLabels] | None = None
+
+    def labels(self, sources: Collection[str]) -> IBoundWorkRefLabels:
+        """Labels covering ``sources``: those held when they cover them, else bound over ``sources``."""
+        if self._bound is None or not self._bound[0].issuperset(sources):
+            self._bound = (frozenset(sources), self.reads.work_refs.bindings(sources))
+        return self._bound[1]
+
+
 class _Opened:
-    """One read's tenants' hydration reads, each opened once; ``None`` for a tenant closed since the corpus read."""
+    """One read's tenants, each opened once; ``None`` for a tenant closed since the corpus read."""
 
     def __init__(self, hydration: Callable[[TenantId], StepHydration]) -> None:
         self._hydration = hydration
-        self._opened: dict[TenantId, StepHydration | None] = {}
+        self._opened: dict[TenantId, _Tenant | None] = {}
 
-    def reads(self, tenant: TenantId) -> StepHydration | None:
+    def tenant(self, tenant: TenantId) -> _Tenant | None:
         if tenant not in self._opened:
             try:
-                self._opened[tenant] = self._hydration(tenant)
+                self._opened[tenant] = _Tenant(self._hydration(tenant))
             except (TenantClosed, UnknownTenant):
                 self._opened[tenant] = None
         return self._opened[tenant]
 
-    def label(self, tenant: TenantId) -> WorkRefLabel:
-        reads = self.reads(tenant)
-        return reads.label if reads is not None else _unrendered
+    def bind(self, tenant: TenantId, sources: Collection[str]) -> WorkRefLabel:
+        opened = self.tenant(tenant)
+        return opened.labels(sources).label if opened is not None else _unrendered
 
 
 def _unrendered(ref: WorkRef) -> str | None:

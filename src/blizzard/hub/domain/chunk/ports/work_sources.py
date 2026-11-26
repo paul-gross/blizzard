@@ -1,11 +1,13 @@
 """The work-source ports the hub's closure and forge-status passes consume, and the errors their writes raise.
 
 The work-source package implements them (``bzh:dependency-inversion``). :class:`IWorkClosers` and
-:class:`IWorkAnnotators` are each pass's narrow slice of the work-source registry (``bzh:narrow-seams``); the registry
-satisfies both structurally."""
+:class:`IWorkAnnotators` are each pass's narrow slice of the work-source registry (``bzh:narrow-seams``), and
+:class:`IBoundWorkClosers` and :class:`IBoundWorkAnnotators` the same slices of its bindings over a set of sources; the
+registry satisfies them structurally."""
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -17,6 +19,8 @@ from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
 from blizzard.hub.domain.kernel.forge_refusals import ClassifiedRefusal
 
 __all__ = [
+    "IBoundWorkAnnotators",
+    "IBoundWorkClosers",
     "IWorkAnnotator",
     "IWorkAnnotators",
     "IWorkCloser",
@@ -92,6 +96,19 @@ class IWorkAnnotator(Protocol):
         ...
 
 
+class IBoundWorkClosers(Protocol):
+    """The close halves and pointer labels of a set of sources resolved together; a source outside the set raises
+    ``KeyError``."""
+
+    def closer(self, source: str) -> IWorkCloser | None:
+        """As :meth:`IWorkClosers.closer`."""
+        ...
+
+    def label(self, pointer: WorkRef) -> str:
+        """``pointer`` as displayed — always its source's current slug, never the stored key."""
+        ...
+
+
 class IWorkClosers(Protocol):
     """The close halves of the configured work sources, by source key — all the delivery-time closure pass reads."""
 
@@ -101,17 +118,14 @@ class IWorkClosers(Protocol):
         longer builds. Raises ``WorkSourceError`` when an active source fails to build."""
         ...
 
-    def label(self, pointer: WorkRef) -> str:
-        """``pointer`` as displayed — always its source's current slug, never the stored key."""
+    def bindings(self, sources: Iterable[str]) -> IBoundWorkClosers:
+        """``sources`` resolved together, in a number of reads that does not grow with them."""
         ...
 
 
-class IWorkAnnotators(Protocol):
-    """The write halves of the configured work sources, by source key — all the forge-status pass reads."""
-
-    def annotating_ids(self) -> list[str]:
-        """Every active source with an annotator built, by id — the opted-in subset of the configured sources."""
-        ...
+class IBoundWorkAnnotators(Protocol):
+    """The write halves and labels of a set of sources resolved together; a source outside the set raises
+    ``KeyError``."""
 
     def annotator(self, source: str) -> IWorkAnnotator | None:
         """The write half of the binding keyed ``source``, or ``None`` when that source is unconfigured or not opted
@@ -127,4 +141,16 @@ class IWorkAnnotators(Protocol):
     def source_label(self, source: str) -> str:
         """The handle the source keyed ``source`` displays under: a configured source's current slug, ``hub`` for the
         built-in one, and ``source`` itself when it names no source."""
+        ...
+
+
+class IWorkAnnotators(Protocol):
+    """The write halves of the configured work sources, by source key — all the forge-status pass reads."""
+
+    def annotating_ids(self) -> list[str]:
+        """Every active source with an annotator built, by id — the opted-in subset of the configured sources."""
+        ...
+
+    def bindings(self, sources: Iterable[str]) -> IBoundWorkAnnotators:
+        """``sources`` resolved together, in a number of reads that does not grow with them."""
         ...

@@ -224,6 +224,7 @@ from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import (
     IWorkSource,
     IWorkSourceBatchReader,
+    IWorkSourceBindings,
     IWorkSourceRegistry,
     WorkItem,
     WorkSourceError,
@@ -992,6 +993,9 @@ class WorkSourceRegistry:
         bound = self._sources.get(source)
         return bound if isinstance(bound, IWorkSourceBatchReader) else None
 
+    def bindings(self, sources: Iterable[str]) -> IWorkSourceBindings:
+        return _FakeWorkSourceBindings(self, frozenset(sources))
+
     def resolve(self, token: str) -> WorkRef | None:
         for source in self._sources.values():
             pointer = source.parse(token)
@@ -1001,6 +1005,38 @@ class WorkSourceRegistry:
 
 
 _work_source_registry_conforms: type[IWorkSourceRegistry] = WorkSourceRegistry
+
+
+class _FakeWorkSourceBindings:
+    """:class:`WorkSourceRegistry`'s bindings, answered by its own singular lookups."""
+
+    def __init__(self, registry: WorkSourceRegistry, sources: frozenset[str]) -> None:
+        self._registry = registry
+        self._sources = sources
+
+    def _bound(self, source: str) -> str:
+        if source not in self._sources:
+            raise KeyError(source)
+        return source
+
+    def get(self, source: str) -> IWorkSource | None:
+        return self._registry.get(self._bound(source))
+
+    def closer(self, source: str) -> IWorkCloser | None:
+        return self._registry.closer(self._bound(source))
+
+    def annotator(self, source: str) -> IWorkAnnotator | None:
+        return self._registry.annotator(self._bound(source))
+
+    def label_clearer(self, source: str) -> IWorkAnnotator | None:
+        return self._registry.label_clearer(self._bound(source))
+
+    def source_label(self, source: str) -> str:
+        return self._registry.source_label(self._bound(source))
+
+    def label(self, pointer: WorkRef) -> str:
+        self._bound(pointer.source)
+        return self._registry.label(pointer)
 
 
 class FakeAnnotator:

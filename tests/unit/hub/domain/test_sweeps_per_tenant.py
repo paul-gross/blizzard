@@ -533,7 +533,7 @@ def test_annotation_source_left_warning_inherits_tenant_from_its_sweep() -> None
         memory.annotated_sources.return_value = frozenset({"departed"})
         sources = Mock()
         sources.annotating_ids.return_value = []
-        sources.label_clearer.return_value = None
+        sources.bindings.return_value.label_clearer.return_value = None
         return TenantAnnotation(
             facts=Mock(), work_sources=sources, memory=memory, events=Mock(), clock=FixedClock(_NOW)
         )

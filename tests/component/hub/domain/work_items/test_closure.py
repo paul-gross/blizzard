@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from datetime import timedelta
+from functools import partial
 from pathlib import Path
 from typing import Any, cast
 
@@ -32,14 +33,18 @@ from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.work_items.closure import (
     CloseDrainSweep,
+    CloseDrainTally,
     CloseIntentDrainer,
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.work_sources.registry import BuiltWorkSource
+from tests.support.registry_statements import registry_statements, stored_registry
 from tests.support.scaffolding import (
     FakeCloser,
+    FakeWorkSource,
     HubHarness,
     WorkSourceRegistry,
     build_hub,
@@ -555,3 +560,37 @@ def test_a_chunk_reaching_the_terminal_with_no_landing_enqueues_its_ref(tmp_path
     assert hub.default_adapter(IReadChunkDeliveryRepository).pending_close_intents() == [
         PendingCloseIntent(chunk_id=chunk_id, ref=WorkRef(source="default", ref="1"))
     ]
+
+
+class _ClosingSource(FakeWorkSource):
+    def close(self, pointer: WorkRef, *, trace: object) -> None:
+        return None
+
+
+def test_a_drain_pass_s_registry_statements_are_flat_across_due_intents(tmp_path: Path) -> None:
+    counts: list[int] = []
+    for n in (1, 10):
+        (tmp_path / str(n)).mkdir()
+        hub = build_hub(tmp_path / str(n))
+        for i in range(2 * n):
+            _land(hub, ingest(hub, [{"source": "default", "ref": str(i)}], promote=True))
+        registry = stored_registry(hub, lambda record: BuiltWorkSource(record, _ClosingSource(), lambda: None))
+        delivery = cast(IWriteChunkDeliveryRepository, hub.default_adapter(IReadChunkDeliveryRepository))
+        drainer = CloseIntentDrainer(
+            delivery=delivery,
+            artifacts=hub.default_adapter(IReadChunkArtifactsRepository),
+            chunks=hub.default_adapter(IReadChunkRecordRepository),
+            events=_event_log(hub),
+            work_sources=registry,
+            clock=hub.clock,
+            commit_links=hub.default_adapter(IReadLandedCommitLinks),
+        )
+        due = delivery.pending_close_intents()
+        assert len(due) == 2 * n
+        # The first half builds the adapter, so the measured half only reads revisions and records.
+        drainer.drain(due[:n], CloseDrainTally())
+        tally = CloseDrainTally()
+        counts.append(registry_statements(hub, partial(drainer.drain, due[n:], tally)))
+        assert tally.closed == n
+
+    assert counts[0] == counts[1] > 0

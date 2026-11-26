@@ -198,8 +198,9 @@ class CloseIntentDrainer:
         records = self._chunks.get_many(sorted(chunk_ids)) if chunk_ids else {}
         traces = self._traces(chunk_ids, list(records.values()))
         projects = {chunk_id: chunk.project_id for chunk_id, chunk in records.items() if chunk.project_id is not None}
+        work_sources = self._work_sources.bindings({intent.ref.source for intent in due})
         for intent in due:
-            closer = self._work_sources.closer(intent.ref.source)
+            closer = work_sources.closer(intent.ref.source)
             if closer is None:
                 tally.skipped += 1
                 at = self._clock.now()
@@ -247,7 +248,7 @@ class CloseIntentDrainer:
             )  # retires the intent too, in the same transaction, when the outcome is terminal
             if not wrote:
                 continue  # a redelivered sweep already recorded this outcome
-            event = close_event(self._work_sources.label(intent.ref), outcome, reason)
+            event = close_event(work_sources.label(intent.ref), outcome, reason)
             self._events.record(
                 kind=event.kind,
                 runner_id=None,

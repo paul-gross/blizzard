@@ -119,7 +119,7 @@ def test_list_chunks_query_count_is_independent_of_fleet_size_with_its_chunks_in
     assert count_queries(small.engine, lambda: call(small)) == count_queries(large.engine, lambda: call(large))
 
 
-def test_list_resolves_store_backed_sources_once_per_name_and_only_on_the_page(
+def test_list_resolves_store_backed_sources_in_one_read_and_only_on_the_page(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource(), "other": FakeWorkSource(name="other")})
@@ -131,11 +131,11 @@ def test_list_resolves_store_backed_sources_once_per_name_and_only_on_the_page(
     class CountingRevisions(ConfigRevisionsStore):
         def __init__(self, store: ScopedConnections) -> None:
             super().__init__(store)
-            self.calls: list[str] = []
+            self.calls: list[list[str]] = []
 
-        def revisions(self, kind: RecordKind, key: str) -> ConfigRevisions | None:
-            self.calls.append(key)
-            return super().revisions(kind, key)
+        def revisions_for(self, kind: RecordKind, keys: Sequence[str]) -> dict[str, ConfigRevisions]:
+            self.calls.append(list(keys))
+            return super().revisions_for(kind, keys)
 
     revisions = CountingRevisions(scoped)
     built_in = hub.work_sources.get("hub")
@@ -166,10 +166,10 @@ def test_list_resolves_store_backed_sources_once_per_name_and_only_on_the_page(
             ]
 
     page()  # Warm graph and source adapters before measuring either population.
-    assert revisions.calls == ["default", "other"]
+    assert revisions.calls == [["default", "other"]]
     before = count_queries(hub.engine, page)
     rows_before = count_rows_read(hub.engine, page)
-    assert revisions.calls[-2:] == ["default", "other"]
+    assert revisions.calls[-1:] == [["default", "other"]]
     graph_id = hub.client.get("/api/chunks", params={"limit": 1}).json()["chunks"][0]["graph_id"]
     for i in range(5, 11):
         # Off-page rows are older than the two page entries.
@@ -177,7 +177,7 @@ def test_list_resolves_store_backed_sources_once_per_name_and_only_on_the_page(
             seed_chunk(conn, f"ch_off_{i}", graph_id=graph_id, at=_T0)
     assert count_queries(hub.engine, page) == before
     assert count_rows_read(hub.engine, page) == rows_before
-    assert revisions.calls[-2:] == ["default", "other"]
+    assert revisions.calls[-1:] == [["default", "other"]]
 
 
 def test_on_page_fallback_pointers_do_not_repeat_record_reads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -192,11 +192,11 @@ def test_on_page_fallback_pointers_do_not_repeat_record_reads(tmp_path: Path, mo
     class CountingRevisions(ConfigRevisionsStore):
         def __init__(self, store: ScopedConnections) -> None:
             super().__init__(store)
-            self.calls: list[str] = []
+            self.calls: list[list[str]] = []
 
-        def revisions(self, kind: RecordKind, key: str) -> ConfigRevisions | None:
-            self.calls.append(key)
-            return super().revisions(kind, key)
+        def revisions_for(self, kind: RecordKind, keys: Sequence[str]) -> dict[str, ConfigRevisions]:
+            self.calls.append(list(keys))
+            return super().revisions_for(kind, keys)
 
     revisions = CountingRevisions(hub_store_connections(hub.engine))
     built_in = hub.work_sources.get("hub")
@@ -222,10 +222,10 @@ def test_on_page_fallback_pointers_do_not_repeat_record_reads(tmp_path: Path, mo
     page(3)  # warm the adapter before counting
     revisions.calls.clear()
     small = count_queries(hub.engine, lambda: page(3))
-    assert revisions.calls == ["default"]
+    assert revisions.calls == [["default"]]
     revisions.calls.clear()
     large = count_queries(hub.engine, lambda: page(9))
-    assert revisions.calls == ["default"]
+    assert revisions.calls == [["default"]]
     assert small == large
 
 

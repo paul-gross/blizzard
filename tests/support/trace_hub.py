@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -10,6 +10,7 @@ from typing import Any
 import sqlalchemy as sa
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.hub.domain.chunk.ingest import IWorkRefLabels
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, Node
 from blizzard.hub.domain.observability.tracing.repository import StepHydration
@@ -69,8 +70,40 @@ nodes:
 """
 
 
-def label(ref: WorkRef) -> str | None:
+def label(ref: WorkRef) -> str:
     return f"{ref.source}#{ref.ref}"
+
+
+class FnWorkRefLabels:
+    """Work-ref labels answered by two functions; bound, a source outside ``sources`` raises ``KeyError``."""
+
+    def __init__(
+        self,
+        label: Callable[[WorkRef], str],
+        source_label: Callable[[str], str],
+        sources: frozenset[str] | None = None,
+    ) -> None:
+        self._label = label
+        self._source_label = source_label
+        self._sources = sources
+
+    def label(self, pointer: WorkRef) -> str:
+        self._require_bound(pointer.source)
+        return self._label(pointer)
+
+    def source_label(self, source: str) -> str:
+        self._require_bound(source)
+        return self._source_label(source)
+
+    def bindings(self, sources: Iterable[str]) -> FnWorkRefLabels:
+        return FnWorkRefLabels(self._label, self._source_label, frozenset(sources))
+
+    def _require_bound(self, source: str) -> None:
+        if self._sources is not None and source not in self._sources:
+            raise KeyError(source)
+
+
+_fn_work_ref_labels_conforms: type[IWorkRefLabels] = FnWorkRefLabels
 
 
 def trace_store(hub: HubHarness, *, hydration: Callable[[TenantId], StepHydration] | None = None) -> TraceStore:
@@ -82,8 +115,7 @@ def trace_store(hub: HubHarness, *, hydration: Callable[[TenantId], StepHydratio
             graphs=hub.resolve(tenant, IReadGraphRepository),
             names=hub.resolve(tenant, IReadRunnerRegistry),
             projects=ProjectLabels(hub.resolve(tenant, IReadProjectRepository)),
-            label=label,
-            source_label=hub.resolve(tenant, IWorkSourceRegistry).source_label,
+            work_refs=FnWorkRefLabels(label, hub.resolve(tenant, IWorkSourceRegistry).source_label),
         )
 
     return TraceStore(

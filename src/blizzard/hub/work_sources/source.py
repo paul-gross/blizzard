@@ -8,7 +8,7 @@ so a registry can loop over every binding."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol, runtime_checkable
@@ -16,8 +16,14 @@ from typing import Protocol, runtime_checkable
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.users import IReadUserRepository
+from blizzard.hub.domain.chunk.ingest import IBoundWorkRefLabels
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkItemAuthorKind, WorkRef
-from blizzard.hub.domain.chunk.ports.work_sources import IWorkAnnotator, IWorkCloser
+from blizzard.hub.domain.chunk.ports.work_sources import (
+    IBoundWorkAnnotators,
+    IBoundWorkClosers,
+    IWorkAnnotator,
+    IWorkCloser,
+)
 from blizzard.hub.domain.kernel.forge_refusals import (
     AuthRefusal,
     ClassifiedRefusal,
@@ -145,9 +151,20 @@ class IWorkSourceBatchReader(Protocol):
         ...
 
 
+class IWorkSourceBindings(IBoundWorkClosers, IBoundWorkAnnotators, IBoundWorkRefLabels, Protocol):
+    """A set of sources resolved together, from revisions and records read when it was made, so a later edit need not
+    show. Each method otherwise answers as :class:`IWorkSourceRegistry`'s does, building a source on first use; a
+    source outside the set raises ``KeyError``."""
+
+    def get(self, source: str) -> IWorkSource | None:
+        """As :meth:`IWorkSourceRegistry.get`."""
+        ...
+
+
 class IWorkSourceRegistry(Protocol):
     """The hub's work sources, each looked up by its key — ``hub`` for the built-in source, a configured source's id
-    otherwise; only :meth:`resolve` reads a slug."""
+    otherwise; only :meth:`resolve` reads a slug. A caller resolving several sources does it through
+    :meth:`bindings`."""
 
     def get(self, source: str) -> IWorkSource | None:
         """The binding keyed ``source``, or ``None`` when none is configured."""
@@ -164,9 +181,7 @@ class IWorkSourceRegistry(Protocol):
 
     def label(self, pointer: WorkRef) -> str:
         """``pointer`` as displayed: its binding's :meth:`IWorkSource.label`, else ``{source label}#{ref}`` — always
-        the source's current slug, never the stored key.
-        Each call costs one config read; a caller labelling several pointers uses ``SelectedWorkSources``, or
-        ``label_from_binding`` with a binding it already holds."""
+        the source's current slug, never the stored key."""
         ...
 
     def annotator(self, source: str) -> IWorkAnnotator | None:
@@ -197,6 +212,11 @@ class IWorkSourceRegistry(Protocol):
     def batch_reader(self, source: str) -> IWorkSourceBatchReader | None:
         """The batch read of the binding keyed ``source``, or ``None`` when that source is unconfigured or its
         binding reads only pointer by pointer."""
+        ...
+
+    def bindings(self, sources: Iterable[str]) -> IWorkSourceBindings:
+        """``sources`` resolved under one revisions read and one records read. Raises for no source: one that cannot
+        be built raises at its own lookup."""
         ...
 
     def resolve(self, token: str) -> WorkRef | None:

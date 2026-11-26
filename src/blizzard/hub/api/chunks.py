@@ -101,7 +101,6 @@ from blizzard.hub.domain.urgency.model import UrgencyRetired, UrgencyUnknown
 from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.graphs import PackagedDefaultGraph
-from blizzard.hub.work_sources.registry import SelectedWorkSources
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from blizzard.wire.chunk import (
     BlockedView,
@@ -368,10 +367,8 @@ def list_chunks(
     urgencies = views.urgency_reading.by_id()
     # The page's projects — one batched read, narrowed to the page.
     projects = views.projects.get_many(sorted({c.project_id for c in page_chunks if c.project_id is not None}))
-    # Config revisions are read once per distinct source on each request, never cached across requests.
-    sources = SelectedWorkSources(
-        views.work_sources, (pointer.source for chunk in page_chunks for pointer in chunk.work_refs)
-    )
+    # The page's sources, their config revisions read once on each request and never cached across requests.
+    sources = views.work_sources.bindings(pointer.source for chunk in page_chunks for pointer in chunk.work_refs)
     # A page chunk's flow place depends on the submissions ahead of it, whose chunks need not be on the page: the
     # read covers the whole line of every flow the page's chunks hold — bounded by the line, not the fleet.
     flow_places = chunk_flow_places(views.lines, page_ids)

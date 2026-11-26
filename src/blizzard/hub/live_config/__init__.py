@@ -1,8 +1,8 @@
 """Objects built from configured records, kept under the revisions they were built from.
 
-The store stays the only answer to what is configured (``bzh:config-read-on-use``): every
-hand-out reads the record's current revisions first, so a cold cache, a warm one, and a
-second process's cache hand out equivalent objects."""
+The store stays the only answer to what is configured (``bzh:config-read-on-use``): every hand-out is judged against
+revisions read from the store, at the hand-out or ahead of it by a caller holding several, so a cold cache, a warm
+one, and a second process's cache hand out equivalent objects for the same revisions."""
 
 from __future__ import annotations
 
@@ -65,6 +65,9 @@ class ConfigObjectCache:
         # is building under this lock.
         self._lock = threading.RLock()
         self._closes = 0
+        #: Entries installed so far, and the count each record's newest entry was installed at.
+        self._installs = 0
+        self._installed: dict[tuple[RecordKind, str], int] = {}
 
     def get[T](self, kind: RecordKind, key: str, build: Callable[[], T]) -> T | None:
         """The object built for the record's current revisions, building it on a miss;
@@ -75,6 +78,30 @@ class ConfigObjectCache:
         """The current revisions of each of ``keys`` in one read, for a caller handing out several records' objects
         through :meth:`get_under`; a key with no record is dropped."""
         return self._revisions.revisions_for(kind, keys)
+
+    def mark(self) -> int:
+        """Where the cache's installs stand: taken before reading revisions ahead, for :meth:`get_since`."""
+        with self._lock:
+            return self._installs
+
+    def get_since[T](
+        self,
+        kind: RecordKind,
+        key: str,
+        mark: int,
+        current: ConfigRevisions | None,
+        build: Callable[[], T],
+        reread: Callable[[], T | None],
+    ) -> T | None:
+        """:meth:`get_under` against ``current``, read some while ago, after ``mark`` was taken. When an object for
+        other revisions was installed since, ``current`` may be the older, so ``reread`` answers instead and the newer
+        object stays installed."""
+        with self._lock:
+            held = self._entries.get((kind, key))
+            matches = held is not None and current is not None and held[0] == CacheKey.of(kind, key, current)
+            if not matches and self._installed.get((kind, key), 0) > mark:
+                return reread()
+            return self.get_under(kind, key, current, build)
 
     def get_under[T](
         self, kind: RecordKind, key: str, current: ConfigRevisions | None, build: Callable[[], T]
@@ -98,6 +125,8 @@ class ConfigObjectCache:
                 _close(built)
                 return built
             self._entries[(kind, key)] = (wanted, built)
+            self._installs += 1
+            self._installed[(kind, key)] = self._installs
             if held is not None:
                 self._supersede(kind, key, held[1])
         return built

@@ -45,6 +45,7 @@ from tests.support.linked_projects_world import (
     repository_id,
     source_doc,
 )
+from tests.support.registry_statements import stored_registry
 from tests.support.scaffolding import (
     FakeWorkSource,
     HubHarness,
@@ -445,6 +446,31 @@ def test_resolve_reads_every_active_source_s_revisions_once(tmp_path: Path) -> N
         assert registry.resolve(f"{names[-1]}#7") == WorkRef(source=names[-1], ref="7")
         counts.append(count_queries(hub.engine, lambda registry=registry: registry.resolve("unclaimed")))
     assert counts[0] == counts[1]
+
+
+def test_bindings_statements_are_flat_across_source_counts_and_repeated_lookups(tmp_path: Path) -> None:
+    names = [f"src{i}" for i in range(10)]
+    hub = build_hub(tmp_path, work_sources={name: FakeWorkSource(name=name) for name in names})
+    registry = stored_registry(
+        hub, lambda record: BuiltWorkSource(record, FakeWorkSource(name=record.name), lambda: None)
+    )
+    ids = [_source_id(hub, name) for name in names]
+
+    def look_up(n: int, times: int) -> None:
+        bound = registry.bindings(ids[:n])
+        for _ in range(times):
+            for source in ids[:n]:
+                bound.get(source)
+                bound.closer(source)
+                bound.annotator(source)
+                bound.label_clearer(source)
+                bound.source_label(source)
+                bound.label(WorkRef(source=source, ref="1"))
+
+    look_up(len(ids), 1)  # Builds every source, so the measured calls only read revisions and records.
+    one = count_queries(hub.engine, lambda: look_up(1, 1))
+    assert count_queries(hub.engine, lambda: look_up(len(ids), 1)) == one
+    assert count_queries(hub.engine, lambda: look_up(len(ids), 10)) == one
 
 
 def test_the_graph_mint_s_cross_graph_check_is_flat_across_target_counts(graphs_hub: HubHarness) -> None:

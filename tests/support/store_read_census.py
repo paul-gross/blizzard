@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import base64
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -65,6 +65,7 @@ from blizzard.hub.domain.chunk.model import (
     DecisionChoice,
     WorkItemAuthor,
     WorkRef,
+    WorkRefLabel,
     decide_close_enqueue,
 )
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
@@ -352,6 +353,7 @@ from tests.support.scaffolding import (
     stamp,
 )
 from tests.support.takeover_unit import record_takeover_in_unit
+from tests.support.trace_hub import FnWorkRefLabels
 
 _BASE = datetime(2026, 9, 14, 12, 0, 0, tzinfo=UTC)
 
@@ -1227,8 +1229,12 @@ _HUB_BASE = datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
 _HUB_UNTIL = _HUB_BASE + timedelta(days=365)
 
 
-def _label(ref: WorkRef) -> str | None:
+def _label(ref: WorkRef) -> str:
     return f"{ref.source}#{ref.ref}"
+
+
+def _label_binder(tenant: TenantId, sources: Collection[str]) -> WorkRefLabel:
+    return _label
 
 
 def _window_in_one_snapshot(reads: IReadTraceSteps) -> None:
@@ -1240,7 +1246,7 @@ def _window_in_one_snapshot(reads: IReadTraceSteps) -> None:
 def _corpus_window_in_one_snapshot(corpus: IReadStepCorpus) -> None:
     """The corpus's candidates and their step facts, read inside one snapshot."""
     with corpus.snapshot() as snapshot:
-        snapshot.step_facts_for(snapshot.closing_candidates(_HUB_BASE, _ht(10_000), 50).chunk_ids, lambda _: _label)
+        snapshot.step_facts_for(snapshot.closing_candidates(_HUB_BASE, _ht(10_000), 50).chunk_ids, _label_binder)
 
 
 def _trace_store_of(connections: ScopedConnections, hub: HubHarness) -> TraceStore:
@@ -1252,8 +1258,7 @@ def _trace_store_of(connections: ScopedConnections, hub: HubHarness) -> TraceSto
             graphs=hub.default_adapter(IReadGraphRepository),
             names=hub.default_adapter(IReadRunnerRegistry),
             projects=ProjectLabels(hub.default_adapter(IReadProjectRepository)),
-            label=_label,
-            source_label=hub.default_adapter(IWorkSourceRegistry).source_label,
+            work_refs=FnWorkRefLabels(_label, hub.default_adapter(IWorkSourceRegistry).source_label),
         ),
         tenant_name=hub.resolve_hub(OpenTenants).name,
     )
@@ -3507,7 +3512,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         _HUB_BASE, _ht(10_000), 50
     ),
     (IReadStepCorpus, "step_facts_for"): lambda w: w.hub.resolve_hub(HubScopedReads).corpus.step_facts_for(
-        [w.chunk_transition, w.chunk_question, w.chunk_dependency_dependent], lambda _tenant: _label
+        [w.chunk_transition, w.chunk_question, w.chunk_dependency_dependent], _label_binder
     ),
     (IReadTraceSteps, "snapshot"): lambda w: _window_in_one_snapshot(_trace_store_of(w.store_connections, w.hub)),
     (IReadStepCorpus, "snapshot"): lambda w: _corpus_window_in_one_snapshot(w.hub.resolve_hub(HubScopedReads).corpus),
