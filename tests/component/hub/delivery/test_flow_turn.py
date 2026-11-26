@@ -943,7 +943,7 @@ def _past_deadline(world: _World) -> str:
 
 
 def _polls(world: _World, chunk_id: str) -> list[str]:
-    facts = world.hub.services.chunks.facts.load_facts(chunk_id)
+    facts = world.hub.default_adapter(IReadChunkFactsRepository).load_facts(chunk_id)
     assert facts is not None
     return [poll.kind for poll in facts.hub_node_polls]
 
@@ -1011,7 +1011,7 @@ def test_a_silent_forge_at_a_final_build_times_out(world: _World, monkeypatch: p
     def silent(repository: Any, *, cut_off: Any, priority: Any) -> Any:
         raise ForgeUnavailable("the installation could not be read: ReadTimeout")
 
-    monkeypatch.setattr(world.hub.services.forges, "repository_forge", silent)
+    monkeypatch.setattr(world.hub.default_adapter(ForgeRegistry), "repository_forge", silent)
 
     world.tick()
 

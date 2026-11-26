@@ -79,7 +79,7 @@ def _github(locator: str, *, secret: str = "gh", api_base: str = GITHUB_API_BASE
     return _Source(locator, secret, api_base, annotate)
 
 
-_HELD_SCOPES: list[TenantStores] = []
+_HELD_SCOPES: list[Resolver] = []
 
 
 @pytest.fixture(autouse=True)
