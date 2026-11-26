@@ -28,12 +28,7 @@
   color: var(--cyan);
 }
 .section {
-  margin: 8px 0 0;
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-  font-weight: normal;
+  margin-top: 8px;
 }
 .changes {
   list-style: none;

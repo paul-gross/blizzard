@@ -165,7 +165,7 @@
         />
 
         <section class="rp-recent" data-testid="gardening-routine-recent-runs">
-          <h4>Recent runs</h4>
+          <fleet-kit-section-head label="Recent runs" [level]="4" />
           <fleet-kit-async-state
             [state]="panel.recentRunsState"
             placement="inline"
@@ -187,7 +187,7 @@
         </section>
 
         <section class="rp-scopes" data-testid="gardening-routine-scopes">
-          <h4>Related scopes</h4>
+          <fleet-kit-section-head label="Related scopes" [level]="4" />
           <fleet-kit-async-state [state]="relatedScopesState()" placement="inline"
             loadingText="Loading related scopes…" errorText="Related scopes unavailable."
             emptyText="No scope is related to this routine.">
@@ -212,14 +212,14 @@
   <fleet-kit-panel label="Activity" data-testid="gardening-routine-runtime" [bodyScroll]="false">
     <div class="rp-body">
       <section class="rp-trend" data-testid="gardening-routine-trend">
-        <h4>Inflow &amp; outflow — {{ panel.windowLabel }}</h4>
+        <fleet-kit-section-head [label]="'Inflow &amp; outflow — ' + panel.windowLabel" [level]="4" />
         @if (panel.trend) {
           <fleet-kit-fact-list [rows]="trendRows(panel.trend)" testid="gardening-routine-trend-facts" />
         }
       </section>
 
       <section class="rp-measurements" data-testid="gardening-routine-measurements">
-        <h4>Measurement — {{ panel.windowLabel }}</h4>
+        <fleet-kit-section-head [label]="'Measurement — ' + panel.windowLabel" [level]="4" />
         <fleet-kit-async-state
           [state]="panel.measurementsState"
           placement="inline"
@@ -238,7 +238,7 @@
       </section>
 
       <section class="rp-last-swept" data-testid="gardening-routine-last-swept">
-        <h4>Last swept</h4>
+        <fleet-kit-section-head label="Last swept" [level]="4" />
         <table>
           <thead>
             <tr>

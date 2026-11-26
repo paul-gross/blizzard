@@ -1,14 +1,14 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { compactRef, KitAccordionGroup, KitAccordionSection, KitAsyncState, KitUrgencyPill, type KitAsyncStateValue, type Urgency, type UrgencyReference } from 'fleet';
+import { compactRef, KitAccordionGroup, KitAccordionSection, KitAsyncState, KitSectionHead, KitUrgencyPill, type KitAsyncStateValue, type Urgency, type UrgencyReference } from 'fleet';
 import { AppLink } from 'fleet/shell';
 import { nextClaimSummary } from './runner-next-claim.model';
 import { type NextClaim, passReasonWord } from './runner-next-claim.domain';
 @Component({
   selector: 'app-runner-next-claim-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, KitAccordionSection, KitAsyncState, KitUrgencyPill, RouterLink, AppLink],
+  imports: [NgTemplateOutlet, KitAccordionSection, KitAsyncState, KitSectionHead, KitUrgencyPill, RouterLink, AppLink],
   hostDirectives: [KitAccordionGroup],
   templateUrl: './runner-next-claim-view.html',
   styleUrl: './runner-next-claim-view.css',

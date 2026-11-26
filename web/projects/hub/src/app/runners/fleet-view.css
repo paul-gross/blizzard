@@ -21,14 +21,9 @@
   min-height: 0;
 }
 .hostless {
-  margin: 10px 0 0;
-  padding: 4px 10px;
+  --kit-section-head-pad: 4px 10px 0;
+  margin-top: 10px;
   border-bottom: 1px solid var(--line);
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
-  font-weight: normal;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 /* The kit row is bare, so the card draws the select-row chrome itself: a reserved
    left edge that turns cyan on selection, over the --surface-* interaction scale. */

@@ -17,6 +17,7 @@ import {
   KitButton,
   type KitFact,
   KitFactList,
+  KitSectionHead,
 } from 'fleet';
 
 import type { ConfigActionsVm } from './config-actions.model';
@@ -64,7 +65,7 @@ export interface ConfigRecordVm {
 @Component({
   selector: 'app-config-record-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigRevisions, FleetWhen, KitAsyncState, KitBadge, KitButton, KitErrorLine, KitFactList, RouterLink, AppLink],
+  imports: [ConfigRevisions, FleetWhen, KitAsyncState, KitBadge, KitButton, KitErrorLine, KitFactList, KitSectionHead, RouterLink, AppLink],
   templateUrl: './config-record-panel.html',
   styleUrl: './config-record-panel.css',
 })

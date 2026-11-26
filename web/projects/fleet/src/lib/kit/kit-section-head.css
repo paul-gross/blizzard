@@ -9,7 +9,10 @@
   padding: var(--kit-section-head-pad, 0);
   margin-bottom: 6px;
 }
+/* A heading-element tag renders as the span does. */
 .tag {
+  margin: 0;
+  font-weight: inherit;
   font-size: var(--fs-label);
   letter-spacing: 0.18em;
   text-transform: uppercase;

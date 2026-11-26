@@ -59,14 +59,8 @@
 .sp-routines {
   padding: 0 12px 10px;
 }
-.sp-routines h4 {
-  margin: 0;
-  padding: 10px 0 4px;
-  color: var(--label);
-  font-size: var(--fs-label);
-  font-weight: normal;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+.sp-routines fleet-kit-section-head {
+  margin-top: 10px;
 }
 .sp-routines ul {
   display: flex;

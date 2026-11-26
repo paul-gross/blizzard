@@ -28,7 +28,7 @@
       }
       @if (list().hostless.length > 0) {
         <div role="group" aria-labelledby="fleet-hostless-heading">
-        <h3 class="hostless" id="fleet-hostless-heading" data-testid="fleet-hostless-heading">No host</h3>
+        <fleet-kit-section-head class="hostless" label="No host" [level]="3" labelId="fleet-hostless-heading" data-testid="fleet-hostless-heading" />
         @for (card of list().hostless; track card.id) {
           <ng-container *ngTemplateOutlet="listCard; context: { $implicit: card }" />
         }

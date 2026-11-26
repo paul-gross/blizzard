@@ -134,6 +134,6 @@ describe('HubSettingsPage', () => {
     expect(panels).toHaveLength(2);
     expect(panels[0].querySelector('[data-testid="admin-change-who"]')?.textContent).toContain('pgross via api');
     expect(panels[0].querySelector('[data-testid="admin-change-row-2"] app-config-field-diff')).not.toBeNull();
-    expect(el.querySelector('article h3:not(.section)')).toBeNull();
+    expect(el.querySelector('article h3:not(.tag)')).toBeNull();
   });
 });

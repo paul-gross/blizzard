@@ -76,7 +76,7 @@
 
       @if (panel.attention.length) {
         <section class="cp-section" data-testid="gardening-cadence-panel-attention">
-          <h4>Needs attention</h4>
+          <fleet-kit-section-head label="Needs attention" [level]="4" />
           <ul class="cp-attention">
             @for (item of panel.attention; track $index) {
               <li>
@@ -96,7 +96,7 @@
       }
 
       <section class="cp-section" data-testid="gardening-cadence-panel-chores">
-        <h4>Chores</h4>
+        <fleet-kit-section-head label="Chores" [level]="4" />
         @for (chore of panel.chores; track chore.key) {
           <article class="cp-chore" [attr.data-testid]="'gardening-cadence-chore-' + chore.key">
             <div class="cp-chore-head">

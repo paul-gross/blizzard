@@ -13,6 +13,7 @@ import {
   KitFactList,
   KitErrorLine,
   KitField,
+  KitSectionHead,
   KitTextInput,
 } from 'fleet';
 import { AppLink } from 'fleet/shell';
@@ -68,7 +69,7 @@ export interface ScopePanelVm {
 @Component({
   selector: 'app-scope-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, FormField, KitAsyncState, KitBadge, KitButton, KitConfirmDialog, KitErrorLine, KitField, KitFactList, KitTextInput, AppLink, RouterLink],
+  imports: [FleetWhen, FormField, KitAsyncState, KitBadge, KitButton, KitConfirmDialog, KitErrorLine, KitField, KitFactList, KitSectionHead, KitTextInput, AppLink, RouterLink],
   templateUrl: './scope-panel.html',
   styleUrl: './scope-panel.css',
 })
