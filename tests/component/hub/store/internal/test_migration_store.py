@@ -171,6 +171,45 @@ def test_record_migration_repins_releases_and_persists_artifacts_in_one_write(tm
     assert chunks.accepted_transition_target(chunk_id, from_node_id=node_id, epoch=1) is None
 
 
+def test_record_migration_that_repins_the_model_leaves_the_default_harness_set(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, node_id, target_graph_id = _claimed(hub)
+    chunks = cast(IWriteChunkMovementRepository, hub.default_adapter(IReadChunkMovementRepository))
+    record = cast(IWriteChunkRecordRepository, hub.default_adapter(IReadChunkRecordRepository))
+    harnesses = ["claude_code", "opencode"]
+    with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
+        record.set_defaults(
+            chunk_id, default_model=[], default_effort=None, default_harnesses=harnesses, transaction=tx
+        )
+    seeded = record.get(chunk_id)
+    assert seeded is not None and seeded.default_harnesses == harnesses
+
+    with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
+        wrote = chunks.record_migration(
+            chunk_id,
+            close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
+            from_node_id=node_id,
+            from_graph_id=seeded.graph_id,
+            to_graph_id=target_graph_id,
+            landed_node_id="nd_landed",
+            choice_name="migrate",
+            model="claude-sonnet-5",
+            epoch=1,
+            source=MigrationSource.AUTHORED_EDGE,
+            at=hub.clock.now(),
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=tx,
+        )
+    assert wrote is not None
+
+    chunk = record.get(chunk_id)
+    assert chunk is not None
+    assert chunk.default_model == ["claude-sonnet-5"]
+    assert chunk.default_harnesses == harnesses
+
+
 def test_record_migration_is_idempotent_on_replay(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, node_id, target_graph_id = _claimed(hub)

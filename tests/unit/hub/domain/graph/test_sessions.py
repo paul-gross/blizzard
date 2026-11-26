@@ -330,6 +330,15 @@ def test_an_empty_harnesses_list_is_rejected_naming_the_rule() -> None:
     assert "empty list" in str(exc_info.value)
 
 
+def test_an_empty_model_list_is_a_valid_no_preference_declaration() -> None:
+    doc = GraphDoc.of(_doc(sessions={"x": {"model": []}}))
+
+    result = Validator.of(doc, TEST_CATALOGUE).result
+    assert result.ok, result.errors
+    minted = Reification.of(doc, FixedClock(datetime(2026, 1, 1, tzinfo=UTC))).graph.session_by_name("x")
+    assert minted is not None and minted.model == []
+
+
 def test_a_duplicate_harnesses_entry_is_rejected_naming_the_rule() -> None:
     result = Validator.of(
         GraphDoc.of(_doc(sessions={"code": {"harnesses": ["claude_code", "claude_code"]}})), TEST_CATALOGUE
