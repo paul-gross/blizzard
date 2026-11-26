@@ -63,7 +63,6 @@ def _workspace(tmp_path: Path, origin: Path) -> Path:
     (workspace / ".winter" / "config.lock").unlink(missing_ok=True)
     cli = SubprocessWinterCli(children=CHILDREN, env=tool_env())
     try:
-        cli.ensure_ready(workspace)
         cli.run(workspace, ["ws", "init"])
     except WinterCliError as exc:  # environment-specific winter failure
         pytest.skip(f"winter ws init failed in this environment: {exc}")

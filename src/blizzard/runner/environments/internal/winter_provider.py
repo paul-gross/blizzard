@@ -36,7 +36,6 @@ _WORKSPACE_SCOPE = "workspace"
 class _WinterCli(Protocol):
     """The winter-CLI sub-seam the provider drives."""
 
-    def ensure_ready(self, workspace_root: Path) -> None: ...
     def run(self, workspace_root: Path, args: Sequence[str]) -> None: ...
     def capture(self, workspace_root: Path, args: Sequence[str]) -> str: ...
 
@@ -70,7 +69,6 @@ class WinterWorkspaceProvider:
         self._base_branch = base_branch
         self._winter = winter
         self._git = git
-        self._ready = False
         self._service_bound: bool | None = None
         # Manifest reads cannot overlap a reset: the served API and the loop use
         # this same provider from different threads.
@@ -108,9 +106,6 @@ class WinterWorkspaceProvider:
             raise WorkspaceAcquisitionError(
                 f"pool exhausted: need {count}, {len(free)} free (pool={list(self._pool)}, held={held_ids})"
             )
-        if not self._ready:
-            self._winter.ensure_ready(self._workspace_root)
-            self._ready = True
         # Standalone repos are workspace-global, so refresh them once per reset
         # pass rather than repeating the pull for every env in the pass.
         self._step(
