@@ -15,7 +15,7 @@ test('deleting a chunk withdraws its item and publishes the deletion', async ({ 
   expect((await api.get(`/api/work-sources/hub/items/${ref}`)).body.closure).toBe('withdrawn');
   const frames = await stream.barrier();
   expect(frames.filter((frame) => frame.event === 'chunk-changed' && frame.data.chunk_id === chunkId)).toEqual([
-    expect.objectContaining({ data: expect.objectContaining({ chunk_id: chunkId, cause: 'deleted', by: 'alice', status: 'not_ready' }) }),
+    expect.objectContaining({ data: expect.objectContaining({ chunk_id: chunkId, cause: 'deleted', by: 'operator', status: 'not_ready' }) }),
   ]);
   expect(frames.some((frame) => frame.event === 'queue-changed')).toBe(true);
   expect((await api.delete(`/api/chunks/${chunkId}`, { data: {} })).status).toBe(404);

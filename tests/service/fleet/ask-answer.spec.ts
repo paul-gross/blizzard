@@ -44,7 +44,7 @@ async function scenario({ api, cli, forge, issue, repository, runnerHosts }: Wor
   for (let index = 0; index < 4; index++) passes.push(await host.step());
   const still = (await api.get(`/api/chunks/${chunk.chunk_id}`)).body;
   const open = (await api.get('/api/questions')).body as { question_id: string }[];
-  const result = await cli(['hub', 'question', 'answer', question.question_id, answer(repo.name, host.cliBinary), '--by', 'alice']);
+  const result = await cli(['hub', 'question', 'answer', question.question_id, answer(repo.name, host.cliBinary)]);
   const landed = await stepChunkVia(host, api, chunk.chunk_id, (status) => ['done', 'needs_human', 'stopped'].includes(status), wait);
   const closed = (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.questions as { question_id: string; answered: boolean; delivered: boolean }[];
   const pulls = (await forge.call('GET', `/repos/${repo.owner}/${repo.name}/pulls?state=all`)).body as { merged: boolean }[];

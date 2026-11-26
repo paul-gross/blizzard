@@ -20,6 +20,7 @@ from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.wire.base import WireModel
 from blizzard.wire.decision import DecisionView
 from blizzard.wire.flow import ChunkFlowPlaceView, FlowFactView
+from blizzard.wire.forge import DEPRECATED_FIELD
 from blizzard.wire.problem import ProblemDetails, ProblemMembers
 from blizzard.wire.question import QuestionView
 from blizzard.wire.urgency import UrgencyRef
@@ -98,7 +99,8 @@ class ChunkIngestResponse(WireModel):
 class ChunkDeleteRequest(BaseModel):
     """Delete a chunk — records who deleted it."""
 
-    by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
 
 
 class ChunkDeleteResponse(BaseModel):
@@ -503,13 +505,15 @@ class PendingView(WireModel):
 class ChunkPauseRequest(BaseModel):
     """Set or clear a chunk's operator pause brake — records who flipped it."""
 
-    by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
 
 
 class ChunkStopRequest(BaseModel):
     """Terminally abandon a chunk — records who stopped it."""
 
-    by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
 
 
 class ChunkPlacementRequest(BaseModel):
@@ -525,7 +529,8 @@ class ChunkPlacementRequest(BaseModel):
 class ChunkCompleteRequest(BaseModel):
     """Manually complete a chunk, from any non-``done`` status — records who completed it."""
 
-    by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
 
 
 class ChunkRestartRequest(BaseModel):
@@ -536,7 +541,8 @@ class ChunkRestartRequest(BaseModel):
 
     node: str | None = None
     to_graph: str | None = None
-    by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
     #: A note binding every later session on the chunk; a blank note is no note.
     note: str | None = None
 
@@ -808,7 +814,8 @@ class ChunkDependencyDeclareRequest(BaseModel):
     declared it."""
 
     prerequisite_chunk_id: str
-    by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
 
 
 class ChunkDependencyReleaseRequest(BaseModel):
@@ -816,7 +823,8 @@ class ChunkDependencyReleaseRequest(BaseModel):
     addressed by the ordered pair rather than a minted edge id. Records who released it."""
 
     prerequisite_chunk_id: str
-    by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
 
 
 class ChunkDependencyEdgeView(WireModel):

@@ -54,7 +54,7 @@ export function injectHostRetireMutation() {
     mutationFn: async (vars: HostRetireVars): Promise<void> => {
       const { error } = await retireHostApiHostsHostIdRetirePost({
         path: { host_id: vars.hostId },
-        body: { by: 'operator', force: vars.force },
+        body: { force: vars.force },
         throwOnError: false,
       });
       if (error)
@@ -76,7 +76,7 @@ export function injectHostRevokeTokenMutation() {
       const { error } = await revokeHostTokenApiHostsHostIdTokenRevocationsPost(
         {
           path: { host_id: hostId },
-          body: { by: 'operator' },
+          body: {},
           throwOnError: false,
         },
       );

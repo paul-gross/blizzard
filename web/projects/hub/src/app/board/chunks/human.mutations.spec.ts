@@ -53,8 +53,8 @@ describe('injectResolveDecisionMutation', () => {
 
     const bodies = stub.forRoute('/api/decisions/dc_1/resolutions', 'POST').map((r) => r.body);
     expect(bodies).toEqual([
-      { choice: 'approve', resolved_by: 'operator', note: 'fix the flaky test only' },
-      { choice: 'approve', resolved_by: 'operator' },
+      { choice: 'approve', note: 'fix the flaky test only' },
+      { choice: 'approve' },
     ]);
   });
 

@@ -545,7 +545,6 @@ def get_runner_next_claim(
 @router.post(
     "/runners/{runner_id}/pause",
     response_model=RunnerRegistryView,
-    dependencies=[Depends(require(Permission.RUNNER_PAUSE))],
 )
 @inject_sync
 def pause_runner(
@@ -558,16 +557,16 @@ def pause_runner(
     hosts: Hosts,
     executors: Executors,
     events: Events,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.RUNNER_PAUSE))],
 ) -> RunnerRegistryView:
     """Set a runner's pause brake — no new claims; in-flight chunks run on."""
     reads = RunnerReads(registry, fleet, clock, projects, hosts, executors)
-    return Paused(reads, events, runner_id, request.by).set()
+    return Paused(reads, events, runner_id, identity.username).set()
 
 
 @router.post(
     "/runners/{runner_id}/resume",
     response_model=RunnerRegistryView,
-    dependencies=[Depends(require(Permission.RUNNER_PAUSE))],
 )
 @inject_sync
 def resume_runner(
@@ -580,16 +579,16 @@ def resume_runner(
     hosts: Hosts,
     executors: Executors,
     events: Events,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.RUNNER_PAUSE))],
 ) -> RunnerRegistryView:
     """Clear a runner's pause brake — it resumes claiming on its next pull."""
     reads = RunnerReads(registry, fleet, clock, projects, hosts, executors)
-    return Resumed(reads, events, runner_id, request.by).set()
+    return Resumed(reads, events, runner_id, identity.username).set()
 
 
 @router.post(
     "/runners/{runner_id}/retire",
     response_model=RunnerRetireResponse,
-    dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
 @inject_sync
 def retire_runner(
@@ -604,6 +603,7 @@ def retire_runner(
     routes: Routes,
     events: Events,
     frames: Frames,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.RUNNER_RETIRE))],
 ) -> RunnerRetireResponse:
     """Retire a runner — its token is revoked and its claims and registrations refused;
     409 naming each held chunk unless ``force``, which releases them. Re-running on a
@@ -616,15 +616,15 @@ def retire_runner(
     held = routes.live_routes_of_runner(runner_id)
     changes = chunk_events.ChunkChanged.before_many(frames, [r.chunk_id for r in held])
     try:
-        outcome = fleet.retire(registration, by=request.by, force=request.force)
+        outcome = fleet.retire(registration, by=identity.username, force=request.force)
     except RetireInterrupted as exc:
-        publish_retirement(events, frames, registration, exc.committed, by=request.by, changes=changes)
+        publish_retirement(events, frames, registration, exc.committed, by=identity.username, changes=changes)
         raise ProblemHTTPException(partial(problems.runner_retire_interrupted_problem, exc)) from exc
     except RunnerHoldsRoutes as exc:
         raise ProblemHTTPException(partial(problems.runner_holds_routes_problem, exc)) from exc
     except RunnerLifecycleConflict as exc:
         raise ProblemHTTPException(partial(problems.runner_lifecycle_conflict_problem, exc)) from exc
-    publish_retirement(events, frames, registration, outcome, by=request.by, changes=changes)
+    publish_retirement(events, frames, registration, outcome, by=identity.username, changes=changes)
     return RunnerRetireResponse(
         runner=reads.reread(runner_id), released_chunk_ids=[r.chunk_id for r in outcome.released]
     )
@@ -671,7 +671,6 @@ def _publish_releases(
 @router.post(
     "/runners/{runner_id}/reinstate",
     response_model=RunnerRegistryView,
-    dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
 @inject_sync
 def reinstate_runner(
@@ -686,6 +685,7 @@ def reinstate_runner(
     routes: Routes,
     events: Events,
     frames: Frames,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.RUNNER_RETIRE))],
 ) -> RunnerRegistryView:
     """Reinstate a retired runner — any token it still carries is revoked with the reversal, and it stays unenrolled
     until enrolled afresh; 409 when not retired, when it stands under a retired host, and when its lifecycle moved
@@ -696,7 +696,7 @@ def reinstate_runner(
     held = routes.live_routes_of_runner(runner_id)
     changes = chunk_events.ChunkChanged.before_many(frames, [r.chunk_id for r in held])
     try:
-        outcome = fleet.reinstate(registration, by=request.by)
+        outcome = fleet.reinstate(registration, by=identity.username)
     except ReinstateInterrupted as exc:
         _publish_releases(events, frames, exc.released, changes)
         raise ProblemHTTPException(partial(problems_runners.runner_reinstate_interrupted_problem, exc)) from exc
@@ -714,7 +714,7 @@ def reinstate_runner(
         runner_id,
         kind="reinstated",
         runner_name=registration.name,
-        by=request.by,
+        by=identity.username,
         key=f"runner_lifecycle_facts:{outcome.fact_id}",
     )
     return reads.reread(runner_id)
@@ -724,7 +724,6 @@ def reinstate_runner(
     "/runners/{runner_id}/token-revocations",
     response_model=RunnerTokenRevocationResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
 @inject_sync
 def revoke_runner_token(
@@ -737,13 +736,14 @@ def revoke_runner_token(
     hosts: Hosts,
     executors: Executors,
     events: Events,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.RUNNER_RETIRE))],
 ) -> RunnerTokenRevocationResponse:
     """Revoke a runner's token — it stays added and must be re-enrolled; 409 when unenrolled, and when it was retired
     or reinstated while the revocation was decided."""
     reads = RunnerReads(registry, fleet, clock, projects, hosts, executors)
     registration = reads.registration(runner_id)
     try:
-        revocation_id = fleet.revoke_token(registration, by=request.by)
+        revocation_id = fleet.revoke_token(registration, by=identity.username)
     except RunnerNotEnrolled as exc:
         raise ProblemHTTPException(partial(problems_runners.runner_not_enrolled_problem, exc)) from exc
     except RunnerLifecycleConflict as exc:
@@ -752,7 +752,7 @@ def revoke_runner_token(
         runner_id,
         kind="token-revoked",
         runner_name=registration.name,
-        by=request.by,
+        by=identity.username,
         key=f"runner_token_revocations:{revocation_id}",
     )
     return RunnerTokenRevocationResponse(runner=reads.reread(runner_id))

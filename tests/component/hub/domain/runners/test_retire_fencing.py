@@ -68,8 +68,8 @@ def _register(hub: HubHarness) -> None:
     _ok(hub.client.post("/api/fleet/runners", json=body), 201)
 
 
-def _retire(hub: HubHarness, *, by: str = "op") -> Any:
-    return hub.client.post(f"/api/runners/{_RUNNER}/retire", json={"by": by, "force": True})
+def _retire(hub: HubHarness) -> Any:
+    return hub.client.post(f"/api/runners/{_RUNNER}/retire", json={"force": True})
 
 
 def _reinstate(hub: HubHarness) -> Any:
@@ -149,7 +149,7 @@ def test_a_stale_retire_rerun_leaves_a_rescued_runner_its_token_and_route(
     # The re-run decides on the retired registration its route loaded, then the rescue lands before its revocation.
     _once(monkeypatch, hub.default_adapter(FleetService), "holdings", rescue)
 
-    refused = _retire(hub, by="stale")
+    refused = _retire(hub)
 
     assert refused.status_code == 409, refused.text
     assert not _runner(hub).retired
@@ -181,7 +181,7 @@ def test_a_stale_release_pass_leaves_a_rescued_runner_its_reclaimed_route(
     assert _route_runner(hub, chunk_id) == _RUNNER
     # What the interrupted retire did commit is still announced: its fact.
     retired = [f for f in _frames(hub, since, "runner-changed") if f.get("kind") == "retired"]
-    assert [f.get("by") for f in retired] == ["op"]
+    assert [f.get("by") for f in retired] == ["operator"]
 
 
 def test_a_reinstate_after_a_retire_stopped_before_its_release_pass_releases_the_leftover_route(
@@ -215,7 +215,7 @@ def test_a_reinstate_decided_before_a_reinstate_and_re_retire_leaves_the_runner_
 
     def reinstate_and_retire_again() -> None:
         _ok(_reinstate(hub))
-        _ok(_retire(hub, by="later"))
+        _ok(_retire(hub))
 
     _once(monkeypatch, hub.default_adapter(FleetService)._transactions, "begin", reinstate_and_retire_again)  # pyright: ignore[reportPrivateUsage]  # the fleet service's transaction seam is the only point between the read and the unit
 
@@ -223,7 +223,7 @@ def test_a_reinstate_decided_before_a_reinstate_and_re_retire_leaves_the_runner_
 
     assert refused.status_code == 409, refused.text
     runner = _runner(hub)
-    assert runner.retired and runner.retired_by == "later"
+    assert runner.retired
 
 
 def test_a_host_retire_leaves_a_runner_released_and_rescued_while_its_loop_ran(
@@ -283,7 +283,7 @@ def test_a_reinstate_refused_after_its_release_pass_still_announces_the_release(
 
     def reinstate_and_retire_again() -> None:
         _ok(_reinstate(hub))
-        _ok(_retire(hub, by="later"))
+        _ok(_retire(hub))
 
     # The reinstate's release of the leftover route commits; a reinstate and a re-retire land before its own fact.
     _once_after(monkeypatch, hub.default_adapter(DetachService), "release_held", reinstate_and_retire_again)
@@ -293,7 +293,7 @@ def test_a_reinstate_refused_after_its_release_pass_still_announces_the_release(
 
     assert refused.status_code == 409, refused.text
     runner = _runner(hub)
-    assert runner.retired and runner.retired_by == "later"
+    assert runner.retired
     assert _route_runner(hub, chunk_id) is None
     detached = [f for f in _frames(hub, since, "chunk-changed") if f.get("cause") == "detached"]
     assert [f.get("chunk_id") for f in detached] == [chunk_id]

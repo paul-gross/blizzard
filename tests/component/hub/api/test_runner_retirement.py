@@ -111,7 +111,7 @@ def test_retiring_an_idle_runner_hides_it_and_records_who_and_when(tmp_path: Pat
     body = resp.json()
     assert body["released_chunk_ids"] == []
     assert body["runner"]["retired"] is True
-    assert body["runner"]["retired_by"] == "op"
+    assert body["runner"]["retired_by"] == "operator"
     assert body["runner"]["retired_at"] is not None
     assert _listed(hub) == []
     [row] = _listed(hub, include_retired=True)

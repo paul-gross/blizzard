@@ -160,7 +160,7 @@ def test_noted_resolve_requeue_and_restart_reach_chunk_notes_oldest_first(tmp_pa
     ]
     assert (rows[0]["node"], rows[0]["choice"], rows[0]["by"]) == ("signoff", "reject", "operator")
     assert (rows[1]["node"], rows[1]["choice"], rows[1]["by"]) == (None, None, "operator")
-    assert (rows[2]["node"], rows[2]["by"]) == ("build", "ada")
+    assert (rows[2]["node"], rows[2]["by"]) == ("build", "operator")
     assert [r["recorded_at"] for r in rows] == sorted(r["recorded_at"] for r in rows)
 
 
@@ -175,7 +175,7 @@ def test_history_shows_a_row_per_resolution_requeue_and_restart(tmp_path: Path) 
     assert [(r["kind"], r["by"], r["note"]) for r in person_made] == [
         ("resolution", "operator", "first"),
         ("requeue", "operator", None),
-        ("restart", "ada", "third"),
+        ("restart", "operator", "third"),
     ]
     assert (person_made[0]["from_node"], person_made[0]["choice"]) == ("signoff", "reject")
 

@@ -209,7 +209,7 @@ def test_a_restart_note_is_stored_and_read_back(tmp_path: Path) -> None:
 
     assert resp.status_code == 202, resp.text
     [restart] = _fleet_detail(hub, chunk_id)["restarts"]
-    assert (restart["restarted_by"], restart["note"]) == ("ada", _NOTE)
+    assert (restart["restarted_by"], restart["note"]) == ("operator", _NOTE)
 
 
 @pytest.mark.parametrize("body", [{}, {"note": " "}])

@@ -597,7 +597,7 @@ describe('ChunkDetail container', () => {
 
     const calls = stub.forRoute('/api/chunks/ch_routed/pause', 'POST');
     expect(calls).toHaveLength(1);
-    expect(calls[0].body).toMatchObject({ by: 'operator' });
+    expect(calls[0].body).toEqual({});
   });
 
   it('fires the resume client call for a paused chunk whose status reads waiting_on_human', async () => {

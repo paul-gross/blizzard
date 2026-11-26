@@ -29,7 +29,7 @@ describe('injectCompleteChunkMutation (issue #294)', () => {
 
     const calls = stub.forRoute('/api/chunks/ch_1/complete', 'POST');
     expect(calls).toHaveLength(1);
-    expect(calls[0].body).toEqual({ by: 'operator' });
+    expect(calls[0].body).toEqual({});
   });
 
   it('invalidates the chunks list, the ready queue, and the chunk detail on success', async () => {

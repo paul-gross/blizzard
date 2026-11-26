@@ -422,7 +422,7 @@ def retire_cadence(
     nothing. 404 on an unknown id, 409 on a stale `If-Match`."""
     cadence = _cadence_or_404(cadence_id, cadences)
     try:
-        retired = lifecycle.retire(cadence, change_context(identity, door), by=request.by, if_match=if_match)
+        retired = lifecycle.retire(cadence, change_context(identity, door), by=identity.username, if_match=if_match)
     except ConfigRevisionConflict as exc:
         raise _revision_conflict(exc) from exc
     return _labelled(retired, reading, projects, urgencies)
@@ -449,7 +449,7 @@ def enable_cadence(
         enabled = lifecycle.enable(
             cadence,
             change_context(identity, door),
-            by=request.by,
+            by=identity.username,
             may_admit=may_admit(identity.permissions),
             if_match=if_match,
         )

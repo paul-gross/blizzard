@@ -271,7 +271,7 @@ def test_the_change_row_carries_the_door_and_the_authenticated_actor_not_by(tmp_
     assert [(r["door"], r["actor"]) for r in rows] == [("board", user.user_id), ("cli", user.user_id)]
     with hub.engine.connect() as conn:
         (set_by,) = conn.exec_driver_sql("SELECT set_by FROM routine_lifecycle_facts").one()
-    assert set_by == "someone-else"
+    assert set_by == "ada"
 
 
 def test_a_slug_another_project_holds_resolves_within_the_routines_project(hub: HubHarness) -> None:

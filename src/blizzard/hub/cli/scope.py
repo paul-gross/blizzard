@@ -93,28 +93,28 @@ def scope_edit(cli: CliContext, slug: str, description: str, project: str | None
 
 @scope_group.command("retire", cls=FleetCommand)
 @click.argument("slug")
-@click.option("--by", "by", default="operator", help="Who is retiring, recorded as the actor.")
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
 @project_option(required_by_hub=True)
-def scope_retire(cli: CliContext, slug: str, by: str, project: str | None) -> None:
+def scope_retire(cli: CliContext, slug: str, project: str | None) -> None:
     """Retire SLUG — a reversible brake; in-flight users of it are untouched."""
-    _set_scope_lifecycle(cli, slug, verb="retire", by=by, project=project)
+    _set_scope_lifecycle(cli, slug, verb="retire", project=project)
 
 
 @scope_group.command("enable", cls=FleetCommand)
 @click.argument("slug")
-@click.option("--by", "by", default="operator", help="Who is re-enabling, recorded as the actor.")
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
 @project_option(required_by_hub=True)
-def scope_enable(cli: CliContext, slug: str, by: str, project: str | None) -> None:
+def scope_enable(cli: CliContext, slug: str, project: str | None) -> None:
     """Re-enable a retired SLUG."""
-    _set_scope_lifecycle(cli, slug, verb="enable", by=by, project=project)
+    _set_scope_lifecycle(cli, slug, verb="enable", project=project)
 
 
-def _set_scope_lifecycle(cli: CliContext, slug: str, *, verb: str, by: str, project: str | None) -> None:
+def _set_scope_lifecycle(cli: CliContext, slug: str, *, verb: str, project: str | None) -> None:
     operation = f"POST /scopes/{{slug}}/{verb}"
     resp = cli.post(
         project_path(project, f"/scopes/{slug}/{verb}"),
         operation,
-        json_body={"by": by},
+        json_body={},
         door=True,
     )
     raw, body = cli.decode(resp, _SCOPE, operation)

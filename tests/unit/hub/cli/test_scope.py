@@ -103,11 +103,11 @@ def test_scope_retire_posts_to_the_retire_endpoint() -> None:
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(
-        hub_group, ["scope", "retire", "blizzard", "--by", "paul"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+        hub_group, ["scope", "retire", "blizzard"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
     assert result.exit_code == 0, result.output
-    assert calls == [("http://hub.local:8421/api/scopes/blizzard/retire", {"by": "paul"})]
+    assert calls == [("http://hub.local:8421/api/scopes/blizzard/retire", {})]
     assert "retired" in result.output
 
 
@@ -124,7 +124,7 @@ def test_scope_enable_posts_to_the_enable_endpoint() -> None:
     )
 
     assert result.exit_code == 0, result.output
-    assert calls == [("http://hub.local:8421/api/scopes/blizzard/enable", {"by": "operator"})]
+    assert calls == [("http://hub.local:8421/api/scopes/blizzard/enable", {})]
     assert "enabled" in result.output
 
 

@@ -195,15 +195,15 @@ def retire_host_runner(
     held = routes.live_routes_of_runner(runner_id)
     changes = chunk_events.ChunkChanged.before_many(frames, [r.chunk_id for r in held])
     try:
-        outcome: RetireOutcome = fleet.retire(registration, by=request.by, force=request.force)
+        outcome: RetireOutcome = fleet.retire(registration, by=principal.host_name, force=request.force)
     except RetireInterrupted as exc:
-        publish_retirement(events, frames, registration, exc.committed, by=request.by, changes=changes)
+        publish_retirement(events, frames, registration, exc.committed, by=principal.host_name, changes=changes)
         return problem_response(problems.runner_retire_interrupted_problem(exc, instance=http_request.url.path))
     except RunnerHoldsRoutes as exc:
         return problem_response(problems.runner_holds_routes_problem(exc, instance=http_request.url.path))
     except RunnerLifecycleConflict as exc:
         return problem_response(problems.runner_lifecycle_conflict_problem(exc, instance=http_request.url.path))
-    publish_retirement(events, frames, registration, outcome, by=request.by, changes=changes)
+    publish_retirement(events, frames, registration, outcome, by=principal.host_name, changes=changes)
     refreshed = registry.get_runner(runner_id)
     assert refreshed is not None  # just retired, so the runner exists
 

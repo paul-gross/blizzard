@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Final, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.wire.base import WireModel
+from blizzard.wire.forge import DEPRECATED_FIELD
 from blizzard.wire.problem import ProblemDetails
 
 
@@ -37,10 +38,10 @@ class ScopeEditRequest(BaseModel):
 
 
 class ScopeLifecycleRequest(BaseModel):
-    """Retire or re-enable a scope — ``by`` is recorded on the lifecycle fact; the change
-    row's actor is the authenticated caller."""
+    """Retire or re-enable a scope — the lifecycle fact and the change row both record the authenticated caller."""
 
-    by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
 
 
 class ScopeView(WireModel):

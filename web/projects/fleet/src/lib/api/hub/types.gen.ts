@@ -598,6 +598,8 @@ export type AnswerRequest = {
     answer: string;
     /**
      * Answered By
+     *
+     * @deprecated
      */
     answered_by?: string;
 };
@@ -1349,11 +1351,13 @@ export type CadenceErrandView = {
 /**
  * CadenceLifecycleRequest
  *
- * Retire or re-enable a cadence; ``by`` is recorded on the lifecycle fact.
+ * Retire or re-enable a cadence; the lifecycle fact records the authenticated caller.
  */
 export type CadenceLifecycleRequest = {
     /**
      * By
+     *
+     * @deprecated
      */
     by?: string;
 };
@@ -1777,6 +1781,8 @@ export type ChunkChangedPayload = {
 export type ChunkCompleteRequest = {
     /**
      * By
+     *
+     * @deprecated
      */
     by?: string;
 };
@@ -1889,6 +1895,8 @@ export type ChunkDeleteRefusal = typeof ChunkDeleteRefusal[keyof typeof ChunkDel
 export type ChunkDeleteRequest = {
     /**
      * By
+     *
+     * @deprecated
      */
     by?: string;
 };
@@ -1914,6 +1922,8 @@ export type ChunkDeleteResponse = {
 export type ChunkDependencyDeclareRequest = {
     /**
      * By
+     *
+     * @deprecated
      */
     by?: string;
     /**
@@ -1968,6 +1978,8 @@ export type ChunkDependencyEdgeView = {
 export type ChunkDependencyReleaseRequest = {
     /**
      * By
+     *
+     * @deprecated
      */
     by?: string;
     /**
@@ -2838,6 +2850,8 @@ export type ChunkPatchResponse = {
 export type ChunkPauseRequest = {
     /**
      * By
+     *
+     * @deprecated
      */
     by?: string;
 };
@@ -2916,6 +2930,8 @@ export type ChunkRequeueRequest = {
 export type ChunkRestartRequest = {
     /**
      * By
+     *
+     * @deprecated
      */
     by?: string;
     /**
@@ -3005,6 +3021,8 @@ export type ChunkStatusView = {
 export type ChunkStopRequest = {
     /**
      * By
+     *
+     * @deprecated
      */
     by?: string;
 };
@@ -5111,6 +5129,8 @@ export type DecisionResolutionRequest = {
     note?: string | null;
     /**
      * Resolved By
+     *
+     * @deprecated
      */
     resolved_by?: string;
 };
@@ -9645,6 +9665,8 @@ export type HostLifecycleConflictProblem = {
 export type HostLifecycleRequest = {
     /**
      * By
+     *
+     * @deprecated
      */
     by?: string;
 };
@@ -9907,6 +9929,8 @@ export type HostReportRequest = {
 export type HostRetireRequest = {
     /**
      * By
+     *
+     * @deprecated
      */
     by?: string;
     /**
@@ -10056,6 +10080,8 @@ export type HostRunnerView = {
 export type HostRunnersRequest = {
     /**
      * By
+     *
+     * @deprecated
      */
     by?: string;
     /**
@@ -15048,11 +15074,13 @@ export type RoutineEntry = {
 /**
  * RoutineLifecycleRequest
  *
- * A request to retire or re-enable a routine; ``by`` names who the change is attributed to.
+ * A request to retire or re-enable a routine; the change is attributed to the authenticated caller.
  */
 export type RoutineLifecycleRequest = {
     /**
      * By
+     *
+     * @deprecated
      */
     by?: string;
 };
@@ -16024,6 +16052,8 @@ export type RunnerLifecycleConflictProblem = {
 export type RunnerLifecycleRequest = {
     /**
      * By
+     *
+     * @deprecated
      */
     by?: string;
 };
@@ -16181,6 +16211,8 @@ export type RunnerOwnershipProblem = {
 export type RunnerPauseRequest = {
     /**
      * By
+     *
+     * @deprecated
      */
     by?: string;
 };
@@ -16510,6 +16542,8 @@ export type RunnerRetireInterruptedProblem = {
 export type RunnerRetireRequest = {
     /**
      * By
+     *
+     * @deprecated
      */
     by?: string;
     /**
@@ -16850,12 +16884,13 @@ export type ScopeEntry = {
 /**
  * ScopeLifecycleRequest
  *
- * Retire or re-enable a scope — ``by`` is recorded on the lifecycle fact; the change
- * row's actor is the authenticated caller.
+ * Retire or re-enable a scope — the lifecycle fact and the change row both record the authenticated caller.
  */
 export type ScopeLifecycleRequest = {
     /**
      * By
+     *
+     * @deprecated
      */
     by?: string;
 };

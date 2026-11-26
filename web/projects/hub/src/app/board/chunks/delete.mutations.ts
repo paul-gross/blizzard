@@ -16,10 +16,7 @@ export interface DeleteVars {
 
 /**
  * `DELETE /api/chunks/{id}` — withdraw an unacquired chunk's hub item(s), through the
- * generated client (bzh:generated-client). No operator identity is threaded through
- * the request body's `by` field here — the route defaults it server-side, the same
- * convention {@link injectPromoteChunkMutation}/{@link injectDetachChunkMutation}
- * follow for their own writes. 404 for an unknown chunk and 409 for an already-acquired
+ * generated client (bzh:generated-client). 404 for an unknown chunk and 409 for an already-acquired
  * one both surface as a thrown error — the caller reports it, nothing here swallows it.
  * On success it re-reads the fleet list, the ready queue, and the backlog — the deleted
  * chunk leaves whichever of the two lists it sat in, `not_ready` or `ready`, unlike

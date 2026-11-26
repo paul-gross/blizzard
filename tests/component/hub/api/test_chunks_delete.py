@@ -83,7 +83,7 @@ def test_delete_withdraws_the_chunks_open_hub_item(tmp_path: Path) -> None:
     assert item["closure"] == "withdrawn"
 
 
-def test_delete_defaults_by_to_operator_and_accepts_an_override(tmp_path: Path) -> None:
+def test_delete_records_the_caller_whether_or_not_the_body_names_someone(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     default_id = ingest(hub, [_POINTER])
     since = hub.events.latest_id()
@@ -96,7 +96,7 @@ def test_delete_defaults_by_to_operator_and_accepts_an_override(tmp_path: Path) 
     resp = _delete_chunk(hub, named_id, by="alice")
     assert resp.status_code == 202, resp.text
     named_frame = json.loads(emitted_events(hub, since=since)[0]["data"])
-    assert named_frame["by"] == "alice"
+    assert named_frame["by"] == "operator"
 
 
 def test_delete_publishes_both_chunk_changed_and_queue_changed(tmp_path: Path) -> None:
@@ -131,7 +131,7 @@ def test_delete_chunk_changed_frame_carries_cause_deleted_and_by_no_richer_shape
     frame = frames[0]
     assert frame["chunk_id"] == chunk_id
     assert frame["cause"] == "deleted"
-    assert frame["by"] == "alice"
+    assert frame["by"] == "operator"
     assert frame["key"].startswith("chunk_deleted:")
     assert "graph_id" not in frame
     assert "node" not in frame

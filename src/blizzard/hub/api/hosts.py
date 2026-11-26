@@ -281,7 +281,6 @@ def get_host(host_id: str, hosts: Hosts, registry: Runners, clock: Clock) -> Hos
 @router.post(
     "/hosts/{host_id}/adoptions",
     response_model=HostRegistryView,
-    dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
 @inject_sync
 def adopt_runners(
@@ -292,6 +291,7 @@ def adopt_runners(
     clock: Clock,
     host_enrollment: HostEnrollment,
     events: Events,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.RUNNER_RETIRE))],
 ) -> HostRegistryView:
     """Place existing runners under the host, all or none. A runner of another tenant is refused as unknown (404), one
     already under a host or a retired one 409, and so is a retired host — one retired while the adoption was decided
@@ -299,19 +299,18 @@ def adopt_runners(
     reads = HostReads(hosts, registry, clock)
     host = reads.host(host_id)
     try:
-        host_enrollment.adopt(host, request.runner_ids, by=request.by)
+        host_enrollment.adopt(host, request.runner_ids, by=identity.username)
     except UnknownRunner as exc:
         raise _unknown_runner(exc) from exc
     except (RunnerAlreadyHosted, RunnerRetired, HostRetired, RunnerLifecycleConflict) as exc:
         raise _conflict(exc) from exc
-    events.publish_host_changed(host_id, kind="adopted", host_name=host.name, by=request.by)
+    events.publish_host_changed(host_id, kind="adopted", host_name=host.name, by=identity.username)
     return reads.reread(host_id)
 
 
 @router.post(
     "/hosts/{host_id}/releases",
     response_model=HostRegistryView,
-    dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
 @inject_sync
 def release_runners(
@@ -322,6 +321,7 @@ def release_runners(
     clock: Clock,
     host_enrollment: HostEnrollment,
     events: Events,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.RUNNER_RETIRE))],
 ) -> HostRegistryView:
     """Return runners under the host to standing alone, keeping their ids and tokens, all or none. A runner not under
     the host is refused as unknown (404). A retired host releases only retired runners: an unretired one is refused 409
@@ -330,12 +330,12 @@ def release_runners(
     reads = HostReads(hosts, registry, clock)
     host = reads.host(host_id)
     try:
-        host_enrollment.release(host, request.runner_ids, by=request.by)
+        host_enrollment.release(host, request.runner_ids, by=identity.username)
     except (UnknownRunner, RunnerNotUnderHost) as exc:
         raise _unknown_runner(exc) from exc
     except (HostRetirementUnfinished, HostLifecycleConflict, RunnerLifecycleConflict) as exc:
         raise _conflict(exc) from exc
-    events.publish_host_changed(host_id, kind="released", host_name=host.name, by=request.by)
+    events.publish_host_changed(host_id, kind="released", host_name=host.name, by=identity.username)
     return reads.reread(host_id)
 
 
@@ -364,7 +364,6 @@ def enroll_host(
     "/hosts/{host_id}/token-revocations",
     response_model=HostTokenRevocationResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
 @inject_sync
 def revoke_host_token(
@@ -375,19 +374,20 @@ def revoke_host_token(
     clock: Clock,
     host_enrollment: HostEnrollment,
     events: Events,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.RUNNER_RETIRE))],
 ) -> HostTokenRevocationResponse:
     """Revoke a host's token and issue none — it stays added and must be enrolled afresh; 409 when unenrolled."""
     reads = HostReads(hosts, registry, clock)
     host = reads.host(host_id)
     try:
-        revocation_id = host_enrollment.revoke_token(host, by=request.by)
+        revocation_id = host_enrollment.revoke_token(host, by=identity.username)
     except HostNotEnrolled as exc:
         raise _conflict(exc) from exc
     events.publish_host_changed(
         host_id,
         kind="token-revoked",
         host_name=host.name,
-        by=request.by,
+        by=identity.username,
         key=f"host_token_revocations:{revocation_id}",
     )
     return HostTokenRevocationResponse(host=reads.reread(host_id))
@@ -396,7 +396,6 @@ def revoke_host_token(
 @router.post(
     "/hosts/{host_id}/retire",
     response_model=HostRetireResponse,
-    dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
 @inject_sync
 def retire_host(
@@ -409,6 +408,7 @@ def retire_host(
     retirement: Retirement,
     events: Events,
     frames: Frames,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.RUNNER_RETIRE))],
 ) -> HostRetireResponse:
     """Retire a host — its token is revoked and every runner under it retired; 409 naming each runner's held chunks
     unless ``force``, which releases them. Re-running on a retired host re-runs each runner's release pass. A host
@@ -421,12 +421,14 @@ def retire_host(
     held = [route for r in under for route in routes.live_routes_of_runner(r.runner_id)]
     changes = chunk_events.ChunkChanged.before_many(frames, [r.chunk_id for r in held])
     try:
-        outcome = retirement.retire(host, by=request.by, force=request.force)
+        outcome = retirement.retire(host, by=identity.username, force=request.force)
     except (HostHoldsRoutes, HostLifecycleConflict) as exc:
         raise _conflict(exc) from exc
     except HostRetirementInterrupted as exc:
-        _publish_host_retirement(registry, events, frames, host, under, exc.committed, by=request.by, changes=changes)
+        _publish_host_retirement(
+            registry, events, frames, host, under, exc.committed, by=identity.username, changes=changes
+        )
         raise _conflict(exc) from exc
-    _publish_host_retirement(registry, events, frames, host, under, outcome, by=request.by, changes=changes)
+    _publish_host_retirement(registry, events, frames, host, under, outcome, by=identity.username, changes=changes)
     released = [r.chunk_id for result in outcome.runners.values() for r in result.released]
     return HostRetireResponse(host=reads.reread(host_id), released_chunk_ids=released)

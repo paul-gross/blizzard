@@ -194,8 +194,8 @@ blizzard hub cadence get evening
 blizzard hub cadence errands evening
 blizzard hub cadence edit evening [--name TEXT] [--cron EXPR] [--zone ZONE] [--spacing 3d] [--anchor finished]
                                   [--no-schedule] [--no-spacing]
-blizzard hub cadence retire evening [--by WHO]
-blizzard hub cadence enable evening [--by WHO]
+blizzard hub cadence retire evening
+blizzard hub cadence enable evening
 
 blizzard hub cadence chore add evening arch --routine architecture-drift [--all-scopes | --scope S ...] [--mode delta] [--note TEXT] [--hold] [--urgency U]
 blizzard hub cadence chore edit evening arch [--routine R] [--all-scopes | --scope S ... | --default-scope] [--mode M] [--note TEXT] [--hold | --promote] [--urgency U | --clear-urgency]

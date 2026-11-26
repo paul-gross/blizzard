@@ -68,7 +68,7 @@ describe('injectAwaitingHumanService', () => {
       await vi.waitFor(() => expect(stub.forRoute('/api/questions/qn_1/answers', 'POST')).toHaveLength(1));
       await new Promise((r) => setTimeout(r, 0));
       expect(settled).toBe(false);
-      expect(stub.forRoute('/api/questions/qn_1/answers', 'POST')[0].body).toEqual({ answer: 'rest', answered_by: 'operator' });
+      expect(stub.forRoute('/api/questions/qn_1/answers', 'POST')[0].body).toEqual({ answer: 'rest' });
 
       release();
       expect(await pending).toEqual({ ok: true });
@@ -126,7 +126,6 @@ describe('injectAwaitingHumanService', () => {
       expect(notices.begin).toHaveBeenCalledTimes(1);
       expect(stub.forRoute('/api/decisions/de_1/resolutions', 'POST')[0].body).toEqual({
         choice: 'approve',
-        resolved_by: 'operator',
         note: 'careful',
       });
       expect(keysOf(invalidate)).toEqual([hubChunkKey('ch_1'), hubChunksKey, hubDecisionsKey]);
@@ -137,10 +136,7 @@ describe('injectAwaitingHumanService', () => {
       stub = s.stub;
 
       await s.service.resolve('ch_1', 'de_1', 'approve', { note: '  ' });
-      expect(stub.forRoute('/api/decisions/de_1/resolutions', 'POST')[0].body).toEqual({
-        choice: 'approve',
-        resolved_by: 'operator',
-      });
+      expect(stub.forRoute('/api/decisions/de_1/resolutions', 'POST')[0].body).toEqual({ choice: 'approve' });
     });
 
     it('says a lost race on the outcome notice and answers ok', async () => {

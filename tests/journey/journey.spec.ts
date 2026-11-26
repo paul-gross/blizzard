@@ -317,7 +317,7 @@ test('test_the_acceptance_journey_end_to_end', async ({ api, cli, forge, freshHu
 
   // The parked chunk is answered at the hub, no takeover, and resumes to done: the open question survived the restart.
   const question = (await detail(ask)).questions[0]!;
-  await blizzard(['hub', 'question', 'answer', question.question_id, answerScript(cliPath), '--by', 'alice']);
+  await blizzard(['hub', 'question', 'answer', question.question_id, answerScript(cliPath)]);
 
   // -- The morning after --
   for (const id of [groupedApi, review, ask]) await reaches(id, 'done');

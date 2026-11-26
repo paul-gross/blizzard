@@ -30,7 +30,7 @@ describe('injectChunkPauseMutation (issue #46)', () => {
 
     const calls = stub.forRoute('/api/chunks/ch_1/pause', 'POST');
     expect(calls).toHaveLength(1);
-    expect(calls[0].body).toEqual({ by: 'operator' });
+    expect(calls[0].body).toEqual({});
     expect(stub.forRoute('/api/chunks/ch_1/resume', 'POST')).toHaveLength(0);
   });
 
@@ -41,7 +41,7 @@ describe('injectChunkPauseMutation (issue #46)', () => {
 
     const calls = stub.forRoute('/api/chunks/ch_1/resume', 'POST');
     expect(calls).toHaveLength(1);
-    expect(calls[0].body).toEqual({ by: 'operator' });
+    expect(calls[0].body).toEqual({});
     expect(stub.forRoute('/api/chunks/ch_1/pause', 'POST')).toHaveLength(0);
   });
 

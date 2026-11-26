@@ -69,13 +69,12 @@ set. Both are idempotent and never mint or retire a scope — naming one `scope 
 no routine holds, refuses rather than creating either. `scope remove` also refuses removing the routine's own default
 scope, which stays a member of its set for as long as it is the default.
 
-`routine retire <slug> [--by operator]` and `routine enable <slug> [--by operator]` are a routine's own reversible
-brake, the scope lifecycle's own shape: retiring appends `routine.retired`, `enable` appends `routine.enabled`, and
-neither touches the stored row, its findings, proposals, or closures. A repeated retire or enable writes nothing.
-`routine list
---include-retired` includes a retired routine in the listing, marked; every other verb still resolves a
-retired routine's slug to its `routine_id` the same way a live one does, so it reaches the domain's own retired refusal
-rather than reading as unknown.
+`routine retire <slug>` and `routine enable <slug>` are a routine's own reversible brake, the scope lifecycle's own
+shape: retiring appends `routine.retired`, `enable` appends `routine.enabled`, and neither touches the stored row, its
+findings, proposals, or closures. A repeated retire or enable writes nothing. `routine list
+--include-retired` includes
+a retired routine in the listing, marked; every other verb still resolves a retired routine's slug to its `routine_id`
+the same way a live one does, so it reaches the domain's own retired refusal rather than reading as unknown.
 
 ## Revisions and the change log
 

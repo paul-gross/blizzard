@@ -29,7 +29,7 @@ describe('injectCadenceLifecycleMutation', () => {
     const calls = stub.forRoute('/api/cadences/cad_evening/retire', 'POST');
     expect(calls).toHaveLength(1);
     expect(calls[0].headers['if-match']).toBe('2');
-    expect(calls[0].body).toEqual({ by: 'operator' });
+    expect(calls[0].body).toEqual({});
     expect(stub.forRoute('/api/cadences/cad_evening/enable', 'POST')).toHaveLength(0);
   });
 

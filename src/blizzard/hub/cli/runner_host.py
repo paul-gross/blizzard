@@ -154,9 +154,9 @@ def host_show(cli: CliContext, host_id: str) -> None:
     cli.show(raw, HostDetail(host))
 
 
-def _runners_verb(cli: CliContext, host_id: str, runner_ids: tuple[str, ...], *, verb: str, by: str) -> Any:
+def _runners_verb(cli: CliContext, host_id: str, runner_ids: tuple[str, ...], *, verb: str) -> Any:
     operation = f"POST /hosts/{{id}}/{verb}"
-    resp = cli.post(f"/api/hosts/{host_id}/{verb}", operation, json_body={"by": by, "runner_ids": list(runner_ids)})
+    resp = cli.post(f"/api/hosts/{host_id}/{verb}", operation, json_body={"runner_ids": list(runner_ids)})
     raw, _ = cli.decode(resp, _HOST, operation)
     return raw
 
@@ -164,36 +164,36 @@ def _runners_verb(cli: CliContext, host_id: str, runner_ids: tuple[str, ...], *,
 @runner_host_group.command("adopt", cls=FleetCommand)
 @click.argument("host_id")
 @click.argument("runner_ids", nargs=-1, required=True)
-@click.option("--by", "by", default="operator", help="Who is adopting, recorded as the actor.")
-def host_adopt(cli: CliContext, host_id: str, runner_ids: tuple[str, ...], by: str) -> None:
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
+def host_adopt(cli: CliContext, host_id: str, runner_ids: tuple[str, ...]) -> None:
     """Place existing runners RUNNER_IDS under host HOST_ID, all or none.
 
     Refused for a runner of another tenant (as unknown), one already under a host, and a retired one."""
-    body = _runners_verb(cli, host_id, runner_ids, verb="adoptions", by=by)
+    body = _runners_verb(cli, host_id, runner_ids, verb="adoptions")
     cli.show_lines(body, f"adopted {', '.join(runner_ids)} under host {host_id}")
 
 
 @runner_host_group.command("release", cls=FleetCommand)
 @click.argument("host_id")
 @click.argument("runner_ids", nargs=-1, required=True)
-@click.option("--by", "by", default="operator", help="Who is releasing, recorded as the actor.")
-def host_release(cli: CliContext, host_id: str, runner_ids: tuple[str, ...], by: str) -> None:
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
+def host_release(cli: CliContext, host_id: str, runner_ids: tuple[str, ...]) -> None:
     """Return runners RUNNER_IDS under host HOST_ID to standing alone, keeping their ids and tokens.
 
     A registered host then halts each one, as a runner the hub no longer holds under it."""
-    body = _runners_verb(cli, host_id, runner_ids, verb="releases", by=by)
+    body = _runners_verb(cli, host_id, runner_ids, verb="releases")
     cli.show_lines(body, f"released {', '.join(runner_ids)} from host {host_id}")
 
 
 @runner_host_group.command("revoke-token", cls=FleetCommand)
 @click.argument("host_id")
-@click.option("--by", "by", default="operator", help="Who is revoking, recorded as the actor.")
-def host_revoke_token(cli: CliContext, host_id: str, by: str) -> None:
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
+def host_revoke_token(cli: CliContext, host_id: str) -> None:
     """Revoke host HOST_ID's token and issue none — it stays added, and is refused until `enroll` issues a new one."""
     resp = cli.post(
         f"/api/hosts/{host_id}/token-revocations",
         "POST /hosts/{id}/token-revocations",
-        json_body={"by": by},
+        json_body={},
     )
     raw, _ = cli.decode(resp, _REVOKED, "POST /hosts/{id}/token-revocations")
     cli.show_lines(raw, f"revoked {host_id}'s token — enroll it to mint a fresh one")
@@ -216,8 +216,8 @@ def host_enroll(cli: CliContext, host_id: str) -> None:
 @runner_host_group.command("retire", cls=FleetCommand)
 @click.argument("host_id")
 @click.option("--force", is_flag=True, default=False, help="Release every chunk the runners under the host hold.")
-@click.option("--by", "by", default="operator", help="Who is retiring, recorded as the actor.")
-def host_retire(cli: CliContext, host_id: str, force: bool, by: str) -> None:
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
+def host_retire(cli: CliContext, host_id: str, force: bool) -> None:
     """Retire host HOST_ID — revoke its token and retire every runner under it.
 
     Refused while any of them holds chunks unless --force, which releases them. Re-running finishes a partial
@@ -225,7 +225,7 @@ def host_retire(cli: CliContext, host_id: str, force: bool, by: str) -> None:
     resp = cli.post(
         f"/api/hosts/{host_id}/retire",
         "POST /hosts/{id}/retire",
-        json_body={"by": by, "force": force},
+        json_body={"force": force},
     )
     raw, retired = cli.decode(resp, _RETIRED, "POST /hosts/{id}/retire")
     lines = [f"host {host_id} is retired"]

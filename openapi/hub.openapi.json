@@ -942,6 +942,7 @@
           },
           "answered_by": {
             "default": "operator",
+            "deprecated": true,
             "title": "Answered By",
             "type": "string"
           }
@@ -2128,10 +2129,11 @@
         "type": "object"
       },
       "CadenceLifecycleRequest": {
-        "description": "Retire or re-enable a cadence; ``by`` is recorded on the lifecycle fact.",
+        "description": "Retire or re-enable a cadence; the lifecycle fact records the authenticated caller.",
         "properties": {
           "by": {
             "default": "operator",
+            "deprecated": true,
             "title": "By",
             "type": "string"
           }
@@ -2909,6 +2911,7 @@
         "properties": {
           "by": {
             "default": "operator",
+            "deprecated": true,
             "title": "By",
             "type": "string"
           }
@@ -3048,6 +3051,7 @@
         "properties": {
           "by": {
             "default": "operator",
+            "deprecated": true,
             "title": "By",
             "type": "string"
           }
@@ -3074,6 +3078,7 @@
         "properties": {
           "by": {
             "default": "operator",
+            "deprecated": true,
             "title": "By",
             "type": "string"
           },
@@ -3151,6 +3156,7 @@
         "properties": {
           "by": {
             "default": "operator",
+            "deprecated": true,
             "title": "By",
             "type": "string"
           },
@@ -4711,6 +4717,7 @@
         "properties": {
           "by": {
             "default": "operator",
+            "deprecated": true,
             "title": "By",
             "type": "string"
           }
@@ -4805,6 +4812,7 @@
         "properties": {
           "by": {
             "default": "operator",
+            "deprecated": true,
             "title": "By",
             "type": "string"
           },
@@ -4980,6 +4988,7 @@
         "properties": {
           "by": {
             "default": "operator",
+            "deprecated": true,
             "title": "By",
             "type": "string"
           }
@@ -8182,6 +8191,7 @@
           },
           "resolved_by": {
             "default": "operator",
+            "deprecated": true,
             "title": "Resolved By",
             "type": "string"
           }
@@ -15416,6 +15426,7 @@
         "properties": {
           "by": {
             "default": "operator",
+            "deprecated": true,
             "title": "By",
             "type": "string"
           }
@@ -15868,6 +15879,7 @@
         "properties": {
           "by": {
             "default": "operator",
+            "deprecated": true,
             "title": "By",
             "type": "string"
           },
@@ -16072,6 +16084,7 @@
         "properties": {
           "by": {
             "default": "operator",
+            "deprecated": true,
             "title": "By",
             "type": "string"
           },
@@ -23658,10 +23671,11 @@
         "type": "object"
       },
       "RoutineLifecycleRequest": {
-        "description": "A request to retire or re-enable a routine; ``by`` names who the change is attributed to.",
+        "description": "A request to retire or re-enable a routine; the change is attributed to the authenticated caller.",
         "properties": {
           "by": {
             "default": "operator",
+            "deprecated": true,
             "title": "By",
             "type": "string"
           }
@@ -25154,6 +25168,7 @@
         "properties": {
           "by": {
             "default": "operator",
+            "deprecated": true,
             "title": "By",
             "type": "string"
           }
@@ -25361,6 +25376,7 @@
         "properties": {
           "by": {
             "default": "operator",
+            "deprecated": true,
             "title": "By",
             "type": "string"
           }
@@ -26077,6 +26093,7 @@
         "properties": {
           "by": {
             "default": "operator",
+            "deprecated": true,
             "title": "By",
             "type": "string"
           },
@@ -26568,10 +26585,11 @@
         "type": "object"
       },
       "ScopeLifecycleRequest": {
-        "description": "Retire or re-enable a scope \u2014 ``by`` is recorded on the lifecycle fact; the change\nrow's actor is the authenticated caller.",
+        "description": "Retire or re-enable a scope \u2014 the lifecycle fact and the change row both record the authenticated caller.",
         "properties": {
           "by": {
             "default": "operator",
+            "deprecated": true,
             "title": "By",
             "type": "string"
           }
@@ -49365,7 +49383,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/pause": {
       "post": {
-        "description": "Pause the chunk with a runner's own bearer token \u2014 the same transition as the\noperator route, ``by`` defaulting to ``operator``.",
+        "description": "Pause the chunk with a runner's own bearer token \u2014 the same transition as the\noperator route, recorded as ``operator``.",
         "operationId": "pause_chunk_api_fleet_chunks__chunk_id__pause_post",
         "parameters": [
           {

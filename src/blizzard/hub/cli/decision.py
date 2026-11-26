@@ -50,15 +50,15 @@ def decision_list(cli: CliContext, project: str | None) -> None:
 @decision_group.command("resolve", cls=FleetCommand)
 @click.argument("decision_id")
 @click.argument("choice")
-@click.option("--by", "resolved_by", default="operator", help="Who is resolving, recorded as the actor.")
+@click.option("--by", expose_value=False, deprecated=True, help="Ignored: the hub records the signed-in caller.")
 @click.option("--note", default=None, help="A note binding every later session on the chunk, as an answer does.")
-def decision_resolve(cli: CliContext, decision_id: str, choice: str, resolved_by: str, note: str | None) -> None:
+def decision_resolve(cli: CliContext, decision_id: str, choice: str, note: str | None) -> None:
     """Resolve an open decision by picking CHOICE; the chunk then moves on along that choice.
 
     Only the first resolution counts: a later one is refused and told who already resolved.
     Refused too when CHOICE is not one of the decision's choices, or the decision was closed
     undecided by a restart or by its chunk ending."""
-    request = {"choice": choice, "resolved_by": resolved_by}
+    request = {"choice": choice}
     if note is not None:
         request["note"] = note
     resp = cli.send("post", f"/api/decisions/{decision_id}/resolutions", json_body=request)

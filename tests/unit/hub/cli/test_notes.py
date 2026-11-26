@@ -39,8 +39,8 @@ def _posting(status: int, body: object) -> tuple[Bound, list[dict[str, Any]]]:
 @pytest.mark.parametrize(
     ("flags", "sent"),
     [
-        ([], {"choice": "pass", "resolved_by": "operator"}),
-        (["--note", "ship it"], {"choice": "pass", "resolved_by": "operator", "note": "ship it"}),
+        ([], {"choice": "pass"}),
+        (["--note", "ship it"], {"choice": "pass", "note": "ship it"}),
     ],
 )
 def test_resolve_sends_the_note_only_when_given(flags: list[str], sent: dict[str, str]) -> None:
@@ -65,8 +65,8 @@ def test_requeue_sends_a_body_only_with_a_note(flags: list[str], sent: dict[str,
 @pytest.mark.parametrize(
     ("flags", "sent"),
     [
-        ([], {"node": None, "to_graph": None, "by": "operator"}),
-        (["--note", "clean slate"], {"node": None, "to_graph": None, "by": "operator", "note": "clean slate"}),
+        ([], {"node": None, "to_graph": None}),
+        (["--note", "clean slate"], {"node": None, "to_graph": None, "note": "clean slate"}),
     ],
 )
 def test_restart_sends_the_note_only_when_given(flags: list[str], sent: dict[str, object]) -> None:

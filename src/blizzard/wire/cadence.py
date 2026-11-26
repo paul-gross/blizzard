@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Annotated, Final, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.foundation.cadence_anchor import CadenceAnchor
 from blizzard.foundation.cadence_attention import AttentionReason, ErrandState
@@ -13,6 +13,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.forge import DEPRECATED_FIELD
 from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
@@ -80,9 +81,10 @@ class CadenceEditRequest(BaseModel):
 
 
 class CadenceLifecycleRequest(BaseModel):
-    """Retire or re-enable a cadence; ``by`` is recorded on the lifecycle fact."""
+    """Retire or re-enable a cadence; the lifecycle fact records the authenticated caller."""
 
-    by: str = "operator"
+    #: Deprecated and ignored: the hub records the authenticated caller.
+    by: str = Field(default="operator", json_schema_extra=DEPRECATED_FIELD)
 
 
 class CadenceScheduleView(WireModel):

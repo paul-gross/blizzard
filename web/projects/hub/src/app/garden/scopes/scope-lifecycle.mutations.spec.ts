@@ -31,7 +31,7 @@ describe('injectScopeLifecycleMutation', () => {
 
     const calls = stub.forRoute('/api/projects/acme/scopes/blizzard/retire', 'POST');
     expect(calls).toHaveLength(1);
-    expect(calls[0].body).toEqual({ by: 'operator' });
+    expect(calls[0].body).toEqual({});
     expect(stub.forRoute('/api/projects/acme/scopes/blizzard/enable', 'POST')).toHaveLength(0);
   });
 
@@ -42,7 +42,7 @@ describe('injectScopeLifecycleMutation', () => {
 
     const calls = stub.forRoute('/api/projects/acme/scopes/blizzard/enable', 'POST');
     expect(calls).toHaveLength(1);
-    expect(calls[0].body).toEqual({ by: 'operator' });
+    expect(calls[0].body).toEqual({});
     expect(stub.forRoute('/api/projects/acme/scopes/blizzard/retire', 'POST')).toHaveLength(0);
   });
 
