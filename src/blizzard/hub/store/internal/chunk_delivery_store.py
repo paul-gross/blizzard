@@ -16,7 +16,13 @@ from sqlalchemy import case, func
 
 from blizzard.hub.domain.chunk.close_read import CloseAttempt, CloseClosure, CloseIntent
 from blizzard.hub.domain.chunk.delivery_read import LandingFact
-from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, PendingCloseIntent, WorkItemCloseOutcome, WorkRef
+from blizzard.hub.domain.chunk.model import (
+    CloseEnqueueDecision,
+    PendingCloseIntent,
+    RouteReleaseCause,
+    WorkItemCloseOutcome,
+    WorkRef,
+)
 from blizzard.hub.domain.chunk.ports.delivery import DeliveryWrite, IWriteChunkDeliveryRepository
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
@@ -219,7 +225,10 @@ class ChunkDeliveryStore:
         )
         conn.execute(
             self._store.insert(s.route_released).values(
-                chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
+                chunk_id=chunk_id,
+                released_at=at,
+                seq=next_route_seq(conn, chunk_id),
+                cause=RouteReleaseCause.DELIVERY.value,
             )
         )
         return DeliveryWrite(

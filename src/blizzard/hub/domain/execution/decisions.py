@@ -23,6 +23,7 @@ from blizzard.hub.domain.chunk.model import (
     ChunkVerb,
     DecisionCheck,
     GateDecision,
+    RouteReleaseCause,
     decide_close_enqueue,
     person_note,
 )
@@ -304,6 +305,6 @@ class RequeueService:
             # A detached chunk holds no route: there is nothing to release.
             if self._route.route_of(chunk.chunk_id, transaction=transaction) is not None:
                 self._route.record_route_released(
-                    chunk.chunk_id, at=now, transaction=transaction
+                    chunk.chunk_id, at=now, cause=RouteReleaseCause.REQUEUE, transaction=transaction
                 )  # -> ready, re-leasable
             return requeue_id

@@ -19,13 +19,21 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.hub_event_types import ActivityChunkChangeCause, ChunkChangeCause
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunk.model import ActivityEntry, DecisionChoice, RouteReleaseCause, decide_close_enqueue
+from blizzard.hub.domain.chunk.model import (
+    OWN_OCCURRENCE_RELEASE_CAUSES,
+    ActivityEntry,
+    DecisionChoice,
+    RouteReleaseCause,
+    decide_close_enqueue,
+)
 from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerAddition
 from blizzard.hub.domain.runners.route import Route
+from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_events_store import EVENT_SOURCES
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
@@ -33,6 +41,7 @@ from blizzard.hub.store.transactions import HubTransactions
 from tests.support.scaffolding import (
     chunk_stores,
     chunk_unit,
+    hub_scoped,
     hub_store_connections,
     migrate_to,
     migrated_hub_at,
@@ -196,7 +205,7 @@ def _seed_requeue(store: ChunkStores, engine: sa.Engine) -> None:
 
 def _seed_release(store: ChunkStores, engine: sa.Engine) -> None:
     with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
-        store.route.record_route_released("ch_1", at=_at(1), transaction=tx)
+        store.route.record_route_released("ch_1", at=_at(1), cause=RouteReleaseCause.DETACH, transaction=tx)
 
 
 def _seed_restart(store: ChunkStores, engine: sa.Engine) -> None:
@@ -378,7 +387,7 @@ def _route_and_release(
     *,
     runner_id: str,
     at: int,
-    cause: RouteReleaseCause | None,
+    cause: RouteReleaseCause,
     reason: str | None = None,
 ) -> None:
     route = Route(chunk_id="ch_1", runner_id=runner_id, workspace_id="w1", environment_ids=[], created_at=_at(at))
@@ -400,12 +409,58 @@ def test_released_reads_off_a_release_row_naming_its_holder_and_reason(tmp_path:
 
 
 @pytest.mark.parametrize("cause", [None, RouteReleaseCause.DETACH, RouteReleaseCause.RETIREMENT])
-def test_every_other_route_released_row_still_reads_detached(tmp_path: Path, cause: RouteReleaseCause | None) -> None:
+def test_a_detach_a_retirement_and_an_uncaused_release_read_detached(
+    tmp_path: Path, cause: RouteReleaseCause | None
+) -> None:
     store, engine = _store(tmp_path)
-    _route_and_release(store, engine, runner_id="rn_first", at=1, cause=cause)
+    _route_and_release(store, engine, runner_id="rn_first", at=1, cause=cause or RouteReleaseCause.DETACH)
+    if cause is None:
+        # A row written before the cause was recorded is reachable only by writing the column directly.
+        with hub_store_connections(engine).write("seed") as conn:
+            conn.execute(hub_scoped(sa.update(s.route_released).values(cause=None)))
     row = _row_for(store, "detached")
     assert row.runner_id is None
     assert row.reason is None
+
+
+@pytest.mark.parametrize("cause", sorted(set(RouteReleaseCause) - OWN_OCCURRENCE_RELEASE_CAUSES))
+def test_a_release_written_as_part_of_another_fact_gets_no_row_and_takes_no_page_slot(
+    tmp_path: Path, cause: RouteReleaseCause
+) -> None:
+    store, engine = _store(tmp_path)
+    _route_and_release(store, engine, runner_id="rn_first", at=1, cause=RouteReleaseCause.DETACH)
+    # Newer than the detach and more than the page holds.
+    for at in (3, 5, 7):
+        _route_and_release(store, engine, runner_id="rn_later", at=at, cause=cause)
+
+    rows = store.events.activity_facts_since(_T0, limit=2)
+
+    assert [(r.cause, r.at) for r in rows if r.key.startswith("route_released:")] == [("detached", _at(2))]
+
+
+def test_a_finalized_delivery_has_no_row(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    _seed_claim(store, engine)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.delivery.finalize_delivery(
+            "ch_1",
+            transition_id="tr_landed",
+            from_node_id="nd_deliver",
+            to_node_id=RESERVED_TERMINAL,
+            choice_name="success",
+            epoch=2,
+            runner_id="hub",
+            at=_at(2),
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=tx,
+        )
+
+    with hub_store_connections(engine).write("read") as conn:
+        causes = conn.execute(hub_scoped(sa.select(s.route_released.c.cause))).scalars().all()
+
+    assert causes == [RouteReleaseCause.DELIVERY.value]
+    rows = store.events.activity_facts_since(_T0, limit=10)
+    assert [r.key for r in rows if r.key.startswith("route_released:")] == []
 
 
 def test_paused_reads_off_chunk_pause_facts(tmp_path: Path) -> None:

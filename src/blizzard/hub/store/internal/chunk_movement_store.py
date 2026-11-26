@@ -21,7 +21,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
-from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, RouteReleaseCause
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository, MigrationWrite, TransitionWrite
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
@@ -253,7 +253,10 @@ class ChunkMovementStore:
         if release_route:
             conn.execute(
                 self._store.insert(s.route_released).values(
-                    chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
+                    chunk_id=chunk_id,
+                    released_at=at,
+                    seq=next_route_seq(conn, chunk_id),
+                    cause=RouteReleaseCause.MIGRATION.value,
                 )
             )
         insert_artifacts(conn, chunk_id, artifacts, at=at)

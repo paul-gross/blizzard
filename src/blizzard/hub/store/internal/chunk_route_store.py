@@ -145,7 +145,7 @@ class ChunkRouteStore:
         chunk_id: str,
         *,
         at: datetime,
-        cause: RouteReleaseCause | None = None,
+        cause: RouteReleaseCause,
         reason: str | None = None,
         expected_runner: RunnerLifecycleVersion | None = None,
         transaction: LockedTransaction,
@@ -158,7 +158,7 @@ class ChunkRouteStore:
                 chunk_id=chunk_id,
                 released_at=at,
                 seq=next_route_seq(conn, chunk_id),
-                cause=None if cause is None else cause.value,
+                cause=cause.value,
                 reason=reason,
             )
         )

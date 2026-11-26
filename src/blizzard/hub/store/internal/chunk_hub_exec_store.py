@@ -17,7 +17,7 @@ from sqlalchemy import Connection
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.wait_kinds import WaitKind
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, RouteReleaseCause
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import HubStepTransitionWrite, IWriteChunkHubExecRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
@@ -127,7 +127,10 @@ class ChunkHubExecStore:
         if release_route:
             conn.execute(
                 self._store.insert(s.route_released).values(
-                    chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
+                    chunk_id=chunk_id,
+                    released_at=at,
+                    seq=next_route_seq(conn, chunk_id),
+                    cause=RouteReleaseCause.HUB_STEP.value,
                 )
             )
         if to_node_id == RESERVED_TERMINAL or any(is_landing_marker(row.name, row.data) for row in artifacts):

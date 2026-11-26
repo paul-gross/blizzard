@@ -88,7 +88,7 @@ class _FakeRouteRepo:
         chunk_id: str,
         *,
         at: datetime,
-        cause: RouteReleaseCause | None = None,
+        cause: RouteReleaseCause,
         reason: str | None = None,
         transaction: LockedTransaction,
     ) -> int:

@@ -12,7 +12,7 @@ from datetime import datetime
 from sqlalchemy import Connection
 
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
-from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, RouteReleaseCause
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.store import schema as s
@@ -64,7 +64,10 @@ class ChunkLifecycleStore:
         if route_of_conn(conn, chunk_id) is not None:
             conn.execute(
                 self._store.insert(s.route_released).values(
-                    chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
+                    chunk_id=chunk_id,
+                    released_at=at,
+                    seq=next_route_seq(conn, chunk_id),
+                    cause=RouteReleaseCause.STOP.value,
                 )
             )
         withdrawn = withdraw_waiting(conn, waiting, outcome="stopped", at=at)
@@ -92,7 +95,10 @@ class ChunkLifecycleStore:
         if route_of_conn(conn, chunk_id) is not None:
             conn.execute(
                 self._store.insert(s.route_released).values(
-                    chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
+                    chunk_id=chunk_id,
+                    released_at=at,
+                    seq=next_route_seq(conn, chunk_id),
+                    cause=RouteReleaseCause.COMPLETE.value,
                 )
             )
         withdrawn = withdraw_waiting(conn, waiting, outcome="completed", at=at)
