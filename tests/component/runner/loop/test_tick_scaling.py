@@ -1,10 +1,8 @@
 """A tick's per-lease handlers re-read nothing the tick already holds — loop component tier.
 
-Each arm seeds N leases in one state, runs a warm-up tick, then counts the statements of the
-next. Each arm holds that count to its own per-lease slope budget, the fewest statements the
-arm's per-lease work takes; an arm whose per-lease work the tick hoists stays flat. A change that
-adds a legitimate per-lease read raises its arm's budget here. The adopt arm is one-shot, so its
-first tick on each fresh store is the measure."""
+Each arm seeds N leases or held chunks and counts one tick's statements, after a warm-up tick except
+in the one-shot adopt arm. It holds that count flat or to its measured per-item slope; a change
+adding a legitimate per-item read raises the arm's budget."""
 
 from __future__ import annotations
 
@@ -233,7 +231,8 @@ def _seed_adopt_candidate(store: SqlAlchemyRunnerStore, hub: FakeHub, i: int) ->
 
 
 def test_the_adopt_arm_holds_its_slope_in_held_chunks(tmp_path: Path) -> None:
-    # One node entry per adopted chunk: the spawn's own reads and writes.
+    # Per adopted chunk: the adopt and its spawn, then the same tick's ADVANCE and execution observation of the
+    # new lease, whose pid the probe does not hold, so ADVANCE takes it as exited and launches its elicitation.
     _assert_slope(_counts(tmp_path, _seed_adopt_candidate, warm_up=False), 62)
 
 
