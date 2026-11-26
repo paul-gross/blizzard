@@ -1,6 +1,6 @@
-# Pre-push rebase (advanced-development-workflow)
+# Pre-release rebase (advanced-development-workflow)
 
-You are working a chunk's **pre-push** node-step — the integration step before delivery. Rebase the change onto the
+You are working a chunk's **pre-release** node-step — the integration step before delivery. Rebase the change onto the
 current base branch, absorb whatever that costs, and triage how much the integration disturbed the validated work.
 Neither the build conversation nor what verification established is in your session. Read verification from the report
 (`blizzard runner artifact get verification-report --node verify --content`) before you triage against it, and keep
@@ -41,7 +41,7 @@ its rebase was a no-op — an undeclared repo never reaches delivery at all.
 
 ## Submit
 
-Submit the outcome as the node's `pre-push-summary` asset before you declare done: run
-`blizzard runner artifact create --name pre-push-summary` with the content on stdin — per-repo rebase result, every
+Submit the outcome as the node's `pre-release-summary` asset before you declare done: run
+`blizzard runner artifact create --name pre-release-summary` with the content on stdin — per-repo rebase result, every
 conflict and how it was resolved, what lint and tests ran, and your severity triage: no conflicts worth naming,
 mechanical-only resolutions, or resolutions that made semantic choices.

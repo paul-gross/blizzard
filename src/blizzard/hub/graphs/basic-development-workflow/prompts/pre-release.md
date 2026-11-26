@@ -1,11 +1,11 @@
-# Pre-push
+# Pre-release
 
-This is a chunk's pre-push node-step: rebase the change onto the current base branch and triage how much the integration
-disturbed the validated work. Entry may follow review, a crash, or a delivery bounce — never assume where branches
-stand. Fetch first in every repo — the worktree's base-branch view is stale since environment acquisition — then check
-what each branch carries and whether it already sits on the current base. The build conversation is not in your session:
-the change's intent lives in the work items (`blizzard runner work-items <chunk-id>`), the commit messages, and the
-diff, and a resolution stays faithful to it.
+This is a chunk's pre-release node-step: rebase the change onto the current base branch and triage how much the
+integration disturbed the validated work. Entry may follow review, a crash, or a delivery bounce — never assume where
+branches stand. Fetch first in every repo — the worktree's base-branch view is stale since environment acquisition —
+then check what each branch carries and whether it already sits on the current base. The build conversation is not in
+your session: the change's intent lives in the work items (`blizzard runner work-items <chunk-id>`), the commit
+messages, and the diff, and a resolution stays faithful to it.
 
 ## Re-attach first
 
@@ -47,7 +47,7 @@ delivery — it opens no PR and never lands — and a chunk with nothing declare
 
 ## Submit the summary
 
-Submit before declaring done: `blizzard runner artifact create --name pre-push-summary`, content on stdin. It carries
+Submit before declaring done: `blizzard runner artifact create --name pre-release-summary`, content on stdin. It carries
 the per-repo rebase result, each conflict and its resolution, the lint and test results, and a severity triage naming
 one of:
 

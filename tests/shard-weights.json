@@ -66240,7 +66240,7 @@
           "seconds": 0.057,
           "weight": 1
         },
-        "tests/unit/hub/graphs/test_basic_harness_workflow_graph.py::test_bas_hwf_four_pools_retier_review_iterate_and_prepush_off_frontier": {
+        "tests/unit/hub/graphs/test_basic_harness_workflow_graph.py::test_bas_hwf_four_pools_retier_review_iterate_and_prerelease_off_frontier": {
           "seconds": 0.06,
           "weight": 1
         },
@@ -66252,7 +66252,7 @@
           "seconds": 0.065,
           "weight": 1
         },
-        "tests/unit/hub/graphs/test_basic_harness_workflow_graph.py::test_bas_hwf_pre_push_redeclares_the_commit_and_produces_retrospective": {
+        "tests/unit/hub/graphs/test_basic_harness_workflow_graph.py::test_bas_hwf_pre_release_redeclares_the_commit_and_produces_retrospective": {
           "seconds": 0.049,
           "weight": 1
         },
@@ -66680,7 +66680,7 @@
           "seconds": 0.007,
           "weight": 1
         },
-        "tests/unit/hub/graphs/test_packaged_prompt_session_claims.py::test_cold_eyes_claim_matches_the_nodes_session[advanced-development-workflow:pre-push]": {
+        "tests/unit/hub/graphs/test_packaged_prompt_session_claims.py::test_cold_eyes_claim_matches_the_nodes_session[advanced-development-workflow:pre-release]": {
           "seconds": 0.006,
           "weight": 1
         },
@@ -66704,7 +66704,7 @@
           "seconds": 0.007,
           "weight": 1
         },
-        "tests/unit/hub/graphs/test_packaged_prompt_session_claims.py::test_cold_eyes_claim_matches_the_nodes_session[basic-development-workflow:pre-push]": {
+        "tests/unit/hub/graphs/test_packaged_prompt_session_claims.py::test_cold_eyes_claim_matches_the_nodes_session[basic-development-workflow:pre-release]": {
           "seconds": 0.007,
           "weight": 1
         },
@@ -66724,7 +66724,7 @@
           "seconds": 0.006,
           "weight": 1
         },
-        "tests/unit/hub/graphs/test_packaged_prompt_session_claims.py::test_cold_eyes_claim_matches_the_nodes_session[basic-harness-workflow:pre-push]": {
+        "tests/unit/hub/graphs/test_packaged_prompt_session_claims.py::test_cold_eyes_claim_matches_the_nodes_session[basic-harness-workflow:pre-release]": {
           "seconds": 0.007,
           "weight": 1
         },
@@ -66804,11 +66804,11 @@
           "seconds": 0.007,
           "weight": 1
         },
-        "tests/unit/hub/graphs/test_packaged_prompts_attach.py::test_asset_producing_node_prompt_names_the_artifact_create_cli[advanced-development-workflow:pre-push:pre-push-summary]": {
+        "tests/unit/hub/graphs/test_packaged_prompts_attach.py::test_asset_producing_node_prompt_names_the_artifact_create_cli[advanced-development-workflow:pre-release:pre-release-summary]": {
           "seconds": 0.007,
           "weight": 1
         },
-        "tests/unit/hub/graphs/test_packaged_prompts_attach.py::test_asset_producing_node_prompt_names_the_artifact_create_cli[advanced-development-workflow:pre-push:retrospective]": {
+        "tests/unit/hub/graphs/test_packaged_prompts_attach.py::test_asset_producing_node_prompt_names_the_artifact_create_cli[advanced-development-workflow:pre-release:retrospective]": {
           "seconds": 0.007,
           "weight": 1
         },
@@ -66848,7 +66848,7 @@
           "seconds": 0.007,
           "weight": 1
         },
-        "tests/unit/hub/graphs/test_packaged_prompts_attach.py::test_asset_producing_node_prompt_names_the_artifact_create_cli[basic-development-workflow:pre-push:pre-push-summary]": {
+        "tests/unit/hub/graphs/test_packaged_prompts_attach.py::test_asset_producing_node_prompt_names_the_artifact_create_cli[basic-development-workflow:pre-release:pre-release-summary]": {
           "seconds": 0.007,
           "weight": 1
         },
@@ -66868,11 +66868,11 @@
           "seconds": 0.007,
           "weight": 1
         },
-        "tests/unit/hub/graphs/test_packaged_prompts_attach.py::test_asset_producing_node_prompt_names_the_artifact_create_cli[basic-harness-workflow:pre-push:pre-push-summary]": {
+        "tests/unit/hub/graphs/test_packaged_prompts_attach.py::test_asset_producing_node_prompt_names_the_artifact_create_cli[basic-harness-workflow:pre-release:pre-release-summary]": {
           "seconds": 0.007,
           "weight": 1
         },
-        "tests/unit/hub/graphs/test_packaged_prompts_attach.py::test_asset_producing_node_prompt_names_the_artifact_create_cli[basic-harness-workflow:pre-push:retrospective]": {
+        "tests/unit/hub/graphs/test_packaged_prompts_attach.py::test_asset_producing_node_prompt_names_the_artifact_create_cli[basic-harness-workflow:pre-release:retrospective]": {
           "seconds": 0.007,
           "weight": 1
         },
@@ -66936,7 +66936,7 @@
           "seconds": 0.008,
           "weight": 1
         },
-        "tests/unit/hub/graphs/test_packaged_prompts_attach.py::test_git_commit_producing_node_prompt_names_the_artifact_commit_cli[advanced-development-workflow:pre-push:commit]": {
+        "tests/unit/hub/graphs/test_packaged_prompts_attach.py::test_git_commit_producing_node_prompt_names_the_artifact_commit_cli[advanced-development-workflow:pre-release:commit]": {
           "seconds": 0.009,
           "weight": 1
         },
@@ -66948,7 +66948,7 @@
           "seconds": 0.009,
           "weight": 1
         },
-        "tests/unit/hub/graphs/test_packaged_prompts_attach.py::test_git_commit_producing_node_prompt_names_the_artifact_commit_cli[basic-development-workflow:pre-push:commit]": {
+        "tests/unit/hub/graphs/test_packaged_prompts_attach.py::test_git_commit_producing_node_prompt_names_the_artifact_commit_cli[basic-development-workflow:pre-release:commit]": {
           "seconds": 0.009,
           "weight": 1
         },
@@ -66960,7 +66960,7 @@
           "seconds": 0.009,
           "weight": 1
         },
-        "tests/unit/hub/graphs/test_packaged_prompts_attach.py::test_git_commit_producing_node_prompt_names_the_artifact_commit_cli[basic-harness-workflow:pre-push:commit]": {
+        "tests/unit/hub/graphs/test_packaged_prompts_attach.py::test_git_commit_producing_node_prompt_names_the_artifact_commit_cli[basic-harness-workflow:pre-release:commit]": {
           "seconds": 0.009,
           "weight": 1
         },
@@ -67028,11 +67028,11 @@
           "seconds": 0.07,
           "weight": 1
         },
-        "tests/unit/hub/graphs/test_packaged_prompts_forge_neutral.py::test_recovery_site_carries_every_obligation_and_outcome[basic-development-workflow/prompts/pre-push.from-deliver.md]": {
+        "tests/unit/hub/graphs/test_packaged_prompts_forge_neutral.py::test_recovery_site_carries_every_obligation_and_outcome[basic-development-workflow/prompts/pre-release.from-deliver.md]": {
           "seconds": 0.07,
           "weight": 1
         },
-        "tests/unit/hub/graphs/test_packaged_prompts_forge_neutral.py::test_recovery_site_carries_every_obligation_and_outcome[basic-harness-workflow/prompts/pre-push.from-deliver.md]": {
+        "tests/unit/hub/graphs/test_packaged_prompts_forge_neutral.py::test_recovery_site_carries_every_obligation_and_outcome[basic-harness-workflow/prompts/pre-release.from-deliver.md]": {
           "seconds": 0.069,
           "weight": 1
         },

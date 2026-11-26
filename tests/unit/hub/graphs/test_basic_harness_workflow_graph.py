@@ -44,7 +44,7 @@ def test_bas_hwf_shape_is_the_six_node_frontier_build_advanced_gate_lane() -> No
         "build",
         "review",
         "iterate",
-        "pre-push",
+        "pre-release",
         "deliver",
         "record-findings",
         "retrospective",
@@ -53,28 +53,28 @@ def test_bas_hwf_shape_is_the_six_node_frontier_build_advanced_gate_lane() -> No
     assert _node(doc, "build").executor is Executor.RUNNER
     assert _node(doc, "review").executor is Executor.RUNNER
     assert _node(doc, "iterate").executor is Executor.RUNNER
-    assert _node(doc, "pre-push").executor is Executor.RUNNER
+    assert _node(doc, "pre-release").executor is Executor.RUNNER
     assert _node(doc, "deliver").executor is Executor.HUB
     assert _node(doc, "record-findings").executor is Executor.HUB
     assert _node(doc, "retrospective").executor is Executor.RUNNER
 
 
-def test_bas_hwf_four_pools_retier_review_iterate_and_prepush_off_frontier() -> None:
+def test_bas_hwf_four_pools_retier_review_iterate_and_prerelease_off_frontier() -> None:
     doc = _doc()
-    assert set(doc.sessions) == {"code", "gate", "iteration", "prepush"}
+    assert set(doc.sessions) == {"code", "gate", "iteration", "prerelease"}
     # Frontier authors once; every gate and loop behind it runs advanced.
     assert doc.sessions["code"].model == ["blizzard:frontier"]
     assert doc.sessions["gate"].model == ["blizzard:advanced"]
     assert doc.sessions["iteration"].model == ["blizzard:advanced"]
-    assert doc.sessions["prepush"].model == ["blizzard:advanced"]
-    # The build, iterate, and pre-push lineages are each bounded — every one can
+    assert doc.sessions["prerelease"].model == ["blizzard:advanced"]
+    # The build, iterate, and pre-release lineages are each bounded — every one can
     # accumulate across its own loop; the gate is only ever reached fresh, so it is not.
     assert doc.sessions["code"].rotate is not None
     assert doc.sessions["iteration"].rotate is not None
-    assert doc.sessions["prepush"].rotate is not None
+    assert doc.sessions["prerelease"].rotate is not None
     assert doc.sessions["gate"].rotate is None
     # A uniform ceiling above every bounded lineage's rotate bound, inert on gate.
-    for pool in ("code", "gate", "iteration", "prepush"):
+    for pool in ("code", "gate", "iteration", "prerelease"):
         assert doc.sessions[pool].compaction_window == "450000"
 
 
@@ -83,12 +83,15 @@ def test_bas_hwf_node_continuity() -> None:
     assert (_node(doc, "build").session, _node(doc, "build").session_source) == (SessionMode.RESUME, "code")
     assert (_node(doc, "review").session, _node(doc, "review").session_source) == (SessionMode.FRESH, "gate")
     assert (_node(doc, "iterate").session, _node(doc, "iterate").session_source) == (SessionMode.RESUME, "iteration")
-    assert (_node(doc, "pre-push").session, _node(doc, "pre-push").session_source) == (SessionMode.RESUME, "prepush")
+    assert (_node(doc, "pre-release").session, _node(doc, "pre-release").session_source) == (
+        SessionMode.RESUME,
+        "prerelease",
+    )
     retrospective = doc.node("retrospective")
     assert retrospective is not None
-    # Explicit, not bare resume: unlike bas-dwf, the prepush lineage never saw build
-    # or iterate, so retrospective must pin the same pool pre-push actually ran on.
-    assert (retrospective.session, retrospective.session_source) == (SessionMode.RESUME, "prepush")
+    # Explicit, not bare resume: unlike bas-dwf, the prerelease lineage never saw build
+    # or iterate, so retrospective must pin the same pool pre-release actually ran on.
+    assert (retrospective.session, retrospective.session_source) == (SessionMode.RESUME, "prerelease")
 
 
 def test_bas_hwf_target_routing_table() -> None:
@@ -101,13 +104,13 @@ def test_bas_hwf_target_routing_table() -> None:
         return {c.name: c.to for c in node.judgement.choices}
 
     assert routes("build") == {"pass": "review", "fail": "build"}
-    assert routes("review") == {"pass": "pre-push", "fail": "iterate"}
+    assert routes("review") == {"pass": "pre-release", "fail": "iterate"}
     assert routes("iterate") == {"pass": "review", "fail": "iterate"}
-    assert routes("pre-push") == {"clean": "deliver", "insignificant": "review", "significant": "iterate"}
+    assert routes("pre-release") == {"clean": "deliver", "insignificant": "review", "significant": "iterate"}
     assert routes("deliver") == {
         "landed": "record-findings",
-        "conflict": "pre-push",
-        "failure": "pre-push",
+        "conflict": "pre-release",
+        "failure": "pre-release",
         "inherited-failure": "iterate",
     }
     assert routes("record-findings") == {
@@ -127,12 +130,12 @@ def test_bas_hwf_produces() -> None:
     assert any(p.name == "retrospective" for p in _node(doc, "retrospective").produces)
 
 
-def test_bas_hwf_pre_push_redeclares_the_commit_and_produces_retrospective() -> None:
+def test_bas_hwf_pre_release_redeclares_the_commit_and_produces_retrospective() -> None:
     doc = _doc()
-    pre_push_produces = {(p.name, p.kind) for p in _node(doc, "pre-push").produces}
-    assert ("commit", ArtifactKind.GIT_COMMIT) in pre_push_produces
-    assert any(p.name == "pre-push-summary" for p in _node(doc, "pre-push").produces)
-    assert any(p.name == "retrospective" for p in _node(doc, "pre-push").produces)
+    pre_release_produces = {(p.name, p.kind) for p in _node(doc, "pre-release").produces}
+    assert ("commit", ArtifactKind.GIT_COMMIT) in pre_release_produces
+    assert any(p.name == "pre-release-summary" for p in _node(doc, "pre-release").produces)
+    assert any(p.name == "retrospective" for p in _node(doc, "pre-release").produces)
 
 
 def test_bas_hwf_review_finding_refutes_is_produced_only_by_iterate() -> None:

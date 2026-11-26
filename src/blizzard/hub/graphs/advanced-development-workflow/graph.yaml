@@ -1,9 +1,9 @@
 # The advanced-development-workflow graph — plan -> plan-review -> build -> verify ->
-# review -> pre-push -> deliver, on one single linear track.
+# review -> pre-release -> deliver, on one single linear track.
 #
 # The heavyweight lane: adopt-or-produce a plan gated on the project's declared
 # verification methods and architecture guidance, build the phases strictly in order,
-# close the build with the verify finale, cold multi-axes review, then a pre-push
+# close the build with the verify finale, cold multi-axes review, then a pre-release
 # rebase: rebase every ahead repo onto the current base branch, resolve conflicts
 # inside the rebase, run lint plus judgement-scoped unit tests, and triage severity —
 # clean proceeds to delivery, insignificant conflicts re-enter review, semantic
@@ -26,11 +26,11 @@ entry: plan
 #                 does.
 #   code          the build lineage — `build` alone — on the basic tier and BOUNDED,
 #                 since it accumulates across every review-fail loop.
-#   integration   the integration lineage — pre-push -> resolve — on the basic tier and
-#                 bounded with `code`'s numbers. Held apart from `code` because every
-#                 resume re-reads the whole lineage: pre-push read ~281 cache tokens per
-#                 output token resuming the build conversation, against far less on the
-#                 cold-started `prepush` pool of basic-harness-workflow. What the cold
+#   integration   the integration lineage — pre-release -> resolve — on the basic tier
+#                 and bounded with `code`'s numbers. Held apart from `code` because every
+#                 resume re-reads the whole lineage: pre-release read ~281 cache tokens
+#                 per output token resuming the build conversation, against far less on the
+#                 cold-started `prerelease` pool of basic-harness-workflow. What the cold
 #                 lineage needs reaches it through the reviewed-plan, the commit messages,
 #                 and the diff rather than through the build conversation.
 #   verification  the verify finale's own lineage, on the basic tier and bounded the same
@@ -261,7 +261,7 @@ nodes:
       choices:
         pass:
           description: The work passes the multi-axes review and nothing blocks this round.
-          to: pre-push
+          to: pre-release
         fail:
           description: Review found findings that block this round, recorded in the review-findings asset.
           to: build
@@ -270,21 +270,21 @@ nodes:
       max: 2
       exhausted: escalate
 
-  pre-push:
+  pre-release:
     executor: runner
-    prompt: ./prompts/pre-push.md
+    prompt: ./prompts/pre-release.md
     session: resume:integration  # integration is mechanical (rebase, lint, targeted
       # tests), not a judgement call — it works from the branch and the reviewed-plan,
       # so it keeps its own lineage rather than re-reading the build conversation
     produces:
-      - pre-push-summary
+      - pre-release-summary
       - retrospective
       # A rebase REWRITES the branch, so the commit `build` declared is orphaned the
       # moment this node runs. Re-declaring here is what lets `deliver` open its PR
       # against the rebased tip instead of the stale, orphaned one.
       - {name: commit, kind: git_commit}
     judgement:
-      prompt: ./prompts/pre-push.judgement.md
+      prompt: ./prompts/pre-release.judgement.md
       choices:
         clean:
           description: The rebase applied with no conflicts (or trivial mechanical ones) and lint plus the targeted unit tests are green.
@@ -292,11 +292,11 @@ nodes:
         insignificant:
           description: Conflicts were resolved without semantic choices; the rebased result re-enters review for cold eyes.
           to: review
-          prompt_addendum: ./prompts/review.from-pre-push.md
+          prompt_addendum: ./prompts/review.from-pre-release.md
         significant:
           description: Conflict resolution required semantic choices or the rebase reshaped the change; the work re-earns its verification.
           to: verify
-          prompt_addendum: ./prompts/verify.from-pre-push.md
+          prompt_addendum: ./prompts/verify.from-pre-release.md
     retries:
       max: 2
       exhausted: escalate
@@ -314,7 +314,7 @@ nodes:
           description: Every repo's PR merged cleanly into its base branch; routed to record-findings before the chunk closes with a retrospective.
           to: record-findings
         conflict:
-          description: A repo's PR read dirty — a real merge conflict — routed immediately, without waiting out poll_timeout; sent to resolve to base-merge without discarding the validated verify/review/pre-push spine.
+          description: A repo's PR read dirty — a real merge conflict — routed immediately, without waiting out poll_timeout; sent to resolve to base-merge without discarding the validated verify/review/pre-release spine.
           to: resolve
         failure:
           description: A repo's check run completed with a terminal conclusion the base branch does not share on that check, poll_timeout exceeded with a repo never going cleanly mergeable, a PR head carrying a commit beyond the submitted one and its own base merges (a foreign advance), or the land pass itself raised; routed to resolve to diagnose and repair without discarding the validated spine.
@@ -329,14 +329,14 @@ nodes:
     prompt: ./prompts/resolve.md
     session: resume:integration  # mechanical (base-merge, self-clearing forge state),
       # not a judgement call — deliver is a hub node with no session, so the
-      # `integration` lineage, pre-push's, is the closest context holding the
+      # `integration` lineage, pre-release's, is the closest context holding the
       # branch/rebase history
     produces:
       - resolve-report
       - retrospective
       # `resolved` routes straight back to `deliver`, and clearing a delivery blocker
       # (a base-merge, a re-push) moves the branch — so this node re-declares its tip for
-      # the same reason `pre-push` does.
+      # the same reason `pre-release` does.
       - {name: commit, kind: git_commit}
     judgement:
       prompt: ./prompts/resolve.judgement.md

@@ -5,7 +5,7 @@ not change the delivered code; name files and findings, not vibes.
 
 ## Gather the record
 
-Read the asset trail — the chunk's work item(s), the review findings, and the pre-push summary — and read
+Read the asset trail — the chunk's work item(s), the review findings, and the pre-release summary — and read
 `blizzard runner chunk history`, which lists transitions and bounces oldest-first, including bounced attempts that
 produced no artifact. This lane keeps no per-node retrospective diary to synthesize.
 

@@ -9,7 +9,7 @@ tip, and declare done again.
 - Record each refutation in `review-finding-refutes`: the finding's anchor (`<repo>/<path>:<line>`) copied verbatim, the
   id answered, and the argument with evidence. The reviewer matches on the anchor, since every pass renumbers ids.
 - Commit each repair on top of the reviewed tip — never amend, rebase, or merge the base branch; integration is
-  `pre-push`'s.
+  `pre-release`'s.
 
 The finding format this restates is retrievable directly:
 `blizzard runner artifact get --scope system review/finding-format --content`. If that read fails or comes back empty,
