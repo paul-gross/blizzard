@@ -501,6 +501,7 @@ def test_an_unrecognized_compaction_window_logs_once_per_value_and_is_ignored(tm
     adapter, _ = _adapter(tmp_path)
     with capture_logs() as logs:
         assert adapter.resolve_compaction_window("150k tokens") is None
+        assert adapter.resolve_compaction_window("150k tokens") is None
         assert adapter.resolve_compaction_window("half") is None
         assert adapter.resolve_compaction_window("8K") == "8K"
         assert adapter.resolve_compaction_window(None) is None
