@@ -6,7 +6,9 @@ window and the per-source ``limit`` bound, against a real store."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 from typing import get_args
 
@@ -20,11 +22,14 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.model import ActivityEntry, DecisionChoice, RouteReleaseCause, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerAddition
 from blizzard.hub.domain.runners.route import Route
+from blizzard.hub.store.internal.chunk_events_store import EVENT_SOURCES
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from blizzard.hub.store.transactions import HubTransactions
 from tests.support.scaffolding import (
     chunk_stores,
     chunk_unit,
@@ -65,6 +70,171 @@ def _row_for(store: ChunkStores, cause: str, *, since: datetime = _T0, limit: in
     return rows[0]
 
 
+# --- seeders writing through the store's own writers ----------------------------------------------------------
+
+
+def _seed_claim(store: ChunkStores, engine: sa.Engine) -> None:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.route.record_route(
+            Route(chunk_id="ch_1", runner_id="runner-a", workspace_id="ws-a", environment_ids=[], created_at=_at(1)),
+            token_hash="deadbeef",
+            at=_at(1),
+            transaction=tx,
+        )
+
+
+def _seed_transition(store: ChunkStores, engine: sa.Engine, *, runner_id: str, choice_name: str | None) -> None:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.movement.record_transition(
+            transition_id="tr_1",
+            chunk_id="ch_1",
+            from_node_id=None,
+            to_node_id="nd_b",
+            choice_name=choice_name,
+            epoch=1,
+            runner_id=runner_id,
+            at=_at(1),
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=tx,
+        )
+
+
+def _seed_migration(store: ChunkStores, engine: sa.Engine) -> None:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.movement.record_migration(
+            "ch_1",
+            from_node_id=None,
+            from_graph_id="gr_1",
+            to_graph_id="gr_2",
+            landed_node_id=None,
+            choice_name="reroute",
+            model=None,
+            epoch=1,
+            at=_at(1),
+            artifacts=[],
+            source=MigrationSource.AUTHORED_EDGE,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=tx,
+        )
+
+
+def _seed_decision(store: ChunkStores, engine: sa.Engine) -> None:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.decisions.record_decision(
+            imposed_by_runner_id=None,
+            decision_id="dec_1",
+            chunk_id="ch_1",
+            node_id="nd_gate",
+            node_name="gate",
+            epoch=1,
+            choices=[DecisionChoice(name="go", description="go")],
+            at=_at(1),
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=tx,
+        )
+
+
+def _seed_decision_resolution(store: ChunkStores, engine: sa.Engine) -> None:
+    _seed_decision(store, engine)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
+        store.decisions.record_decision_resolution(
+            "dec_1", choice="go", resolved_by="alice", at=_at(2), transaction=unit
+        )
+
+
+def _seed_question(store: ChunkStores, engine: sa.Engine) -> None:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.questions.record_question(
+            question_id="qn_1",
+            chunk_id="ch_1",
+            node_id="nd_a",
+            session_id=None,
+            runner_id="runner-a",
+            epoch=1,
+            question="continue?",
+            options=[],
+            asked_at=_at(1),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=tx,
+        )
+
+
+def _seed_question_answer(store: ChunkStores, engine: sa.Engine) -> None:
+    _seed_question(store, engine)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
+        store.questions.answer_question("qn_1", answer="yes", answered_by="alice", at=_at(2), transaction=unit)
+
+
+def _seed_escalation(store: ChunkStores, engine: sa.Engine) -> None:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.escalations.record_escalation(
+            "ch_1",
+            epoch=1,
+            takeover_command="cd x && resume",
+            at=_at(1),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            cause=None,
+            detail=None,
+            transaction=tx,
+        )
+
+
+def _seed_requeue(store: ChunkStores, engine: sa.Engine) -> None:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.movement.record_requeue("ch_1", at=_at(1), transaction=tx)
+
+
+def _seed_release(store: ChunkStores, engine: sa.Engine) -> None:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.route.record_route_released("ch_1", at=_at(1), transaction=tx)
+
+
+def _seed_restart(store: ChunkStores, engine: sa.Engine) -> None:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.movement.record_restart(
+            "ch_1",
+            from_node_id=None,
+            to_node_id="nd_build",
+            by="alice",
+            at=_at(1),
+            waiting=(),
+            transaction=tx,
+        )
+
+
+def _seed_stop(store: ChunkStores, engine: sa.Engine) -> None:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.lifecycle.record_stop("ch_1", by="alice", at=_T0, waiting=(), transaction=tx)
+
+
+def _seed_completion(store: ChunkStores, engine: sa.Engine) -> None:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.lifecycle.record_completion(
+            "ch_1",
+            by="alice",
+            at=_T0,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            waiting=(),
+            transaction=tx,
+        )
+
+
+def _seed_demotion(store: ChunkStores, engine: sa.Engine) -> None:
+    with HubTransactions(hub_store_connections(engine)).begin() as transaction:
+        locked = transaction.lock_set(chunks=["ch_1"], keys=[BACKLOG_RANKING_LOCK])
+        store.queue.record_demote_with_position("ch_1", position=1.0, at=_at(1), transaction=locked)
+
+
 # --- one case per mapped ChunkChangeCause member -----------------------------
 
 
@@ -101,13 +271,7 @@ def test_grouped_reads_off_chunk_grouped(tmp_path: Path) -> None:
 
 def test_claimed_reads_off_route_created(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
-        store.route.record_route(
-            Route(chunk_id="ch_1", runner_id="runner-a", workspace_id="ws-a", environment_ids=[], created_at=_at(1)),
-            token_hash="deadbeef",
-            at=_at(1),
-            transaction=tx,
-        )
+    _seed_claim(store, engine)
     row = _row_for(store, "claimed")
     assert row.chunk_id == "ch_1"
     assert row.runner_id == "runner-a"
@@ -117,22 +281,7 @@ def test_claimed_reads_off_route_created(tmp_path: Path) -> None:
 
 def test_node_completed_reads_off_transitions_authored_by_a_runner(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
-        store.movement.record_transition(
-            transition_id="tr_1",
-            chunk_id="ch_1",
-            from_node_id=None,
-            to_node_id="nd_b",
-            choice_name="approve",
-            epoch=1,
-            runner_id="runner-a",
-            at=_at(1),
-            artifacts=[],
-            admission=EpochAdmission.AT_OR_ABOVE,
-            terminal=False,
-            close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=tx,
-        )
+    _seed_transition(store, engine, runner_id="runner-a", choice_name="approve")
     row = _row_for(store, "node-completed")
     assert row.chunk_id == "ch_1"
     assert row.runner_id == "runner-a"
@@ -142,22 +291,7 @@ def test_node_completed_reads_off_transitions_authored_by_a_runner(tmp_path: Pat
 
 def test_hub_advanced_reads_off_transitions_authored_by_the_hub_coordinator(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
-        store.movement.record_transition(
-            transition_id="tr_1",
-            chunk_id="ch_1",
-            from_node_id=None,
-            to_node_id="nd_b",
-            choice_name=None,
-            epoch=1,
-            runner_id="hub",
-            at=_at(1),
-            artifacts=[],
-            admission=EpochAdmission.AT_OR_ABOVE,
-            terminal=False,
-            close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=tx,
-        )
+    _seed_transition(store, engine, runner_id="hub", choice_name=None)
     row = _row_for(store, "hub-advanced")
     assert row.chunk_id == "ch_1"
     assert row.runner_id == "hub"
@@ -167,24 +301,7 @@ def test_hub_advanced_reads_off_transitions_authored_by_the_hub_coordinator(tmp_
 
 def test_migrated_reads_off_chunk_migrations(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
-        store.movement.record_migration(
-            "ch_1",
-            from_node_id=None,
-            from_graph_id="gr_1",
-            to_graph_id="gr_2",
-            landed_node_id=None,
-            choice_name="reroute",
-            model=None,
-            epoch=1,
-            at=_at(1),
-            artifacts=[],
-            source=MigrationSource.AUTHORED_EDGE,
-            admission=EpochAdmission.AT_OR_ABOVE,
-            terminal=False,
-            close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=tx,
-        )
+    _seed_migration(store, engine)
     row = _row_for(store, "migrated")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_2"  # the migration's target graph, not the one migrated out of
@@ -193,22 +310,7 @@ def test_migrated_reads_off_chunk_migrations(tmp_path: Path) -> None:
 
 def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
-        store.decisions.record_decision(
-            imposed_by_runner_id=None,
-            decision_id="dec_1",
-            chunk_id="ch_1",
-            node_id="nd_gate",
-            node_name="gate",
-            epoch=1,
-            choices=[DecisionChoice(name="go", description="go")],
-            at=_at(1),
-            artifacts=[],
-            admission=EpochAdmission.AT_OR_ABOVE,
-            terminal=False,
-            close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=tx,
-        )
+    _seed_decision(store, engine)
     row = _row_for(store, "decision-submitted")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -217,26 +319,7 @@ def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
 
 def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
-        store.decisions.record_decision(
-            imposed_by_runner_id=None,
-            decision_id="dec_1",
-            chunk_id="ch_1",
-            node_id="nd_gate",
-            node_name="gate",
-            epoch=1,
-            choices=[DecisionChoice(name="go", description="go")],
-            at=_at(1),
-            artifacts=[],
-            admission=EpochAdmission.AT_OR_ABOVE,
-            terminal=False,
-            close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=tx,
-        )
-    with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
-        store.decisions.record_decision_resolution(
-            "dec_1", choice="go", resolved_by="alice", at=_at(2), transaction=unit
-        )
+    _seed_decision_resolution(store, engine)
     row = _row_for(store, "decision-resolved")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -245,21 +328,7 @@ def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> Non
 
 def test_question_asked_reads_off_questions(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
-        store.questions.record_question(
-            question_id="qn_1",
-            chunk_id="ch_1",
-            node_id="nd_a",
-            session_id=None,
-            runner_id="runner-a",
-            epoch=1,
-            question="continue?",
-            options=[],
-            asked_at=_at(1),
-            admission=EpochAdmission.AT_OR_ABOVE,
-            terminal=False,
-            transaction=tx,
-        )
+    _seed_question(store, engine)
     row = _row_for(store, "question-asked")
     assert row.chunk_id == "ch_1"
     assert row.runner_id == "runner-a"
@@ -269,23 +338,7 @@ def test_question_asked_reads_off_questions(tmp_path: Path) -> None:
 
 def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
-        store.questions.record_question(
-            question_id="qn_1",
-            chunk_id="ch_1",
-            node_id="nd_a",
-            session_id=None,
-            runner_id="runner-a",
-            epoch=1,
-            question="continue?",
-            options=[],
-            asked_at=_at(1),
-            admission=EpochAdmission.AT_OR_ABOVE,
-            terminal=False,
-            transaction=tx,
-        )
-    with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
-        store.questions.answer_question("qn_1", answer="yes", answered_by="alice", at=_at(2), transaction=unit)
+    _seed_question_answer(store, engine)
     row = _row_for(store, "question-answered")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -294,18 +347,7 @@ def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
 
 def test_escalated_reads_off_escalations(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
-        store.escalations.record_escalation(
-            "ch_1",
-            epoch=1,
-            takeover_command="cd x && resume",
-            at=_at(1),
-            admission=EpochAdmission.AT_OR_ABOVE,
-            terminal=False,
-            cause=None,
-            detail=None,
-            transaction=tx,
-        )
+    _seed_escalation(store, engine)
     row = _row_for(store, "escalated")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -314,12 +356,7 @@ def test_escalated_reads_off_escalations(tmp_path: Path) -> None:
 
 def test_requeued_reads_off_requeues(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
-        store.movement.record_requeue(
-            "ch_1",
-            at=_at(1),
-            transaction=tx,
-        )
+    _seed_requeue(store, engine)
     row = _row_for(store, "requeued")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -328,8 +365,7 @@ def test_requeued_reads_off_requeues(tmp_path: Path) -> None:
 
 def test_detached_reads_off_route_released(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
-        store.route.record_route_released("ch_1", at=_at(1), transaction=tx)
+    _seed_release(store, engine)
     row = _row_for(store, "detached")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -393,8 +429,7 @@ def test_resumed_reads_off_chunk_pause_facts(tmp_path: Path) -> None:
 
 def test_stopped_reads_off_chunk_stopped(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
-        store.lifecycle.record_stop("ch_1", by="alice", at=_T0, waiting=(), transaction=tx)
+    _seed_stop(store, engine)
     row = _row_for(store, "stopped")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -403,15 +438,7 @@ def test_stopped_reads_off_chunk_stopped(tmp_path: Path) -> None:
 
 def test_completed_reads_off_chunk_completed(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
-        store.lifecycle.record_completion(
-            "ch_1",
-            by="alice",
-            at=_T0,
-            close_decision=decide_close_enqueue([], lambda _: True),
-            waiting=(),
-            transaction=tx,
-        )
+    _seed_completion(store, engine)
     row = _row_for(store, "completed")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -420,16 +447,7 @@ def test_completed_reads_off_chunk_completed(tmp_path: Path) -> None:
 
 def test_restarted_reads_off_chunk_restarts(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
-        store.movement.record_restart(
-            "ch_1",
-            from_node_id=None,
-            to_node_id="nd_build",
-            by="alice",
-            at=_at(1),
-            waiting=(),
-            transaction=tx,
-        )
+    _seed_restart(store, engine)
     row = _row_for(store, "restarted")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -458,6 +476,48 @@ def test_deleted_chunk_shows_only_its_own_deletion_row(tmp_path: Path) -> None:
     causes = {r.cause for r in store.events.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_1"}
 
     assert causes == {"deleted"}
+
+
+#: How to give a chunk one fact in each source that filters deleted chunks out, keyed by the source's table.
+_DELETABLE_FACTS: dict[str, Callable[[ChunkStores, sa.Engine], object]] = {
+    "chunk_promoted": lambda store, engine: seed_promote(store, engine, "ch_1", at=_at(1)),
+    "chunk_demoted": _seed_demotion,
+    "route_created": _seed_claim,
+    "transitions": partial(_seed_transition, runner_id="runner-a", choice_name="approve"),
+    "chunk_migrations": _seed_migration,
+    "chunk_restarts": _seed_restart,
+    "decisions": _seed_decision,
+    "decision_resolutions": _seed_decision_resolution,
+    "questions": _seed_question,
+    "question_answers": _seed_question_answer,
+    "escalations": _seed_escalation,
+    "requeues": _seed_requeue,
+    "route_released": _seed_release,
+    "chunk_pause_facts": lambda store, _: store.lifecycle.record_pause("ch_1", paused=True, by="alice", at=_at(1)),
+    "chunk_stopped": _seed_stop,
+    "chunk_completed": _seed_completion,
+}
+
+
+def test_every_source_that_filters_deleted_chunks_has_a_deletion_case() -> None:
+    """Grouping needs no deletion case, since a grouped chunk cannot be deleted, and the deletion row is the one a
+    deletion keeps."""
+    unfiltered = {"chunk_grouped", "chunk_deleted"}
+    assert set(_DELETABLE_FACTS) == {table.name for table in EVENT_SOURCES} - unfiltered
+
+
+@pytest.mark.parametrize("source", sorted(_DELETABLE_FACTS))
+def test_a_deleted_chunks_fact_is_suppressed_in_every_source(tmp_path: Path, source: str) -> None:
+    store, engine = _store(tmp_path)
+    _DELETABLE_FACTS[source](store, engine)
+    before = store.events.activity_facts_since(_T0, limit=50)
+    assert any(r.key.startswith(f"{source}:") for r in before), f"no {source} row to suppress: {before}"
+    with hub_store_connections(engine).write("seed") as conn:
+        record_deleted_row(conn, "ch_1", by="alice", at=_at(3))
+
+    rows = store.events.activity_facts_since(_T0, limit=50)
+
+    assert [r.cause for r in rows if r.chunk_id == "ch_1"] == ["deleted"]
 
 
 def test_grouped_chunks_history_is_unaffected_by_the_deleted_exclusion(tmp_path: Path) -> None:

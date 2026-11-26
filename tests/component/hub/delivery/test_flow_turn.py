@@ -19,7 +19,7 @@ from sqlalchemy import insert, select, update
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.delivery.action_registry import HubActions
-from blizzard.hub.delivery.flow_turn import TurnRunner
+from blizzard.hub.delivery.flow_turn import BUILD_BOUND_SECONDS, TurnRunner
 from blizzard.hub.domain.actions.check_observations import missing_checks
 from blizzard.hub.domain.actions.effects import ActionEscalation, IEffectSink, Marker, Pass
 from blizzard.hub.domain.actions.visit import Visit
@@ -305,8 +305,12 @@ def test_three_cut_offs_in_a_row_escalate_the_fourth_turn_one_epoch_up(tmp_path:
     detail = world.detail(chunk_id)
     assert detail["status"] == "needs_human"
     with world.hub.engine.connect() as conn:
-        cause, epoch = conn.execute(hub_scoped(select(s.escalations.c.cause, s.escalations.c.epoch))).one()
+        cause, epoch, stuck = conn.execute(
+            hub_scoped(select(s.escalations.c.cause, s.escalations.c.epoch, s.escalations.c.detail))
+        ).one()
     assert (cause, epoch) == ("hub-action-stuck", 2)
+    assert "hub action `test.block` at node `step`" in stuck
+    assert f"at its 0.6s pass deadline or its {BUILD_BOUND_SECONDS:g}s build bound" in stuck
 
 
 def test_an_interrupted_turn_neither_counts_toward_the_run_nor_resets_it(tmp_path: Path) -> None:
