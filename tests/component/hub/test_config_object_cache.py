@@ -5,6 +5,7 @@ built object is a stand-in client holding the record's fields and its revealed t
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -195,6 +196,27 @@ def test_a_cold_cache_and_a_second_cache_build_equivalent_objects(world: _World)
 
     assert warm is not None and other is not None
     assert (other.locator, other.annotate, other.token) == (warm.locator, warm.annotate, warm.token)
+
+
+def test_a_close_landing_inside_a_build_closes_what_it_built_and_keeps_nothing(world: _World) -> None:
+    """A finalizer can run ``close`` on the building thread, which already holds the cache's lock."""
+    built: list[_Client | None] = []
+
+    def build() -> _Client:
+        world.live.objects.close()
+        return _Client("locator", False, "token")
+
+    def hand_out() -> None:
+        built.append(world.live.objects.get(RecordKind.WORK_SOURCE, world.source_id, build))
+
+    # A daemon thread, so a deadlock fails this test rather than hanging the run.
+    thread = threading.Thread(target=hand_out, daemon=True)
+    thread.start()
+    thread.join(timeout=30)
+
+    assert not thread.is_alive()
+    assert built[0] is not None and built[0].closed
+    assert world.client() is not built[0]
 
 
 def test_an_unknown_record_builds_nothing(world: _World) -> None:

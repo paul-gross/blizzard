@@ -14,8 +14,11 @@ from blizzard.hub.domain.actions.check_observations import (
     marker_name,
     missing_checks,
     observation,
+    overtaken_by_checks,
+    superseded_name,
     timeout_observation,
 )
+from blizzard.hub.domain.artifact.model import StoredArtifact
 from tests.support.land_action_doubles import _row  # pyright: ignore[reportPrivateUsage]
 
 
@@ -33,7 +36,26 @@ def test_observation_scoping_and_historical_timeout() -> None:
     result = timeout_observation((marker,), marker.node_id, 1)
     assert result is not None and result.cause == EscalationCause.MISSING_CHECKS
     assert "sha1" in result.detail and now.isoformat() in result.detail
-    assert "not reconfirmed" in result.detail
+    assert "overall deadline expired" in result.detail
+
+
+def test_a_superseded_observation_no_longer_times_out_as_missing_checks() -> None:
+    now = datetime(2026, 1, 2, tzinfo=UTC)
+
+    def observed(sha: str) -> StoredArtifact:
+        return _row(ArtifactKind.ASSET, marker_name("re_1", sha), marker_content("org/repo", "fast-forward", sha, now))
+
+    first, second = observed("sha1"), observed("sha2")
+    read = _row(ArtifactKind.ASSET, superseded_name("re_1", "sha1"), "sha1")
+    newest = timeout_observation((first, second), first.node_id, 1)
+    assert newest is not None and "sha2" in newest.detail
+    assert overtaken_by_checks((first, second), 1, "re_1") == ("sha1", "sha2")
+    assert overtaken_by_checks((first, second, read), 1, "re_1") == ("sha2",)
+    assert overtaken_by_checks((first,), 1, "re_2") == ()
+    assert overtaken_by_checks((first,), 2, "re_1") == ()
+    assert timeout_observation((first, read), first.node_id, 1) is None
+    left = timeout_observation((first, second, read), first.node_id, 1)
+    assert left is not None and "sha2" in left.detail
 
 
 def test_observation_uses_first_marker_in_current_epoch() -> None:

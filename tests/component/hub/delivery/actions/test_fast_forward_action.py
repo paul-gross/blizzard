@@ -8,8 +8,17 @@ import pytest
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.landing_policy import LandingPolicy
-from blizzard.hub.forge.landing import CheckOutcome, CommitSummary, ComparisonStatus, FileChange, ForgeRejected
-from tests.support.github_double import RED, check, comparison
+from blizzard.hub.domain.actions.visit import Visit
+from blizzard.hub.forge.landing import (
+    Check,
+    CheckOutcome,
+    CommitSummary,
+    ComparisonStatus,
+    FileChange,
+    ForgeRejected,
+    Mergeability,
+)
+from tests.support.github_double import RED, GitHubDouble, check, comparison
 from tests.support.land_action_doubles import (
     _GADGET,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
     _SUBMITTED,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
@@ -284,3 +293,35 @@ def test_an_unreadable_containment_comparison_is_not_proof(missing: tuple[str, s
     assert answer.choice == "pending"
     assert sink.landings() == []
     assert not any(name.startswith("no-code/") for name in sink.markers())
+
+
+def _beside_a_conflict(widget_checks: tuple[Check, ...], base_checks: tuple[Check, ...]) -> tuple[GitHubDouble, Visit]:
+    """A fast-forward ``widget`` beside a conflicting ``gadget``, whose conflict ends the visit."""
+    forge = _forge(_WIDGET, _GADGET)
+    state = forge.repo(_WIDGET)
+    state.compares[("base-tip", _SUBMITTED)] = comparison(ComparisonStatus.AHEAD)
+    state.heads["main"] = "base-tip"
+    state.checks[_SUBMITTED] = widget_checks
+    state.checks["base-tip"] = base_checks
+    forge.repo(_GADGET).mergeability = Mergeability.CONFLICTING
+    visit = _visit((_WIDGET, _GADGET))
+    widget, gadget = visit.resolution.targets
+    targets = (replace(widget, landing_policy=LandingPolicy.FAST_FORWARD), gadget)
+    return forge, replace(visit, resolution=replace(visit.resolution, targets=targets))
+
+
+@pytest.mark.parametrize(
+    "checks,base_checks",
+    [((check("e2e", CheckOutcome.PENDING, "in_progress"),), ()), (RED, RED)],
+    ids=["candidate-wait", "inherited-wait"],
+)
+def test_a_waiting_candidates_checks_are_listed_when_the_visit_ends_beside_it(
+    checks: tuple[Check, ...], base_checks: tuple[Check, ...]
+) -> None:
+    forge, visit = _beside_a_conflict(checks, base_checks)
+
+    answer, sink = _land(forge, visit)
+
+    assert answer.choice == "conflict"
+    findings = sink.markers()["delivery-findings"]
+    assert f"## {_WIDGET}#- — feat/x\nChecks:\n  - {checks[0].name}: {checks[0].detail}" in findings

@@ -13,6 +13,7 @@ from types import MappingProxyType
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.actions.declarations import GitCommits, UnconvergedDeliveryError
+from blizzard.hub.domain.actions.effects import Pass
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import LandedRepos, WorkRef
 from blizzard.hub.domain.chunk.no_code import finished_repos, no_code_marker, no_code_repos
@@ -152,7 +153,8 @@ class Visit:
     """Everything a pass reads, fixed as the visit starts. ``markers`` are the artifacts recorded at this
     node across every epoch, so a re-visit sees what earlier visits wrote; ``work_items`` are one
     ``{label, reference}`` mapping per work ref. ``first_turn_at`` is when the visit's first turn started, across
-    every generation of its submissions; ``now`` is the driver's clock as it built the visit."""
+    every generation of its submissions; ``now`` is the driver's clock as it built the visit. ``final_pass`` marks
+    the pass taken past the node's poll deadline, whose ``pending`` answer ends the visit."""
 
     chunk: VisitChunk
     node: VisitNode
@@ -167,6 +169,16 @@ class Visit:
     project: LandingProject
     first_turn_at: datetime
     now: datetime
+    final_pass: bool = False
+
+    def times_out(self, answer: Pass) -> bool:
+        """Whether ``answer`` leaves this visit to its poll timeout: the final pass still ``pending``.
+        ``awaiting-merge`` is never charged against the deadline."""
+        return self.final_pass and answer.escalation is None and answer.choice == "pending"
+
+    def ends_with(self, answer: Pass) -> bool:
+        """Whether ``answer`` is the visit's last: any answer but a reserved wait, or one that times it out."""
+        return not answer.waits() or self.times_out(answer)
 
     def marker_names(self) -> frozenset[str]:
         """The names of the markers recorded at this node, in any epoch."""
@@ -175,6 +187,10 @@ class Visit:
     def landed_repos(self) -> frozenset[str]:
         """The repos landed anywhere in the chunk's delivery — a non-blank ``merged/<repo>`` at any node."""
         return LandedRepos.of(self.artifacts).names
+
+    def visit_landings(self) -> Mapping[str, str]:
+        """The revision of each repository landed at this node in this epoch, read from its marker."""
+        return MappingProxyType(LandedRepos.of(tuple(row for row in self.markers if row.epoch == self.epoch)).shas)
 
     def no_code_repos(self) -> frozenset[str]:
         """Current declarations resolved without a merge at this node."""

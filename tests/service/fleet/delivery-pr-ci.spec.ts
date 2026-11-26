@@ -96,18 +96,12 @@ test('test_pr_ci_pends_on_blocked_then_lands_when_green', async ({ repository, i
   expect(pending.landed_repos).toEqual([]);
   expect((await api.get('/api/chunks')).body.chunks.find((s: { chunk_id: string }) => s.chunk_id === chunk.chunk_id).open_prs).toEqual([reference]);
   expect((await forge.call('GET', new URL(reference.url).pathname)).status).toBe(200);
-  const findings = pending.artifacts.filter((a) => a.name === 'delivery-findings');
-  expect(findings).toHaveLength(1);
-  const content = findings[0]!.content || '';
-  expect(content).toContain(repo.name);
-  expect(content.toLowerCase()).toContain('ci');
+  const visitRecords = (detail: Wire.ChunkDetail) =>
+    detail.artifacts.filter((a) => a.name === 'delivery-findings' || a.name === 'hub-log.land');
+  expect(visitRecords(pending)).toHaveLength(0);
   const second = await nextPoll(api, chunk.chunk_id, pending.pending!.next_poll_at);
   const third = await nextPoll(api, chunk.chunk_id, second.pending!.next_poll_at);
-  for (const detail of [second, third]) {
-    const rows = detail.artifacts.filter((a) => a.name === 'delivery-findings');
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.content || '').toBe(content);
-  }
+  for (const detail of [second, third]) expect(visitRecords(detail)).toHaveLength(0);
   await lever(forge, repo, 'checks_pending', 'DELETE');
   const done = await drive(host, api, chunk.chunk_id, (s) => ['done', 'needs_human'].includes(s.status));
   expect(done.status).toBe('done');
@@ -125,6 +119,14 @@ test('test_pr_ci_pends_on_blocked_then_lands_when_green', async ({ repository, i
   expect(history![0]!.parents).toEqual([before, opened[0]!.head.sha]);
   expect(done.landed_repos[0]!.commit_hash).toBe(after);
   expect(await host.originLog(repo.name, 'main', 'PR_CI_LANDED.md')).toHaveLength(1);
+  const findings = done.artifacts.filter((a) => a.name === 'delivery-findings');
+  expect(findings).toHaveLength(1);
+  expect(findings[0]!.content).toContain(`Landed at ${after}:`);
+  expect(findings[0]!.content).toContain('success');
+  expect(findings[0]!.content).not.toContain('unfinished');
+  const log = done.artifacts.filter((a) => a.name === 'hub-log.land');
+  expect(log).toHaveLength(1);
+  expect(log[0]!.content).toContain(`landed at ${after}`);
 });
 
 test.describe('failure in two owned worlds', () => {
@@ -150,6 +152,7 @@ test.describe('failure in two owned worlds', () => {
     expect(findings).toBeDefined();
     expect(findings!.content).toContain(first.name);
     expect(findings!.content).toContain('failure');
+    expect(findings!.content).not.toContain('unfinished');
     expect(findings!.content).not.toContain('not this change');
     expect(await firstHost.originHead(first.name, 'main')).toBe(mainBefore);
 
@@ -567,6 +570,9 @@ test.describe('poll timeout, on the controlled clock', () => {
     expect(bounced.bounces[0]!.cause).toBe('poll-timeout');
     expect(bounced.landed).toBe(false);
     expect(bounced.current_node_name).toBe('build');
+    const findings = bounced.artifacts.filter((artifact) => artifact.name === 'delivery-findings');
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.content).toContain('unfinished when the visit ended');
     const opened = await pulls(forge, repo);
     expect(opened.length).toBeGreaterThan(0);
     expect(opened.some((pull) => pull.merged)).toBe(false);

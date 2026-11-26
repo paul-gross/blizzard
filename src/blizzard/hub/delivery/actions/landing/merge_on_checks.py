@@ -356,10 +356,15 @@ async def _routed(pull: PullRequest) -> RepoState:
     route = Route(pull.mergeability, merged=pull.merged, landed_revision=pull.change.merged_revision)
     verdict = await read_verdict(repo, head_sha) if route.reads_verdict else None
     route = replace(route, verdict=verdict)
+    findings: dict[str, Any] | None = None
+    if verdict is not None and verdict.checks is not None:
+        findings = pull.record(WAIT, checks=verdict.rows())
     if route.asks_eligibility:
         assert verdict is not None
         eligible = await eligibility(repo, head_sha, verdict)
-        if isinstance(eligible, (Waiting, NeedsPerson)):
+        if isinstance(eligible, Waiting):
+            return replace(eligible, findings=findings)
+        if isinstance(eligible, NeedsPerson):
             return eligible
         route = replace(route, admitted_empty=eligible is True)
     decision = route.decision
@@ -407,17 +412,13 @@ async def _routed(pull: PullRequest) -> RepoState:
         run.say(f"{pull} behind — update from its base requested ({answered}); re-polling")
         return Waiting(f"{pull} behind")
     if decision == WAIT:
-        findings: dict[str, Any] | None = None
-        if verdict is not None:
-            # A degraded CI read falls through to the plain wait below.
-            if verdict.decision == FAILED:
-                return await _failed(pull, verdict, verdict.failure_rows(await read_verdict(repo, repo.base_branch)))
-            if verdict.substantive:
-                findings = pull.record(WAIT, checks=verdict.running_rows())
+        # A degraded CI read falls through to the plain wait below.
+        if verdict is not None and verdict.decision == FAILED:
+            return await _failed(pull, verdict, verdict.failure_rows(await read_verdict(repo, repo.base_branch)))
         run.say(f"{pull} is {state} — not cleanly mergeable yet; re-polling")
         return Waiting(f"{pull} is {state}", findings)
     # A green verdict, or an empty read the policy admits, at a mergeable or blocked head — eligible.
-    return Ready(_merge_at(pull, head_sha))
+    return Ready(_merge_at(pull, head_sha), findings)
 
 
 async def _failed(pull: PullRequest, verdict: Verdict, checks: list[dict[str, Any]]) -> RepoState:

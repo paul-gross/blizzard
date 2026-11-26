@@ -11,7 +11,7 @@ import asyncio
 import traceback
 from collections.abc import Callable, Mapping
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from functools import partial
 from types import MappingProxyType
@@ -358,32 +358,31 @@ class TurnRunner:
 
     def _build(self, submission: Submission, ending: _TurnEnding, cut_off: TurnCutOff) -> _Ready | None:
         """The visit, or ``None`` once the turn has ended without a pass: the visit no longer takes one, three
-        cut-offs in a row, a poll timed out, a refusal, resources moved under the submission, or a capability
-        missing."""
+        cut-offs in a row, a refusal, resources moved under the submission, or a capability missing. Past the node's
+        poll deadline the visit is marked as taking its final pass."""
         at = self._visit_of(submission)
         facts = self._facts.load_facts(submission.chunk_id)
         if at is None or facts is None or not may_pass(facts, submission):
             self._end(submission, ending, outcome=TURN_SUPERSEDED)
             return None
-        chunk, graph, node, epoch = at.chunk, at.graph, at.node, at.epoch
+        chunk, node, epoch = at.chunk, at.node, at.epoch
         outcomes = self._flows.turn_outcomes(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
         if is_stuck(outcomes):
             self._router.escalate(chunk, self._stuck(node), epoch=epoch, ending=ending)
             return None
         pending_since = facts.hub_node_pending_since(node_id=node.node_id, epoch=epoch)
-        if pending_since is not None and self._clock.now() - pending_since >= PollPolicy.of(node).timeout:
-            markers = tuple(self._artifacts.load_artifacts(chunk.chunk_id)) if node.action == "land" else ()
-            missing = timeout_observation(markers, node.node_id, epoch)
-            if missing is not None:
-                self._router.escalate(chunk, missing, epoch=epoch, ending=ending)
-            else:
-                self._router.route_pending_timeout(chunk, graph, node, epoch=epoch, ending=ending)
-            return None
+        final_pass = pending_since is not None and self._clock.now() - pending_since >= PollPolicy.of(node).timeout
         action = self._actions.action(node.action) if node.action is not None else None
-        return self.resolve(at, action, submission, ending, cut_off)
+        return self.resolve(at, action, submission, ending, cut_off, final_pass)
 
     def resolve(
-        self, at: _Visit, action: IHubAction | None, submission: Submission, ending: _TurnEnding, cut_off: TurnCutOff
+        self,
+        at: _Visit,
+        action: IHubAction | None,
+        submission: Submission,
+        ending: _TurnEnding,
+        cut_off: TurnCutOff,
+        final_pass: bool = False,
     ) -> _Ready | None:
         chunk, graph, node, epoch = at.chunk, at.graph, at.node, at.epoch
         artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
@@ -443,6 +442,7 @@ class TurnRunner:
             project=project,
             first_turn_at=self._first_turn_at(submission),
             now=self._clock.now(),
+            final_pass=final_pass,
         )
         watch = visit.watched_repo() if spec.lands else None
         try:
@@ -454,7 +454,7 @@ class TurnRunner:
             self._refuse_auth(at, ending, resolution, refused.target, refused.cause)
             return None
         except _TargetSilent as silent:
-            self._hold_silent(at, ending, silent.target, silent.cause)
+            self._hold_silent(at, ending, silent.target, silent.cause, final_pass=final_pass)
             return None
         if missing is not None:
             target, capability = missing
@@ -491,7 +491,7 @@ class TurnRunner:
                     self._refuse_auth(at, ending, resolution, target, exc)
                     return None
                 except ForgeUnavailable as exc:
-                    self._hold_silent(at, ending, target, exc)
+                    self._hold_silent(at, ending, target, exc, final_pass=final_pass)
                     return None
         commits = [{k: v or "" for k, v in c.items()} for c in git_commits.payload(resolution.qualified, resolution)]
         return _Ready(at, action, visit, MappingProxyType(forges), resolution, commits)
@@ -578,11 +578,31 @@ class TurnRunner:
         self._router.escalate_forge_auth(at.chunk, at.node, escalation, escalation.auth, epoch=at.epoch, ending=ending)
 
     def _hold_silent(
-        self, at: _Visit, ending: _TurnEnding, target: ResolvedRepository, cause: ForgeUnavailable
+        self,
+        at: _Visit,
+        ending: _TurnEnding,
+        target: ResolvedRepository,
+        cause: ForgeUnavailable,
+        *,
+        final_pass: bool,
     ) -> None:
-        """Wait the visit ``pending``: ``target``'s forge did not answer, as a pass whose forge did not answer waits."""
+        """Wait the visit ``pending``: ``target``'s forge did not answer, as a pass whose forge did not answer waits.
+        A visit past its poll deadline times out instead."""
+        if final_pass:
+            _log.info("a visit's forge did not answer its final build", repository=target.record, error=str(cause))
+            self._route_timeout(at.chunk, at.graph, at.node, epoch=at.epoch, ending=ending)
+            return
         _log.info("a visit's forge did not answer its build; re-polling", repository=target.record, error=str(cause))
         self._router.record_wait(at.chunk, at.node, epoch=at.epoch, kind="pending", ending=ending)
+
+    def _route_timeout(self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int, ending: _TurnEnding) -> None:
+        """Kick back a visit past its poll deadline — or, a revision still without a check, escalate it."""
+        markers = tuple(self._artifacts.load_artifacts(chunk.chunk_id)) if node.action == "land" else ()
+        missing = timeout_observation(markers, node.node_id, epoch)
+        if missing is not None:
+            self._router.escalate(chunk, missing, epoch=epoch, ending=ending)
+        else:
+            self._router.route_pending_timeout(chunk, graph, node, epoch=epoch, ending=ending)
 
     def _refuse_unavailable(
         self, at: _Visit, ending: _TurnEnding, target: ResolvedRepository, cause: CredentialUnavailable
@@ -739,10 +759,17 @@ class TurnRunner:
         """Route what the pass answered, ending the turn with it."""
         chunk, graph, node, epoch = ready.at.chunk, ready.at.graph, ready.at.node, ready.at.epoch
         spec = ready.action.spec
-        answer = self._answer(chunk, node, spec, run, epoch=epoch)
-        log_artifact = self._record_pass_log(chunk, node, spec.name, answer, epoch=epoch)
+        answer = self._answer(chunk, node, spec, run, epoch=epoch, final_pass=ready.visit.final_pass)
+        timed_out = ready.visit.times_out(answer)
+        # A hub artifact keeps its first write per epoch, so the log is left for the pass that ends the visit.
+        ends_visit = ready.visit.ends_with(answer)
+        if timed_out:
+            answer = replace(answer, log=(*answer.log, "the poll timeout ended the visit"))
+        log_artifact = self._record_pass_log(chunk, node, spec.name, answer, epoch=epoch) if ends_visit else None
         if answer.escalation is not None:
             self._escalate_pass(chunk, node, ready, answer.escalation, epoch=epoch, ending=ending)
+        elif timed_out:
+            self._route_timeout(chunk, graph, node, epoch=epoch, ending=ending)
         elif answer.waits():
             self._router.record_wait(
                 chunk,
@@ -833,7 +860,9 @@ class TurnRunner:
         with self._transactions.begin() as unit:
             ending.end(unit.lock_chunks([submission.chunk_id]), outcome=outcome, closure=closure)
 
-    def _answer(self, chunk: Chunk, node: Node, spec: ActionSpec, run: PassRun, *, epoch: int) -> Pass:
+    def _answer(
+        self, chunk: Chunk, node: Node, spec: ActionSpec, run: PassRun, *, epoch: int, final_pass: bool
+    ) -> Pass:
         """What a pass that ended as ``run`` answers: its own answer; an overrun waits where the action can and fails
         where it cannot; an escaping exception fails, its traceback the pass's log."""
         if run.answer is not None:
@@ -852,7 +881,8 @@ class TurnRunner:
             at=self._clock.now(),
         )
         if spec.can_wait_for(node.action_args):
-            return Pass(choice=_PENDING)
+            unread = (f"`{spec.name}` overran its final pass bound; no check state was read",)
+            return Pass(choice=_PENDING, log=unread if final_pass else ())
         return Pass(choice=HUB_DEFAULT_FAILURE_CHOICE, log=(f"`{spec.name}` overran its pass bound",))
 
     def _record_pass_log(self, chunk: Chunk, node: Node, action_name: str, answer: Pass, *, epoch: int) -> str | None:

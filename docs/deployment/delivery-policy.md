@@ -48,10 +48,14 @@ evidence that CI is absent. Ensure the repository's forge token can read both ki
 By default `allow_no_ci` is false, including on existing repositories migrated to this version. If a successful read
 finds no checks, the hub records the first observation for that repository and SHA, then waits ten minutes for CI to
 register. If a later read still finds no checks after that grace, it escalates `missing-checks`, identifying the
-repository, policy, SHA and first observation time. A new SHA has its own grace period. The ordinary overall pending
-deadline may expire first: in that case the diagnostic names the earlier empty observation and says it was **not
-reconfirmed**, rather than claiming checks are still absent. Inspect the forge and token permissions before deciding
-whether CI is missing.
+repository, policy, SHA and first observation time. A new SHA has its own grace period.
+
+The node's overall pending deadline (`poll_timeout`) may expire first. Delivery then takes one final pass before giving
+up: checks that have turned green land, and a parked change waiting on a person is not timed out. Work still pending
+after that pass bounces as `poll-timeout`. The exception is an empty observation with no later read that found checks:
+it escalates `missing-checks`, naming that observation and saying the deadline expired before any check appeared. The
+final pass may not have read the forge again, so inspect the forge and token permissions before deciding whether CI is
+missing.
 
 For a repository intentionally without CI, explicitly opt in with `blizzard hub repo edit <repository> --allow-no-ci` or
 `allow_no_ci: true` in its configuration document. Reverse it with `--no-allow-no-ci` or `allow_no_ci: false`. This

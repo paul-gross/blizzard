@@ -5,10 +5,10 @@ that*. The change has already passed verify, review, and pre-push — preserve t
 
 ## Diagnose before you touch anything
 
-Start with `blizzard runner artifact get delivery-findings --node deliver --content`; when it is absent, fall back to
-the `hub-log.land` log, the bounce envelope, and the PRs and their check results on the forge. Check the state as it is
-*now*, not as the bounce described it — a self-clearing state may have cleared, and an earlier attempt may already have
-repaired a repo. Then establish which case you are in:
+Start with `blizzard runner artifact get delivery-findings --node deliver --content` and the `hub-log.land` log: the
+findings carry each check's state as the landing visit ended, the log the conflict or error that ended it. Then read the
+bounce envelope and the PRs and their checks on the forge. Check the state *now*, not as the bounce described it — it
+may have cleared, or an earlier attempt may have repaired a repo. Then establish which case applies:
 
 ### 1. Merge conflict
 
@@ -27,10 +27,9 @@ capture exactly which check failed and why in the `resolve-report`; your finding
 ### 3. Foreign commit on the PR head
 
 `delivery-findings/foreign-head` (read it with `--node deliver`) says the PR head carries a commit beyond the one the
-chunk submitted and its own base merges, and names it; `delivery-findings` may still show an earlier wait. Never select
-`resolved` over it: the commit has not been verified, reviewed, or pre-pushed. Read what it changed. If it belongs to
-the change, adopt it — fetch, declare the head as the repo's tip, and select `substantive` so it earns verification. If
-it does not belong, select `broken`.
+chunk submitted and its own base merges, and names it. Never select `resolved` over it: the commit has not been
+verified, reviewed, or pre-pushed. Read what it changed. If it belongs to the change, adopt it — fetch, declare the head
+as the repo's tip, and select `substantive` so it earns verification. If it does not belong, select `broken`.
 
 ### 4. Flaky or intermittent CI check
 

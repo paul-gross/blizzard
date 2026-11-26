@@ -216,7 +216,7 @@ class Park:
                     comparison = None
                 if comparison is not None:
                     evidence["compared_commits"] = [c.revision for c in comparison.commits]
-            steps.append(("delivery-findings", json.dumps(evidence)))
+            steps.append((f"delivery-findings/merged-head/{repo.repo}", json.dumps(evidence)))
         for name, content in steps:
             try:
                 await repo.run.post(name, content)

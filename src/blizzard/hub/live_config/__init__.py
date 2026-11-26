@@ -61,7 +61,10 @@ class ConfigObjectCache:
         self._revisions = revisions
         self._entries: dict[tuple[RecordKind, str], tuple[CacheKey, object]] = {}
         self._superseded: dict[tuple[RecordKind, str], object] = {}
-        self._lock = threading.Lock()
+        # Reentrant: garbage collection can run the tenant scope's finalizer, and so ``close``, on the thread that
+        # is building under this lock.
+        self._lock = threading.RLock()
+        self._closes = 0
 
     def get[T](self, kind: RecordKind, key: str, build: Callable[[], T]) -> T | None:
         """The object built for the record's current revisions, building it on a miss;
@@ -88,7 +91,12 @@ class ConfigObjectCache:
             wanted = CacheKey.of(kind, key, current)
             if held is not None and held[0] == wanted:
                 return cast(T, held[1])
+            closes = self._closes
             built = build()
+            if closes != self._closes:
+                # Closed while building: closed and forgotten like every other object the cache held.
+                _close(built)
+                return built
             self._entries[(kind, key)] = (wanted, built)
             if held is not None:
                 self._supersede(kind, key, held[1])
@@ -109,6 +117,7 @@ class ConfigObjectCache:
             held = [obj for _, obj in self._entries.values()] + list(self._superseded.values())
             self._entries.clear()
             self._superseded.clear()
+            self._closes += 1
         for obj in held:
             _close(obj)
 
