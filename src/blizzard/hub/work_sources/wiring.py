@@ -79,7 +79,8 @@ def work_annotators(registry: IWorkSourceRegistry) -> IWorkAnnotators:
 
 
 def work_ref_labels(registry: IWorkSourceRegistry) -> IWorkRefLabels:
-    """How the tenant's sources and pointers display, as ingest labels a chunk's work refs."""
+    """How the tenant's sources and pointers display, as ingest labels a chunk's work refs and trace step hydration
+    renders them."""
     return registry
 
 

@@ -152,8 +152,9 @@ class IWorkSourceBatchReader(Protocol):
 
 
 class IWorkSourceBindings(IBoundWorkClosers, IBoundWorkAnnotators, IBoundWorkRefLabels, Protocol):
-    """A set of sources resolved together. Each method answers as :class:`IWorkSourceRegistry`'s own does, building a
-    source on first use; a source outside the set raises ``KeyError``."""
+    """A set of sources resolved together, from revisions and records read when it was made, so a later edit need not
+    show. Each method otherwise answers as :class:`IWorkSourceRegistry`'s does, building a source on first use; a
+    source outside the set raises ``KeyError``."""
 
     def get(self, source: str) -> IWorkSource | None:
         """As :meth:`IWorkSourceRegistry.get`."""

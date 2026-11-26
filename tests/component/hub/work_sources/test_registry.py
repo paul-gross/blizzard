@@ -7,7 +7,7 @@ rebuilt between a write and the next registry call."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import cast
 
@@ -19,8 +19,10 @@ from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.work_sources import WorkAnnotateError
 from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
+from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ForgeEdit, IReadForgeRepository
+from blizzard.hub.domain.config.revisions import ConfigRevisions
 from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
     IReadWorkSourceRepository,
@@ -37,6 +39,7 @@ from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceR
 from blizzard.hub.work_sources.source import IWorkSourceRegistry, WorkSourceAuthRefused, WorkSourceError
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
 from tests.support.forge_auth import sent_header
+from tests.support.registry_statements import registry_over
 from tests.support.scaffolding import (
     OP,
     FakeWorkSource,
@@ -414,11 +417,11 @@ def _stored_registry(
     app: FastAPI, build: Callable[[ConfiguredWorkSource], BuiltWorkSource], *, close_forge_writes_enabled: bool = True
 ) -> StoreWorkSourceRegistry:
     """A registry of its own over ``app``'s records and revisions, building through ``build``."""
-    return StoreWorkSourceRegistry(
-        records=tenant_adapter_of(app, IReadWorkSourceRepository),
-        objects=ConfigObjectCache(ConfigRevisionsStore(hub_store_connections(app.state.engine))),
-        build=build,
-        built_in=_sources(app).get("hub"),  # pyright: ignore[reportArgumentType]  # the registry port types its "hub" entry as IWorkSource; it is the built-in source
+    return registry_over(
+        tenant_adapter_of(app, IReadWorkSourceRepository),
+        ConfigRevisionsStore(hub_store_connections(app.state.engine)),
+        _sources(app).get("hub"),
+        build,
         close_forge_writes_enabled=close_forge_writes_enabled,
     )
 
@@ -567,3 +570,81 @@ def test_bindings_refuse_a_source_outside_the_bound_set(hub: tuple[TestClient, F
     for reach in (bound.get, bound.closer, bound.annotator, bound.label_clearer, bound.source_label):
         with pytest.raises(KeyError):
             reach("hub")
+
+
+class _Slugged(FakeWorkSource):
+    """Labels every pointer with the slug of the record it was built from."""
+
+    def __init__(self, slug: str) -> None:
+        super().__init__()
+        self.slug = slug
+
+    def label(self, pointer: WorkRef) -> str:
+        return f"{self.slug}!{pointer.ref}"
+
+
+def _slugged(record: ConfiguredWorkSource) -> BuiltWorkSource:
+    return BuiltWorkSource(record, _Slugged(record.slug), lambda: None)
+
+
+def test_a_binding_older_than_the_cached_adapter_hands_out_that_one_and_leaves_it_installed(
+    hub: tuple[TestClient, FastAPI], forge: tuple[ForgeDouble, str]
+) -> None:
+    client, app = hub
+    source_id = create(client, app, forge[1])
+    released: list[str] = []
+
+    def build(record: ConfiguredWorkSource) -> BuiltWorkSource:
+        return BuiltWorkSource(record, _Slugged(record.slug), lambda: released.append(record.slug))
+
+    registry = _stored_registry(app, build)
+    bound = registry.bindings([source_id])
+    _rename(app, source_id, "widget-core")
+    newer = registry.get(source_id)
+
+    assert bound.get(source_id) is newer
+    assert registry.get(source_id) is newer
+    assert released == []
+
+
+def test_an_edit_landing_between_a_binding_s_two_reads_is_not_cached_as_current(
+    hub: tuple[TestClient, FastAPI], forge: tuple[ForgeDouble, str]
+) -> None:
+    """The revisions are read before the records: read the other way, the old record would be cached under the new
+    revision and handed out until the next edit."""
+    client, app = hub
+    source_id = create(client, app, forge[1])
+    stored = tenant_adapter_of(app, IReadWorkSourceRepository)
+    edits = [lambda: _rename(app, source_id, "widget-core")]
+
+    def edit_once() -> None:
+        while edits:
+            edits.pop()()
+
+    class EditingRevisions(ConfigRevisionsStore):
+        def revisions_for(self, kind: RecordKind, keys: Sequence[str]) -> dict[str, ConfigRevisions]:
+            found = super().revisions_for(kind, keys)
+            edit_once()
+            return found
+
+    class EditingRecords:
+        def __getattr__(self, name: str) -> object:
+            return getattr(stored, name)
+
+        def get_many(self, work_source_ids: list[WorkSourceId]) -> dict[WorkSourceId, ConfiguredWorkSource]:
+            found = stored.get_many(work_source_ids)
+            edit_once()
+            return found
+
+    registry = registry_over(
+        cast(IReadWorkSourceRepository, EditingRecords()),
+        EditingRevisions(hub_store_connections(app.state.engine)),
+        _sources(app).get("hub"),
+        _slugged,
+    )
+    pointer = WorkRef(source=source_id, ref="1")
+    registry.bindings([source_id]).get(source_id)
+    assert edits == []
+
+    current = registry.get(source_id)
+    assert current is not None and current.label(pointer) == "widget-core!1"

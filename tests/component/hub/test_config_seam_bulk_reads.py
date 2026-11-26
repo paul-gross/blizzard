@@ -45,6 +45,7 @@ from tests.support.linked_projects_world import (
     repository_id,
     source_doc,
 )
+from tests.support.registry_statements import stored_registry
 from tests.support.scaffolding import (
     FakeWorkSource,
     HubHarness,
@@ -450,13 +451,8 @@ def test_resolve_reads_every_active_source_s_revisions_once(tmp_path: Path) -> N
 def test_bindings_statements_are_flat_across_source_counts_and_repeated_lookups(tmp_path: Path) -> None:
     names = [f"src{i}" for i in range(10)]
     hub = build_hub(tmp_path, work_sources={name: FakeWorkSource(name=name) for name in names})
-    built_in = hub.work_sources.get("hub")
-    assert isinstance(built_in, HubWorkSource)
-    registry = StoreWorkSourceRegistry(
-        records=hub.default_adapter(IReadWorkSourceRepository),
-        objects=ConfigObjectCache(ConfigRevisionsStore(hub_store_connections(hub.engine))),
-        build=lambda record: BuiltWorkSource(record, FakeWorkSource(name=record.name), lambda: None),
-        built_in=built_in,
+    registry = stored_registry(
+        hub, lambda record: BuiltWorkSource(record, FakeWorkSource(name=record.name), lambda: None)
     )
     ids = [_source_id(hub, name) for name in names]
 

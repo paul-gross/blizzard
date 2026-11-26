@@ -276,8 +276,10 @@ def test_closing_candidates_are_the_open_tenants_chunks(world: _World) -> None:
 
 
 def _tenant_label(tenant: TenantId, sources: Collection[str]) -> WorkRefLabel:
-    """A label that names the tenant it was asked for beside the ref, so a test sees whose rendered it."""
-    return lambda ref: f"{tenant}:{ref.ref}"
+    """A label that names the tenant it was asked for beside the ref, so a test sees whose rendered it; a ref whose
+    source was not asked for raises ``KeyError``."""
+    bound = dict.fromkeys(sources, tenant)
+    return lambda ref: f"{bound[ref.source]}:{ref.ref}"
 
 
 def test_step_facts_are_the_open_tenants_chunks_each_tagged_and_labelled_in_its_tenant(world: _World) -> None:
@@ -290,6 +292,35 @@ def test_step_facts_are_the_open_tenants_chunks_each_tagged_and_labelled_in_its_
         _live(world.carried): (f"{world.carried}:{_live(world.carried)}",),
         _live(_OPEN): (f"{_OPEN}:{_live(_OPEN)}",),
     }
+
+
+def test_step_facts_bind_each_open_tenant_once_over_the_sources_its_own_chunks_name(world: _World) -> None:
+    second = "ch_second"
+    world.insert(
+        s.chunks,
+        tenant_id=_OPEN,
+        project_id=default_project(world.engine, _OPEN),
+        chunk_id=second,
+        graph_id=f"gr_{_OPEN}",
+        minted_at=_AT,
+        model="",
+    )
+    for tenant, chunk_id, source in (
+        (world.carried, _live(world.carried), "src_carried"),
+        (_OPEN, second, "src_open"),
+    ):
+        world.insert(s.chunk_work_refs, tenant_id=tenant, chunk_id=chunk_id, source=source, ref="2")
+    asked: list[tuple[TenantId, frozenset[str]]] = []
+
+    def bind(tenant: TenantId, sources: Collection[str]) -> WorkRefLabel:
+        asked.append((tenant, frozenset(sources)))
+        return _tenant_label(tenant, sources)
+
+    world.corpus.step_facts_for([*(_live(t) for t in (world.carried, _OPEN, _CLOSED)), second], bind)
+
+    assert sorted(asked) == sorted(
+        [(world.carried, frozenset({"src", "src_carried"})), (_OPEN, frozenset({"src", "src_open"}))]
+    )
 
 
 def test_step_facts_statement_count_is_constant_within_one_batch(world: _World) -> None:

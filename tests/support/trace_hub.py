@@ -75,20 +75,32 @@ def label(ref: WorkRef) -> str:
 
 
 class FnWorkRefLabels:
-    """Work-ref labels answered by two functions, bound or not."""
+    """Work-ref labels answered by two functions; bound, a source outside ``sources`` raises ``KeyError``."""
 
-    def __init__(self, label: Callable[[WorkRef], str], source_label: Callable[[str], str]) -> None:
+    def __init__(
+        self,
+        label: Callable[[WorkRef], str],
+        source_label: Callable[[str], str],
+        sources: frozenset[str] | None = None,
+    ) -> None:
         self._label = label
         self._source_label = source_label
+        self._sources = sources
 
     def label(self, pointer: WorkRef) -> str:
+        self._require_bound(pointer.source)
         return self._label(pointer)
 
     def source_label(self, source: str) -> str:
+        self._require_bound(source)
         return self._source_label(source)
 
     def bindings(self, sources: Iterable[str]) -> FnWorkRefLabels:
-        return self
+        return FnWorkRefLabels(self._label, self._source_label, frozenset(sources))
+
+    def _require_bound(self, source: str) -> None:
+        if self._sources is not None and source not in self._sources:
+            raise KeyError(source)
 
 
 _fn_work_ref_labels_conforms: type[IWorkRefLabels] = FnWorkRefLabels

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 
+from blizzard.hub.domain.config.revisions import IReadConfigRevisions
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, IReadWorkSourceRepository
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
@@ -15,18 +16,35 @@ from tests.support.scaffolding import HubHarness, capture_statements, hub_store_
 _REGISTRY_TABLES = re.compile(r"\b(?:FROM|JOIN)\s+(?:work_sources|work_source_lifecycle_facts)\b")
 
 
+def registry_over(
+    records: IReadWorkSourceRepository,
+    revisions: IReadConfigRevisions,
+    built_in: object,
+    build: Callable[[ConfiguredWorkSource], BuiltWorkSource],
+    *,
+    close_forge_writes_enabled: bool = True,
+) -> StoreWorkSourceRegistry:
+    """The production registry over ``records`` and ``revisions``, building through ``build`` with a cache of its
+    own."""
+    assert isinstance(built_in, HubWorkSource)
+    return StoreWorkSourceRegistry(
+        records=records,
+        objects=ConfigObjectCache(revisions),
+        build=build,
+        built_in=built_in,
+        close_forge_writes_enabled=close_forge_writes_enabled,
+    )
+
+
 def stored_registry(
     hub: HubHarness, build: Callable[[ConfiguredWorkSource], BuiltWorkSource]
 ) -> StoreWorkSourceRegistry:
-    """The production registry over ``hub``'s own records — the harness's ``work_sources`` fake issues no
-    statements — with a cache of its own."""
-    built_in = hub.work_sources.get("hub")
-    assert isinstance(built_in, HubWorkSource)
-    return StoreWorkSourceRegistry(
-        records=hub.default_adapter(IReadWorkSourceRepository),
-        objects=ConfigObjectCache(ConfigRevisionsStore(hub_store_connections(hub.engine))),
-        build=build,
-        built_in=built_in,
+    """:func:`registry_over` ``hub``'s own records — the harness's ``work_sources`` fake issues no statements."""
+    return registry_over(
+        hub.default_adapter(IReadWorkSourceRepository),
+        ConfigRevisionsStore(hub_store_connections(hub.engine)),
+        hub.work_sources.get("hub"),
+        build,
     )
 
 
