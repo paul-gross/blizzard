@@ -1,4 +1,4 @@
-// exemplar: bzh:frontend-domain-boundary, bzh:frontend-edit-baseline — the translator asserted at both edges.
+// exemplar: bzh:frontend-domain-boundary — the translator asserted at both edges.
 
 import { readRefusal } from 'fleet';
 

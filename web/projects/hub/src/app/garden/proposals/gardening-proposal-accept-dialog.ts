@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, input, type OnInit, output, signal } from '@angular/core';
-import { form } from '@angular/forms/signals';
-import { submitForm } from 'fleet';
+import { apply, form } from '@angular/forms/signals';
+import { createRefusalState, submitForm } from 'fleet';
 
 import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
 import { defaultUrgencyName, urgencyOptions } from '../../core/urgency-options.model';
-import { acceptanceDraftFor } from './proposal-acceptance.domain';
+import { acceptanceDraftFor, type ProposalAcceptanceDraft } from './proposal-acceptance.domain';
 import { proposalAcceptanceRules } from './proposal-acceptance.form';
 import { injectProposalAcceptanceService } from './proposal-acceptance.service';
 import { GardeningProposalAcceptDialogView } from './gardening-proposal-accept-dialog-view';
@@ -37,7 +37,12 @@ export class GardeningProposalAcceptDialog implements OnInit {
 
   private readonly draft = signal(acceptanceDraftFor(''));
 
-  protected readonly acceptForm = form(this.draft, proposalAcceptanceRules);
+  private readonly refusal = createRefusalState<ProposalAcceptanceDraft>();
+
+  protected readonly acceptForm = form(this.draft, (path) => {
+    apply(path, proposalAcceptanceRules);
+    apply(path, this.refusal.schema);
+  });
 
   /** Every live urgency, led by the tenant default's empty-value row. */
   protected readonly urgencyOptions = computed(() =>
@@ -53,7 +58,9 @@ export class GardeningProposalAcceptDialog implements OnInit {
   }
 
   protected async onSave(): Promise<void> {
-    const ok = await submitForm(this.acceptForm, (draft) => this.service.accept(this.proposalId(), draft));
+    const ok = await submitForm(this.acceptForm, (draft) => this.service.accept(this.proposalId(), draft), {
+      refusalState: this.refusal,
+    });
     if (ok) this.closed.emit();
   }
 }

@@ -1,4 +1,4 @@
-// exemplar: bzh:frontend-domain-boundary, bzh:frontend-edit-baseline — the draft the form edits; no wire, no Angular.
+// exemplar: bzh:frontend-domain-boundary — the draft the form edits and its rule; no wire, no Angular.
 
 /** How an accepted proposal closes: minting a linked work item, or agreeing and minting nothing. */
 export type ProposalAcceptanceMode = 'mint' | 'decline';
@@ -17,4 +17,11 @@ export interface ProposalAcceptanceDraft {
 /** The draft an Accept dialog opens with: a mint of the proposal's own body, with no reason and the tenant default. */
 export function acceptanceDraftFor(proposalBody: string): ProposalAcceptanceDraft {
   return { mode: 'mint', body: proposalBody, reason: '', urgency: '' };
+}
+
+export const DECLINE_REASON_REQUIRED = 'Required';
+
+/** Whether the draft is a decline still owing its reason; whitespace alone counts as blank. */
+export function isDeclineReasonMissing({ mode, reason }: Pick<ProposalAcceptanceDraft, 'mode' | 'reason'>): boolean {
+  return mode === 'decline' && reason.trim() === '';
 }

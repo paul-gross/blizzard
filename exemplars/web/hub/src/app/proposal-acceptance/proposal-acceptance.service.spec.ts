@@ -1,4 +1,4 @@
-// exemplar: bzh:frontend-edit-baseline, bzh:frontend-mutation-settles-on-refresh — the accept's outcomes asserted.
+// exemplar: bzh:frontend-mutation-settles-on-refresh — the accept's outcomes asserted.
 
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';

@@ -14,10 +14,9 @@ import {
 import type { ProposalAcceptanceDraft } from './proposal-acceptance.domain';
 
 /**
- * The Accept dialog's presentational view — a `KitForm` over the container's `form()`: the mint/decline choice, the
- * mint's urgency and prefilled work-item body, and one reason field in both modes. The schema hides the mint fields
- * under a decline. No query or client dependency (`bzh:frontend-container-presentational`): the container owns the
- * draft and answers {@link save}.
+ * The Accept dialog's presentational view — a `KitForm` over the field tree it is given: the mint/decline choice, the
+ * mint's urgency and prefilled work-item body, and one reason field in both modes. A hidden field is not rendered. No
+ * query or client dependency (`bzh:frontend-container-presentational`).
  *
  * Copy states that acceptance neither promotes the minted item nor changes any finding's state — the surface's own
  * answer to the two things acceptance does not do.

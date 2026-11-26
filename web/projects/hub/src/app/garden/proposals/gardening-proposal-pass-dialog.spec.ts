@@ -119,4 +119,30 @@ describe('GardeningProposalPassDialog', () => {
     expect(input.value).toBe('not worth it yet');
     expect(stub.forRoute('/api/garden-proposals/gp_1/pass', 'POST')).toHaveLength(1);
   });
+
+  it('sends again when Pass is pressed after a form-line refusal', async () => {
+    let attempts = 0;
+    const mounted = await mount({
+      'POST /api/garden-proposals/{proposal_id}/pass': () => {
+        if (++attempts === 1) throw new TypeError('Failed to fetch');
+        return gardenProposalView({ proposal_id: 'gp_1', closure: gardenProposalClosureView() });
+      },
+    });
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
+    let closed = false;
+    fixture.componentInstance.closed.subscribe(() => (closed = true));
+
+    const input = el.querySelector<HTMLTextAreaElement>('[data-testid="proposal-pass-reason-input"]')!;
+    input.value = 'not worth it yet';
+    input.dispatchEvent(new Event('input'));
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('[data-testid="kit-form-save"]')!.click();
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('[data-testid="kit-form-save"]')!.click();
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/garden-proposals/gp_1/pass', 'POST')).toHaveLength(2);
+    expect(closed).toBe(true);
+  });
 });

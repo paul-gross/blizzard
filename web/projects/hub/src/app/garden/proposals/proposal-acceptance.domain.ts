@@ -16,3 +16,10 @@ export interface ProposalAcceptanceDraft {
 export function acceptanceDraftFor(proposalBody: string): ProposalAcceptanceDraft {
   return { mode: 'mint', body: proposalBody, reason: '', urgency: '' };
 }
+
+export const DECLINE_REASON_REQUIRED = 'Required';
+
+/** Whether the draft is a decline still owing its reason; whitespace alone counts as blank. */
+export function isDeclineReasonMissing({ mode, reason }: Pick<ProposalAcceptanceDraft, 'mode' | 'reason'>): boolean {
+  return mode === 'decline' && reason.trim() === '';
+}

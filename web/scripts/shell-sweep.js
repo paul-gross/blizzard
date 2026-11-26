@@ -310,6 +310,10 @@
  *     model in real Chromium: one Tab stop, arrow keys between text cells and native controls
  *     skipping disabled cells, exactly one click per Enter or Space on a button, and a select
  *     popup that opens once, owns its keys, and returns focus to its trigger.
+ *   - projects/fleet/src/lib/kit/kit-combobox.shell-sweep.spec.ts — the kit combobox's
+ *     keyboard model in real Chromium, as the zone picker uses it: typing filters, arrows
+ *     highlight, Enter picks, Escape closes, a stored unlisted value is kept, and an
+ *     unmatched edit restores the current text.
  *   - projects/fleet/src/lib/kit/kit-select-list.shell-sweep.spec.ts — a 40-row kit
  *     select list in a height-capped scroller in real Chromium: one Tab stop landing on
  *     the selected row, arrows, Home, End and type-ahead moving focus without opening,

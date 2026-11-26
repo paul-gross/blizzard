@@ -15,8 +15,8 @@ import {
 
 import type { ProposalAcceptanceDraft } from './proposal-acceptance.domain';
 
-/** The Accept dialog's view — a `KitForm` over the container's `form()`: the mint or decline choice, the mint's urgency
- * and prefilled work-item body, and one reason field in both modes. The schema hides the mint fields under a decline. */
+/** The Accept dialog's view — a `KitForm` over the field tree it is given: the mint or decline choice, the mint's
+ * urgency and prefilled work-item body, and one reason field in both modes. A hidden field is not rendered. */
 @Component({
   selector: 'app-proposal-accept-dialog-view',
   changeDetection: ChangeDetectionStrategy.OnPush,

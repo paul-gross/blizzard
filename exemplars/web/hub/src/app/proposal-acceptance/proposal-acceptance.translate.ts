@@ -1,4 +1,4 @@
-// exemplar: bzh:frontend-domain-boundary, bzh:frontend-edit-baseline — the draft as the request, and the refusals as fields.
+// exemplar: bzh:frontend-domain-boundary — the draft as the request, and the refusals as fields.
 
 import type { RefusalMap } from 'fleet';
 

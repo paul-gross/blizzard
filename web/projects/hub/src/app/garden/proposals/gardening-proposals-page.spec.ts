@@ -357,40 +357,51 @@ describe('GardeningProposalsPage', () => {
       },
     ];
 
-    it('survives a raced closure with its draft, and the selection moves on only once it closes', async () => {
-      let closedElsewhere = false;
-      const closed = gardenProposalView({ ...WAITING_A, closure: gardenProposalClosureView() });
-      const { fixture, router, el } = await render(
-        undefined,
-        OPERATOR_ME_RESPONSE,
-        '/gardening/proposals/gp_1',
-        false,
-        {
-          'GET /api/garden-proposals': () =>
-            gardenProposalsPageView({ proposals: [closedElsewhere ? closed : WAITING_A, WAITING_B] }),
-          'POST /api/garden-proposals/{proposal_id}/accept': () => {
-            closedElsewhere = true;
-            return stubError(409, { detail: 'garden proposal gp_1 already carries a closure' });
+    // The routed proposal is the only waiting row, so losing it moves to the bare route, whose detail is another
+    // component instance: an unheld selection takes the dialog and its draft with it.
+    for (const { verb, trigger, textbox } of [
+      { verb: 'accept', trigger: 'gardening-proposal-accept', textbox: 'proposal-accept-body-input' },
+      { verb: 'pass', trigger: 'gardening-proposal-pass', textbox: 'proposal-pass-reason-input' },
+    ]) {
+      it(`keeps the ${verb} dialog and its typed text through a raced closure, moving on only once it closes`, async () => {
+        let closedElsewhere = false;
+        const closed = gardenProposalView({ ...WAITING_A, closure: gardenProposalClosureView() });
+        const { fixture, router, el } = await render(
+          undefined,
+          OPERATOR_ME_RESPONSE,
+          '/gardening/proposals/gp_1',
+          false,
+          {
+            'GET /api/garden-proposals': () =>
+              gardenProposalsPageView({ proposals: [closedElsewhere ? closed : WAITING_A] }),
+            [`POST /api/garden-proposals/{proposal_id}/${verb}`]: () => {
+              closedElsewhere = true;
+              return stubError(409, { detail: 'garden proposal gp_1 already carries a closure' });
+            },
           },
-        },
-        withDetail,
-      );
-      el.querySelector<HTMLElement>('[data-testid="gardening-proposal-accept"]')!.click();
-      await settle(fixture);
+          withDetail,
+        );
+        el.querySelector<HTMLElement>(`[data-testid="${trigger}"]`)!.click();
+        await settle(fixture);
+        const input = inOverlay(textbox) as HTMLTextAreaElement;
+        input.value = 'typed by the operator';
+        input.dispatchEvent(new Event('input'));
+        await settle(fixture);
 
-      inOverlay('kit-form-save')!.click();
-      await settle(fixture, 8);
+        inOverlay('kit-form-save')!.click();
+        await settle(fixture, 8);
 
-      expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeNull();
-      expect(router.url).toBe('/gardening/proposals/gp_1');
-      expect(inOverlay('kit-form-line')?.textContent).toContain('already carries a closure');
-      expect((inOverlay('proposal-accept-body-input') as HTMLTextAreaElement).value).toBe(WAITING_A.body);
+        expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeNull();
+        expect(router.url).toBe('/gardening/proposals/gp_1');
+        expect(inOverlay('kit-form-line')?.textContent).toContain('already carries a closure');
+        expect((inOverlay(textbox) as HTMLTextAreaElement).value).toBe('typed by the operator');
 
-      inOverlay('kit-form-cancel')!.click();
-      await settle(fixture, 8);
+        inOverlay('kit-form-cancel')!.click();
+        await settle(fixture, 8);
 
-      expect(router.url).toBe('/gardening/proposals/gp_2');
-    });
+        expect(router.url).toBe('/gardening/proposals');
+      });
+    }
   });
 
   describe('a proposal with a pending Pass/Accept drops from the waiting docket (Part B)', () => {

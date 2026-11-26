@@ -25,7 +25,7 @@ import {
 import { AppLink } from 'fleet/shell';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
-import { urgencyOptions } from '../../core/urgency-options.model';
+import { defaultUrgencyName, urgencyOptions } from '../../core/urgency-options.model';
 import type { RoutineEditDraft } from '../core/routine.domain';
 
 /** Which inline field of the routine is open for editing. */
@@ -202,7 +202,7 @@ export class FleetRoutinePanel {
     urgencyOptions(this.urgencies(), {
       key: 'slug',
       retired: { current: this.defaultUrgency() },
-      inherit: { label: 'Tenant default', name: this.urgencies().find((u) => u.default)?.name ?? null },
+      inherit: { label: 'Tenant default', name: defaultUrgencyName(this.urgencies()) },
     }));
   protected urgencyLabel(): string {
     return this.urgencyOptions().find((o) => o.value === this.urgencyValue())?.label ?? this.urgencyValue();

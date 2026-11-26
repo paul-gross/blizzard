@@ -147,6 +147,23 @@ describe('GardeningProposalAcceptDialog', () => {
     expect(stub.forRoute(ROUTE, 'POST')[0].body).not.toHaveProperty('urgency');
   });
 
+  it('sends the urgency picked in the select', async () => {
+    const m = await mount({
+      'GET /api/urgencies': () => URGENCIES,
+      'POST /api/garden-proposals/{proposal_id}/accept': () => ACCEPT_RESPONSE,
+    });
+    stub = m.stub;
+    await settle(m.fixture);
+    m.q('proposal-accept-urgency')!.click();
+    await settle(m.fixture);
+    [...document.body.querySelectorAll<HTMLElement>('[role="option"]')]
+      .find((option) => option.textContent?.trim() === 'Urgent')!
+      .click();
+    await settle(m.fixture);
+    await m.save();
+    expect(stub.forRoute(ROUTE, 'POST')[0].body).toMatchObject({ urgency: 'urgent' });
+  });
+
   it('keeps an edited body through a proposalBody input change and an urgencies refetch', async () => {
     const m = await mount({ 'GET /api/urgencies': () => URGENCIES });
     stub = m.stub;
@@ -214,6 +231,25 @@ describe('GardeningProposalAcceptDialog', () => {
     expect(m.q<HTMLTextAreaElement>('proposal-accept-body-input')!.value).toBe('my edit');
     expect(stub.forRoute(ROUTE, 'POST')).toHaveLength(1);
     expect(m.closedCount()).toBe(0);
+  });
+
+  it('sends again when Accept is pressed after a form-line refusal, clearing it once the accept lands', async () => {
+    let attempts = 0;
+    const m = await mount({
+      'POST /api/garden-proposals/{proposal_id}/accept': () => {
+        if (++attempts === 1) throw new TypeError('Failed to fetch');
+        return ACCEPT_RESPONSE;
+      },
+    });
+    stub = m.stub;
+    await m.save();
+    expect(m.q('kit-form-line')).not.toBeNull();
+    expect(stub.forRoute(ROUTE, 'POST')).toHaveLength(1);
+
+    await m.save();
+    expect(stub.forRoute(ROUTE, 'POST')).toHaveLength(2);
+    expect(m.q('kit-form-line')).toBeNull();
+    expect(m.closedCount()).toBe(1);
   });
 
   it('ignores Cancel while the accept is in flight', async () => {

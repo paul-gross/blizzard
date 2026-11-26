@@ -1,4 +1,4 @@
-// exemplar: bzh:frontend-edit-baseline — the schema's mode-judged rules asserted.
+// exemplar: bzh:frontend-domain-boundary — the schema's mode-judged rules asserted.
 
 import { Injector, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
