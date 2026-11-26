@@ -18,8 +18,7 @@ export interface ScopeLifecycleVars {
 /**
  * `POST /api/projects/{project}/scopes/{slug}/retire|enable`, inside the lensed project — routed by the desired `retired` state
  * (`injectGraphLifecycleMutation`'s own shape), through the generated client
- * (bzh:generated-client). On success it re-reads the scope list. The hub records
- * the signed-in caller as the actor.
+ * (bzh:generated-client). On success it re-reads the scope list.
  */
 export function injectScopeLifecycleMutation() {
   const queryClient = inject(QueryClient);

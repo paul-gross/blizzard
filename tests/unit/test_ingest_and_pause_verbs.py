@@ -305,21 +305,6 @@ def test_stop_shows_the_hubs_unknown_chunk_refusal() -> None:
     assert "ch_nope" in result.output
 
 
-def test_stop_defaults_by_to_operator() -> None:
-    calls: list[tuple[str, object]] = []
-
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        calls.append((url, json))
-        return _FakeResponse(202, {"chunk_id": "ch_42"})
-
-    bound = bind_stubs(post=fake_post)
-    result = bound.runner.invoke(hub_group, ["chunk", "stop", "ch_42"])
-
-    assert result.exit_code == 0, result.output
-    _, body = calls[0]
-    assert body == {}
-
-
 def test_done_posts_to_the_chunk_and_reports_completed() -> None:
     """The verb POSTs to the chunk's complete sub-resource, naming no actor."""
     calls: list[tuple[str, object]] = []
@@ -349,21 +334,6 @@ def test_done_shows_the_hubs_unknown_chunk_refusal() -> None:
 
     assert result.exit_code != 0
     assert "ch_nope" in result.output
-
-
-def test_done_defaults_by_to_operator() -> None:
-    calls: list[tuple[str, object]] = []
-
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        calls.append((url, json))
-        return _FakeResponse(202, {"chunk_id": "ch_42"})
-
-    bound = bind_stubs(post=fake_post)
-    result = bound.runner.invoke(hub_group, ["chunk", "done", "ch_42"])
-
-    assert result.exit_code == 0, result.output
-    _, body = calls[0]
-    assert body == {}
 
 
 def test_pause_chunk_posts_to_the_chunk_and_reports_paused() -> None:
@@ -441,7 +411,7 @@ def test_resume_chunk_shows_the_hubs_unknown_chunk_refusal() -> None:
     assert "ch_nope" in result.output
 
 
-def test_chunk_delete_confirms_and_sends_the_delete_with_by() -> None:
+def test_chunk_delete_confirms_and_sends_the_delete() -> None:
     calls: list[tuple[str, str, object]] = []
 
     def fake_request(method: str, url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -474,7 +444,7 @@ def test_chunk_delete_aborts_when_confirmation_is_declined() -> None:
     assert result.exit_code != 0
 
 
-def test_chunk_delete_yes_skips_the_prompt_and_defaults_by_to_operator() -> None:
+def test_chunk_delete_yes_skips_the_prompt() -> None:
     calls: list[tuple[str, str, object]] = []
 
     def fake_request(method: str, url: str, *, json: object, timeout: float) -> _FakeResponse:

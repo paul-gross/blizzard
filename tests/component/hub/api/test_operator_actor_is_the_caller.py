@@ -10,7 +10,16 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from blizzard.auth_core import Role
+from blizzard.hub.domain.execution.fleet import FleetService, RetireInterrupted, RetireOutcome
+from blizzard.hub.domain.execution.host_retirement import (
+    HostRetirementInterrupted,
+    HostRetirementService,
+    HostRetireOutcome,
+)
+from blizzard.hub.domain.runners.registration import RunnerLifecycleConflict
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
@@ -51,6 +60,11 @@ def _signed_in(tmp_path: Path) -> HubHarness:
 def _actors(hub: HubHarness, table: str, column: str = "set_by") -> list[str]:
     with hub.engine.connect() as conn:
         return [row[0] for row in conn.exec_driver_sql(f"SELECT {column} FROM {table} ORDER BY rowid")]
+
+
+def _frames(hub: HubHarness, event: str, *, since: int) -> list[tuple[str, str]]:
+    frames = [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == event]
+    return [(f["kind"], f["by"]) for f in frames if "by" in f]
 
 
 def _accepted(resp: Any) -> None:
@@ -102,6 +116,7 @@ def test_the_dependency_routes_record_the_caller(tmp_path: Path) -> None:
 def test_the_runner_routes_record_the_caller(tmp_path: Path) -> None:
     hub = _signed_in(tmp_path)
     seed_runner(hub, "rn_a")
+    since = hub.events.latest_id()
 
     _accepted(hub.client.post("/api/runners/rn_a/pause", json=_SPOOF))
     _accepted(hub.client.post("/api/runners/rn_a/resume", json=_SPOOF))
@@ -112,6 +127,8 @@ def test_the_runner_routes_record_the_caller(tmp_path: Path) -> None:
     assert _actors(hub, "runner_pause_facts") == [_CALLER, _CALLER]
     assert _actors(hub, "runner_token_revocations", "revoked_by") == [_CALLER]
     assert _actors(hub, "runner_lifecycle_facts") == [_CALLER, _CALLER]
+    kinds = ("paused", "resumed", "token-revoked", "retired", "reinstated")
+    assert _frames(hub, "runner-changed", since=since) == [(kind, _CALLER) for kind in kinds]
 
 
 def test_the_host_routes_record_the_caller(tmp_path: Path) -> None:
@@ -125,16 +142,16 @@ def test_the_host_routes_record_the_caller(tmp_path: Path) -> None:
 
     _accepted(hub.client.post(f"/api/hosts/{host_id}/adoptions", json=runners))
     _accepted(hub.client.post(f"/api/hosts/{host_id}/releases", json=runners))
+    _accepted(hub.client.post(f"/api/hosts/{host_id}/adoptions", json=runners))
     _accepted(hub.client.post(f"/api/hosts/{host_id}/token-revocations", json=_SPOOF))
     _accepted(hub.client.post(f"/api/hosts/{host_id}/retire", json=_SPOOF))
 
-    frames = [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == "host-changed"]
-    assert {f["kind"]: f["by"] for f in frames if f["kind"] in ("adopted", "released")} == {
-        "adopted": _CALLER,
-        "released": _CALLER,
-    }
+    kinds = ("adopted", "released", "adopted", "token-revoked", "retired")
+    assert _frames(hub, "host-changed", since=since) == [(kind, _CALLER) for kind in kinds]
+    assert ("retired", _CALLER) in _frames(hub, "runner-changed", since=since)
     assert _actors(hub, "host_token_revocations", "revoked_by") == [_CALLER]
     assert _actors(hub, "host_lifecycle_facts") == [_CALLER]
+    assert _actors(hub, "runner_lifecycle_facts") == [_CALLER]
 
 
 def test_the_cadence_routes_record_the_caller(tmp_path: Path) -> None:
@@ -184,9 +201,56 @@ def test_a_runner_a_host_retires_under_itself_is_retired_by_that_host(tmp_path: 
     added = hub.client.post("/api/hosts", json={"name": "box"}).json()
     headers = {"Authorization": f"Bearer {added['token']}"}
     runner_id = hub.client.post("/api/fleet/host/runners", json={"name": "mine"}, headers=headers).json()["runner_id"]
+    since = hub.events.latest_id()
 
     retired = hub.client.post(f"/api/fleet/host/runners/{runner_id}/retire", json=_SPOOF, headers=headers)
 
     assert retired.status_code == 200, retired.text
     assert retired.json()["runner"]["retired_by"] == "box"
     assert _actors(hub, "runner_lifecycle_facts") == ["box"]
+    assert _frames(hub, "runner-changed", since=since) == [("retired", "box")]
+
+
+_COMMITTED = RetireOutcome(fact_id=1, revocation_id=None, released=())
+
+
+def _interrupting(monkeypatch: pytest.MonkeyPatch, service: type, exc: Exception) -> None:
+    def interrupted(self: object, *args: Any, **kwargs: Any) -> Any:
+        raise exc
+
+    monkeypatch.setattr(service, "retire", interrupted)
+
+
+@pytest.mark.parametrize("door", ["operator", "host"])
+def test_an_interrupted_runner_retire_publishes_the_same_actor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, door: str
+) -> None:
+    hub = _signed_in(tmp_path)
+    added = hub.client.post("/api/hosts", json={"name": "box"}).json()
+    headers = {"Authorization": f"Bearer {added['token']}"}
+    runner_id = hub.client.post("/api/fleet/host/runners", json={"name": "mine"}, headers=headers).json()["runner_id"]
+    refusal = RunnerLifecycleConflict(runner_id, expected=0)
+    _interrupting(monkeypatch, FleetService, RetireInterrupted(_COMMITTED, refusal))
+    since = hub.events.latest_id()
+
+    if door == "operator":
+        resp = hub.client.post(f"/api/runners/{runner_id}/retire", json=_SPOOF)
+    else:
+        resp = hub.client.post(f"/api/fleet/host/runners/{runner_id}/retire", json=_SPOOF, headers=headers)
+
+    assert resp.status_code == 409, resp.text
+    assert _frames(hub, "runner-changed", since=since) == [("retired", _CALLER if door == "operator" else "box")]
+
+
+def test_an_interrupted_host_retire_publishes_the_caller(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = _signed_in(tmp_path)
+    host_id = hub.client.post("/api/hosts", json={"name": "box"}).json()["host_id"]
+    committed = HostRetireOutcome(fact_id=1, revocation_id=None, runners={})
+    refusal = RunnerLifecycleConflict("rn_a", expected=0)
+    _interrupting(monkeypatch, HostRetirementService, HostRetirementInterrupted(committed, refusal))
+    since = hub.events.latest_id()
+
+    resp = hub.client.post(f"/api/hosts/{host_id}/retire", json=_SPOOF)
+
+    assert resp.status_code == 409, resp.text
+    assert _frames(hub, "host-changed", since=since) == [("retired", _CALLER)]

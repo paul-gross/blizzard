@@ -165,7 +165,7 @@ def test_revoke_token_posts_to_the_revocations() -> None:
     assert "revoked hs_a's token" in result.output
 
 
-def test_retire_posts_force_and_by_and_names_what_it_released() -> None:
+def test_retire_posts_force_and_names_what_it_released() -> None:
     bound, calls = _stub("post", _respond(200, {"host": _row("hs_a", "box"), "released_chunk_ids": ["ch_1"]}))
 
     result = bound.runner.invoke(hub_group, ["runner-host", "retire", "hs_a", "--force"], env=ENV)

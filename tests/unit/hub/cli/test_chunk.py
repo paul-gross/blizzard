@@ -240,7 +240,7 @@ def test_restart_without_a_node_posts_a_null_target() -> None:
     assert "build" in result.output
 
 
-def test_restart_sends_the_named_node_and_actor() -> None:
+def test_restart_sends_the_named_node() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -587,7 +587,7 @@ def test_show_marks_no_estimate_when_none_was_reported() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_depend_declares_and_defaults_by_to_operator() -> None:
+def test_depend_declares_the_dependency() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -617,29 +617,6 @@ def test_depend_declares_and_defaults_by_to_operator() -> None:
     ]
     assert "ch_1" in result.output
     assert "ch_2" in result.output
-
-
-def test_depend_sends_a_named_by() -> None:
-    calls: list[object] = []
-
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        calls.append(json)
-        return _FakeResponse(
-            202,
-            {
-                "dependency_id": "dep_1",
-                "dependent_chunk_id": "ch_1",
-                "prerequisite_chunk_id": "ch_2",
-                "declared_at": "2026-01-01T00:00:00+00:00",
-                "declared_by": "ada",
-            },
-        )
-
-    bound = bind_stubs(post=fake_post)
-    result = bound.runner.invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2"])
-
-    assert result.exit_code == 0, result.output
-    assert calls == [{"prerequisite_chunk_id": "ch_2"}]
 
 
 def test_depend_refuses_a_dependent_not_editable() -> None:
@@ -701,7 +678,7 @@ def test_depend_shows_the_hubs_404_naming_both_chunks() -> None:
     assert "ch_2" in result.output
 
 
-def test_release_dependency_releases_and_defaults_by_to_operator() -> None:
+def test_release_dependency_releases_the_edge() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:

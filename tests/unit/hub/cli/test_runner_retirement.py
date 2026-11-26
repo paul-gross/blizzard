@@ -58,7 +58,7 @@ def _runner(**fields: Any) -> dict[str, Any]:
 _RETIRED_VIEW = _runner(retired=True, retired_at="2026-09-28T00:00:00Z", retired_by="op")
 
 
-def test_retire_posts_force_and_by_and_names_what_it_released() -> None:
+def test_retire_posts_force_and_names_what_it_released() -> None:
     bound, calls = _stub("post", _FakeResponse(200, {"runner": _RETIRED_VIEW, "released_chunk_ids": ["ch_1", "ch_2"]}))
 
     result = bound.runner.invoke(hub_group, ["runner", "retire", "runner-a", "--force"], env=_ENV)
@@ -78,7 +78,7 @@ def test_retire_surfaces_the_holdings_refusal() -> None:
     assert "ch_1" in result.output
 
 
-def test_reinstate_posts_by_and_reports_it() -> None:
+def test_reinstate_posts_and_reports_it() -> None:
     bound, calls = _stub("post", _FakeResponse(200, _runner()))
 
     result = bound.runner.invoke(hub_group, ["runner", "reinstate", "runner-a"], env=_ENV)

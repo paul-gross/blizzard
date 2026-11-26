@@ -15,7 +15,7 @@ export interface RunnerPauseVars {
  * `POST /api/runners/{id}/pause|resume` — the operator brake, routed to the
  * pause or resume verb by the desired `paused` state, through the generated client
  * (bzh:generated-client). Re-reads the registry on success; the stream also fires
- * `runner-changed`. The hub records the signed-in caller as the actor.
+ * `runner-changed`.
  */
 export function injectRunnerPauseMutation() {
   const queryClient = inject(QueryClient);
