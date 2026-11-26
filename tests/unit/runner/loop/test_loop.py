@@ -2887,6 +2887,9 @@ def test_a_real_identity_handshake_failure_kills_the_launch_and_leaves_a_durably
         ).one()
     assert row.session_id is None
     assert row.identity_failed_at is not None  # the provisional generation is durably closed unidentified
+    (event,) = [json.loads(b.payload) for b in store.pending_outbound() if b.kind == EVENT_RECORDED]
+    assert event["kind"] == "command-failed"
+    assert event["detail"] == {"command": "await worker identity", "stderr_tail": "fake: identity never arrived"}
 
 
 def test_reap_closes_a_provisional_generation_left_by_an_identity_failure(tmp_path: Path):

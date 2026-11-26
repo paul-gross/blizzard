@@ -517,7 +517,16 @@ def test_a_landing_on_a_flow_writes_its_five_rows_once(world: _World) -> None:
     with world.hub.engine.connect() as conn:
         kind, detail = conn.execute(hub_scoped(select(s.event_log.c.kind, s.event_log.c.detail))).one()
     assert kind == "flow-landed"
-    assert json.loads(detail)["members"] == [{"chunk_id": chunk_id, "project_id": "prj_default"}]
+    assert json.loads(detail) == {
+        "flow_id": submission.flows[0].flow_id,
+        "resource": "repo:re_a/main",
+        "repository_id": "re_a",
+        "branch": "main",
+        "revision": "m1",
+        "chunk_id": chunk_id,
+        "project_id": "prj_default",
+        "members": [{"chunk_id": chunk_id, "project_id": "prj_default"}],
+    }
 
 
 # --- levers -----------------------------------------------------------------------------------------------------------
