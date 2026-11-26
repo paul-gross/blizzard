@@ -11,6 +11,7 @@ from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsReposi
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.terminal import terminal_under_lock
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from tests.support.scaffolding import HubHarness, chunk_stores, chunk_unit, hub_store_connections
@@ -53,7 +54,7 @@ def record_no_code(
 ) -> None:
     """Record on the visit at epoch 1 the ``no-code/`` marker bound to ``repo``'s declaration of ``branch`` at
     ``commit``, resolved to the hub's one repository record."""
-    (record,) = hub.services.repository_records.list_all(include_retired=False)
+    (record,) = hub.default_adapter(IReadRepositoryRecordRepository).list_all(include_retired=False)
     name, content = no_code_marker(
         {
             "repo": repo,
