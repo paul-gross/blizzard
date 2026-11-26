@@ -26,4 +26,5 @@ it('renders unknown vocabulary as its raw spelling', () => {
   const change: HubSettingsChange = { id: 1, revision: 1, op: { kind: 'unknown', raw: 'replace' }, door: { kind: 'unknown', raw: 'console' }, actor: 'a', recorded_at: 'now', apply_id: null, diff: [] };
   expect(recordOf(row).facts).toEqual([{ label: 'Value', value: '1' }, { label: 'Source', value: 'remote' }, { label: 'Lifetime', value: 'later' }]);
   expect(revisionsOf([change])[0]).toMatchObject({ op: 'replace', door: 'console' });
+  expect(changeEntriesOf([change])[0]).toMatchObject({ title: 'Revision 1 · replace', door: 'console' });
 });

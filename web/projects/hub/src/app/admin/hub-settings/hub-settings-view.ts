@@ -1,4 +1,4 @@
-import type { HubSettingRow, HubSettingsChange } from './hub-settings.domain';
+import type { HubSettingRow } from './hub-settings.domain';
 import { hubSettingValueText } from './hub-settings.domain';
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { KitAsyncState, KitButton, KitSectionHead, type KitAsyncStateValue } from 'fleet';

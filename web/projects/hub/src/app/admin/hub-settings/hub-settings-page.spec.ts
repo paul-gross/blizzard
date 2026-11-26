@@ -2,7 +2,6 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { HubSettingsChange } from 'fleet';
 import { OPERATOR_ME_RESPONSE, settle, stubError, stubHubClient, type RequestClientStub } from 'fleet/testing';
 import { HubSettingsPage } from './hub-settings-page';
 
@@ -24,9 +23,12 @@ describe('HubSettingsPage', () => {
     expect(stub.forRoute('/api/admin/settings/changes', 'GET')).toHaveLength(0);
   });
 
+  const change = (id: number) => ({ id, revision: id, op: 'edit' as const, door: 'api' as const, actor: 'pgross', recorded_at: '2026-01-02T00:00:00Z',
+    apply_id: null, diff: [{ field: 'alpha', old: 60, new: 75, old_label: null, new_label: null }] });
+
   async function mountAuthorized(
     patch: NonNullable<Parameters<typeof stubHubClient>[0]['PATCH /api/admin/settings']>,
-    changes: HubSettingsChange[] = [],
+    changes: ReturnType<typeof change>[] = [],
   ) {
     const permissions = [...OPERATOR_ME_RESPONSE.permissions, 'settings:admin' as const];
     const me = { ...OPERATOR_ME_RESPONSE, permissions, tenants: OPERATOR_ME_RESPONSE.tenants.map((t) => ({ ...t, permissions })) };
@@ -127,8 +129,6 @@ describe('HubSettingsPage', () => {
   });
 
   it('renders each history change as a change-entry panel', async () => {
-    const change = (id: number): HubSettingsChange => ({ id, revision: id, op: 'edit', door: 'api', actor: 'pgross', recorded_at: '2026-01-02T00:00:00Z',
-      apply_id: null, diff: [{ field: 'alpha', old: 60, new: 75, old_label: null, new_label: null }] });
     const { el } = await mountAuthorized(() => ({ revision: 8, settings: [] }), [change(2), change(1)]);
     const panels = el.querySelectorAll('app-change-entry-panel');
     expect(panels).toHaveLength(2);
