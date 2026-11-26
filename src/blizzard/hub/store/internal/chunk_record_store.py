@@ -281,9 +281,9 @@ class ChunkRecordStore:
         return ChunkPage(chunks=chunks, next_cursor=next_cursor)
 
     def queue_keys(self, list_: QueueList, *, statuses: Mapping[str, ChunkStatus]) -> list[QueueKey]:
-        """The three ranking columns of the chunks ``statuses`` names at ``list_``'s status — never a
-        ``chunk_work_refs`` row. Ephemeral ids are excluded by an uncorrelated ``NOT IN``, read once per
-        statement: neither ephemeral table indexes ``chunk_id``, so a per-member probe walks its whole history."""
+        """Excludes ephemeral ids by an uncorrelated ``NOT IN``, for the reason pinned in
+        ``tests/component/hub/store/internal/test_chunk_record_store_bulk_reads.py``'s
+        ``test_queue_keys_reads_the_ephemeral_set_once_per_statement_not_once_per_member``."""
         named = _named_with_status(_LIST_STATUS[list_], statuses)
         if not named:
             return []

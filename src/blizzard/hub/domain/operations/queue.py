@@ -525,8 +525,7 @@ class Landing:
 
 
 class QueueMember(Protocol):
-    """What ranking reads of a list member — a :class:`~blizzard.hub.domain.chunk.model.Chunk` or a
-    :class:`~blizzard.hub.domain.chunk.ports.record.QueueKey`."""
+    """What ranking reads of a list member."""
 
     @property
     def chunk_id(self) -> str: ...
@@ -702,12 +701,10 @@ class QueueService:
         limit: int,
         project: str | None = None,
     ) -> QueuePage:
-        """``list_``'s chunks bounded and keyset-paginated (:meth:`QueueRanking.page`), narrowed to
-        ``project``'s chunks when one is named — ranked over the whole list first, so narrowing never
-        reranks. Only the page's chunks are reconstituted. The keys, positions and promotion instants
-        still read every member (``bzh:page-bounded-read``): an absolute whole-list position and the
-        keyset order need every member's effective position. ``cursor`` is a prior
-        :attr:`QueuePage.next_cursor`, else raising
+        """``list_``'s chunks, keyset-paginated (:meth:`QueueRanking.page`) and narrowed to ``project``'s when one is
+        named; only the page's chunks are reconstituted. Keys, positions and promotion instants read every member
+        (``bzh:page-bounded-read``): an absolute position and the keyset order need each one's effective position.
+        ``cursor`` is a prior :attr:`QueuePage.next_cursor`, else raising
         :class:`~blizzard.hub.domain.kernel.pagination.MalformedCursor`."""
         keys = self._record.queue_keys(list_, statuses=statuses)
         page = read_ranking(self._queue, keys).page(keys, cursor=cursor, limit=limit, project=project)

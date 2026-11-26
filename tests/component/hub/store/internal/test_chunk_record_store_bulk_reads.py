@@ -202,8 +202,9 @@ def test_queue_keys_of_an_empty_list_is_empty(tmp_path: Path) -> None:
 
 
 def test_queue_keys_reads_the_ephemeral_set_once_per_statement_not_once_per_member(tmp_path: Path) -> None:
-    # Neither ephemeral table is indexed by chunk id, so a correlated probe walks the tenant's whole grouped and
-    # deleted history for every member; row and statement counts cannot see that walk.
+    """Neither ephemeral table indexes ``chunk_id``, so a correlated ``NOT EXISTS`` walks the tenant's whole grouped
+    and deleted history once per member; an uncorrelated ``NOT IN`` reads it once per statement. Row and statement
+    counts cannot see that walk."""
     store, engine = _store(tmp_path)
     _mint(store, "ch_live")
     statuses = store.facts.load_live_statuses()
