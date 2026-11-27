@@ -6216,6 +6216,11 @@
             ],
             "title": "Reason"
           },
+          "reason_truncated": {
+            "default": false,
+            "title": "Reason Truncated",
+            "type": "boolean"
+          },
           "route_token": {
             "anyOf": [
               {

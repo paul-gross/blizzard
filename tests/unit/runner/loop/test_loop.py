@@ -2018,6 +2018,7 @@ def test_resumed_preamble_reuses_the_same_scratch_directory_a_fresh_spawn_got(tm
         ("pass", " \n ", None),
         ("pass", "", None),
     ],
+    ids=["failure", "boundary", "blank", "empty"],
 )
 def test_advance_review_harvests_findings_asset_from_assessment(
     tmp_path: Path, choice: str, assessment: str, reason: str | None

@@ -6,11 +6,31 @@ pins the rejection edges (``bzh:facts-not-status``).
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from blizzard.foundation.node_steps import ApplyOutcome
+from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.hub.node_steps import completion_submission
+from blizzard.runner.leases.model import NewLease
+from blizzard.runner.loop.steps import Advance, Pull
+from blizzard.runner.node_steps.submissions import ApplyReply
+from tests.support.runner_fakes import (
+    FakeHarness,
+    FakeHub,
+    FakeProbe,
+    FakeProvider,
+    FakeWorktreeGit,
+    make_context,
+    make_envelope,
+    make_store,
+)
+from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import HubHarness, build_hub, make_ready, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "9"}
@@ -148,6 +168,91 @@ def test_accepted_reason_survives_replay_with_different_prose(tmp_path: Path) ->
     artifacts = [a for a in chunk["artifacts"] if a["kind"] == "git_commit"]
     assert len(artifacts) == 1
     assert artifacts[0]["commit_hash"] == completion["artifacts"][0]["commit_hash"]
+
+
+@pytest.mark.parametrize(
+    ("reason", "truncated", "expected"),
+    [
+        ("a" * 1999 + " ", False, "a" * 1999),
+        ("a" * 1999 + " ", True, "a" * 1999 + " "),
+        (" \n ", True, None),
+        ("  " + "🍦" * 1996 + "  ", True, "🍦" * 1996),
+    ],
+    ids=["raw-boundary", "clipped-boundary", "blank", "invalid-clipped"],
+)
+def test_hub_normalizes_untrusted_completion_reason(
+    tmp_path: Path, reason: str, truncated: bool, expected: str | None
+) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claimed(hub)
+    response = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={**_completion(node_id, epoch=1), "reason": reason, "reason_truncated": truncated},
+    )
+    assert response.status_code == 200
+    assert response.json()["outcome"] != "failure"
+    history = hub.client.get(f"/api/chunks/{chunk_id}").json()["history"]
+    assert next(row for row in history if row["from_node_id"] == node_id)["reason"] == expected
+
+
+def test_runner_judgement_boundary_reason_persists_at_hub(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claimed(hub)
+    now = datetime(2026, 7, 13, 12, tzinfo=UTC)
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_r",
+                chunk_id=chunk_id,
+                graph_id="gr_1",
+                node_id=node_id,
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=now,
+            )
+        )
+    )
+    store.record_spawn(
+        "lease_r",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=now,
+    )
+    store.record_binding(chunk_id=chunk_id, environment_id="e1", workdir="/ws/e1", bound_at=now, workspace_id="ws1")
+    runner_hub = FakeHub()
+    runner_hub.envelopes[chunk_id] = make_envelope(
+        chunk_id, "build", node_id=node_id, choices=[("pass", "meets criteria")], produces=["findings"]
+    )
+    runner_hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=runner_hub.envelopes[chunk_id])]
+    assessment = "a" * 1999 + " b"
+    ctx = make_context(
+        store,
+        hub=runner_hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(
+            handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100),
+            verdict="pass",
+            assessment=assessment,
+        ),
+        probe=FakeProbe(),
+        worktree_git=FakeWorktreeGit(),
+    )
+    Advance(ctx).run()
+    Advance(ctx).run()
+    Advance(ctx).run()
+    Pull(ctx).run()
+    _, submission = runner_hub.completions[0]
+    payload = completion_submission(submission).model_dump(mode="json")
+    # The hub graph requires its git artifact; retain the runner's submitted assessment.
+    payload["artifacts"] = _completion(node_id, epoch=1)["artifacts"]
+    response = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=payload)
+    assert response.status_code == 200
+    assert response.json()["outcome"] != "failure"
+    history = hub.client.get(f"/api/chunks/{chunk_id}").json()["history"]
+    assert next(row for row in history if row["from_node_id"] == node_id)["reason"] == "a" * 1999 + " "
 
 
 @pytest.mark.parametrize(

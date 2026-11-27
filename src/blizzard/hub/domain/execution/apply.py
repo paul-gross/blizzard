@@ -415,7 +415,7 @@ class ApplyService:
                     artifacts=artifact_rows,
                     close_decision=decide_close_enqueue(chunk.work_refs, self._closer_available),
                     decision_id=submission.decision_id,
-                    reason=normalize_transition_reason(submission.reason),
+                    reason=normalize_transition_reason(submission.reason, truncated=submission.reason_truncated),
                     transaction=transaction,
                 )
                 if isinstance(transitioned, FenceRefusal):

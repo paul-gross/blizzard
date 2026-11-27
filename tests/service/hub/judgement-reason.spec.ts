@@ -2,8 +2,11 @@ import { expect, test } from '../../harness/fixtures';
 
 test.use({ isolation: 'fresh-tenant' });
 
-test('a mock runner completion exposes its judgement reason in chunk history', async ({ api, issue, mockRunner }) => {
-  const reason = 'The mock runner found the change ready.';
+for (const { label, reason, truncated } of [
+  { label: 'ordinary', reason: 'The mock runner found the change ready.', truncated: false },
+  { label: 'truncated at whitespace', reason: 'a'.repeat(1999) + ' ', truncated: true },
+]) {
+test(`a mock runner completion exposes its ${label} judgement reason in chunk history`, async ({ api, issue, mockRunner }) => {
   const graph = {
     name: 'default-delivery', entry: 'build', nodes: {
       build: {
@@ -26,7 +29,7 @@ test('a mock runner completion exposes its judgement reason in chunk history', a
   const runner = await mockRunner('reason-reporter');
   expect((await runner.drive('register')).body.status).toBe(201);
   expect((await runner.drive('claim', { chunk_id: id })).body.claimed).toBe(true);
-  const completed = await runner.drive('complete', { chunk_id: id, choice: 'pass', reason });
+  const completed = await runner.drive('complete', { chunk_id: id, choice: 'pass', reason, reason_truncated: truncated });
   expect(completed.body.drove).toBe(true);
   expect(completed.body.response?.outcome).toBe('next');
 
@@ -36,3 +39,4 @@ test('a mock runner completion exposes its judgement reason in chunk history', a
     expect.objectContaining({ choice_name: 'pass', reason }),
   ]));
 });
+}

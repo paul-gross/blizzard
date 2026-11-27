@@ -1,13 +1,16 @@
 import { expect, runnerTest as test, stepUntil } from '../../harness/fixtures';
 
-test('a real runner submits the judgement reason to the mock hub', async ({ mockHub, runnerHost }) => {
-  const reason = 'Checks passed; the change is ready for review.';
+for (const { label, verdictReason, reason, truncated } of [
+  { label: 'ordinary', verdictReason: 'Checks passed; the change is ready for review.', reason: 'Checks passed; the change is ready for review.', truncated: false },
+  { label: 'truncated at whitespace', verdictReason: 'a'.repeat(1999) + ' b', reason: 'a'.repeat(1999) + ' ', truncated: true },
+]) {
+test(`a real runner submits its ${label} judgement reason to the mock hub`, async ({ mockHub, runnerHost }) => {
   const seeded = await mockHub.seed.chunk({
     entry: 'build',
     nodes: {
       build: {
         executor: 'runner', session: 'resume', judged_by: 'worker', prompt: "print('worked')\n",
-        judgement_prompt: `verdict('pass', '${reason}')\n`,
+        judgement_prompt: `verdict('pass', '${verdictReason}')\n`,
         choices: [{ name: 'pass', description: 'ready', to: 'done' }],
       },
     },
@@ -22,10 +25,11 @@ test('a real runner submits the judgement reason to the mock hub', async ({ mock
   const requests = (await mockHub.captured.read()).body.requests.filter((request) =>
     request.method === 'POST' && request.path === `/api/fleet/chunks/${id}/completions`);
   expect(requests.length).toBeGreaterThan(0);
-  expect(requests[0]!.body).toMatchObject({ choice: 'pass', reason });
+  expect(requests[0]!.body).toMatchObject({ choice: 'pass', reason, reason_truncated: truncated });
   const detail = await mockHub.fleetOf(runnerHost, 'runner-local').get(`/api/fleet/chunks/${id}`);
   expect(detail.status).toBe(200);
   expect(detail.body.history).toEqual(expect.arrayContaining([
     expect.objectContaining({ choice_name: 'pass', reason }),
   ]));
 });
+}

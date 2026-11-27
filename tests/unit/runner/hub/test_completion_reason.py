@@ -12,7 +12,7 @@ from blizzard.wire.completion import CompletionSubmission
 
 
 def test_completion_reason_survives_buffer_wire_round_trip() -> None:
-    completion = Completion(choice="pass", epoch=1, from_node_id="node", reason="Done")
+    completion = Completion(choice="pass", epoch=1, from_node_id="node", reason="a" * 1999 + " ", reason_truncated=True)
     payload = json.loads(completion_submission(completion).model_dump_json())
     assert completion_of(CompletionSubmission.model_validate(payload)) == completion
 
@@ -28,6 +28,19 @@ def test_old_completion_buffer_has_no_reason() -> None:
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     assert buffered_completion(fact).reason is None
+    assert buffered_completion(fact).reason_truncated is False
+
+
+def test_old_buffer_with_reason_defaults_truncation_to_false() -> None:
+    fact = BufferedFact(
+        seq=1,
+        kind=COMPLETION_KIND,
+        chunk_id="chunk",
+        lease_id="lease",
+        payload=json.dumps({"submission": {"choice": "pass", "epoch": 1, "from_node_id": "node", "reason": "Done"}}),
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    assert buffered_completion(fact).reason_truncated is False
 
 
 def test_wire_reason_enforces_codepoint_cap() -> None:

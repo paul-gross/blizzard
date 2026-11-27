@@ -52,3 +52,5 @@ class CompletionSubmission(BaseModel):
     # Optional owning-lease check; absent it, match the runner alone.
     lease_id: str | None = None
     reason: str | None = Field(default=None, max_length=TRANSITION_REASON_MAX_LENGTH)
+    # Set when the trimmed assessment exceeded the cap: its clipped boundary whitespace is meaningful.
+    reason_truncated: bool = False

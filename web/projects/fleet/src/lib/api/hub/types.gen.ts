@@ -3781,6 +3781,10 @@ export type CompletionSubmission = {
      */
     reason?: string | null;
     /**
+     * Reason Truncated
+     */
+    reason_truncated?: boolean;
+    /**
      * Route Token
      */
     route_token?: string | null;
