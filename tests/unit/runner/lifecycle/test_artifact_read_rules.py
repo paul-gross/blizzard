@@ -19,7 +19,9 @@ from blizzard.runner.lifecycle.artifacts import (
     has_producing_node,
     read_only_reason,
     refuse_epochs_outside_node,
+    series_newest_first,
 )
+from blizzard.wire.chunk import ArtifactView
 from blizzard.wire.envelope import WorkerArtifact
 
 
@@ -197,3 +199,26 @@ def test_listing_every_epoch_of_a_scope_without_epochs_is_refused(scope: Artifac
         f"--all-epochs cannot include {scope.value} scope — only node scope has epochs; "
         f"drop one of --all-epochs / --scope {scope.value}"
     )
+
+
+def _entry(content: str, *, node: str = "verify", epoch: int = 5, produced_at: str | None = None) -> ArtifactView:
+    return ArtifactView(
+        key=f"{node}.plan.{epoch}",
+        kind=ArtifactKind.ASSET,
+        name="plan",
+        node_id=f"nd_{node}",
+        node_name=node,
+        epoch=epoch,
+        produced_at=produced_at,
+        content=content,
+    )
+
+
+def test_a_series_keeps_the_first_entry_of_a_repeated_key_newest_first() -> None:
+    served = [_entry("round-1"), _entry("round-2", epoch=9), _entry("round-2 duplicate", epoch=9)]
+    assert [e.content for e in series_newest_first(served)] == ["round-2", "round-1"]
+
+
+def test_a_shared_epoch_orders_by_production_time_unstated_oldest() -> None:
+    served = [_entry("unstated"), _entry("stated", node="build", produced_at="2026-07-21T12:00:00+00:00")]
+    assert [e.content for e in series_newest_first(served)] == ["stated", "unstated"]

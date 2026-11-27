@@ -22,10 +22,12 @@ __all__ = [
     "IReadGraphArtifactRepository",
     "IWriteGraphArtifactRepository",
     "PinnedGraphArtifact",
+    "SeriesEntry",
     "carries_content",
     "has_producing_node",
     "read_only_reason",
     "refuse_epochs_outside_node",
+    "series_newest_first",
 ]
 
 
@@ -123,14 +125,35 @@ def _label(candidate: ArtifactCandidate) -> str:
     raise AssertionError(f"unhandled artifact scope {candidate.scope!r}")  # pragma: no cover
 
 
+class SeriesEntry(Protocol):
+    """What ordering a node series reads off one entry."""
+
+    @property
+    def node_name(self) -> str: ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def epoch(self) -> int: ...
+    @property
+    def produced_at(self) -> str | None: ...
+
+
+def series_newest_first[E: SeriesEntry](entries: Sequence[E]) -> list[E]:
+    """One entry per ``(node_name, name, epoch)``, newest first by epoch then production time, an
+    unstated time ranking oldest. ``entries`` arrive earliest write first within a key, and that
+    first one is kept: the row a bare read serves."""
+    kept: dict[tuple[str, str, int], E] = {}
+    for entry in entries:
+        kept.setdefault((entry.node_name, entry.name, entry.epoch), entry)
+    return sorted(kept.values(), key=lambda e: (e.epoch, e.produced_at or ""), reverse=True)
+
+
 @domain_model
 @dataclass(frozen=True)
 class ArtifactRead:
     """A worker's read of one artifact by ``name`` against its lease's mint ``graph_id``, optionally
-    narrowed by ``node`` (a producing node), ``epoch`` (one entry of a node's series) and ``scope``.
-    A supplied ``node`` or ``epoch`` settles scope to node — neither a graph declaration nor a system
-    artifact has a producing node or epochs — so graph and system join the search only when no
-    narrowing flag is given."""
+    narrowed by ``node``, ``epoch`` and ``scope``. ``node`` or ``epoch`` settles scope to node, so
+    graph and system join the search only when no narrowing flag is given."""
 
     name: str
     graph_id: str
@@ -164,13 +187,10 @@ class ArtifactRead:
         return self.scope is None and self.node is None and self.epoch is None
 
     def resolve[C: ArtifactCandidate](self, candidates: Sequence[C]) -> C:
-        """The one candidate the searched scopes found, else :class:`ArtifactNotFound`
-        naming what was searched, or :class:`ArtifactAmbiguous` for a name in several scopes.
-        With ``epoch``, ``candidates`` is the whole node series and only that epoch's entries
-        survive — :class:`ArtifactEpochNotHeld` when there are none.
-        Node candidates collapse to the newest by epoch first — each lease mints a fresh, rising
-        epoch, so two producing nodes never tie; a tie keeps the first, the envelope's
-        newest-first order."""
+        """The one candidate the searched scopes found, else :class:`ArtifactNotFound`, or
+        :class:`ArtifactAmbiguous` for a name in several scopes. With ``epoch``, only the series'
+        entries at it survive — :class:`ArtifactEpochNotHeld` when there are none. Node candidates
+        collapse to the highest epoch, a tie keeping the first given."""
         if not candidates:
             raise ArtifactNotFound(self._not_found())
         if self.epoch is not None:

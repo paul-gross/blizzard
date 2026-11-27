@@ -1,4 +1,4 @@
-"""The slice of a hub chunk detail a worker's read of superseded artifact epochs decodes."""
+"""The artifacts slice of a hub chunk detail."""
 
 from __future__ import annotations
 

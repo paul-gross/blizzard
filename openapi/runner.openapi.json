@@ -14433,7 +14433,7 @@
     },
     "/runners/{runner_id}/api/leases/{lease_id}/artifacts/{name}": {
       "get": {
-        "description": "One artifact by name, optionally narrowed by ``scope`` and, for node scope, by ``node``\nand ``epoch``; ``404`` when nothing matches. A supplied ``node`` or ``epoch`` settles scope to\nnode on its own \u2014 neither a graph declaration nor a system artifact has a producing node or\nepochs \u2014 so pairing either with ``scope=graph``/``scope=system`` is ``400``. A name several\nnodes produced reads as the newest entry (``node`` narrows to one node's series); ``epoch``\nreads that one entry instead, and an epoch the series does not hold is ``404`` naming those it\nholds. ``409`` is a name colliding across scopes, naming them.",
+        "description": "One artifact by name, the newest entry unless ``epoch`` names one, optionally narrowed by\n``scope`` and ``node``. ``404`` when nothing matches, naming the held epochs when the series\nlacks ``epoch``; ``400`` for ``node`` or ``epoch`` with a graph or system scope; ``409`` for a\nname colliding across scopes, naming them.",
         "operationId": "get_artifact_runners__runner_id__api_leases__lease_id__artifacts__name__get",
         "parameters": [
           {

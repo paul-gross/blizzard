@@ -1,10 +1,8 @@
-"""A worker's read of its own node-step artifacts, its graph mint's own
-baked-in declarations, and blizzard's own published system-artifact set — node scope
-resolved latest-by-epoch unless the read names an epoch or asks for all of them — or one by
-name, whose ``:path`` converter captures a slash verbatim. Graph scope answers from the
-runner's own pinned-mint mirror; node and system scope proxy through the hub on every call
-(``bzh:graph-scope-reads-local``, ``bzh:system-scope-reads-live``). Authorization resolves
-before any source is consulted."""
+"""A worker's read of its own node-step artifacts, its graph mint's baked-in declarations, and
+blizzard's published system-artifact set; ``:path`` captures a slash in a name verbatim. Graph
+scope answers from the runner's own pinned-mint mirror; node and system scope proxy through the
+hub on every call (``bzh:graph-scope-reads-local``, ``bzh:system-scope-reads-live``).
+Authorization resolves before any source is consulted."""
 
 from __future__ import annotations
 
@@ -27,6 +25,7 @@ from blizzard.runner.lifecycle.artifacts import (
     ArtifactReadContradiction,
     IReadGraphArtifactRepository,
     refuse_epochs_outside_node,
+    series_newest_first,
 )
 from blizzard.wire.chunk import ArtifactView
 from blizzard.wire.chunk_artifacts import ChunkArtifactsSource
@@ -36,21 +35,7 @@ from blizzard.wire.system_artifact import SYSTEM_ARTIFACT_NOT_FOUND
 router = APIRouter(prefix="/api", tags=["runner"])
 
 
-def _node_row(artifact: EnvelopeArtifact) -> WorkerArtifact:
-    return WorkerArtifact(
-        scope=ArtifactScope.NODE,
-        name=artifact.name,
-        kind=artifact.kind,
-        node_name=artifact.node_name,
-        epoch=artifact.epoch,
-        repo=artifact.repo,
-        branch_name=artifact.branch_name,
-        commit_hash=artifact.commit_hash,
-        content=artifact.content,
-    )
-
-
-def _series_row(artifact: ArtifactView) -> WorkerArtifact:
+def _node_row(artifact: EnvelopeArtifact | ArtifactView) -> WorkerArtifact:
     return WorkerArtifact(
         scope=ArtifactScope.NODE,
         name=artifact.name,
@@ -111,37 +96,22 @@ def _system_hit(name: str, request: Request) -> WorkerArtifact | None:
 @collaborator
 @dataclass(frozen=True)
 class NodeArtifacts:
-    """One chunk's envelope artifacts, read through the layered forward to the hub."""
-
-    items: list[EnvelopeArtifact]
-
-    @classmethod
-    def of(cls, chunk_id: str, request: Request) -> NodeArtifacts:
-        upstream = HubProxy.of(request, "artifacts").get(f"/api/fleet/chunks/{chunk_id}/envelope", chunk_id=chunk_id)
-        return cls(NodeEnvelope.model_validate(upstream.json()).artifacts)
-
-    def named(self, name: str, *, node: str | None) -> list[EnvelopeArtifact]:
-        matches = [a for a in self.items if a.name == name]
-        return matches if node is None else [a for a in matches if a.node_name == node]
-
-
-@collaborator
-@dataclass(frozen=True)
-class NodeArtifactSeries:
-    """Every epoch of one chunk's node-scope artifacts, newest first, read through the layered
-    forward to the hub's chunk detail."""
+    """One chunk's node-scope artifacts, read through the layered forward to the hub."""
 
     items: list[WorkerArtifact]
 
     @classmethod
-    def of(cls, chunk_id: str, request: Request) -> NodeArtifactSeries:
+    def newest(cls, chunk_id: str, request: Request) -> NodeArtifacts:
+        """The newest entry of each series, as the chunk's envelope carries them."""
+        upstream = HubProxy.of(request, "artifacts").get(f"/api/fleet/chunks/{chunk_id}/envelope", chunk_id=chunk_id)
+        return cls([_node_row(a) for a in NodeEnvelope.model_validate(upstream.json()).artifacts])
+
+    @classmethod
+    def every_epoch(cls, chunk_id: str, request: Request) -> NodeArtifacts:
+        """Every entry of each series, from the hub's chunk detail."""
         upstream = HubProxy.of(request, "artifacts").get(f"/api/fleet/chunks/{chunk_id}", chunk_id=chunk_id)
-        served: dict[tuple[str, str, int], ArtifactView] = {}
-        for view in ChunkArtifactsSource.model_validate(upstream.json()).artifacts:
-            # The first served under a key is the earliest write — the row a bare read serves.
-            served.setdefault((view.node_name, view.name, view.epoch), view)
-        newest_first = sorted(served.values(), key=lambda v: (v.epoch, v.produced_at or ""), reverse=True)
-        return cls([_series_row(view) for view in newest_first])
+        source = ChunkArtifactsSource.model_validate(upstream.json())
+        return cls([_node_row(a) for a in series_newest_first(source.artifacts)])
 
     def named(self, name: str, *, node: str | None) -> list[WorkerArtifact]:
         matches = [a for a in self.items if a.name == name]
@@ -167,10 +137,8 @@ def list_artifacts(
         return _graph_rows(lease.graph_id, request)
     if scope is ArtifactScope.SYSTEM:
         return _system_rows(request)
-    if all_epochs:
-        node_rows = NodeArtifactSeries.of(lease.chunk_id, request).items
-    else:
-        node_rows = [_node_row(a) for a in NodeArtifacts.of(lease.chunk_id, request).items]
+    read_series = NodeArtifacts.every_epoch if all_epochs else NodeArtifacts.newest
+    node_rows = read_series(lease.chunk_id, request).items
     if scope is ArtifactScope.NODE:
         return node_rows
     return node_rows + _graph_rows(lease.graph_id, request) + _system_rows(request)
@@ -185,13 +153,10 @@ def get_artifact(
     scope: ArtifactScope | None = None,
     epoch: int | None = None,
 ) -> WorkerArtifact:
-    """One artifact by name, optionally narrowed by ``scope`` and, for node scope, by ``node``
-    and ``epoch``; ``404`` when nothing matches. A supplied ``node`` or ``epoch`` settles scope to
-    node on its own — neither a graph declaration nor a system artifact has a producing node or
-    epochs — so pairing either with ``scope=graph``/``scope=system`` is ``400``. A name several
-    nodes produced reads as the newest entry (``node`` narrows to one node's series); ``epoch``
-    reads that one entry instead, and an epoch the series does not hold is ``404`` naming those it
-    holds. ``409`` is a name colliding across scopes, naming them."""
+    """One artifact by name, the newest entry unless ``epoch`` names one, optionally narrowed by
+    ``scope`` and ``node``. ``404`` when nothing matches, naming the held epochs when the series
+    lacks ``epoch``; ``400`` for ``node`` or ``epoch`` with a graph or system scope; ``409`` for a
+    name colliding across scopes, naming them."""
     lease = authorized_lease(lease_id, request)
     read = ArtifactRead(name=name, graph_id=lease.graph_id, node=node, scope=scope, epoch=epoch)
     try:
@@ -200,10 +165,8 @@ def get_artifact(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     candidates: list[WorkerArtifact] = []
     if read.searches_node():
-        if epoch is None:
-            candidates += [_node_row(a) for a in NodeArtifacts.of(lease.chunk_id, request).named(name, node=node)]
-        else:
-            candidates += NodeArtifactSeries.of(lease.chunk_id, request).named(name, node=node)
+        read_series = NodeArtifacts.newest if epoch is None else NodeArtifacts.every_epoch
+        candidates += read_series(lease.chunk_id, request).named(name, node=node)
     if read.searches_graph() and (graph_hit := _graph_hit(lease.graph_id, name, request)) is not None:
         candidates.append(graph_hit)
     if read.searches_system() and (system_hit := _system_hit(name, request)) is not None:
