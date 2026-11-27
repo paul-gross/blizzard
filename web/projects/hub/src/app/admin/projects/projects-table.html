@@ -10,6 +10,7 @@
   <div
     class="rows"
     fleetKitSelectList
+    selectionMode="explicit" [softDisabled]="false" [wrap]="false" focusMode="activedescendant"
     ariaLabel="Projects"
     [value]="selectedKey()"
     (valueChange)="pick.emit($event)"

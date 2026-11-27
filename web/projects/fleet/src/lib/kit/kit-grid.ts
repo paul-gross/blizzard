@@ -1,4 +1,4 @@
-import { Directive, input } from '@angular/core';
+import { Directive, inject, input, type OnInit } from '@angular/core';
 import { Grid } from '@angular/aria/grid';
 
 /**
@@ -8,14 +8,22 @@ import { Grid } from '@angular/aria/grid';
  *
  * Every grid binds `[softDisabled]="false"`: Aria defaults it to `true`, under which a disabled control in
  * the active cell leaves the table with no Tab stop. A host directive's input cannot be defaulted by the kit,
- * so the consumer's template carries the binding. `ariaLabel` names the grid.
+ * so the consumer's template carries the binding; a dev build throws when it is missing. `ariaLabel` names the grid.
  */
 @Directive({
   selector: '[fleetKitGrid]',
   hostDirectives: [{ directive: Grid, inputs: ['disabled', 'softDisabled', 'rowWrap', 'colWrap'] }],
   host: { '[attr.aria-label]': 'ariaLabel()' },
 })
-export class KitGrid {
+export class KitGrid implements OnInit {
   /** The grid's accessible name. */
   readonly ariaLabel = input<string | null>(null);
+
+  private readonly grid = inject(Grid);
+
+  ngOnInit(): void {
+    if ((typeof ngDevMode === 'undefined' || ngDevMode) && this.grid.softDisabled()) {
+      throw new Error('fleetKitGrid is missing [softDisabled]="false"');
+    }
+  }
 }

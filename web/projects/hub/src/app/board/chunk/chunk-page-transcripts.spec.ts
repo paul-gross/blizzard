@@ -238,7 +238,10 @@ describe('Chunk page Transcripts tab', () => {
 
     el.querySelector<HTMLButtonElement>('[data-testid="transcript-segment-back"]')?.click();
     await settle(harness.fixture);
-    expect(document.activeElement).toBe(el.querySelector('[data-testid="transcript-segment-item"]'));
+    // The segment list takes the focus the row asked for, with that row as its active descendant.
+    const restored = el.querySelector('[data-testid="transcript-segment-item"]')!;
+    expect(document.activeElement).toBe(restored.closest('[role="listbox"]'));
+    expect(document.activeElement?.getAttribute('aria-activedescendant')).toBe(restored.id);
 
     await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=transcripts&segment=sg_1&sidechain=0`);
     await settle(harness.fixture);

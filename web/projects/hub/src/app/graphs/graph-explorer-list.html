@@ -14,6 +14,7 @@
   class="groups"
   data-testid="graph-explorer-groups"
   fleetKitSelectList
+  selectionMode="explicit" [softDisabled]="false" [wrap]="false" focusMode="activedescendant"
   ariaLabel="Graphs"
   [value]="selectedGraphId()"
   (valueChange)="open($event)"

@@ -26,7 +26,7 @@
 .row:hover {
   background: var(--surface-hover);
 }
-:host(:focus-visible) .row {
+:host-context([role='listbox']:focus-visible) .row.highlighted {
   outline: 1px solid var(--cyan);
   outline-offset: -2px;
 }
@@ -60,7 +60,4 @@
   align-items: inherit;
   justify-content: inherit;
   color: inherit;
-}
-:host(.bare:focus-visible) .row {
-  outline: none;
 }

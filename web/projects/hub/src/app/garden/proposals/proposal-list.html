@@ -9,6 +9,7 @@
       class="pl-list"
       data-testid="gardening-proposals-list"
       fleetKitSelectList
+      selectionMode="explicit" [softDisabled]="false" [wrap]="false" focusMode="activedescendant"
       ariaLabel="Proposals"
       [value]="selectedId()"
       (valueChange)="pick($event)"

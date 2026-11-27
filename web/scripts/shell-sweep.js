@@ -70,8 +70,9 @@
  *   - projects/hub/src/app/runners/fleet-page.shell-sweep.spec.ts — the desktop
  *     Fleet tab: the host list and detail sit side by side at 1280px, the
  *     title-bar host actions are on screen and hit-testable, a selected
- *     host-less runner's slot bar and pace bars stay inside the detail, and
- *     nothing overflows horizontally at 1280/1024px.
+ *     host-less runner's slot bar and pace bars stay inside the detail,
+ *     nothing overflows horizontally at 1280/1024px, and a bare card is ringed
+ *     under keyboard focus but not after a click.
  *   - projects/runner/src/app/core/identity/session-recovery-view.shell-sweep.spec.ts —
  *     the runner's session-recovery surface (blizzard#312), which replaces the
  *     whole panel while a bounce could not be silently completed: the
@@ -315,14 +316,19 @@
  *     highlight, Enter picks, Escape closes, a stored unlisted value is kept, and an
  *     unmatched edit restores the current text.
  *   - projects/fleet/src/lib/kit/kit-select-list.shell-sweep.spec.ts — a 40-row kit
- *     select list in a height-capped scroller in real Chromium: one Tab stop landing on
- *     the selected row, arrows, Home, End and type-ahead moving focus without opening,
- *     End scrolling the last row into view, Enter and a click opening, and an outside
- *     value change moving the Tab stop with scroll and focus unchanged.
+ *     select list in a height-capped scroller in real Chromium: one Tab stop on the list
+ *     itself, arrows, Home, End and type-ahead moving the active descendant without
+ *     opening, End and Tabbing back onto the list scrolling the active row into view,
+ *     Enter and a click opening, an outside value change moving the active row with
+ *     scroll and focus unchanged, a pointer press leaving focus on the list with no
+ *     outline, one Shift+Tab from leaving it, an arrow pressed on a link inside a
+ *     row taking focus back to the list with the row it moves to outlined, and a list
+ *     filtered to nothing and back outlining its selected row again.
  *   - projects/fleet/src/lib/kit/kit-select-row.shell-sweep.spec.ts — the kit select row's
  *     default chrome (6px 8px padding, hairline and left edge, selected background) on
  *     its inner element is unchanged, while `bare` draws none of it in any state and lets
- *     a host flex rule reach the projected children, at 800px, 390px and 320px.
+ *     a host flex rule reach the projected children, at 800px, 390px and 320px; the active
+ *     row is outlined only while the list has keyboard focus.
  *   - projects/fleet/src/lib/transcripts/chunk-transcripts-provenance.shell-sweep.spec.ts —
  *     two transcript segments recording distinct harnesses (blizzard#441) render two
  *     genuinely distinct provenance badges with no horizontal overflow at 390px.

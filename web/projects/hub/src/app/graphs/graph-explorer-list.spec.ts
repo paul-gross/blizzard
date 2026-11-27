@@ -397,12 +397,13 @@ describe('GraphExplorerList', () => {
     const v1 = el.querySelector<HTMLElement>(
       '[data-graph-id="gr_build_v1"] [data-testid="graph-explorer-row"]',
     )!;
-    for (let step = 0; step < 4 && document.activeElement !== v1; step++) {
-      key(header, 'ArrowDown');
+    const list = el.querySelector<HTMLElement>('[role="listbox"]')!;
+    for (let step = 0; step < 4 && list.getAttribute('aria-activedescendant') !== v1.id; step++) {
+      key(list, 'ArrowDown');
       await fixture.whenStable();
     }
-    expect(document.activeElement).toBe(v1);
-    key(v1, 'Enter');
+    expect(list.getAttribute('aria-activedescendant')).toBe(v1.id);
+    key(list, 'Enter');
     await fixture.whenStable();
     expect(emitted).toEqual(['gr_build_v2', 'gr_build_v1']);
   });

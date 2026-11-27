@@ -4,7 +4,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { commands, page } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 
 import { firstFleetId, fleetList, resolveSelection } from './fleet-page.model';
 import { FleetView } from './fleet-view';
@@ -267,6 +267,49 @@ describe('desktop Fleet tab layout shell sweep (web:shell-sweep)', () => {
       const stale = root.querySelector<HTMLElement>('[data-subscription-slug="stale"] [data-testid="subscription-pace-group-refreshed"]')!;
       expect(getComputedStyle(aging).color).not.toBe(getComputedStyle(stale).color);
       expect(getComputedStyle(aging).color).not.toBe(getComputedStyle(root).color);
+    } finally {
+      root.remove();
+    }
+  });
+
+  it('rings a keyboard-focused bare card, and not a clicked one', async () => {
+    await loadDesignTokens();
+    await TestBed.configureTestingModule({
+      imports: [FleetView],
+      providers: [provideZonelessChangeDetection(), provideRouter([]), provideTanStackQuery(nextClaimClient())],
+    }).compileComponents();
+    const groups = groupHostRows(ROWS, CARDS);
+    const list = fleetList(groups);
+    const fixture = TestBed.createComponent(FleetView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('list', list);
+    fixture.componentRef.setInput('selectedId', firstFleetId(list));
+    fixture.componentRef.setInput('selection', resolveSelection(groups, firstFleetId(list)));
+    fixture.componentRef.setInput('canPause', true);
+    const root = fixture.nativeElement as HTMLElement;
+    root.style.display = 'block';
+    root.style.height = '700px';
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(1280, 900);
+      const listbox = root.querySelector<HTMLElement>('[role="listbox"]')!;
+      const cards = root.querySelectorAll<HTMLElement>('fleet-kit-select-row');
+      const outline = (el: HTMLElement) => getComputedStyle(el).outlineStyle;
+
+      await userEvent.click(cards[1]);
+      expect(document.activeElement).toBe(listbox);
+      expect(cards[1].getAttribute('data-active')).toBe('true');
+      expect(outline(cards[1])).toBe('none');
+
+      await userEvent.keyboard('{ArrowUp}');
+      expect(cards[0].getAttribute('data-active')).toBe('true');
+      expect(outline(cards[0])).toBe('solid');
+      expect(outline(cards[1])).toBe('none');
+      expect(outline(listbox)).toBe('none');
+      listbox.blur();
+      expect(outline(cards[0])).toBe('none');
     } finally {
       root.remove();
     }
