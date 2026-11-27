@@ -117,11 +117,37 @@ def test_stale_epoch_is_rejected_and_nothing_lands(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, node_id = _claimed(hub)
 
-    resp = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(node_id, epoch=99))
+    completion = {**_completion(node_id, epoch=99), "reason": "Stale work must not land."}
+    resp = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=completion)
     assert resp.status_code == 200
     assert resp.json()["outcome"] == "failure"
-    # The chunk never advanced and no artifact entered the store.
-    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"
+    chunk = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert chunk["status"] == "running"
+    assert chunk["history"] == []
+    assert not any(a["kind"] == "git_commit" for a in chunk["artifacts"])
+
+
+def test_accepted_reason_survives_replay_with_different_prose(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claimed(hub)
+    completion = {**_completion(node_id, epoch=1), "reason": "Checks passed; ready to deliver."}
+
+    first = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=completion)
+    assert first.status_code == 200
+    assert first.json()["outcome"] != "failure"
+    replay = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions", json={**completion, "reason": "Different replay prose."}
+    )
+    assert replay.status_code == 200
+    assert replay.json() == first.json()
+
+    chunk = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    transitions = [t for t in chunk["history"] if t["from_node_id"] == node_id]
+    assert len(transitions) == 1
+    assert transitions[0]["reason"] == completion["reason"]
+    artifacts = [a for a in chunk["artifacts"] if a["kind"] == "git_commit"]
+    assert len(artifacts) == 1
+    assert artifacts[0]["commit_hash"] == completion["artifacts"][0]["commit_hash"]
 
 
 @pytest.mark.parametrize(
@@ -169,10 +195,14 @@ def test_completion_on_terminal_chunk_fails(tmp_path: Path) -> None:
 def test_unknown_choice_is_a_failure(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, node_id = _claimed(hub)
-    resp = hub.client.post(
-        f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(node_id, epoch=1, choice="nope")
-    )
+    completion = {**_completion(node_id, epoch=1, choice="nope"), "reason": "This choice is invalid."}
+    resp = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=completion)
+    assert resp.status_code == 200
     assert resp.json()["outcome"] == "failure"
+    chunk = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert chunk["status"] == "running"
+    assert chunk["history"] == []
+    assert not any(a["kind"] == "git_commit" for a in chunk["artifacts"])
 
 
 def test_non_code_chunk_completes_with_only_asset_artifacts(tmp_path: Path) -> None:
