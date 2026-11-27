@@ -16,6 +16,7 @@ import sqlalchemy as sa
 from sqlalchemy import Connection
 
 from blizzard.runner.environments.repository import EnvBinding
+from blizzard.runner.hosting.names import RecordedName
 from blizzard.runner.store.schema import (
     binding_releases,
     env_bindings,
@@ -48,23 +49,26 @@ class RunnerAudit:
             rows = conn.execute(sa.select(runner_identity.c.runner_id).order_by(runner_identity.c.id)).all()
         return tuple(str(row.runner_id) for row in rows)
 
-    def stored_names(self) -> dict[str, str]:
-        """Each runner's stored name, by id: its non-blank ``name`` settings entry, else its identity row's name."""
+    def recorded_names(self) -> dict[str, RecordedName]:
         entries = runner_setting_entries
         with self.read_transaction() as conn:
-            named = {
+            rows = {
                 str(row.runner_id): str(row.runner_name)
                 for row in conn.execute(sa.select(runner_identity.c.runner_id, runner_identity.c.runner_name))
             }
+            stored: dict[str, str] = {}
             for row in conn.execute(
                 sa.select(entries.c.runner_id, entries.c.value).where(
                     entries.c.key == "name", entries.c.value.is_not(None)
                 )
             ):
                 value = json.loads(row.value)
-                if isinstance(value, str) and value.strip():
-                    named[str(row.runner_id)] = value.strip()
-        return named
+                if isinstance(value, str):
+                    stored[str(row.runner_id)] = value
+        return {
+            runner_id: RecordedName(stored.get(runner_id), rows.get(runner_id))
+            for runner_id in rows.keys() | stored.keys()
+        }
 
     def unhosted_runners(self) -> tuple[str, ...]:
         """The runners an identity row names and no hosted row accounts for, once the store hosts any runner; none on

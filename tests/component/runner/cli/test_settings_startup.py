@@ -19,6 +19,7 @@ from blizzard.runner.harness.harness_set import HarnessAssemblyKey, HarnessSet, 
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter
 from blizzard.runner.harness.opencode_v2.driver import ServiceIdentity
+from blizzard.runner.harness.wiring import harness_families
 from blizzard.runner.hosting.model import CLI, OPERATOR, SEED, HostedRunnerOp, HostingFact, RunnerAdmission
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
@@ -379,19 +380,30 @@ def test_recovery_retry_preserves_enabled_opencode_version_hold(
 
 @pytest.mark.parametrize("initial", ["", "99.0.0"])
 @pytest.mark.parametrize("persistent", [False, True])
+@pytest.mark.parametrize("separate_chooser", [False, True])
 def test_recovery_retries_unchanged_binary_version_after_transient_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, initial: str, persistent: bool
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, initial: str, persistent: bool, separate_chooser: bool
 ) -> None:
     monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
     binary, answer, calls = tmp_path / "opencode", tmp_path / "version", tmp_path / "calls"
     answer.write_text(initial)
     binary.write_text(f"#!/bin/sh\necho x >> '{calls}'\ncat '{answer}'\n")
     binary.chmod(0o755)
+    configured = binary
+    if separate_chooser:
+        # The version-choosing binary is the only one present: recovery must ask for it, not the section's.
+        configured = tmp_path / "absent"
+
+        def choose(_declaration: object, _section: object) -> str:
+            return str(binary)
+
+        for declaration in harness_families()["opencode"]:
+            monkeypatch.setattr(type(declaration), "version_binary", choose)
     url = f"sqlite:///{tmp_path / 'host.db'}"
     write_minimal_host(
         tmp_path,
         top=f'db_url = "{url}"',
-        runner=f'[runner.opencode]\nenabled = false\nbinary = "{binary}"\n',
+        runner=f'[runner.opencode]\nenabled = false\nbinary = "{configured}"\n',
     )
     host = load_host_config(tmp_path)
     migrated_store_at(url)
