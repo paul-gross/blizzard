@@ -371,12 +371,11 @@ class EventDerivationReconciler:
         self._unconverged: set[TenantId] = set()
 
     def sweep(self) -> None:
-        """One convergence pass over every due tenant (never converged, floor elapsed, or signature
-        changed), or a skip when none is; the corpus is read only then, and of the due tenants alone, save a
-        fresh process's every-tenant derived read. A segment is a ``(tenant, segment_id)`` pair — segment ids
-        are runner-minted — and each due tenant's stale set is its derived pairs less its visible ones. A closed
-        tenant is skipped; one whose pins fail or whose half raises is left unconverged and retried alone next
-        tick."""
+        """One convergence pass over every due tenant (never converged, floor elapsed, or signature changed), or a
+        skip when none is; only then are the due tenants' corpora read, save a fresh process's every-tenant derived
+        read. A segment is a ``(tenant, segment_id)`` pair (ids are runner-minted), stale when derived and not
+        visible. A closed tenant is skipped; one whose pins fail or whose half raises is left unconverged and
+        retried alone next tick."""
         signatures = self._corpus.derivation_signature()
         now = self._clock.now()
         self._converged = {

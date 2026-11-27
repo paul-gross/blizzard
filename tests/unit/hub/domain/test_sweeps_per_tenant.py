@@ -74,11 +74,9 @@ def _refused(tenant: TenantId) -> object:
 class _Intents:
     def __init__(self, rows: Sequence[TenantCloseIntent]) -> None:
         self.rows = list(rows)
-        self.reads = 0
         self.asked: list[list[TenantId] | None] = []
 
     def pending_close_intents(self, tenants: Collection[TenantId] | None = None) -> list[TenantCloseIntent]:
-        self.reads += 1
         self.asked.append(_asked(tenants))
         return [row for row in self.rows if tenants is None or row.tenant in tenants]
 
@@ -218,12 +216,10 @@ def test_a_derivation_pass_skips_a_tenant_closed_since_its_corpus_read() -> None
 class _WorkRefs:
     def __init__(self, rows: Sequence[TenantWorkRef]) -> None:
         self.rows = list(rows)
-        self.reads = 0
         self.changes: dict[TenantId, int] = {}
         self.asked: list[list[TenantId] | None] = []
 
     def live_work_refs(self, tenants: Collection[TenantId] | None = None) -> list[TenantWorkRef]:
-        self.reads += 1
         self.asked.append(_asked(tenants))
         return [row for row in self.rows if tenants is None or row.tenant in tenants]
 
@@ -307,7 +303,7 @@ def test_unchanged_annotation_probes_open_no_tenants_and_a_config_edit_selects_o
     opened.clear()
     reconciler.sweep()
     assert opened == []
-    assert corpus.reads == 1
+    assert len(corpus.asked) == 1
 
     corpus.changes[_B] = 1
     reconciler.sweep()
@@ -750,7 +746,7 @@ def test_a_one_tenant_pass_skips_a_tenant_not_due_and_completes() -> None:
         assert reconciler.sweep_tenant(_A) is None
 
     assert len(unit.reconciled) == 1
-    assert corpus.reads == 1
+    assert len(corpus.asked) == 1
     assert [entry["event"] for entry in logs] == ["forge-status sweep skipped"]
 
 

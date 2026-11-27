@@ -79,16 +79,15 @@ _EPHEMERAL_TABLES = ephemeral_tables()
 
 
 def _ephemeral_chunk_ids(tenants: Collection[TenantId] | None) -> CompoundSelect[Any]:
-    """The grouped-away and deleted chunk ids — gone from every corpus read — of every open tenant, or of
-    ``tenants`` alone."""
+    """The grouped-away and deleted chunk ids, gone from every corpus read."""
     return OPEN_TENANTS.union(
         *(OPEN_TENANTS.within_tenants(OPEN_TENANTS.select(t, t.c.chunk_id), t, tenants) for t in _EPHEMERAL_TABLES)
     )
 
 
 def _visible_segments(tenants: Collection[TenantId] | None) -> Select[Any]:
-    """The visible segments, ``(tenant_id, segment_id)``, of every open tenant, or of ``tenants`` alone: final,
-    of a minted chunk, and superseded by no segment of the same tenant."""
+    """The visible segments, ``(tenant_id, segment_id)``: final, of a minted chunk, and superseded by no
+    segment of the same tenant."""
     segment = s.transcript_segments
     successor = segment.alias("successor")
     superseded = OPEN_TENANTS.exists(
@@ -132,8 +131,7 @@ class SweepCorpusReads:
 
     def live_work_refs(self, tenants: Collection[TenantId] | None = None) -> list[TenantWorkRef]:
         """The work-ref rows whose chunk is neither grouped away nor deleted, each with its tenant and
-        chunk, of every open tenant (``None``) or of the open tenants among ``tenants``; which of them are
-        live is the caller's derivation."""
+        chunk; which of them are live is the caller's derivation."""
         refs = s.chunk_work_refs
         statement = (
             OPEN_TENANTS.select(refs, refs.c.tenant_id, refs.c.chunk_id, refs.c.source, refs.c.ref)
@@ -238,8 +236,7 @@ class SweepCorpusReads:
 
     def pending_close_intents(self, tenants: Collection[TenantId] | None = None) -> list[TenantCloseIntent]:
         """The unretired close intents whose chunk is neither grouped away nor deleted, with their
-        attempt history, in intent order, of every open tenant (``None``) or of the open tenants among
-        ``tenants``."""
+        attempt history, in intent order."""
         attempt, intent = s.close_intent_attempts, s.close_intents
         of_intent = and_(attempt.c.tenant_id == intent.c.tenant_id, attempt.c.intent_id == intent.c.id)
         spent = attempt.c.outcome != DEFERRED_ATTEMPT
@@ -326,8 +323,7 @@ class SweepCorpusReads:
         self, extractor_version: str, tenants: Collection[TenantId] | None = None
     ) -> dict[TenantId, CandidacyRead]:
         """The visible segments, and which of them disagree with their current ``extractor_version`` marker
-        or carry none, of every open tenant (``None``) or of the open tenants among ``tenants`` — keyed by
-        tenant; a tenant with no visible segment has no entry."""
+        or carry none, keyed by tenant."""
         segment = s.transcript_segments
         visible = _visible_segments(tenants).subquery()
         marker = s.transcript_event_derivations
@@ -368,8 +364,7 @@ class SweepCorpusReads:
         }
 
     def derived_segment_ids(self, tenants: Collection[TenantId] | None = None) -> dict[TenantId, frozenset[str]]:
-        """The segments carrying any derivation marker, of every open tenant (``None``) or of the open
-        tenants among ``tenants``, keyed by tenant."""
+        """The segments carrying any derivation marker, keyed by tenant."""
         marker = s.transcript_event_derivations
         statement = (
             OPEN_TENANTS.select(marker, marker.c.tenant_id, marker.c.segment_id)

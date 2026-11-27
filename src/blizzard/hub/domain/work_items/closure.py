@@ -374,14 +374,9 @@ class CloseDrainSweep:
     def _due(self, tenants: Collection[TenantId] | None = None) -> dict[TenantId, list[PendingCloseIntent]]:
         """The due intents of every open tenant (``None``) or of ``tenants``, in the corpus's order, from one read.
 
-        The corpus read is deliberately wider than what a pass attempts, due and not yet due: the domain filters it by
-        the newest deferral and the capped exponential backoff (:func:`close_intent_is_due`), so
-        ``CLOSE_DRAIN_PASS_LIMIT`` caps the closures a pass attempts and cannot be a SQL limit on the rows it reads.
-        :meth:`sweep` reads every open tenant's, because :func:`fair_share` rotation picks among every tenant's due
-        set; its read is as large as the hub's backlog, a forge outage included. A global SQL limit applied before
-        fair sharing is not equivalent: it can change which tenants are selected. SQL could express a different,
-        sound scheduling design; this keeps the selection in the domain at the cost of a backlog-sized read.
-        :meth:`sweep_tenant` reads its one tenant's pending intents, bounded by that tenant's backlog."""
+        The read outsizes ``CLOSE_DRAIN_PASS_LIMIT`` because due-ness is the domain's backoff filter
+        (:func:`close_intent_is_due`), not a SQL limit; :meth:`sweep` passes no ``tenants`` because
+        :func:`fair_share` picks among every tenant's due set."""
         now = self._clock.now()
         due: dict[TenantId, list[PendingCloseIntent]] = {}
         for row in self._corpus.pending_close_intents(tenants):
