@@ -5867,9 +5867,10 @@ export type WorkRefView = {
 /**
  * WorkerArtifact
  *
- * One artifact, node- or graph-scoped. A node-scope row names its producing node and epoch —
- * the newest epoch unless the read named one or asked for every epoch; a graph-scope row is one of the pinned graph
- * mint's own baked-in declarations and carries neither, since no node-step produced it.
+ * One artifact, node- or graph-scoped. A node-scope row names its producing node and
+ * epoch — the newest epoch unless the read named one or asked for every epoch; a graph-scope
+ * row is one of the pinned graph mint's own baked-in declarations and carries neither, since
+ * no node-step produced it.
  */
 export type WorkerArtifact = {
     /**

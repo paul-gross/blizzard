@@ -9883,7 +9883,7 @@
         "type": "object"
       },
       "WorkerArtifact": {
-        "description": "One artifact, node- or graph-scoped. A node-scope row names its producing node and epoch \u2014\nthe newest epoch unless the read named one or asked for every epoch; a graph-scope row is one of the pinned graph\nmint's own baked-in declarations and carries neither, since no node-step produced it.",
+        "description": "One artifact, node- or graph-scoped. A node-scope row names its producing node and\nepoch \u2014 the newest epoch unless the read named one or asked for every epoch; a graph-scope\nrow is one of the pinned graph mint's own baked-in declarations and carries neither, since\nno node-step produced it.",
         "properties": {
           "branch_name": {
             "anyOf": [
