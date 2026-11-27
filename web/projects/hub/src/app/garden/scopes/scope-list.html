@@ -9,6 +9,7 @@
     class="sc-list"
     data-testid="gardening-scopes-list"
     fleetKitSelectList
+    selectionMode="explicit" [softDisabled]="false" [wrap]="false"
     ariaLabel="Scopes"
     [value]="selectedSlug()"
     (valueChange)="pick($event)"

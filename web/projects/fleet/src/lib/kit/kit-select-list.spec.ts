@@ -8,7 +8,7 @@ import { KitSelectRow } from './kit-select-row';
   selector: 'fleet-test-host',
   imports: [KitSelectList, KitSelectRow],
   template: `
-    <div fleetKitSelectList ariaLabel="Things" [value]="value()" (valueChange)="opened.push($event)">
+    <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" ariaLabel="Things" [value]="value()" (valueChange)="opened.push($event)">
       @for (row of rows(); track row.id) {
         <fleet-kit-select-row [value]="row.id" [label]="row.id" [disabled]="row.disabled ?? false" [testid]="'row-' + row.id">
           {{ row.id }}
@@ -26,6 +26,8 @@ class TestHost {
 function key(el: Element, name: string): void {
   el.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true }));
 }
+
+const REQUIRED = ['selectionMode="explicit"', '[softDisabled]="false"', '[wrap]="false"'];
 
 describe('KitSelectList', () => {
   async function setup() {
@@ -133,5 +135,17 @@ describe('KitSelectList', () => {
     await fixture.whenStable();
     expect(el.querySelectorAll('[role="option"]')).toHaveLength(0);
     expect(el.querySelectorAll('[tabindex="0"]')).toHaveLength(0);
+  });
+
+  it.each(REQUIRED)('fails a host that drops %s, naming it', (dropped) => {
+    @Component({
+      selector: 'fleet-test-unbound',
+      imports: [KitSelectList],
+      template: '',
+    })
+    class Unbound {}
+    TestBed.overrideTemplate(Unbound, `<div fleetKitSelectList ${REQUIRED.filter((b) => b !== dropped).join(' ')}></div>`);
+
+    expect(() => TestBed.createComponent(Unbound).detectChanges()).toThrow(`fleetKitSelectList is missing ${dropped}`);
   });
 });

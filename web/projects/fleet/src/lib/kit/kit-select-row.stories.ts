@@ -15,7 +15,7 @@ const meta: Meta<KitSelectRow> = {
   render: (args) => ({
     props: args,
     template: `
-      <div fleetKitSelectList ariaLabel="Artifacts" value="review" style="width: 320px">
+      <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" ariaLabel="Artifacts" value="review" style="width: 320px">
         <fleet-kit-select-row value="plan" label="plan.md" [bare]="bare" [ariaLabel]="ariaLabel" [testid]="testid">plan.md</fleet-kit-select-row>
         <fleet-kit-select-row value="review" label="review-findings.json">review-findings.json</fleet-kit-select-row>
         <fleet-kit-select-row value="retro" label="retrospective.md">retrospective.md</fleet-kit-select-row>
@@ -32,7 +32,7 @@ export const LongUnbrokenId: Story = {
   render: (args) => ({
     props: args,
     template: `
-      <div fleetKitSelectList ariaLabel="Artifacts" style="width: 320px">
+      <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" ariaLabel="Artifacts" style="width: 320px">
         <fleet-kit-select-row value="long" label="long id" [bare]="bare">ch_01M57RP7EGQTX461G740Z5WS6G_lease_01M58V8E0A3XPZMXMTPCKVB77F_artifact_reviewed_plan</fleet-kit-select-row>
       </div>`,
   }),

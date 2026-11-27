@@ -2,6 +2,7 @@ import { Component, provideZonelessChangeDetection, viewChild } from '@angular/c
 import { TestBed } from '@angular/core/testing';
 
 import { KitButton } from './kit-button';
+import { KitGrid } from './kit-grid';
 import { KitGridFixture } from './kit-grid.fixture';
 import { KitSelect } from './kit-select';
 
@@ -42,6 +43,13 @@ describe('Kit grid bridge — jsdom contract', () => {
   });
 
   const byId = (el: HTMLElement, id: string) => el.querySelector<HTMLElement>(`[data-testid="${id}"]`)!;
+
+  it('fails a grid that drops [softDisabled]="false", naming it', () => {
+    @Component({ imports: [KitGrid], template: '<table fleetKitGrid></table>' })
+    class Unbound {}
+
+    expect(() => TestBed.createComponent(Unbound).detectChanges()).toThrow('fleetKitGrid is missing [softDisabled]="false"');
+  });
 
   describe('outside a grid', () => {
     it('leaves the native tab order alone: no tabindex attribute unless controlTabIndex is bound', async () => {

@@ -1,6 +1,5 @@
 import { Listbox } from '@angular/aria/listbox';
-import { SIGNAL, signalSetFn, type SignalNode } from '@angular/core/primitives/signals';
-import { afterRenderEffect, DestroyRef, Directive, ElementRef, inject, input, output, untracked } from '@angular/core';
+import { afterRenderEffect, DestroyRef, Directive, ElementRef, inject, input, output, untracked, type OnInit } from '@angular/core';
 
 import { trackUserInput } from './user-input-window';
 
@@ -13,14 +12,19 @@ import { trackUserInput } from './user-input-window';
  * changes, and only a person's click or key press writes it back — Aria's own writes (pruning the
  * values of rows that have not registered yet, its default state) never do. Pressing the row that is
  * already open emits it again and keeps the consumer's value, so a re-open is possible.
+ *
+ * Every list binds `selectionMode="explicit" [softDisabled]="false" [wrap]="false"`: Aria's defaults
+ * would open rows as the highlight moves, let disabled rows take it, and wrap it past the ends. A host
+ * directive's input cannot be defaulted by the kit, so the consumer's template carries the bindings;
+ * a dev build throws when one is missing. Orientation (vertical) and single selection are Aria's defaults.
  */
 @Directive({
   selector: '[fleetKitSelectList]',
   exportAs: 'fleetKitSelectList',
-  hostDirectives: [Listbox],
+  hostDirectives: [{ directive: Listbox, inputs: ['selectionMode', 'softDisabled', 'wrap', 'focusMode'] }],
   host: { '[attr.aria-label]': 'ariaLabel()' },
 })
-export class KitSelectList<V = unknown> {
+export class KitSelectList<V = unknown> implements OnInit {
   /** The open row's `value`; `null` when none is. */
   readonly value = input<V | null>(null);
   readonly valueChange = output<V>();
@@ -35,14 +39,6 @@ export class KitSelectList<V = unknown> {
   private focusedValue: V | undefined;
 
   constructor() {
-    // A host directive's inputs cannot be bound from the host's own metadata, so the list's fixed
-    // Aria settings are written onto the input signals directly, once, before anything reads them.
-    // `orientation` (vertical), single selection and `roving` focus are already Aria's defaults.
-    const fix = <T>(input: () => T, value: T) => signalSetFn((input as unknown as { [SIGNAL]: SignalNode<T> })[SIGNAL], value);
-    fix(this.listbox.selectionMode, 'explicit');
-    fix(this.listbox.softDisabled, false);
-    fix(this.listbox.wrap, false);
-
     const host = this.element;
     // Focus on a row that a re-render destroys falls to <body> with no focusout, so remember that
     // focus was inside the list and which row held it, and hand it back to the same value.
@@ -85,6 +81,17 @@ export class KitSelectList<V = unknown> {
         });
       },
     });
+  }
+
+  ngOnInit(): void {
+    if (typeof ngDevMode === 'undefined' || ngDevMode) {
+      const missing = [
+        this.listbox.selectionMode() === 'follow' && 'selectionMode="explicit"',
+        this.listbox.softDisabled() && '[softDisabled]="false"',
+        this.listbox.wrap() && '[wrap]="false"',
+      ].filter((binding) => binding !== false);
+      if (missing.length > 0) throw new Error(`fleetKitSelectList is missing ${missing.join(' ')}`);
+    }
   }
 
   /** Give focus back to the row that held it when a re-render destroyed that row's element. */

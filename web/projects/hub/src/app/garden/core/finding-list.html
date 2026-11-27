@@ -8,6 +8,7 @@
     class="fl-list"
     data-testid="gardening-findings-list"
     fleetKitSelectList
+    selectionMode="explicit" [softDisabled]="false" [wrap]="false"
     ariaLabel="Findings"
     [value]="selectedId()"
     (valueChange)="findingPick.emit($event)"

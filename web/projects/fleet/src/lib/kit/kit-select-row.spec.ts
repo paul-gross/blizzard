@@ -8,7 +8,7 @@ import { KitSelectRow } from './kit-select-row';
   selector: 'fleet-test-host',
   imports: [KitSelectList, KitSelectRow],
   template: `
-    <div fleetKitSelectList [value]="selected()" (valueChange)="opens.push($event)">
+    <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" [value]="selected()" (valueChange)="opens.push($event)">
       <fleet-kit-select-row value="a" label="Row A" testid="row-a">Row A</fleet-kit-select-row>
       <fleet-kit-select-row value="b" label="Row B" bare ariaLabel="Open chunk ch_1">Row B</fleet-kit-select-row>
     </div>

@@ -21,6 +21,7 @@ const ROWS = Array.from(
     <div class="scroller" data-testid="scroller">
       <div
         fleetKitSelectList
+        selectionMode="explicit" [softDisabled]="false" [wrap]="false"
         ariaLabel="Rows"
         [value]="value()"
         (valueChange)="opened.push($event)"

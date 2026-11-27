@@ -8,6 +8,7 @@
     class="rl-list"
     data-testid="gardening-runs-list"
     fleetKitSelectList
+    selectionMode="explicit" [softDisabled]="false" [wrap]="false"
     ariaLabel="Runs"
     [value]="selectedChunkId()"
     (valueChange)="pick($event)"

@@ -20,7 +20,7 @@ import { KitUrgencyPill } from './kit-urgency-pill';
 @Component({
   imports: [KitSelectList, KitSelectRow],
   template: `
-    <div fleetKitSelectList value="plain">
+    <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" value="plain">
       <fleet-kit-select-row value="plain" label="Plain" testid="plain-btn"><span>Plain</span></fleet-kit-select-row>
       <fleet-kit-select-row class="flex-host" value="bare" label="Bare" bare testid="bare-btn">
         <span class="a">A</span><span class="b">B</span>
