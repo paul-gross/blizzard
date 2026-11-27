@@ -14,7 +14,8 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("transitions", sa.Column("reason", sa.Text(), nullable=True))
+    if "reason" not in {c["name"] for c in sa.inspect(op.get_bind()).get_columns("transitions")}:
+        op.add_column("transitions", sa.Column("reason", sa.Text(), nullable=True))
 
 
 def downgrade() -> None:

@@ -25,6 +25,31 @@ def _rows(conn: sa.Connection) -> list[tuple[object, ...]]:
     return [tuple(row) for row in conn.execute(sa.text(f"SELECT {_COLUMNS} FROM transitions ORDER BY transition_id"))]
 
 
+def test_interrupted_upgrade_resumes_before_revision_stamp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    runner, engine = migrate_to(tmp_path, _PARENT)
+    from alembic.operations import Operations
+
+    add_column = Operations.add_column
+
+    def interrupt_after_add(self: Operations, table_name: str, column: sa.Column[object]) -> None:
+        add_column(self, table_name, column)
+        raise RuntimeError("interrupted after adding column")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Operations, "add_column", interrupt_after_add)
+        with pytest.raises(RuntimeError, match="interrupted after adding column"):
+            runner.upgrade(_REVISION)
+
+    assert "reason" in {col["name"] for col in sa.inspect(engine).get_columns("transitions")}
+    with engine.connect() as conn:
+        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == _PARENT
+
+    runner.upgrade(_REVISION)
+    with engine.connect() as conn:
+        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == _REVISION
+    assert [col["name"] for col in sa.inspect(engine).get_columns("transitions")].count("reason") == 1
+
+
 def test_populated_parent_upgrade_downgrade_upgrade(tmp_path: Path) -> None:
     runner, engine = migrate_to(tmp_path, _PARENT)
     before = schema_snapshot(engine, exemptions={}, name_exemptions={})
