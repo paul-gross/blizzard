@@ -12,6 +12,7 @@ from blizzard.runner.harness.binary_identity import BinaryIdentity
 from blizzard.runner.harness.binding_selection import (
     BindingSelection,
     CachedVersionProbe,
+    probed_binary,
     select_bindings,
     select_declaration,
 )
@@ -110,3 +111,16 @@ def test_first_bindings_names_each_family_s_first_declaration() -> None:
 
 def test_every_declaration_s_normalizer_is_declared_for_the_dialect_guard() -> None:
     assert {"opencode-v2/1", OPENCODE_DECLARATION.normalizer_version} <= set(declared_normalizer_versions())
+
+
+def test_the_probed_binary_is_the_version_choosers_among_several_and_the_sections_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def choose(_declaration: object, _section: object) -> str:
+        return "chooser"
+
+    monkeypatch.setattr(type(OPENCODE_DECLARATION), "version_binary", choose)
+    families = harness_families()
+    assert probed_binary(families["opencode"], _sections().of("opencode")) == "chooser"
+    claude = HarnessSections.defaults().of("claude_code")
+    assert probed_binary(families["claude_code"], claude) == claude.binary

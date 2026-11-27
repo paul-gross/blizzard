@@ -12,6 +12,7 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.runner.composition import credential_renewal_pass, pool_held_ids
 from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.environments.repository import EnvBinding
+from blizzard.runner.hosting.names import RecordedName
 from blizzard.runner.subscriptions.internal.anthropic_credential_renewer import AnthropicCredentialRenewer
 from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
@@ -74,7 +75,7 @@ class _Audit:
     def named_runners(self) -> tuple[str, ...]:
         raise NotImplementedError
 
-    def stored_names(self) -> dict[str, str]:
+    def recorded_names(self) -> dict[str, RecordedName]:
         raise NotImplementedError
 
     def unhosted_runners(self) -> tuple[str, ...]:

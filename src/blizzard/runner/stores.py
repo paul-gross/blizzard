@@ -32,6 +32,7 @@ from blizzard.runner.harness.selftest_result import (
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, IWriteWorkspacePromptRepository
 from blizzard.runner.host_records.model import RecordKind
 from blizzard.runner.host_records.ports import IReadHostRecordRepository, IWriteHostRecordRepository
+from blizzard.runner.hosting.names import RecordedName
 from blizzard.runner.hosting.ports import IReadHostedRunnerRepository, IWriteHostedRunnerRepository
 from blizzard.runner.hub.host_identity import IReadHostIdentityRepository, IWriteHostIdentityRepository
 from blizzard.runner.hub.identity import (
@@ -303,9 +304,9 @@ class IRunnerAudit(Protocol):
         """The ids of the runners the store's identity rows name, oldest first — empty for a store none has joined."""
         ...
 
-    def stored_names(self) -> dict[str, str]:
-        """Each runner's stored name, by id, read in one pass: its non-blank ``name`` settings entry, else its
-        identity row's name."""
+    def recorded_names(self) -> dict[str, RecordedName]:
+        """What the store records of each runner's name, by id, read in one pass and unjudged: its ``name`` settings
+        entry, when that is a string, and its identity row's name."""
         ...
 
     def unhosted_runners(self) -> tuple[str, ...]:

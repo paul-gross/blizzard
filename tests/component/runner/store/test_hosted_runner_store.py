@@ -14,11 +14,13 @@ from blizzard.foundation.secrets.sealing import SealedValue
 from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.runner.composition import build_runner_admission, build_runner_store_files
 from blizzard.runner.hosting.model import CLI, OPERATOR, SEED, HostedRunnerOp, HostingFact, RunnerAdmission
+from blizzard.runner.hosting.names import RecordedName
 from blizzard.runner.hosting.ports import IRunnerAdmission
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.store import schema
 from blizzard.runner.store.internal.host_hosted_runner_store import HostHostedRunnerStore
 from blizzard.runner.store.internal.host_hub_token_store import HostHubTokenStore
+from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
 from blizzard.runner.store.runner_guard import GUARD_ENVIRONMENT_VARIABLE, install_runner_guard
 from tests.support.runner_fakes import make_store, runner_store_errors
 
@@ -170,3 +172,15 @@ def test_the_host_roster_reads_names_hosting_and_the_store_doors_of_a_store_file
     assert roster.name_of("rn_added") == "added"
     assert roster.name_of("rn_file") == "rn_file"
     assert roster.through_a_door() == {"rn_added", "rn_file"}
+
+
+def test_the_audit_reads_recorded_names_unjudged(tmp_path: Path) -> None:
+    url = _url(tmp_path)
+    _admission(url, "rn_blank").admit(_added("rn_blank", "  "), _TOKEN)
+    _admission(url, "rn_named").admit(_added("rn_named", "named"), _TOKEN)
+
+    audit = RunnerAudit(make_store(url).connections)
+    recorded = audit.recorded_names()
+
+    assert recorded == {"rn_blank": RecordedName("  ", "  "), "rn_named": RecordedName("named", "named")}
+    assert build_runner_store_files(FixedClock(_AT)).host_roster(url).name_of("rn_blank") == "rn_blank"

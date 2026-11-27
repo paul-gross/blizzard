@@ -55,6 +55,13 @@ class BindingSelection:
         return self.chosen[harness_id]
 
 
+def probed_binary(family: Sequence[IHarnessDeclaration[Any]], section: HarnessSection) -> str:
+    """The binary to probe for ``family``: the one choosing among several declarations, else the section's own."""
+    if len(family) == 1:
+        return section.binary
+    return cast(IVersionSelectedDeclaration[Any], family[0]).version_binary(section)
+
+
 def select_declaration(
     family: Sequence[IHarnessDeclaration[Any]], section: HarnessSection, versions: IVersionProbe
 ) -> IHarnessDeclaration[Any]:
@@ -64,7 +71,7 @@ def select_declaration(
     if len(family) == 1 or not section.enabled:
         return family[0]
     candidates = [cast(IVersionSelectedDeclaration[Any], declaration) for declaration in family]
-    binary = candidates[0].version_binary(section)
+    binary = probed_binary(family, section)
     if not versions.binary_present(binary):
         return family[0]
     raw = versions.observe_version(binary)
@@ -83,4 +90,11 @@ def select_bindings(
     )
 
 
-__all__ = ["BindingSelection", "HarnessFamilies", "IVersionProbe", "select_bindings", "select_declaration"]
+__all__ = [
+    "BindingSelection",
+    "HarnessFamilies",
+    "IVersionProbe",
+    "probed_binary",
+    "select_bindings",
+    "select_declaration",
+]

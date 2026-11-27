@@ -73,7 +73,7 @@ from blizzard.runner.environments.workspaces import (
 )
 from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
 from blizzard.runner.events.publisher import IRunnerEventPublisher
-from blizzard.runner.harness.binding_selection import BindingSelection, CachedVersionProbe
+from blizzard.runner.harness.binding_selection import BindingSelection, CachedVersionProbe, probed_binary
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.capability_snapshot import BinaryVersionCache, HarnessVersionCache, default_harness_id
 from blizzard.runner.harness.declaration import IVersionSelectedDeclaration
@@ -131,6 +131,7 @@ from blizzard.runner.host_settings_reader import (
     HostSettingsReader,
     HostSettingsSnapshot,
 )
+from blizzard.runner.hosting.names import RecordedName, hosted_name
 from blizzard.runner.hosting.ports import IHostRunnerHub, IRunnerAdmission
 from blizzard.runner.hosting.reconcile import RunnerStartFailure, RunnerStartFailures, reconcile
 from blizzard.runner.hosting.retirement import HubNoticedRetirement, RetirementNotices
@@ -1861,18 +1862,17 @@ def _build_runner(
                 recovery_ids: set[str] = set()
                 families = harness_families()
                 for section in sections:
-                    if (
-                        section.enabled
-                        or section.harness_id not in active_ids
-                        or not versions.binary_present(section.binary)
-                    ):
+                    if section.enabled or section.harness_id not in active_ids:
                         continue
                     family = families[section.harness_id]
+                    binary = probed_binary(family, section)
+                    if not versions.binary_present(binary):
+                        continue
                     if len(family) > 1:
-                        raw = versions.observe_version(section.binary)
+                        raw = versions.observe_version(binary)
                         if not any(cast(IVersionSelectedDeclaration[Any], item).admits_version(raw) for item in family):
                             pending_recovery.add(section.harness_id)
-                            binary_versions.forget(section.binary)
+                            binary_versions.forget(binary)
                             continue
                     recovery_ids.add(section.harness_id)
                 if recovery_ids:
@@ -2185,6 +2185,12 @@ class _RunnerAdmissions:
         return self.admit(runner_id)
 
 
+def _recorded_name(recorded: Mapping[str, RecordedName], runner_id: str) -> str:
+    """:func:`hosted_name` of what ``recorded`` holds of ``runner_id``."""
+    name = recorded.get(runner_id, RecordedName())
+    return hosted_name(name.stored, name.identity_name, runner_id)
+
+
 @dataclass(frozen=True)
 class _HostedRunnerNames:
     """A hosted runner's ``[[runner]]`` name, else its stored one, read for every runner at once."""
@@ -2194,8 +2200,8 @@ class _HostedRunnerNames:
 
     def names_of(self, runner_ids: Sequence[str]) -> Mapping[str, str]:
         declared = {entry.id: entry.name for entry in self.host.runners if entry.id is not None}
-        stored = self.audit.stored_names() if any(runner_id not in declared for runner_id in runner_ids) else {}
-        return {runner_id: declared.get(runner_id) or stored.get(runner_id, runner_id) for runner_id in runner_ids}
+        recorded = self.audit.recorded_names() if any(runner_id not in declared for runner_id in runner_ids) else {}
+        return {runner_id: declared.get(runner_id) or _recorded_name(recorded, runner_id) for runner_id in runner_ids}
 
     def declared_names(self) -> frozenset[str]:
         return frozenset(entry.name for entry in self.host.runners)
@@ -2495,11 +2501,12 @@ class RunnerStoreFiles:
         with _engine(url) as engine:
             stores = build_host_stores(engine, errors=self.errors, clock=self.clock)
             hosted = stores.hosted_runners
+            recorded = stores.runner_audit.recorded_names()
             return HostRoster(
                 named=stores.runner_audit.named_runners(),
                 hosted=hosted.hosted_runner_ids(),
                 split=hosted.roster(),
-                names=stores.runner_audit.stored_names(),
+                names={runner_id: _recorded_name(recorded, runner_id) for runner_id in recorded},
                 beside_the_file=beside_the_file_of(hosted.all_hosted()),
             )
 
