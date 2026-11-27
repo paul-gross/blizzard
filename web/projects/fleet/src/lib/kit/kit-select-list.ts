@@ -2,7 +2,6 @@ import { Listbox } from '@angular/aria/listbox';
 import {
   afterNextRender,
   afterRenderEffect,
-  contentChildren,
   DestroyRef,
   Directive,
   ElementRef,
@@ -10,11 +9,12 @@ import {
   Injector,
   input,
   output,
+  signal,
   untracked,
   type OnInit,
 } from '@angular/core';
 
-import { KitSelectRow } from './kit-select-row';
+import type { KitSelectRow } from './kit-select-row';
 import { trackUserInput } from './user-input-window';
 
 /** The keys Aria moves the highlight on; any other single character is type-ahead. */
@@ -25,7 +25,8 @@ const MOVE_KEYS = ['ArrowUp', 'ArrowDown', 'Home', 'End'];
  * the list; Up, Down, Home, End and type-ahead move the highlight (`aria-activedescendant`, scrolled into
  * view) without opening anything; Enter, Space or a click opens the row the person acted on, through
  * `valueChange`. A row that receives focus takes the highlight and hands focus to the list; a focusable
- * element inside a row keeps its own.
+ * element inside a row keeps its own until a key that moves the highlight is pressed there, which takes
+ * focus to the list. The highlighted row, not the list, draws the focus indicator.
  *
  * The consumer's `value` stays authoritative: it is pushed into Aria whenever it or the set of rows
  * changes, and only a person's click or key press writes it back — Aria's own writes (pruning the
@@ -44,7 +45,6 @@ const MOVE_KEYS = ['ArrowUp', 'ArrowDown', 'Home', 'End'];
   hostDirectives: [{ directive: Listbox, inputs: ['selectionMode', 'softDisabled', 'wrap', 'focusMode'] }],
   host: {
     '[attr.aria-label]': 'ariaLabel()',
-    // Focus rests on the list, whose highlighted row draws the focus indicator.
     style: 'outline: none',
   },
 })
@@ -55,8 +55,9 @@ export class KitSelectList<V = unknown> implements OnInit {
   readonly ariaLabel = input<string | null>(null);
 
   private readonly listbox = inject<Listbox<V>>(Listbox);
-  /** In creation order, which is not DOM order for rows stamped through an outlet. */
-  private readonly rows = contentChildren(KitSelectRow, { descendants: true });
+  /** The rows Aria holds, in no particular order: each registers itself, so one declared in a child
+   * component's template counts too, which a content query would miss. */
+  private readonly rows = signal<readonly KitSelectRow[]>([]);
   /** True from a click or key press on the list until Aria has published its selection. */
   private readonly userInput = trackUserInput();
   private lastPushed: V | null | undefined;
@@ -85,7 +86,10 @@ export class KitSelectList<V = unknown> implements OnInit {
     };
     const keyDown = (event: KeyboardEvent) => {
       const typed = event.key.length === 1 && event.key !== ' ' && !event.ctrlKey && !event.metaKey && !event.altKey;
-      if (!typed && !MOVE_KEYS.includes(event.key)) return;
+      const arrowed = MOVE_KEYS.includes(event.key) && !event.ctrlKey && !event.metaKey && !event.altKey;
+      if (!typed && !arrowed) return;
+      // Pressed on an element inside a row: take focus, so the highlight the key moves is drawn.
+      if (event.target !== host) host.focus({ preventScroll: true });
       // After the render, so Aria's own key handler has moved the highlight.
       afterNextRender({ read: () => this.listbox.scrollActiveItemIntoView() }, { injector: this.injector });
     };
@@ -119,6 +123,12 @@ export class KitSelectList<V = unknown> implements OnInit {
         });
       },
     });
+  }
+
+  /** For {@link KitSelectRow} alone: it registers once its inputs are set and until it is destroyed. */
+  register(row: KitSelectRow): () => void {
+    this.rows.update((rows) => [...rows, row]);
+    return () => this.rows.update((rows) => rows.filter((other) => other !== row));
   }
 
   ngOnInit(): void {

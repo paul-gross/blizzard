@@ -320,8 +320,9 @@
  *     itself, arrows, Home, End and type-ahead moving the active descendant without
  *     opening, End and Tabbing back onto the list scrolling the active row into view,
  *     Enter and a click opening, an outside value change moving the active row with
- *     scroll and focus unchanged, and a pointer press leaving focus on the list with no
- *     outline, one Shift+Tab from leaving it.
+ *     scroll and focus unchanged, a pointer press leaving focus on the list with no
+ *     outline, one Shift+Tab from leaving it, and an arrow pressed on a link inside a
+ *     row taking focus back to the list with the row it moves to outlined.
  *   - projects/fleet/src/lib/kit/kit-select-row.shell-sweep.spec.ts — the kit select row's
  *     default chrome (6px 8px padding, hairline and left edge, selected background) on
  *     its inner element is unchanged, while `bare` draws none of it in any state and lets

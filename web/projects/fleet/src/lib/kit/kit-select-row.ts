@@ -1,5 +1,16 @@
 import { Option } from '@angular/aria/listbox';
-import { ChangeDetectionStrategy, Component, ElementRef, booleanAttribute, inject, input } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  booleanAttribute,
+  inject,
+  input,
+  type OnDestroy,
+  type OnInit,
+} from '@angular/core';
+
+import { KitSelectList } from './kit-select-list';
 
 /**
  * The selectable-row chrome (`design/tokens.css`'s `--surface-*` interaction-state
@@ -10,9 +21,8 @@ import { ChangeDetectionStrategy, Component, ElementRef, booleanAttribute, injec
  *
  * A row is an option of a {@link KitSelectList}: its host carries `role="option"`, `aria-selected`
  * and, while it is the highlighted row, `data-active="true"`; the inner element only draws the chrome.
- * The focus outline shows on the highlighted row while the list has keyboard focus. The row must be
- * declared inside its list's element. The caller supplies the row's content via `<ng-content>`; the
- * list reports the open.
+ * The row must be declared inside its list's element. The caller supplies the row's content via
+ * `<ng-content>`; the list reports the open.
  */
 @Component({
   selector: 'fleet-kit-select-row',
@@ -27,7 +37,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, booleanAttribute, injec
   templateUrl: './kit-select-row.html',
   styleUrl: './kit-select-row.css',
 })
-export class KitSelectRow {
+export class KitSelectRow implements OnInit, OnDestroy {
   protected readonly option = inject<Option<unknown>>(Option);
   /** The row's host element, for the list to place it in document order and recognise its focus. */
   readonly element = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
@@ -48,4 +58,15 @@ export class KitSelectRow {
    * highlighted row's host while the list has keyboard focus
    * (`[role='listbox']:focus-visible fleet-kit-select-row[data-active='true']`). */
   readonly bare = input(false, { transform: booleanAttribute });
+
+  private readonly list = inject(KitSelectList);
+  private unregister?: () => void;
+
+  ngOnInit(): void {
+    this.unregister = this.list.register(this);
+  }
+
+  ngOnDestroy(): void {
+    this.unregister?.();
+  }
 }

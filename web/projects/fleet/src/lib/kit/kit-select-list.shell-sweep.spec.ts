@@ -48,6 +48,27 @@ class Host {
   readonly opened: string[] = [];
 }
 
+@Component({
+  imports: [KitSelectList, KitSelectRow],
+  template: `
+    <div
+      fleetKitSelectList
+      selectionMode="explicit"
+      [softDisabled]="false"
+      [wrap]="false"
+      focusMode="activedescendant"
+      ariaLabel="Linked rows"
+      (valueChange)="opened.push($event)"
+    >
+      <fleet-kit-select-row value="alpha" label="alpha">alpha <a href="#alpha">link</a></fleet-kit-select-row>
+      <fleet-kit-select-row value="bravo" label="bravo">bravo</fleet-kit-select-row>
+    </div>
+  `,
+})
+class LinkHost {
+  readonly opened: string[] = [];
+}
+
 async function loadDesignTokens(): Promise<void> {
   const css = await commands.readFile(
     'projects/fleet/src/lib/core/design/tokens.css',
@@ -154,6 +175,37 @@ describe('KitSelectList keyboard model shell sweep', () => {
       expect(outline(list)).toBe('none');
       await userEvent.keyboard('{Shift>}{Tab}{/Shift}');
       expect(document.activeElement).toBe(before);
+    } finally {
+      root.remove();
+    }
+  });
+
+  it('takes focus back from an element inside a row on a move key, and outlines the row it moves to', async () => {
+    await page.viewport(800, 600);
+    await loadDesignTokens();
+    await TestBed.configureTestingModule({
+      imports: [LinkHost],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(LinkHost);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+    const list = root.querySelector<HTMLElement>('[role="listbox"]')!;
+    const rows = root.querySelectorAll<HTMLElement>('fleet-kit-select-row');
+    const link = root.querySelector<HTMLElement>('a')!;
+    const outline = (row: HTMLElement) => getComputedStyle(row.querySelector<HTMLElement>('.row')!).outlineStyle;
+    try {
+      await userEvent.keyboard('{Tab}');
+      expect(document.activeElement).toBe(list);
+      await userEvent.keyboard('{Tab}');
+      expect(document.activeElement).toBe(link);
+      await userEvent.keyboard('{ArrowDown}');
+      expect(document.activeElement).toBe(list);
+      expect(list.getAttribute('aria-activedescendant')).toBe(rows[1].id);
+      await expect.poll(() => outline(rows[1])).toBe('solid');
+      await userEvent.keyboard('{Enter}');
+      expect(fixture.componentInstance.opened).toEqual(['bravo']);
     } finally {
       root.remove();
     }

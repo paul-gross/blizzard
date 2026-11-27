@@ -53,6 +53,29 @@ class OutletHost {
   readonly bottom = signal<string[]>(['bravo', 'charlie']);
 }
 
+@Component({
+  selector: 'fleet-wrapped-row',
+  imports: [KitSelectRow],
+  template: '<fleet-kit-select-row value="wrapped" testid="row-wrapped">wrapped</fleet-kit-select-row>',
+})
+class WrappedRow {}
+
+@Component({
+  selector: 'fleet-wrapped-host',
+  imports: [KitSelectList, WrappedRow],
+  template: `
+    <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" focusMode="activedescendant" [value]="value()">
+      @if (shown()) {
+        <fleet-wrapped-row />
+      }
+    </div>
+  `,
+})
+class WrappedHost {
+  readonly value = signal<string | null>(null);
+  readonly shown = signal(true);
+}
+
 function key(el: Element, name: string): void {
   el.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true }));
 }
@@ -79,15 +102,15 @@ async function settle(fixture: ComponentFixture<unknown>): Promise<void> {
 }
 
 describe('KitSelectList', () => {
-  // jsdom lays nothing out, so it has no `scrollIntoView`.
+  /** The testid of each element scrolled into view. */
   const scrolled: string[] = [];
-  beforeAll(() => {
-    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
+  beforeEach(() => {
+    vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
       scrolled.push(this.getAttribute('data-testid') ?? '');
-    };
+    });
   });
-  afterAll(() => {
-    delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   async function setup() {
@@ -231,12 +254,36 @@ describe('KitSelectList', () => {
     expect(host.opened).toEqual([]);
   });
 
-  it('leaves focus on a focusable element inside a row', async () => {
-    const { fixture, el } = await setup();
-    const link = el.querySelector<HTMLElement>('[data-testid="link-bravo"]')!;
-    link.focus();
+  it('leaves focus on a focusable element inside a row until a key moves the highlight', async () => {
+    const { fixture, el, list, highlighted, host } = await setup();
+    host.value.set('alpha');
     await settle(fixture);
-    expect(document.activeElement).toBe(link);
+    const link = el.querySelector<HTMLElement>('[data-testid="link-bravo"]')!;
+    for (const name of ['ArrowDown', 'c']) {
+      link.focus();
+      await settle(fixture);
+      expect(document.activeElement).toBe(link);
+      key(link, 'Tab');
+      expect(document.activeElement).toBe(link);
+      key(link, name);
+      await settle(fixture);
+      expect(document.activeElement).toBe(list);
+    }
+    expect(highlighted()).toBe('row-charlie');
+    expect(host.opened).toEqual([]);
+  });
+
+  it('holds a row declared in a child component\'s template like any other', async () => {
+    const fixture = TestBed.createComponent(WrappedHost);
+    await settle(fixture);
+    const { list, highlighted } = read(fixture);
+    expect(list.getAttribute('tabindex')).toBe('0');
+    fixture.componentInstance.value.set('wrapped');
+    await settle(fixture);
+    expect(highlighted()).toBe('row-wrapped');
+    fixture.componentInstance.shown.set(false);
+    await settle(fixture);
+    expect(list.hasAttribute('tabindex')).toBe(false);
   });
 
   async function interacted() {

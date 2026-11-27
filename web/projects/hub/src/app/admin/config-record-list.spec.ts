@@ -13,14 +13,6 @@ function key(el: Element, name: string): void {
 }
 
 describe('ConfigRecordList', () => {
-  // jsdom lays nothing out, so it has no `scrollIntoView`, which a keyboard move on a select list calls.
-  beforeAll(() => {
-    HTMLElement.prototype.scrollIntoView = () => undefined;
-  });
-  afterAll(() => {
-    delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
-  });
-
   async function mount(inputs: { rows?: readonly ConfigRowVm[]; state?: 'loading' | 'error' | 'empty' | 'ready' }) {
     await TestBed.configureTestingModule({
       imports: [ConfigRecordList],

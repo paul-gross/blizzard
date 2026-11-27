@@ -12,14 +12,6 @@ const GRAPHS = [
 ];
 
 describe('GraphExplorerList', () => {
-  // jsdom lays nothing out, so it has no `scrollIntoView`, which a keyboard move on a select list calls.
-  beforeAll(() => {
-    HTMLElement.prototype.scrollIntoView = () => undefined;
-  });
-  afterAll(() => {
-    delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
-  });
-
   async function mount(graphs: readonly GraphSummary[] = GRAPHS, selectedGraphId: string | null = null) {
     await TestBed.configureTestingModule({
       imports: [GraphExplorerList],
