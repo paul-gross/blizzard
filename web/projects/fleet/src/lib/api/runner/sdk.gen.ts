@@ -578,19 +578,18 @@ export const getAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpend
  * The worker's own artifacts — every node-step input resolved latest-by-epoch, the graph
  * mint's own baked-in declarations, and blizzard's published system-artifact set, all
  * kind-discriminated. ``scope`` narrows to one; omitted, all three are read. ``scope=graph``
- * never reaches the hub; ``scope=system`` always does.
+ * never reaches the hub; ``scope=system`` always does. ``all_epochs`` includes each node-scope
+ * series' superseded epochs, newest first; with ``scope=graph``/``scope=system`` it is ``400``.
  */
 export const listArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGet = <ThrowOnError extends boolean = false>(options: Options<ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetData, ThrowOnError>): RequestResult<ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetResponses, ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetErrors, ThrowOnError> => (options.client ?? client).get<ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetResponses, ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/artifacts', ...options });
 
 /**
  * Get Artifact
  *
- * One artifact by name, optionally narrowed by ``scope`` and, for node scope, by ``node``;
- * ``404`` when nothing matches. A supplied ``node`` settles scope to node on its own — neither
- * a graph declaration nor a system artifact has a producing node — so pairing it with
- * ``scope=graph``/``scope=system`` is ``400``. A name several nodes produced
- * reads as the newest entry (``node`` narrows to one node's series); ``409`` is a name colliding
- * across scopes, naming them.
+ * One artifact by name, the newest entry unless ``epoch`` names one, optionally narrowed by
+ * ``scope`` and ``node``. ``404`` when nothing matches, naming the held epochs when the series
+ * lacks ``epoch``; ``400`` for ``node`` or ``epoch`` with a graph or system scope; ``409`` for a
+ * name colliding across scopes, naming them.
  */
 export const getArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGet = <ThrowOnError extends boolean = false>(options: Options<GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetData, ThrowOnError>): RequestResult<GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError> => (options.client ?? client).get<GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/artifacts/{name}', ...options });
 

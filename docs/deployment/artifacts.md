@@ -63,7 +63,9 @@ Each `produces:` entry carries a kind: a bare string is an asset, while a `{name
 kind rather than name — any `git_commit` artifact on the node's attempt covers it.
 
 A later node's bare `artifact get <name>` reads the newest entry under that name, whichever node produced it; `--node`
-narrows the read to one node's series.
+narrows the read to one node's series. Each re-visit of a node adds an entry to its series: `artifact list --all-epochs`
+shows every one, and `--epoch N` reads the one listed under that number. Graph and system scope keep no earlier entries
+and refuse both flags.
 
 Workers declare through `blizzard runner artifact`: `create --name` with content on stdin for an asset;
 `commit --repo --branch --commit`, after the push, for a `git_commit` — the origin comes from the environment's repo

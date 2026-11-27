@@ -429,7 +429,7 @@
           "short_help": "Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node scope only."
         },
         "get": {
-          "help": "Worker: read one published artifact by NAME, passed literally, slashes included \u2014 a ``produces:`` name\n(node scope), a baked-in graph declaration (graph scope), or one of blizzard's own published documents\n(system scope). Refused when NAME is unknown, when NAME resolves in more than one scope (naming them), or when\nthis node-step has only staged it (pointing at ``artifact staged``). ``--content`` prints raw asset text,\nrefused for a git-commit artifact, which carries none.",
+          "help": "Worker: read one published artifact by NAME, passed literally, slashes included, from node,\ngraph, or system scope. Refused when NAME is unknown or resolves in more than one scope (naming\nthem), or when this node-step has only staged it (pointing at ``artifact staged``).\n``--content`` prints raw asset text, refused for a git-commit artifact, which carries none.",
           "params": [
             {
               "hidden": false,
@@ -467,7 +467,19 @@
               "type": "text"
             },
             {
-              "help": "Resolve NAME from one scope only \u2014 `node`, `graph`, or `system`. Omitted searches all three, and a NAME present in more than one scope is ambiguous \u2014 unless `--node` narrows to node scope.",
+              "help": "Read the entry of a node-scope series that `--all-epochs` lists under this number (a bare read returns the newest). This narrows to node scope, so pairing it with `--scope graph`/`--scope system` is refused. A number the series does not hold is refused, naming those it holds.",
+              "hidden": false,
+              "kind": "option",
+              "name": "epoch",
+              "opts": [
+                "--epoch"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer range"
+            },
+            {
+              "help": "Resolve NAME from one scope only \u2014 `node`, `graph`, or `system`. Omitted searches all three, and a NAME present in more than one scope is ambiguous \u2014 unless `--node` or `--epoch` narrows to node scope.",
               "hidden": false,
               "kind": "option",
               "name": "scope",
@@ -492,10 +504,10 @@
             }
           ],
           "path": "runner artifact get",
-          "short_help": "Worker: read one published artifact by NAME, passed literally, slashes included \u2014 a ``produces:`` name (node scope), a baked-in graph declaration (graph scope), or one of blizzard's own published documents (system scope)."
+          "short_help": "Worker: read one published artifact by NAME, passed literally, slashes included, from node, graph, or system scope."
         },
         "list": {
-          "help": "Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch,\nplus the graph mint's own baked-in declarations and blizzard's published system-artifact\nset \u2014 ``--scope`` narrows to one. Content is elided by default; ``--content`` includes it.\nAlso includes this node-step's own staged, not-yet-published submissions,\neach carrying ``\"staged\": true`` \u2014 everything published carries ``\"staged\": false``.",
+          "help": "Worker: list artifacts as kind-discriminated JSON \u2014 the newest entry of each node-scope series,\nthe graph mint's declarations, and blizzard's system artifacts. ``--scope`` narrows to one scope,\n``--all-epochs`` adds earlier entries, and ``--content`` includes the otherwise elided content.\nAlso includes this node-step's own staged submissions, marked ``\"staged\": true``; published\nentries carry ``\"staged\": false``.",
           "params": [
             {
               "help": "Include each artifact's full content instead of just its byte length.",
@@ -520,10 +532,22 @@
               "required": false,
               "secondary_opts": [],
               "type": "choice"
+            },
+            {
+              "help": "Include the earlier entries of each node-scope series, newest first, each naming its node and `epoch`. Graph and system scope keep no earlier entries, so pairing this with `--scope graph`/`--scope system` is refused.",
+              "hidden": false,
+              "kind": "option",
+              "name": "all_epochs",
+              "opts": [
+                "--all-epochs"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
             }
           ],
           "path": "runner artifact list",
-          "short_help": "Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch, plus the graph mint's own baked-in declarations and blizzard's published system-artifact set \u2014 ``--scope`` narrows to one."
+          "short_help": "Worker: list artifacts as kind-discriminated JSON \u2014 the newest entry of each node-scope series, the graph mint's declarations, and blizzard's system artifacts."
         },
         "staged": {
           "help": "Worker: list this node-step's own staged (not-yet-published) submissions, node scope only.\nA fresh ``artifact create`` shows up here immediately; ``--content`` gives the full text.",

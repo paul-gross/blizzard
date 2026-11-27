@@ -986,3 +986,74 @@ def test_bad_staged_answer_does_not_mask_get_not_found() -> None:
     assert result.exit_code != 0
     assert "could not read" in result.stderr
     assert "unreadable answer" not in result.stderr
+
+
+# superseded epochs
+
+
+def test_get_epoch_flag_is_passed_as_a_query_param() -> None:
+    calls: list[dict[str, object] | None] = []
+
+    def fake_get(url: str, *, params: dict[str, object] | None, **_: object) -> _FakeResponse:
+        calls.append(params)
+        return _FakeResponse(text='{"scope": "node", "name": "plan", "kind": "asset", "content": "hi"}')
+
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "plan", "--epoch", "0"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls == [{"epoch": "0"}]
+
+
+def test_get_epoch_miss_takes_no_staged_detour() -> None:
+    calls: list[str] = []
+
+    def fake_get(url: str, **_: object) -> object:
+        calls.append(url)
+        request = httpx2.Request("GET", url)
+        response = httpx2.Response(404, json={"detail": "holds no epoch 7"}, request=request)
+
+        class _Missing(_RejectingResponse):
+            def raise_for_status(self) -> None:
+                raise httpx2.HTTPStatusError("404 not found", request=request, response=response)
+
+        return _Missing({"detail": "holds no epoch 7"})
+
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "plan", "--epoch", "7"], env=_ENV)
+
+    assert result.exit_code != 0
+    assert "holds no epoch 7" in result.output
+    assert calls == ["http://127.0.0.1:8431/api/leases/lease_9/artifacts/plan"]
+
+
+def test_get_refuses_a_negative_epoch_without_calling_the_runner() -> None:
+    bound = bind_stubs(get=lambda *a, **k: pytest.fail("no call expected"))
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "plan", "--epoch", "-1"], env=_ENV)
+
+    assert result.exit_code == 2
+    assert "--epoch" in result.output
+
+
+def test_list_all_epochs_forwards_the_flag_and_summarizes_each_epoch() -> None:
+    calls: list[dict[str, object] | None] = []
+    rows = [
+        {"scope": "node", "name": "report", "kind": "asset", "node_name": "verify", "epoch": e, "content": "x" * e}
+        for e in (9, 5)
+    ]
+
+    def fake_get(url: str, *, params: dict[str, object] | None = None, **_: object) -> _FakeResponse:
+        if url.endswith("/attachments"):
+            return _FakeResponse(payload=[])
+        calls.append(params)
+        return _FakeResponse(payload=rows)
+
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "list", "--all-epochs"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls == [{"all_epochs": "true"}]
+    assert [(a["node_name"], a["name"], a["epoch"], a["bytes"]) for a in json.loads(result.stdout)] == [
+        ("verify", "report", 9, 9),
+        ("verify", "report", 5, 5),
+    ]

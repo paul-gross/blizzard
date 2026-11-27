@@ -11,13 +11,17 @@ import pytest
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.runner.lifecycle.artifacts import (
     ArtifactAmbiguous,
+    ArtifactEpochNotHeld,
     ArtifactNotFound,
     ArtifactRead,
     ArtifactReadContradiction,
     carries_content,
     has_producing_node,
     read_only_reason,
+    refuse_epochs_outside_node,
+    series_newest_first,
 )
+from blizzard.wire.chunk import ArtifactView
 from blizzard.wire.envelope import WorkerArtifact
 
 
@@ -132,3 +136,89 @@ def test_read_graph_and_system_collision_offers_only_scope() -> None:
     with pytest.raises(ArtifactAmbiguous) as refused:
         ArtifactRead(name="plan", graph_id="gr_1").resolve([_GRAPH, _SYSTEM])
     assert refused.value.levers == ("--scope",)
+
+
+def test_epoch_picks_that_entry_of_the_series() -> None:
+    series = [_node("verify", epoch=9), _node("verify", epoch=5)]
+    assert ArtifactRead(name="plan", graph_id="gr_1", epoch=5).resolve(series) == series[1]
+
+
+def test_epoch_narrows_to_node_scope() -> None:
+    read = ArtifactRead(name="plan", graph_id="gr_1", epoch=5)
+    assert (read.searches_node(), read.searches_graph(), read.searches_system()) == (True, False, False)
+
+
+def test_a_same_epoch_two_node_tie_keeps_the_first() -> None:
+    series = [_node("build", epoch=5), _node("verify", epoch=5)]
+    assert ArtifactRead(name="plan", graph_id="gr_1", epoch=5).resolve(series) == series[0]
+
+
+@pytest.mark.parametrize(
+    ("node", "epochs", "detail"),
+    [
+        ("verify", (5, 9, 5), "artifact 'plan' from node 'verify' holds no epoch 7 — it holds epochs 9, 5"),
+        (None, (5,), "artifact 'plan' holds no epoch 7 — it holds epoch 5"),
+    ],
+)
+def test_an_unheld_epoch_names_the_held_ones_newest_first(
+    node: str | None, epochs: tuple[int, ...], detail: str
+) -> None:
+    with pytest.raises(ArtifactEpochNotHeld) as refused:
+        ArtifactRead(name="plan", graph_id="gr_1", node=node, epoch=7).resolve(
+            [_node("verify", epoch=e) for e in epochs]
+        )
+    assert str(refused.value) == detail
+
+
+def test_an_epoch_read_of_an_empty_series_is_not_found() -> None:
+    with pytest.raises(ArtifactNotFound) as refused:
+        ArtifactRead(name="plan", graph_id="gr_1", epoch=7).resolve([])
+    assert str(refused.value) == "no artifact 'plan' for this node-step"
+
+
+@pytest.mark.parametrize("scope", [ArtifactScope.GRAPH, ArtifactScope.SYSTEM])
+def test_epoch_with_a_scope_without_epochs_contradicts(scope: ArtifactScope) -> None:
+    with pytest.raises(ArtifactReadContradiction) as refused:
+        ArtifactRead(name="plan", graph_id="gr_1", scope=scope, epoch=5).validate()
+    assert str(refused.value) == (
+        f"--epoch 5 cannot narrow {scope.value} scope — only node scope has epochs; "
+        f"drop one of --epoch / --scope {scope.value}"
+    )
+
+
+@pytest.mark.parametrize("scope", [None, ArtifactScope.NODE])
+def test_listing_every_epoch_is_allowed_where_node_scope_is_read(scope: ArtifactScope | None) -> None:
+    refuse_epochs_outside_node(scope)
+
+
+@pytest.mark.parametrize("scope", [ArtifactScope.GRAPH, ArtifactScope.SYSTEM])
+def test_listing_every_epoch_of_a_scope_without_epochs_is_refused(scope: ArtifactScope) -> None:
+    with pytest.raises(ArtifactReadContradiction) as refused:
+        refuse_epochs_outside_node(scope)
+    assert str(refused.value) == (
+        f"--all-epochs cannot include {scope.value} scope — only node scope has epochs; "
+        f"drop one of --all-epochs / --scope {scope.value}"
+    )
+
+
+def _entry(content: str, *, node: str = "verify", epoch: int = 5, produced_at: str | None = None) -> ArtifactView:
+    return ArtifactView(
+        key=f"{node}.plan.{epoch}",
+        kind=ArtifactKind.ASSET,
+        name="plan",
+        node_id=f"nd_{node}",
+        node_name=node,
+        epoch=epoch,
+        produced_at=produced_at,
+        content=content,
+    )
+
+
+def test_a_series_keeps_the_first_entry_of_a_repeated_key_newest_first() -> None:
+    served = [_entry("round-1"), _entry("round-2", epoch=9), _entry("round-2 duplicate", epoch=9)]
+    assert [e.content for e in series_newest_first(served)] == ["round-2", "round-1"]
+
+
+def test_a_shared_epoch_orders_by_production_time_unstated_oldest() -> None:
+    served = [_entry("unstated"), _entry("stated", node="build", produced_at="2026-07-21T12:00:00+00:00")]
+    assert [e.content for e in series_newest_first(served)] == ["stated", "unstated"]
