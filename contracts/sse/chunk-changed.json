@@ -17,6 +17,15 @@
     "key": "transitions:tr_01J",
     "project_id": "proj_1"
   },
+  "transition": {
+    "chunk_id": "ch_1",
+    "status": "running",
+    "terminal": false,
+    "cause": "node-completed",
+    "key": "transitions:tr_01J",
+    "transition_from": "plan",
+    "transition_to": "build"
+  },
   "deleted": {
     "chunk_id": "ch_1",
     "status": "not_ready",

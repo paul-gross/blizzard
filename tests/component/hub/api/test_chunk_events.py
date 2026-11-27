@@ -189,6 +189,12 @@ def test_node_completion_carries_prev_node_node_and_status_change(tmp_path: Path
     backfilled = [r for r in _activity_rows(rows) if r["key"] == frame["key"]]
     assert len(backfilled) == 1
     assert backfilled[0]["cause"] == "hub-advanced"
+    assert (frame["transition_from"], frame["transition_to"]) == ("deliver", "done")
+    assert (backfilled[0]["transition_from"], backfilled[0]["transition_to"]) == ("deliver", "done")
+    completed = next(f for f in frames if f.get("cause") == "node-completed")
+    completed_row = next(r for r in _activity_rows(rows) if r["key"] == completed["key"])
+    assert (completed["transition_from"], completed["transition_to"]) == ("build", "deliver")
+    assert (completed_row["transition_from"], completed_row["transition_to"]) == ("build", "deliver")
 
 
 def test_stop_carries_cause_stopped(tmp_path: Path) -> None:

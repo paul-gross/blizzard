@@ -273,16 +273,14 @@ test.describe('on a fresh hub', () => {
     expect(eventMessage).toBeDefined();
     expect(reloaded.find((message) => message.includes('attempt-failed'))).toBe(eventMessage);
 
-    // Live-rendered rows carry the `→` transition arrow; backfill-rendered rows are the bare chunk ref. The flip proves
-    // the backfill path, not leftover replay.
+    // Mint rows name their own cause both before and after the broker restart.
     const mintRows = (messages: string[]): string[] =>
       messages.filter((message) => message !== eventMessage);
     const firstMints = mintRows(firstLoad);
     const reloadMints = mintRows(reloaded);
     expect(firstMints).toHaveLength(2);
     expect(reloadMints).toHaveLength(2);
-    expect(firstMints.every((message) => message.includes('→'))).toBe(true);
-    expect(reloadMints.every((message) => !message.includes('→'))).toBe(true);
-    expect(new Set(reloadMints)).toEqual(new Set(firstMints.map((message) => message.split(' ')[0])));
+    expect(firstMints.every((message) => message.endsWith(' minted'))).toBe(true);
+    expect(new Set(reloadMints)).toEqual(new Set(firstMints));
   });
 });

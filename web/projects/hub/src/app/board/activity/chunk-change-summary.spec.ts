@@ -7,7 +7,7 @@ const NO_HOSTS: ReadonlyMap<string, string> = new Map();
 type ChunkChangedData = LoggedEvent['data'];
 
 describe('summarizeChunkChange', () => {
-  it('renders the full transition and runner lines from a fully-populated frame', () => {
+  it('renders the cause and runner rather than current state', () => {
     const data: ChunkChangedData = {
       chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN1RJ1',
       status: 'failed',
@@ -20,7 +20,7 @@ describe('summarizeChunkChange', () => {
       graph_id: 'gr_01KXKVVF1J3D6H6VYZ3XYN0001',
     };
     const summary = summarizeChunkChange(data, NO_HOSTS);
-    expect(summary.transition).toBe('C-1RJ1 review → failed → build');
+    expect(summary.transition).toBe('C-1RJ1 completed');
     expect(summary.runner).toBe('R-ABF3.r-claude');
   });
 
@@ -63,20 +63,20 @@ describe('summarizeChunkChange', () => {
 
   it('degrades a frame with neither node to a one-line transition', () => {
     const data: ChunkChangedData = { chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', status: 'running' };
-    expect(summarizeChunkChange(data, NO_HOSTS).transition).toBe('C-3YJ9 → running');
+    expect(summarizeChunkChange(data, NO_HOSTS).transition).toBe('C-3YJ9');
   });
 
-  it('drops only the missing segment when one node is absent', () => {
+  it('ignores current-state nodes even when one is absent', () => {
     // No prev_node (e.g. a fresh promote — the chunk has never transitioned).
     const noPrev: ChunkChangedData = { chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', status: 'ready', node: 'build' };
-    expect(summarizeChunkChange(noPrev, NO_HOSTS).transition).toBe('C-3YJ9 → ready → build');
+    expect(summarizeChunkChange(noPrev, NO_HOSTS).transition).toBe('C-3YJ9');
     // No node (e.g. the chunk just landed the terminal transition).
     const noNext: ChunkChangedData = {
       chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
       status: 'done',
       prev_node: 'deliver',
     };
-    expect(summarizeChunkChange(noNext, NO_HOSTS).transition).toBe('C-3YJ9 deliver → done');
+    expect(summarizeChunkChange(noNext, NO_HOSTS).transition).toBe('C-3YJ9');
   });
 
   // --- Delete's actor -------------------------------------
@@ -89,7 +89,7 @@ describe('summarizeChunkChange', () => {
       by: 'operator',
     };
     const summary = summarizeChunkChange(data, NO_HOSTS);
-    expect(summary.transition).toBe('C-3YJ9 → not_ready');
+    expect(summary.transition).toBe('C-3YJ9 deleted');
     expect(summary.runner).toBe('operator');
   });
 

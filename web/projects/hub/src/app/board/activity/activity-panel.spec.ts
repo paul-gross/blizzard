@@ -94,7 +94,7 @@ describe('ActivityPanel', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelectorAll('[data-testid="activity-row"]')).toHaveLength(1);
-    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-old → ready');
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-old');
   });
 
   it('dedupes a backfilled row against a live frame naming the same key, preferring the live copy', async () => {
@@ -106,7 +106,7 @@ describe('ActivityPanel', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelectorAll('[data-testid="activity-row"]')).toHaveLength(1);
-    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-alp → running');
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-alp');
   });
 
   it('renders a claim from its cause rather than the last transition, across live and reload-equivalent backfill', async () => {
@@ -116,7 +116,7 @@ describe('ActivityPanel', () => {
     ]);
     const el = fixture.nativeElement as HTMLElement;
     expect([...el.querySelectorAll('[data-testid="activity-message"]')].map((node) => node.textContent?.trim()))
-      .toEqual(['C-alp claimed', 'C-alp']);
+      .toEqual(['C-alp claimed', 'C-alp completed']);
     log.set([
       { seq: 1, type: 'chunk-changed', data: { chunk_id: 'ch_alp', cause: 'claimed', runner_id: 'runner-one', status: 'running', prev_node: 'build', node: 'verify', key: 'route_created:1' }, at: Date.parse('2020-01-01T00:00:01Z'), key: 'route_created:1' },
       { seq: 2, type: 'chunk-changed', data: { chunk_id: 'ch_alp', cause: 'node-completed', status: 'running', prev_node: 'build', node: 'verify', key: 'transitions:1' }, at: Date.parse('2020-01-01T00:00:00Z'), key: 'transitions:1' },
@@ -124,8 +124,32 @@ describe('ActivityPanel', () => {
     fixture.detectChanges();
     expect(el.querySelectorAll('[data-testid="activity-row"]')).toHaveLength(2);
     expect([...el.querySelectorAll('[data-testid="activity-message"]')].map((node) => node.textContent?.trim()))
-      .toEqual(['C-alp claimed', 'C-alp build → running → verify']);
+      .toEqual(['C-alp claimed', 'C-alp completed']);
     expect(el.querySelector('[data-testid="activity-detail"]')?.textContent?.trim()).toBe('runner-one');
+  });
+
+  const parityCases = [
+    { cause: 'completed', expected: 'completed' },
+    { cause: 'node-completed', expected: 'completed build → verify', transition_from: 'build', transition_to: 'verify' },
+    { cause: 'deleted', expected: 'deleted' },
+    { cause: 'hub-advanced', expected: 'transitioned build → verify', transition_from: 'build', transition_to: 'verify' },
+    { cause: 'stopped', expected: 'stopped' },
+    { cause: 'claimed', expected: 'claimed' },
+    { cause: 'released', expected: 'released (throttled)', reason: 'throttled' },
+  ];
+  it.each(parityCases)('renders $cause from backfill alone', async ({ expected, ...fact }) => {
+    const fixture = await render([activityView({ ...fact, chunk_id: 'ch_alp' })]);
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="activity-message"]')?.textContent?.trim())
+      .toBe(`C-alp ${expected}`);
+  });
+  it.each(parityCases)('renders $cause from live alone', async ({ expected, ...fact }) => {
+    const fixture = await render([]);
+    log.set([{ seq: 1, type: 'chunk-changed', at: 1, data: {
+      ...fact, chunk_id: 'ch_alp', status: 'running', prev_node: 'unrelated', node: 'current',
+    } }]);
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="activity-message"]')?.textContent?.trim())
+      .toBe(`C-alp ${expected}`);
   });
 
   it('never collides two keyless live frames with each other (a hub older than Phase 2 stamps no key)', async () => {
@@ -160,7 +184,7 @@ describe('ActivityPanel', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const messages = [...el.querySelectorAll('[data-testid="activity-message"]')].map((n) => n.textContent?.trim());
-    expect(messages).toEqual(['C-new → running', 'C-old → ready']);
+    expect(messages).toEqual(['C-new', 'C-old']);
   });
 
   it('renders a backfilled row missing status with no placeholder dash', async () => {
@@ -169,7 +193,7 @@ describe('ActivityPanel', () => {
     ]);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-1RJ1 review → build');
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-1RJ1');
   });
 
   // --- Delete's actor -------------------------------------
@@ -188,7 +212,7 @@ describe('ActivityPanel', () => {
     ]);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-del → not_ready');
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-del deleted');
     expect(el.querySelector('[data-testid="activity-detail"]')?.textContent?.trim()).toBe('operator');
   });
 
@@ -206,7 +230,7 @@ describe('ActivityPanel', () => {
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-del → not_ready');
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-del deleted');
     expect(el.querySelector('[data-testid="activity-detail"]')?.textContent?.trim()).toBe('operator');
   });
 

@@ -25,6 +25,8 @@ class ActivityView(WireModel):
     prev_status: str | None = None
     node: str | None = None
     prev_node: str | None = None
+    transition_from: str | None = None
+    transition_to: str | None = None
     runner_id: str | None = None
     # The runner's latest registered name beside its id, on any row carrying one.
     runner_name: str | None = None

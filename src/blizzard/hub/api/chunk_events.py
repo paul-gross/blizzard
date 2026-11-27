@@ -181,6 +181,16 @@ class ChunkChanged:
             return facts
 
         runner_id = state.route.runner_id if state.route is not None else state.released_by
+        transition_from = transition_to = None
+        if key is not None and key.startswith("transitions:"):
+            fact = next((t for t in facts.transitions if f"transitions:{t.transition_id}" == key), None)
+            if fact is not None and fact.graph_id is not None:
+                graph = state.graph if state.graph.graph_id == fact.graph_id else self.frames.graphs.get(fact.graph_id)
+                if graph is not None:
+                    source = graph.node_by_id(fact.from_node_id) if fact.from_node_id else None
+                    target = graph.node_by_id(fact.to_node_id)
+                    transition_from = source.name if source else None
+                    transition_to = "done" if fact.to_node_id == "done" else target.name if target else None
         change = ChunkChange.of(
             state.chunk,
             state.graph,
@@ -196,6 +206,8 @@ class ChunkChanged:
             prev_status=change.prev_status,
             prev_node=change.prev_node,
             node=change.node,
+            transition_from=transition_from,
+            transition_to=transition_to,
             runner_id=change.runner_id,
             runner_name=state.runner_name if change.runner_id is not None else None,
             cause=cause,  # change.cause is a widened `str | None` (`bzh:domain-core` — the
