@@ -9,7 +9,7 @@
     class="rt-list"
     data-testid="gardening-routines-list"
     fleetKitSelectList
-    selectionMode="explicit" [softDisabled]="false" [wrap]="false"
+    selectionMode="explicit" [softDisabled]="false" [wrap]="false" focusMode="activedescendant"
     ariaLabel="Routines"
     [value]="selectedSlug()"
     (valueChange)="pick($event)"

@@ -38,7 +38,8 @@
 .card:hover {
   background: var(--surface-hover);
 }
-.card:focus-visible {
+/* Focus rests on the list, so the bare row's ring is the card's own, on the highlighted one. */
+.rows:focus-visible .card[data-active='true'] {
   outline: 1px solid var(--cyan);
   outline-offset: -2px;
 }

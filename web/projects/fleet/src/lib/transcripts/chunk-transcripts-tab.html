@@ -57,7 +57,7 @@
       <div
         class="seg-list"
         fleetKitSelectList
-        selectionMode="explicit" [softDisabled]="false" [wrap]="false"
+        selectionMode="explicit" [softDisabled]="false" [wrap]="false" focusMode="activedescendant"
         ariaLabel="Segments"
         [value]="segmentId()"
         (valueChange)="pickSegment.emit($event)"

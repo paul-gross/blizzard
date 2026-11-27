@@ -15,6 +15,14 @@ function key(el: Element, name: string): void {
 }
 
 describe('ProjectsTable', () => {
+  // jsdom lays nothing out, so it has no `scrollIntoView`, which a keyboard move on a select list calls.
+  beforeAll(() => {
+    HTMLElement.prototype.scrollIntoView = () => undefined;
+  });
+  afterAll(() => {
+    delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
+  });
+
   async function mount(rows: readonly ProjectRowVm[], selectedKey: string | null = null) {
     await TestBed.configureTestingModule({
       imports: [ProjectsTable],

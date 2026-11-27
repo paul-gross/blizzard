@@ -474,7 +474,10 @@ describe('Mobile chunk drill-down', () => {
 
     el.querySelector<HTMLButtonElement>('[data-testid="artifacts-tab-back"]')?.click();
     await settle(harness.fixture);
-    expect(document.activeElement).toBe(el.querySelector('[data-artifact-key="build.branch.1"]'));
+    // The artifact list takes the focus the row asked for, with that row as its active descendant.
+    const restored = el.querySelector('[data-artifact-key="build.branch.1"]')!;
+    expect(document.activeElement).toBe(restored.closest('[role="listbox"]'));
+    expect(document.activeElement?.getAttribute('aria-activedescendant')).toBe(restored.id);
   });
 
   it('opens one asset artifact in full, one level deeper', async () => {

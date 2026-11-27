@@ -13,10 +13,10 @@ const meta: Meta<KitSelectList> = {
   decorators: [moduleMetadata({ imports: [KitSelectRow] })],
   args: { value: null, ariaLabel: 'Artifacts', valueChange: fn() },
   render: (args) => ({
-    props: { ...args, rows: FEW },
+    props: { ...args, names: FEW },
     template: `
-      <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" [ariaLabel]="ariaLabel" [value]="value" (valueChange)="valueChange($event)" style="max-width: 320px">
-        @for (row of rows; track row) {
+      <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" focusMode="activedescendant" [ariaLabel]="ariaLabel" [value]="value" (valueChange)="valueChange($event)" style="max-width: 320px">
+        @for (row of names; track row) {
           <fleet-kit-select-row [value]="row" [label]="row">{{ row }}</fleet-kit-select-row>
         }
       </div>`,
@@ -31,11 +31,11 @@ export const Selected: Story = { args: { value: 'review-findings.json' } };
 export const Overflowing: Story = {
   args: { value: 'artifact-07.md' },
   render: (args) => ({
-    props: { ...args, rows: MANY },
+    props: { ...args, names: MANY },
     template: `
       <div style="max-width: 320px; height: 240px; overflow: auto">
-        <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" [ariaLabel]="ariaLabel" [value]="value" (valueChange)="valueChange($event)">
-          @for (row of rows; track row) {
+        <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" focusMode="activedescendant" [ariaLabel]="ariaLabel" [value]="value" (valueChange)="valueChange($event)">
+          @for (row of names; track row) {
             <fleet-kit-select-row [value]="row" [label]="row">{{ row }}</fleet-kit-select-row>
           }
         </div>
@@ -45,15 +45,15 @@ export const Overflowing: Story = {
 export const Empty: Story = {
   render: (args) => ({
     props: args,
-    template: `<div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" [ariaLabel]="ariaLabel" [value]="value" style="max-width: 320px"></div>`,
+    template: `<div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" focusMode="activedescendant" [ariaLabel]="ariaLabel" [value]="value" style="max-width: 320px"></div>`,
   }),
 };
 export const DisabledRows: Story = {
   render: (args) => ({
-    props: { ...args, rows: FEW },
+    props: { ...args, names: FEW },
     template: `
-      <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" [ariaLabel]="ariaLabel" [value]="value" (valueChange)="valueChange($event)" style="max-width: 320px">
-        @for (row of rows; track row; let i = $index) {
+      <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" focusMode="activedescendant" [ariaLabel]="ariaLabel" [value]="value" (valueChange)="valueChange($event)" style="max-width: 320px">
+        @for (row of names; track row; let i = $index) {
           <fleet-kit-select-row [value]="row" [label]="row" [disabled]="i % 2 === 1">{{ row }}</fleet-kit-select-row>
         }
       </div>`,
@@ -61,11 +61,11 @@ export const DisabledRows: Story = {
 };
 export const Bare: Story = {
   render: (args) => ({
-    props: { ...args, rows: FEW },
+    props: { ...args, names: FEW },
     template: `
-      <style>fleet-kit-select-row:focus-visible { outline: 1px solid var(--cyan); outline-offset: -2px; }</style>
-      <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" [ariaLabel]="ariaLabel" [value]="value" (valueChange)="valueChange($event)" style="max-width: 320px">
-        @for (row of rows; track row) {
+      <style>[role='listbox']:focus-visible fleet-kit-select-row[data-active='true'] { outline: 1px solid var(--cyan); outline-offset: -2px; }</style>
+      <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" focusMode="activedescendant" [ariaLabel]="ariaLabel" [value]="value" (valueChange)="valueChange($event)" style="max-width: 320px">
+        @for (row of names; track row) {
           <fleet-kit-select-row bare [value]="row" [label]="row">{{ row }}</fleet-kit-select-row>
         }
       </div>`,

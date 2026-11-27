@@ -9,7 +9,7 @@
     class="cd-list"
     data-testid="gardening-cadences-list"
     fleetKitSelectList
-    selectionMode="explicit" [softDisabled]="false" [wrap]="false"
+    selectionMode="explicit" [softDisabled]="false" [wrap]="false" focusMode="activedescendant"
     ariaLabel="Cadences"
     [value]="selectedSlug()"
     (valueChange)="pick($event)"

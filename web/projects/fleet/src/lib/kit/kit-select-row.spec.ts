@@ -8,7 +8,7 @@ import { KitSelectRow } from './kit-select-row';
   selector: 'fleet-test-host',
   imports: [KitSelectList, KitSelectRow],
   template: `
-    <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" [value]="selected()" (valueChange)="opens.push($event)">
+    <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" focusMode="activedescendant" [value]="selected()" (valueChange)="opens.push($event)">
       <fleet-kit-select-row value="a" label="Row A" testid="row-a">Row A</fleet-kit-select-row>
       <fleet-kit-select-row value="b" label="Row B" bare ariaLabel="Open chunk ch_1">Row B</fleet-kit-select-row>
     </div>
@@ -62,5 +62,20 @@ describe('KitSelectRow', () => {
     expect(rows[0].hasAttribute('aria-label')).toBe(false);
     expect(rows[1].classList.contains('bare')).toBe(true);
     expect(rows[1].getAttribute('aria-label')).toBe('Open chunk ch_1');
+  });
+
+  it('marks the highlighted row, drawing its outline class on default rows only', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.selected.set('a');
+    await fixture.whenStable();
+    const rows = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('fleet-kit-select-row');
+
+    expect(rows[0].getAttribute('data-active')).toBe('true');
+    expect(rows[0].querySelector('.row')!.classList.contains('highlighted')).toBe(true);
+    fixture.componentInstance.selected.set('b');
+    await fixture.whenStable();
+    expect(rows[1].getAttribute('data-active')).toBe('true');
+    expect(rows[1].querySelector('.row')!.classList.contains('highlighted')).toBe(false);
+    expect(rows[0].querySelector('.row')!.classList.contains('highlighted')).toBe(false);
   });
 });

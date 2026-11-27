@@ -13,7 +13,7 @@
     <fleet-kit-error-line [message]="error()" />
     <fleet-kit-chips ariaLabel="Urgency lifecycle" [options]="options" [selectedValue]="lifecycle()" (choose)="filter.emit($event)" />
     <fleet-kit-async-state [state]="state()" placement="inline" loadingText="Loading urgencies…" errorText="Could not load urgencies." emptyText="No urgencies found.">
-    <div cdkDropList fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" ariaLabel="Urgencies" [value]="selected()" (valueChange)="pick.emit($event)" [cdkDropListDisabled]="!canEdit() || lifecycle() !== 'active' || pending()" (cdkDropListDropped)="reorder.emit($event)">
+    <div cdkDropList fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" focusMode="activedescendant" ariaLabel="Urgencies" [value]="selected()" (valueChange)="pick.emit($event)" [cdkDropListDisabled]="!canEdit() || lifecycle() !== 'active' || pending()" (cdkDropListDropped)="reorder.emit($event)">
       @for (urgency of rows(); track urgency.id) {
         <div cdkDrag [cdkDragDisabled]="!canEdit() || lifecycle() !== 'active' || pending()" class="urgency-item">
           @if (canEdit() && lifecycle() === 'active') { <span cdkDragHandle class="drag-handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span> }

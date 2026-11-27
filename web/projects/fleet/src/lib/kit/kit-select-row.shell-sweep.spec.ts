@@ -20,7 +20,7 @@ import { KitUrgencyPill } from './kit-urgency-pill';
 @Component({
   imports: [KitSelectList, KitSelectRow],
   template: `
-    <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" value="plain">
+    <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" focusMode="activedescendant" value="plain">
       <fleet-kit-select-row value="plain" label="Plain" testid="plain-btn"><span>Plain</span></fleet-kit-select-row>
       <fleet-kit-select-row class="flex-host" value="bare" label="Bare" bare testid="bare-btn">
         <span class="a">A</span><span class="b">B</span>
@@ -139,4 +139,36 @@ describe('KitSelectRow shell sweep', () => {
       }
     });
   }
+
+  it('outlines the active row only while the list has keyboard focus', async () => {
+    await page.viewport(800, 800);
+    await loadDesignTokens();
+    await TestBed.configureTestingModule({
+      imports: [Host],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(Host);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      const plain = root.querySelector<HTMLElement>('[data-testid="plain-btn"] .row')!;
+      const bare = root.querySelector<HTMLElement>('[data-testid="bare-btn"] .row')!;
+      const outline = (el: HTMLElement) => `${getComputedStyle(el).outlineStyle} ${getComputedStyle(el).outlineWidth}`;
+      expect(getComputedStyle(plain).outlineStyle).toBe('none');
+      await userEvent.keyboard('{Tab}');
+      expect(outline(plain)).toBe('solid 1px');
+      // A bare row draws no outline of its own; its consumer does.
+      await userEvent.keyboard('{ArrowDown}');
+      expect(getComputedStyle(plain).outlineStyle).toBe('none');
+      expect(getComputedStyle(bare).outlineStyle).toBe('none');
+      await userEvent.keyboard('{ArrowUp}');
+      expect(outline(plain)).toBe('solid 1px');
+      (document.activeElement as HTMLElement).blur();
+      expect(getComputedStyle(plain).outlineStyle).toBe('none');
+    } finally {
+      root.remove();
+    }
+  });
 });

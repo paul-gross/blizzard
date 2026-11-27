@@ -1,28 +1,52 @@
 import { Listbox } from '@angular/aria/listbox';
-import { afterRenderEffect, DestroyRef, Directive, ElementRef, inject, input, output, untracked, type OnInit } from '@angular/core';
+import {
+  afterNextRender,
+  afterRenderEffect,
+  contentChildren,
+  DestroyRef,
+  Directive,
+  ElementRef,
+  inject,
+  Injector,
+  input,
+  output,
+  untracked,
+  type OnInit,
+} from '@angular/core';
 
+import { KitSelectRow } from './kit-select-row';
 import { trackUserInput } from './user-input-window';
 
+/** The keys Aria moves the highlight on; any other single character is type-ahead. */
+const MOVE_KEYS = ['ArrowUp', 'ArrowDown', 'Home', 'End'];
+
 /**
- * A master list — a vertical Aria listbox of {@link KitSelectRow}s with one Tab stop. Up, Down,
- * Home, End and type-ahead move the highlight (and focus) without opening anything; Enter, Space or a
- * click opens the row the person acted on, through `valueChange`.
+ * A master list — a vertical Aria listbox of {@link KitSelectRow}s with one Tab stop. DOM focus stays on
+ * the list; Up, Down, Home, End and type-ahead move the highlight (`aria-activedescendant`, scrolled into
+ * view) without opening anything; Enter, Space or a click opens the row the person acted on, through
+ * `valueChange`. A row that receives focus takes the highlight and hands focus to the list; a focusable
+ * element inside a row keeps its own.
  *
  * The consumer's `value` stays authoritative: it is pushed into Aria whenever it or the set of rows
  * changes, and only a person's click or key press writes it back — Aria's own writes (pruning the
  * values of rows that have not registered yet, its default state) never do. Pressing the row that is
  * already open emits it again and keeps the consumer's value, so a re-open is possible.
  *
- * Every list binds `selectionMode="explicit" [softDisabled]="false" [wrap]="false"`: Aria's defaults
- * would open rows as the highlight moves, let disabled rows take it, and wrap it past the ends. A host
- * directive's input cannot be defaulted by the kit, so the consumer's template carries the bindings;
- * a dev build throws when one is missing. Orientation (vertical) and single selection are Aria's defaults.
+ * Every list binds `selectionMode="explicit" [softDisabled]="false" [wrap]="false"
+ * focusMode="activedescendant"`: Aria's defaults would open rows as the highlight moves, let disabled
+ * rows take it, wrap it past the ends and move DOM focus from row to row. A host directive's input cannot
+ * be defaulted by the kit, so the consumer's template carries the bindings; a dev build throws when one is
+ * missing. Orientation (vertical) and single selection are Aria's defaults.
  */
 @Directive({
   selector: '[fleetKitSelectList]',
   exportAs: 'fleetKitSelectList',
   hostDirectives: [{ directive: Listbox, inputs: ['selectionMode', 'softDisabled', 'wrap', 'focusMode'] }],
-  host: { '[attr.aria-label]': 'ariaLabel()' },
+  host: {
+    '[attr.aria-label]': 'ariaLabel()',
+    // Focus rests on the list, whose highlighted row draws the focus indicator.
+    style: 'outline: none',
+  },
 })
 export class KitSelectList<V = unknown> implements OnInit {
   /** The open row's `value`; `null` when none is. */
@@ -31,34 +55,47 @@ export class KitSelectList<V = unknown> implements OnInit {
   readonly ariaLabel = input<string | null>(null);
 
   private readonly listbox = inject<Listbox<V>>(Listbox);
+  /** In creation order, which is not DOM order for rows stamped through an outlet. */
+  private readonly rows = contentChildren(KitSelectRow, { descendants: true });
   /** True from a click or key press on the list until Aria has published its selection. */
   private readonly userInput = trackUserInput();
   private lastPushed: V | null | undefined;
   private readonly element = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
-  private hadFocus = false;
-  private focusedValue: V | undefined;
+  private readonly injector = inject(Injector);
 
   constructor() {
     const host = this.element;
-    // Focus on a row that a re-render destroys falls to <body> with no focusout, so remember that
-    // focus was inside the list and which row held it, and hand it back to the same value.
-    const focusIn = () => {
-      this.hadFocus = true;
-      this.focusedValue = this.activeValue();
+    const focusIn = (event: FocusEvent) => {
+      const row = this.rows().find((r) => r.element === event.target);
+      if (row !== undefined) {
+        this.moveStop(row);
+        host.focus({ preventScroll: true });
+        return;
+      }
+      // Keyboard focus entering the list shows the highlighted row; a pointer press never scrolls.
+      const entered = event.target === host && !host.contains(event.relatedTarget as Node | null);
+      if (entered && host.matches(':focus-visible')) this.listbox.scrollActiveItemIntoView();
     };
     const focusOut = (event: FocusEvent) => {
       if (host.contains(event.relatedTarget as Node | null)) return;
-      this.hadFocus = false;
-      // Focus left the list: a selection that changed while it was inside deferred the roving stop's
-      // move, so put the stop on the selected row now (no focus, no scroll).
+      // Focus left the list: a selection that changed while it was inside deferred the highlight's
+      // move, so put it on the selected row now (no focus, no scroll).
       const selected = this.value();
-      if (selected !== null) this.moveStop(selected);
+      if (selected !== null) this.moveStopTo(selected);
+    };
+    const keyDown = (event: KeyboardEvent) => {
+      const typed = event.key.length === 1 && event.key !== ' ' && !event.ctrlKey && !event.metaKey && !event.altKey;
+      if (!typed && !MOVE_KEYS.includes(event.key)) return;
+      // After the render, so Aria's own key handler has moved the highlight.
+      afterNextRender({ read: () => this.listbox.scrollActiveItemIntoView() }, { injector: this.injector });
     };
     host.addEventListener('focusin', focusIn);
     host.addEventListener('focusout', focusOut);
+    host.addEventListener('keydown', keyDown);
     inject(DestroyRef).onDestroy(() => {
       host.removeEventListener('focusin', focusIn);
       host.removeEventListener('focusout', focusOut);
+      host.removeEventListener('keydown', keyDown);
     });
 
     // Aria writes `value` itself (pruning, explicit toggles); read it through its model's changes.
@@ -72,12 +109,13 @@ export class KitSelectList<V = unknown> implements OnInit {
     afterRenderEffect({
       write: () => {
         const want = this.value();
-        this.rowCount();
+        const count = this.rows().length;
         untracked(() => {
           this.push(want);
-          this.restoreFocus();
-          // Aria leaves an empty list tabbable; an empty list owns no Tab stop.
-          if (this.rowCount() === 0) host.removeAttribute('tabindex');
+          // Aria leaves an empty list tabbable, and its binding does not change when rows return, so the
+          // attribute is both removed and put back here: an empty list owns no Tab stop.
+          if (count === 0) host.removeAttribute('tabindex');
+          else if (!host.hasAttribute('tabindex')) host.setAttribute('tabindex', '0');
         });
       },
     });
@@ -89,20 +127,13 @@ export class KitSelectList<V = unknown> implements OnInit {
         this.listbox.selectionMode() === 'follow' && 'selectionMode="explicit"',
         this.listbox.softDisabled() && '[softDisabled]="false"',
         this.listbox.wrap() && '[wrap]="false"',
+        this.listbox.focusMode() === 'roving' && 'focusMode="activedescendant"',
       ].filter((binding) => binding !== false);
       if (missing.length > 0) throw new Error(`fleetKitSelectList is missing ${missing.join(' ')}`);
     }
   }
 
-  /** Give focus back to the row that held it when a re-render destroyed that row's element. */
-  private restoreFocus(): void {
-    if (!this.hadFocus || this.focusedValue === undefined) return;
-    const active = document.activeElement;
-    if (active !== null && active !== document.body) return;
-    this.moveStop(this.focusedValue)?.element()?.focus({ preventScroll: true });
-  }
-
-  /** Push the consumer's value into Aria, and move the roving stop to it when it changed outside. */
+  /** Push the consumer's value into Aria, and move the highlight to it when it changed outside. */
   private push(want: V | null): void {
     const aria = this.listbox.value();
     const wanted = want === null ? [] : [want];
@@ -112,48 +143,45 @@ export class KitSelectList<V = unknown> implements OnInit {
       return;
     }
     this.lastPushed = want;
-    // While focus is inside the list the roving stop follows focus, not the selection.
+    // While focus is inside the list the highlight is the person's, not the selection's.
     if (this.userInput() || this.element.contains(document.activeElement)) return;
-    // Aria moves its roving Tab stop only on keys and focus (its public `gotoIndex` focuses the
-    // row), so a selection that came from outside (a route refresh, Back, a deep link) would leave
-    // the stop on another row. Set the active item directly: no focus, no scroll.
-    this.moveStop(want);
+    // Aria moves its highlight only on keys, clicks and focus, so a selection that came from outside
+    // (a route refresh, Back, a deep link) would leave it on another row.
+    this.moveStopTo(want);
   }
 
   private onAriaValue(aria: readonly V[]): void {
     if (!this.userInput()) return;
     const consumer = this.value();
-    const acted =
-      aria.length === 1
-        ? aria[0]
-        : this.activeValue();
-    if (acted === undefined || (aria.length === 1 && acted === consumer))
-      return;
+    const acted = aria.length === 1 ? aria[0] : this.rows().find((row) => row.active())?.value();
+    if (acted === undefined || (aria.length === 1 && acted === consumer)) return;
     // The person opened `acted` (a toggle on the row that is already open deselects it, and still
     // opens it again). The consumer decides what is selected, so snap Aria back to its value.
-    this.valueChange.emit(acted);
+    this.valueChange.emit(acted as V);
     const restore = consumer === null ? [] : [consumer];
-    if (aria.length !== restore.length || aria[0] !== restore[0])
-      this.listbox.value.set(restore);
+    if (aria.length !== restore.length || aria[0] !== restore[0]) this.listbox.value.set(restore);
   }
 
-  // Aria exposes no public way to read the highlighted row, count rows, or move the roving stop
-  // without focusing; these three helpers are the only reads of its `_pattern`, so an Aria upgrade
-  // has one place to fix.
-  private activeValue(): V | undefined {
-    return this.listbox._pattern.inputs.activeItem()?.value();
+  private moveStopTo(value: V): void {
+    const row = this.rows().find((r) => r.value() === value);
+    if (row !== undefined) this.moveStop(row);
   }
 
-  /** How many rows have registered; reading it in an effect re-runs the effect as rows come and go. */
-  private rowCount(): number {
-    return this.listbox._pattern.inputs.items().length;
+  /** Move the highlight, and with it the list's stop, to `row`: no focus (in `activedescendant`
+   * mode `gotoIndex` takes none), no scroll. A disabled row refuses it. */
+  private moveStop(row: KitSelectRow): void {
+    this.gotoRow(row);
+    // Aria re-sorts moved rows only when its MutationObserver reports, which can be after this render,
+    // so an index taken from the DOM may have named another row; by the microtask it has re-sorted.
+    if (!row.active()) queueMicrotask(() => this.gotoRow(row));
   }
 
-  /** Put the roving Tab stop on the row valued `value`, without focus or scroll; the row, if any. */
-  private moveStop(value: V) {
-    const inputs = this.listbox._pattern.inputs;
-    const row = inputs.items().find((item) => item.value() === value);
-    if (row !== undefined) inputs.activeItem.set(row);
-    return row;
+  /** `gotoIndex` counts rows in document order, the order Aria keeps them in. */
+  private gotoRow(row: KitSelectRow): void {
+    const rows = this.rows();
+    if (!rows.includes(row)) return;
+    const precedes = (other: KitSelectRow) =>
+      (row.element.compareDocumentPosition(other.element) & Node.DOCUMENT_POSITION_PRECEDING) !== 0;
+    this.listbox.gotoIndex(rows.filter(precedes).length);
   }
 }
