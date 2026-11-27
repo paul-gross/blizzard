@@ -1,17 +1,9 @@
-"""The registration step — register at the hub, keep the identity and the served projects its reply
-names, mirror the hub's pause brake.
+"""The registration step — register at the hub, record the identity and served projects its reply names, seed the
+runner's settings, and mirror the hub's pause brake.
 
-The hub resolves who this runner is from its bearer token; the runner declares its configured name and
-the bindings and subscription its host file gives it. The runner's id is configured and its store is bound to
-it, so a registration never adopts one: it records the reply's name and tenant against the configured id (a
-reply naming no tenant, from a hub that predates tenants, keeps the row's). A reply naming another runner — a
-token rotated since the tick's identity check, or a hub with no identity read — turns the verdict to a mismatch
-and mirrors no brake. The registration declares the configured projects, and a reply answering them replaces the
-stored answer whole once the identity row is recorded; a reply answering none, from a hub that predates
-projects, keeps it. Every registration that records the identity then seeds the runner's settings record, which
-writes only the keys still unseeded; a refused seed is warned of and left to the next one. A failed registration
-leaves the row, the answer, the holder and the mirrored brake as they stood. A refused version halts the runner
-alone until an admitted registration lifts it."""
+The hub resolves who this runner is from its bearer token, and a registration never adopts an id: a reply naming
+another runner writes nothing and turns the verdict to a mismatch. A failed registration leaves what stood, and a
+refused version halts the runner alone until an admitted registration lifts it."""
 
 from __future__ import annotations
 

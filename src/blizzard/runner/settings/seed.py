@@ -10,9 +10,7 @@ from blizzard.runner.settings.ports import IWriteRunnerSettings
 
 
 class RunnerSettingsSeed:
-    """Seeds one runner's record from its boot-held file entry — the only caller of the record's ``seed``.
-
-    A repeated run writes only the keys still without an entry. The record refuses a runner with no identity row."""
+    """Seeds one runner's record from its boot-held file entry."""
 
     def __init__(
         self,
