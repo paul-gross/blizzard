@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, output, signal } from '@angular/core';
 import { apply, form } from '@angular/forms/signals';
-import { createRefusalState, submitForm } from 'fleet';
+import { createRefusalState, submitForm } from 'fleet/forms';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { ProjectLens } from '../../core/project-lens';
 import { injectProjectDomainsQuery } from '../../core/projects.query';

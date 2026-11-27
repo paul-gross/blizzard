@@ -3,14 +3,13 @@ import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail } from './chunk-detail.model';
-import { type AwaitingHumanFormActions, ChunkAwaitingHuman } from '../awaiting-human';
-import {
-  ChunkFacts,
-  ChunkIssuePane,
-  ChunkTimeline,
-  chunkGraphLabel,
-  type WorkItemsState,
-} from '../chunk-detail';
+import { type AwaitingHumanFormActions } from '../awaiting-human/awaiting-human.domain';
+import { ChunkAwaitingHuman } from '../awaiting-human/chunk-awaiting-human';
+import { ChunkFacts } from '../chunk-detail/chunk-facts';
+import { ChunkIssuePane } from '../chunk-detail/chunk-issue-pane';
+import { ChunkTimeline } from '../chunk-detail/chunk-timeline';
+import { chunkGraphLabel } from '../chunk-detail/graph-label';
+import { type WorkItemsState } from '../chunk-detail/work-items-state';
 import { KitPanel, KitPanelHeader } from '../../kit/kit-panel';
 import { ChunkDelivery } from '../chunk-detail/chunk-delivery';
 import { ChunkEscalation } from '../chunk-detail/chunk-escalation';

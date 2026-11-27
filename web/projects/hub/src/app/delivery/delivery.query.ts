@@ -2,7 +2,8 @@ import type { Signal } from '@angular/core';
 import { injectQuery, type QueryObserverResult } from '@tanstack/angular-query-experimental';
 import { injectQueries } from '@tanstack/angular-query-experimental/inject-queries-experimental';
 
-import { fromFlowFactView, getFlowRecordApiFlowsFlowIdRecordGet } from 'fleet';
+import { fromFlowFactView } from 'fleet/chunk-page';
+import { getFlowRecordApiFlowsFlowIdRecordGet } from 'fleet/hub-api';
 import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 import { boardChunksReadOptions } from '../core/chunks.query';
 import { activeFlowsQueryOptions } from '../core/flows.query';

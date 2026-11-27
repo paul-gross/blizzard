@@ -1,4 +1,5 @@
-import { readRefusal, type RefusalMap, type SaveOutcome } from 'fleet';
+import { readRefusal } from 'fleet/core';
+import { type RefusalMap, type SaveOutcome } from 'fleet/forms';
 import type { ProjectLinkDraft, ProjectLinkKind } from './project-link.domain';
 import type { ProjectLinkVars } from './projects.mutations';
 

@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { FLEET_CLOCK } from 'fleet';
+import { FLEET_CLOCK } from 'fleet/core';
 import { fleetSpendView, type RequestClientStub, settle, stubError, stubHubClient, type StubDetailBody, type StubHttpError } from 'fleet/testing';
 import { FleetSpendPanel } from './fleet-spend-panel';
 

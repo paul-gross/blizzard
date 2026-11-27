@@ -1,18 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, viewChild, type TemplateRef } from '@angular/core';
-import {
-  FleetWhen,
-  type KitAsyncStateValue,
-  KitButton,
-  type KitFact,
-  KitFactList,
-  KitSectionHead,
-  KitSwatch,
-  type KitTabOption,
-  KitTabContent,
-  KitTabGroup,
-  KitTabPanel,
-  KitTabs,
-} from 'fleet';
+import { FleetWhen } from 'fleet/core';
+import { type KitAsyncStateValue, KitButton, type KitFact, KitFactList, KitSectionHead, KitSwatch } from 'fleet/kit';
+import { type KitTabOption, KitTabContent, KitTabGroup, KitTabPanel, KitTabs } from 'fleet/kit/tabs';
 
 import type { Project } from '../../core/project.domain';
 import { type LastChangeVm, type RevisionRowVm } from '../config-history.model';

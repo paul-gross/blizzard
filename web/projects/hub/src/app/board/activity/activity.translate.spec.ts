@@ -1,4 +1,4 @@
-import { type ActivityView } from 'fleet';
+import { type ActivityView } from 'fleet/hub-api';
 import { translateActivityRow } from './activity.translate';
 
 describe('translateActivityRow', () => {

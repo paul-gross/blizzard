@@ -2,14 +2,14 @@ import { type Provider, provideZonelessChangeDetection, signal } from '@angular/
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type SseStatus } from 'fleet';
+import { provideFlags } from 'fleet/core';
+import { type SseStatus } from 'fleet/sse';
 import { type RequestClientStub, hiddenAtContainerWidth, hostEnvironmentView, hostRunnerView, runnerAuthSessionView, settle, stubError, stubRunnerClient } from 'fleet/testing';
 import { RunnerLogout } from '../../core/identity/runner-logout';
 import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';
 import { vi } from 'vitest';
 
 import { AppHeader } from './app-header';
-import { provideFlags } from 'fleet';
 import { runnerFlagsRead } from '../../core/flags.query';
 
 /** A `RunnerLiveUpdates` stand-in so a spec can drive {@link AppHeader}'s

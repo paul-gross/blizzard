@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { type KitFact, KitButton, KitErrorLine, KitFactList } from 'fleet';
+import { type KitFact, KitButton, KitErrorLine, KitFactList } from 'fleet/kit';
 
 import type { HostRecordVm } from './host-records.model';
 

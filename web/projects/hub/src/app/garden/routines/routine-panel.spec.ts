@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { form } from '@angular/forms/signals';
 import { provideRouter } from '@angular/router';
 
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import type { RoutineEditDraft } from '../core/routine.domain';
 import { FleetRoutinePanel, type RoutinePanelVm } from './routine-panel';
 import { routineEditRules } from './routine.form';

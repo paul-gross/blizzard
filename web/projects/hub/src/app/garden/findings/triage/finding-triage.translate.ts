@@ -1,4 +1,4 @@
-import type { RefusalMap } from 'fleet';
+import type { RefusalMap } from 'fleet/forms';
 
 import type { FindingExitVars, FindingSupersedeVars } from '../../core/finding.mutations';
 import type { FindingTriageDraft } from './finding-triage.domain';

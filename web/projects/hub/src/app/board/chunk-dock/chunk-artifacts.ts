@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { type ChunkArtifact, type ChunkArtifactStore, KitAsyncState, KitSectionHead, ChunkArtifactBody, sortArtifacts } from 'fleet';
+import { type ChunkArtifact, type ChunkArtifactStore, ChunkArtifactBody, sortArtifacts } from 'fleet/chunk-detail';
+import { KitAsyncState, KitSectionHead } from 'fleet/kit';
 import { AppLink } from 'fleet/shell';
 
 /**

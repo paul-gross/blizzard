@@ -1,15 +1,7 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, input, output, signal } from '@angular/core';
-import {
-  createCopyFlash,
-  harnessName,
-  KitAsyncState,
-  KitBadge,
-  KitButton,
-  KitConfirmDialog,
-  KitErrorLine,
-  type KitFact,
-  KitFactList,
-} from 'fleet';
+import { createCopyFlash, harnessName } from 'fleet/core';
+import { KitAsyncState, KitBadge, KitButton, KitErrorLine, type KitFact, KitFactList } from 'fleet/kit';
+import { KitConfirmDialog } from 'fleet/kit/dialog';
 
 import type { Escalation } from '../../core/escalation.domain';
 import type { Lease } from '../../core/lease.domain';

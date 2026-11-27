@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
 
-import { KitBadge, KitField, KitOption, KitOptionGroup } from 'fleet';
+import { KitBadge, KitField, KitOption, KitOptionGroup } from 'fleet/kit';
 
 import type { Scope } from '../core/scope.domain';
 

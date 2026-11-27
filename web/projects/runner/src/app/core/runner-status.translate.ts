@@ -1,4 +1,5 @@
-import type { UnenforceableGate, UnknownHostValue } from 'fleet';
+import type { UnknownHostValue } from 'fleet/core';
+import type { UnenforceableGate } from 'fleet/host';
 import type { runnerApi } from 'fleet/runner-shell';
 import { openLookup } from 'fleet/shell';
 

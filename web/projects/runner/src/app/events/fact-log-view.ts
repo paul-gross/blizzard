@@ -1,5 +1,11 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { compactRef, formatAbsolute, formatLocalClockWithDay, injectNowSignal, type LocalClockWithDay } from 'fleet';
+import {
+  compactRef,
+  formatAbsolute,
+  formatLocalClockWithDay,
+  injectNowSignal,
+  type LocalClockWithDay,
+} from 'fleet/core';
 
 import type { PanelFact } from '../core/panel-reads.model';
 

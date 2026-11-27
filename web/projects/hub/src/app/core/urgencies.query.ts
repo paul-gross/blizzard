@@ -1,5 +1,5 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
-import { listUrgenciesApiUrgenciesGet, type UrgencyView } from 'fleet';
+import { listUrgenciesApiUrgenciesGet, type UrgencyView } from 'fleet/hub-api';
 import { hubUrgenciesKey } from './query-keys';
 import { fromUrgencyView } from './urgency.translate';
 

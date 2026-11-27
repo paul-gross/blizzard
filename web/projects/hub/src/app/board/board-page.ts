@@ -14,7 +14,15 @@ import { boardLayoutOf, type BoardLayout } from '../core/board-layout.model';
 import { BoardShell } from './board-shell/board-shell';
 import { TracksPanel } from './tracks/tracks-panel';
 import { type BoardLaneMove, type BoardReposition } from './board-shell/board-column';
-import { asyncState, injectChunkUrlSelection, injectRunnerHostNames, errorMessage, type KitAsyncStateValue, injectHubChunkDetailQuery, injectPendingMutationVariables, KitErrorLine } from 'fleet';
+import { injectHubChunkDetailQuery } from 'fleet/chunk-page';
+import {
+  asyncState,
+  injectChunkUrlSelection,
+  injectRunnerHostNames,
+  errorMessage,
+  injectPendingMutationVariables,
+} from 'fleet/core';
+import { type KitAsyncStateValue, KitErrorLine } from 'fleet/kit';
 import { ChunkDetail } from './chunk-dock/chunk-detail';
 import { StepDrawer } from './tracks/step-drawer';
 import { ActivityPanel } from './activity/activity-panel';

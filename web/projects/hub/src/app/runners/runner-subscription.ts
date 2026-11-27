@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { KitBadge } from 'fleet';
+import { KitBadge } from 'fleet/kit';
 
 /**
  * A runner's one subscription by display name, flagged UNROSTERED when its host's roster does

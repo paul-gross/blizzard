@@ -1,4 +1,4 @@
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite';
 
 import { FleetRoutinePanel, type RoutinePanelVm } from './routine-panel';

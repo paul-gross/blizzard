@@ -1,7 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
 import { form } from '@angular/forms/signals';
-import { asyncState, KitButton, KitMasterDetail, KitPanel, type KitAsyncStateValue, submitForm, ViewportService } from 'fleet';
+import { asyncState } from 'fleet/core';
+import { submitForm } from 'fleet/forms';
+import { KitButton, KitMasterDetail, KitPanel, type KitAsyncStateValue } from 'fleet/kit';
+import { ViewportService } from 'fleet/viewport';
 import { FleetRoutineList, type RoutineListRowVm } from './routine-list';
 import type { GraphSummary } from '../../graphs/graph.domain';
 import { injectHubGraphsQuery } from '../../graphs/graphs.query';

@@ -1,4 +1,6 @@
-import { type BeaconTone, compactRef, harnessName, type RunnerSubscription, type Tone, type UnenforceableGate } from 'fleet';
+import { compactRef, harnessName, type RunnerSubscription } from 'fleet/core';
+import { type UnenforceableGate } from 'fleet/host';
+import { type BeaconTone, type Tone } from 'fleet/kit';
 
 import type { MachineChunkRow } from '../core/chunk-rows.model';
 import type { HostRunner } from '../core/host-runner.domain';

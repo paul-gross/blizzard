@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { MemberView } from 'fleet';
+import type { MemberView } from 'fleet/hub-api';
 import { canChangeRole } from './members.domain';
 import { member } from './members.builders';
 import { memberWire } from './members-fixture.translate';

@@ -1,7 +1,18 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitMarkdown, KitPanel, KitProseBlock, KitSectionHead, type Tone, FleetWhen } from 'fleet';
+import { compactRef, FleetWhen } from 'fleet/core';
+import {
+  KitAsyncState,
+  type KitAsyncStateValue,
+  KitBadge,
+  KitButton,
+  KitMarkdown,
+  KitPanel,
+  KitProseBlock,
+  KitSectionHead,
+  type Tone,
+} from 'fleet/kit';
 import type { FindingTriageVerb } from '../core/finding-triage-verb.domain';
 import type { FindingExit, FindingState } from '../core/finding.domain';
 import { findingStateTone, isFindingExited } from '../core/finding-state';

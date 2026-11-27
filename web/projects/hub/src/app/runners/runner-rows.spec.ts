@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { FRESHNESS_AGING_AFTER_MS } from 'fleet';
+import { FRESHNESS_AGING_AFTER_MS } from 'fleet/host';
 import {
   type RequestClientStub,
   runnerRegistryView,

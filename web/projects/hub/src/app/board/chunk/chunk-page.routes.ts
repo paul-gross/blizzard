@@ -1,5 +1,5 @@
 import type { Routes } from '@angular/router';
-import { ChunkPageRoute } from 'fleet';
+import { ChunkPageRoute } from 'fleet/chunk-page/view';
 
 import { HUB_CHUNK_PAGE_PROVIDERS } from './hub-chunk-actions';
 

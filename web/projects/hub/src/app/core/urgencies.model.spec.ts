@@ -1,4 +1,4 @@
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import { bannerUrgencyIcons, resolveUrgency, urgencyPill } from './urgencies.model';
 
 const urgent = { id: 'u', slug: 'urgent', default: false, retired: true } as Urgency;

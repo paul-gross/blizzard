@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { map } from 'rxjs';
 
-import { asyncState } from 'fleet';
+import { asyncState } from 'fleet/core';
 import { AppScope } from 'fleet/shell';
 
 import { LENS_PICKER_FROM, ProjectLens, lensSource } from '../../core/project-lens';

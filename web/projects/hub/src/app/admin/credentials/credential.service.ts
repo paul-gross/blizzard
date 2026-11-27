@@ -1,5 +1,6 @@
 import { computed, type Signal } from '@angular/core';
-import { readRefusal, type SaveOutcome } from 'fleet';
+import { readRefusal } from 'fleet/core';
+import { type SaveOutcome } from 'fleet/forms';
 import { injectCreateCredentialMutation, injectEditCredentialMutation } from './credentials.mutations';
 import type { CredentialBinding, CredentialDraft } from './credential.domain';
 import { CREDENTIAL_REFUSALS, type CredentialEditBaseline, toCreateRequest, toEditRequest } from './credential.translate';

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
-import type { Tone } from '../../kit';
+import type { Tone } from '../../kit/tone';
 import type { ChunkCardView } from './chunk-card.model';
 import { ChunkListRow } from './chunk-list-row';
 

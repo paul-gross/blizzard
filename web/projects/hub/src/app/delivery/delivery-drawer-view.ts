@@ -1,6 +1,14 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type ChunkDetailAggregate, KitAsyncState, type KitAsyncStateValue, KitCloseButton, KitSectionHead, KitSkeleton, toneColor } from 'fleet';
+import { type ChunkDetailAggregate } from 'fleet/chunk-page';
+import {
+  KitAsyncState,
+  type KitAsyncStateValue,
+  KitCloseButton,
+  KitSectionHead,
+  KitSkeleton,
+  toneColor,
+} from 'fleet/kit';
 import { ChunkDetailHeader } from '../core/chunk-detail-header/chunk-detail-header';
 import { DeliveryHistoryList } from './delivery-history-list';
 import type { DeliveryDrawerView as DrawerViewValue } from './delivery-history.model';

@@ -1,4 +1,4 @@
-import type { SaveOutcome } from 'fleet';
+import type { SaveOutcome } from 'fleet/forms';
 import { projectLinkError, type ProjectLinkChoice, type ProjectLinkDraft, type ProjectLinkKind } from './project-link.domain';
 import { projectLinkRefusal, toProjectLink } from './project-link.translate';
 import { injectProjectLinkMutation } from './projects.mutations';

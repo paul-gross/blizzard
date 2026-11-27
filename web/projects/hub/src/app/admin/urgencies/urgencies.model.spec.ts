@@ -1,4 +1,4 @@
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import { liveUrgencies, overlayUrgencies, urgencyOptions, visibleUrgencies } from './urgencies.model';
 
 const first = { id: 'first', retired: false } as Urgency;

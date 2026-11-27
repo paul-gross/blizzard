@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { KitPanel } from 'fleet';
+import { KitPanel } from 'fleet/kit';
 
 import { LocalAsks } from '../../asks/app-asks';
 import { HostPanel } from './host-panel';

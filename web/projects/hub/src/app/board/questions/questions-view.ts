@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { compactRef, runnerBoardParts, runnerTitle, type RunnerBoardParts, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectList, KitSelectRow } from 'fleet';
+import { compactRef, runnerBoardParts, runnerTitle, type RunnerBoardParts } from 'fleet/core';
+import { KitAsyncState, type KitAsyncStateValue, KitPanel } from 'fleet/kit';
+import { KitSelectList, KitSelectRow } from 'fleet/kit/select-list';
 import type { BoardQuestionPresentation } from './questions.domain';
 
 /**

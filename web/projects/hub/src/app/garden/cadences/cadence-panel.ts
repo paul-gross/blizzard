@@ -2,19 +2,19 @@ import { ChangeDetectionStrategy, Component, type TemplateRef, input, output, si
 import type { FieldTree } from '@angular/forms/signals';
 import { RouterLink } from '@angular/router';
 
+import { FleetWhen } from 'fleet/core';
 import {
-  FleetWhen,
   KitAsyncState,
   type KitAsyncStateValue,
   KitBadge,
   KitButton,
-  KitConfirmDialog,
   KitErrorLine,
   type KitFact,
   KitFactList,
   KitSectionHead,
   type Tone,
-} from 'fleet';
+} from 'fleet/kit';
+import { KitConfirmDialog } from 'fleet/kit/dialog';
 import { AppLink } from 'fleet/shell';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
@@ -120,7 +120,7 @@ export interface ChoreFormVm {
   styleUrl: './cadence-panel.css',
 })
 export class FleetCadencePanel {
-  readonly urgencies = input<readonly import('fleet').Urgency[]>([]);
+  readonly urgencies = input<readonly import('fleet/core').Urgency[]>([]);
   readonly vm = input<CadencePanelVm | null>(null);
   readonly state = input.required<KitAsyncStateValue>();
 

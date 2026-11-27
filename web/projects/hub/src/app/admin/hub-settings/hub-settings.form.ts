@@ -1,5 +1,5 @@
 import { disabled, schema, validate } from '@angular/forms/signals';
-import { parseSettingText } from 'fleet';
+import { parseSettingText } from 'fleet/core';
 
 import type { HubSettingDraft } from './hub-settings.domain';
 

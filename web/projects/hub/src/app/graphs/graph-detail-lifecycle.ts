@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { KitErrorLine } from 'fleet';
+import { KitErrorLine } from 'fleet/kit';
 
 /**
  * The graph detail's **lifecycle status** section — the action-error line

@@ -1,4 +1,5 @@
-import type { HostConnection, SubscriptionUsage, UnenforceableGate, UnknownHostValue } from 'fleet';
+import type { HostConnection, SubscriptionUsage, UnknownHostValue } from 'fleet/core';
+import type { UnenforceableGate } from 'fleet/host';
 
 /** Runner facts used by project presentation, including the hub's claimability judgment. */
 export interface ProjectRunner {

@@ -1,7 +1,11 @@
 import { type Member, type MemberRole, canChangeRole, canRevoke, isOwnMember, memberRoleLabel } from './members.domain';
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type KitChipOption, type KitAsyncStateValue, FleetWhen, KitAsyncState, KitBadge, KitButton, KitGrid, KitGridCell, KitGridRow, KitGridWidget, KitPanel, KitSelect } from 'fleet';
+import { FleetWhen } from 'fleet/core';
+import { type KitAsyncStateValue, KitAsyncState, KitBadge, KitButton, KitPanel } from 'fleet/kit';
+import { type KitChipOption } from 'fleet/kit/chips';
+import { KitGrid, KitGridCell, KitGridRow, KitGridWidget } from 'fleet/kit/grid';
+import { KitSelect } from 'fleet/kit/select';
 import { roleChoices } from './members-page.model';
 
 /**

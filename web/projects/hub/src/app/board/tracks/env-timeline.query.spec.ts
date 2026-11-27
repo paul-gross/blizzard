@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { FLEET_CLOCK, type hubApi } from 'fleet';
+import { FLEET_CLOCK } from 'fleet/core';
+import { type hubApi } from 'fleet/hub-api';
 import { type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 import { LOOKBACK_MS, type TimelineRange } from './tracks-window.model';
 import {

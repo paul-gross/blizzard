@@ -1,6 +1,6 @@
 import { applicationConfig, type Meta, type StoryObj } from '@storybook/angular-vite';
 import { provideRouter } from '@angular/router';
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import { RunnerNextClaimView } from './runner-next-claim-view';
 import type { NextClaim, NextClaimCandidate, NextClaimPassed, NextClaimScenario } from './runner-next-claim.domain';
 

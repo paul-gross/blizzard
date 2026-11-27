@@ -1,4 +1,4 @@
-import type { EditBaseline } from 'fleet';
+import type { EditBaseline } from 'fleet/forms';
 import type { ProjectRepositoryLink } from './project-read.domain';
 
 /** Blank is an invalid override, not an instruction to inherit. */

@@ -1,5 +1,5 @@
 import type { TemplateRef } from '@angular/core';
-import type { KitFact } from 'fleet';
+import type { KitFact } from 'fleet/kit';
 import type { Project } from '../../core/project.domain';
 import type { ProjectChunkCounts } from './project-read.domain';
 

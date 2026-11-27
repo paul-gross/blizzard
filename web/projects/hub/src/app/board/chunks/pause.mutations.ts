@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { pauseChunkApiChunksChunkIdPausePost, resumeChunkApiChunksChunkIdResumePost } from 'fleet';
+import { pauseChunkApiChunksChunkIdPausePost, resumeChunkApiChunksChunkIdResumePost } from 'fleet/hub-api';
 import { chunkPauseMutationKey } from '../../core/mutation-keys';
 import { hubChunkKey, hubChunksKey, hubQueueKey } from '../../core/query-keys';
 

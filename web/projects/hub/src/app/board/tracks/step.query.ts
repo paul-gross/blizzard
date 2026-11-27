@@ -1,6 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { envTimelineStepApiEnvTimelineStepGet } from 'fleet';
+import { envTimelineStepApiEnvTimelineStepGet } from 'fleet/hub-api';
 import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 
 import type { StepRef } from './step.model';

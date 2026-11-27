@@ -1,16 +1,7 @@
-import {
-  bounceReason,
-  compactBounce,
-  type ChunkDetailAggregate,
-  formatAbsolute,
-  formatSeenTag,
-  formatWhen,
-  formatWhenParts,
-  parseBounceEnvelope,
-  type ParsedBounceEnvelope,
-  shortCommitHash,
-  type Tone,
-} from 'fleet';
+import { bounceReason, compactBounce, parseBounceEnvelope, type ParsedBounceEnvelope } from 'fleet/chunk-detail';
+import { type ChunkDetailAggregate } from 'fleet/chunk-page';
+import { formatAbsolute, formatSeenTag, formatWhen, formatWhenParts, shortCommitHash } from 'fleet/core';
+import { type Tone } from 'fleet/kit';
 
 import { ordinal, placeInLine, placeStateLabel, placeStateTone } from '../core/flow-place.model';
 import type { DeliveryFlow, DeliveryFlowFact, DeliveryRepository, DeliveryTransition } from './delivery.domain';

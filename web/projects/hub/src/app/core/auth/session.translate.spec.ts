@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { MeResponse } from 'fleet';
+import type { MeResponse } from 'fleet/hub-api';
 import { meResponse, meTenant } from 'fleet/testing';
 
 import { fromMeResponse, fromMeTenant } from './session.translate';

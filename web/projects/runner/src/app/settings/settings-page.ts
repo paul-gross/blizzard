@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { KitSectionHead } from 'fleet';
+import { KitSectionHead } from 'fleet/kit';
 
 import { injectHostRunnerDomainsQuery } from '../core/host.query';
 import { injectRunnerSessionQuery } from '../core/identity/auth.query';

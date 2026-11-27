@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { FleetWhen, KitBadge, KitBeacon } from 'fleet';
+import { FleetWhen } from 'fleet/core';
+import { KitBadge, KitBeacon } from 'fleet/kit';
 
 import type { HostRegistrationSummary } from './host-registration.model';
 

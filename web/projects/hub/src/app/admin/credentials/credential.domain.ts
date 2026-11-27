@@ -1,4 +1,4 @@
-import { readWholeNumber } from 'fleet';
+import { readWholeNumber } from 'fleet/core';
 
 export type CredentialSettingKind = { readonly kind: 'choice'; readonly choices: readonly string[] } | { readonly kind: 'positive-integer' } | { readonly kind: 'unknown'; readonly raw: string };
 export interface CredentialSettingDefinition { readonly key: string; readonly type: CredentialSettingKind }

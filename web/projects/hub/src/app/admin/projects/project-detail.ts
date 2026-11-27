@@ -4,22 +4,17 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
   asyncState,
-  createRefusalState,
   asyncStateOf,
   errorMessage,
-  submitForm,
-  type EditBaseline,
   injectNowSignal,
   injectPendingMutationVariables,
-  type KitAsyncStateValue,
-  KitAsyncState,
-  KitButton,
-  KitDialog,
-  KitErrorLine,
-  type KitTabOption,
   restingAsyncState,
-  ViewportService,
-} from 'fleet';
+} from 'fleet/core';
+import { createRefusalState, submitForm, type EditBaseline } from 'fleet/forms';
+import { type KitAsyncStateValue, KitAsyncState, KitButton, KitErrorLine } from 'fleet/kit';
+import { KitDialog } from 'fleet/kit/dialog';
+import { type KitTabOption } from 'fleet/kit/tabs';
+import { ViewportService } from 'fleet/viewport';
 import { map } from 'rxjs';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';

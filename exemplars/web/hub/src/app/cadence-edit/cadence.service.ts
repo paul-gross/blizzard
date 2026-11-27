@@ -1,6 +1,7 @@
 // exemplar: bzh:frontend-edit-baseline, bzh:frontend-mutation-settles-on-refresh.
 
-import { type EditBaseline, readRefusal, type SaveOutcome } from 'fleet';
+import { readRefusal } from 'fleet/core';
+import { type EditBaseline, type SaveOutcome } from 'fleet/forms';
 
 import { injectEditCadenceMutation } from './cadence-edit.mutations';
 import type { CadenceDraft } from './cadence.domain';

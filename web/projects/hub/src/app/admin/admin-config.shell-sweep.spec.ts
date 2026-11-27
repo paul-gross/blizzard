@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 
 import type { ConfigActionsVm } from './config-actions.model';
 import { ConfigMaster } from './config-master';

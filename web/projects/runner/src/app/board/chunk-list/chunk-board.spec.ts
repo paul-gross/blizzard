@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type KitAsyncStateValue } from 'fleet';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import { type RequestClientStub, settle, stubRunnerClient } from 'fleet/testing';
 
 import { type MachineChunkRow, machineChunkRows } from '../../core/chunk-rows.model';

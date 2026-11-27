@@ -1,5 +1,6 @@
 // bzh:frontend-domain-boundary — the one place the forge wire is read and written.
-import type { EditBaseline, ForgeCreateRequest, ForgeDetail, ForgePatchRequest, ForgeSummary, RefusalMap } from 'fleet';
+import type { EditBaseline, RefusalMap } from 'fleet/forms';
+import type { ForgeCreateRequest, ForgeDetail, ForgePatchRequest, ForgeSummary } from 'fleet/hub-api';
 
 import type { Forge, ForgeDraft, ForgeRecord } from './forge.domain';
 

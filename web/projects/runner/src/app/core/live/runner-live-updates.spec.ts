@@ -7,7 +7,7 @@ import {
   type EventSourceFactory,
   type FleetEventSource,
   INVALIDATION_COALESCE_WINDOW_MS,
-} from 'fleet';
+} from 'fleet/sse';
 import { vi } from 'vitest';
 
 import { hostKey, runnerChunkDetailKey, runnerDashboardKey, runnerLeasesKey } from '../query-keys';

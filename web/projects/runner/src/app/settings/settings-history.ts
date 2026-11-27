@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { asyncState } from 'fleet';
+import { asyncState } from 'fleet/core';
 
 import type { HistoryTarget } from './settings.domain';
 import { settingsChanges } from './settings.model';

@@ -9,7 +9,7 @@ import {
   supersedeFindingsApiFindingsSupersedePost,
   wontFixFindingsApiFindingsWontFixPost,
   type FindingView,
-} from 'fleet';
+} from 'fleet/hub-api';
 import {
   confirmGoneFindingsMutationKey,
   notAFindingFindingsMutationKey,

@@ -1,5 +1,6 @@
 // bzh:frontend-domain-boundary — the one place an awaiting-human draft is written as a save and its refusals read.
-import type { AnswerDraft, DecisionNoteDraft, RefusalMap } from 'fleet';
+import type { AnswerDraft, DecisionNoteDraft } from 'fleet/awaiting-human';
+import type { RefusalMap } from 'fleet/forms';
 
 import type { AnswerVars, ResolveVars } from './human.mutations';
 

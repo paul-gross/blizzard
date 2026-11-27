@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { KitTab, KitTabStrip } from 'fleet';
+import { KitTab, KitTabStrip } from 'fleet/kit';
 
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { injectDomainUrgenciesQuery } from '../core/urgencies.query';

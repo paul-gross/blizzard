@@ -2,7 +2,7 @@ import { type WritableSignal, provideZonelessChangeDetection, signal } from '@an
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { type SseStatus } from 'fleet';
+import { type SseStatus } from 'fleet/sse';
 import { settle, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { ActivityPanel } from './activity-panel';
 import { HubLiveUpdates, type LoggedEvent } from '../../core/live/hub-live-updates';

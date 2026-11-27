@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
-import { FLEET_CLOCK, KitTab, KitTabStrip } from 'fleet';
+import { FLEET_CLOCK } from 'fleet/core';
+import { KitTab, KitTabStrip } from 'fleet/kit';
 import { AppLink } from 'fleet/shell';
 
 import { gardenPathOf } from './garden-lens.guard';

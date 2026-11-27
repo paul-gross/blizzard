@@ -1,7 +1,12 @@
 import { toProjectRepository } from './repositories.translate';
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { getRepositoryApiRepositoriesRepositoryGet, hubApi, listRepositoriesApiRepositoriesGet, type RepositorySummary } from 'fleet';
+import {
+  getRepositoryApiRepositoriesRepositoryGet,
+  hubApi,
+  listRepositoriesApiRepositoriesGet,
+  type RepositorySummary,
+} from 'fleet/hub-api';
 import { hubConfigKey, hubConfigListKey, hubConfigRecordKey } from '../../core/query-keys';
 import type { LandingPolicy, Repository } from './repository.domain';
 import { fromLandingPolicyNeeds, fromRepositorySummary } from './repository.translate';

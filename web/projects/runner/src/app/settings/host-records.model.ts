@@ -1,4 +1,4 @@
-import { settingValueText } from 'fleet';
+import { settingValueText } from 'fleet/core';
 
 import type { HostRecordState } from '../core/host-record.domain';
 import { type HostRecord, type HostRecordKind, recordRetired } from './host-records.domain';

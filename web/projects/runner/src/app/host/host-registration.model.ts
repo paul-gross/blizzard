@@ -1,4 +1,5 @@
-import { openLookup, type Tone } from 'fleet';
+import { openLookup } from 'fleet/core';
+import { type Tone } from 'fleet/kit';
 
 import type { HostRegistration, KnownHostRegistrationState } from '../core/host-registration.domain';
 

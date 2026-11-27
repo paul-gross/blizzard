@@ -1,4 +1,5 @@
-import { type ChunkFlowPlaceView, fromFlowFactView } from 'fleet';
+import { fromFlowFactView } from 'fleet/chunk-page';
+import { type ChunkFlowPlaceView } from 'fleet/hub-api';
 import { bounceView, chunkSummary, flowFactView, flowView, landedRepoView, prView, repositorySummary, workRefView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 

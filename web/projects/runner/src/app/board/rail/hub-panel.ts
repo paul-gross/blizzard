@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, signal } from '@angular/core';
-import { asyncState, KitAsyncState } from 'fleet';
+import { asyncState } from 'fleet/core';
+import { KitAsyncState } from 'fleet/kit';
 
 import { injectPanelDashboards } from '../../core/panel-reads';
 import { hubLink } from '../../core/runner-health.model';

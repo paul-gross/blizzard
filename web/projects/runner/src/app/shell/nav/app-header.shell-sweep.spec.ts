@@ -8,7 +8,7 @@ import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';
 import { page } from 'vitest/browser';
 
 import { AppHeader } from './app-header';
-import { provideFlags } from 'fleet';
+import { provideFlags } from 'fleet/core';
 import { runnerFlagsRead } from '../../core/flags.query';
 
 /**

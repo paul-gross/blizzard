@@ -1,7 +1,7 @@
 import { Injector, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import { hubClient, meApiMeGet } from 'fleet';
+import { hubClient, meApiMeGet } from 'fleet/hub-api';
 import { DOOR_HEADER, provideDoorInterceptor } from './door.interceptor';
 
 describe('provideDoorInterceptor', () => {

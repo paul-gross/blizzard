@@ -1,8 +1,8 @@
-import type { hubApi } from 'fleet';
+import { readRefusal } from 'fleet/core';
+import type { hubApi } from 'fleet/hub-api';
 import { credentialSummary, forgeDetail, repositorySummary } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
-import { readRefusal } from 'fleet';
 import { repository, repositoryDraft } from './repository.builders';
 import { PARK_TIMEOUT_MESSAGE } from './repository.domain';
 import {

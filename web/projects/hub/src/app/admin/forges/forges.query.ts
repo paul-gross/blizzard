@@ -1,5 +1,5 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
-import { getForgeApiForgesForgeGet, listForgesApiForgesGet, type ForgeDetail, type ForgeSummary } from 'fleet';
+import { getForgeApiForgesForgeGet, listForgesApiForgesGet, type ForgeDetail, type ForgeSummary } from 'fleet/hub-api';
 import { hubConfigListKey, hubConfigRecordKey } from '../../core/query-keys';
 import type { Forge, ForgeRecord } from '../../forge/forge.domain';
 import { fromForgeDetail, fromForgeSummary } from '../../forge/forge.translate';

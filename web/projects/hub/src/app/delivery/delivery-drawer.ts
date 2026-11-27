@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { asyncState, injectHubChunkDetailQuery, injectNowSignal, injectRunnerHostNames } from 'fleet';
+import { injectHubChunkDetailQuery } from 'fleet/chunk-page';
+import { asyncState, injectNowSignal, injectRunnerHostNames } from 'fleet/core';
 import { injectProjectDomainsQuery } from '../core/projects.query';
 import { injectShowProjectColors, openProjectColor } from '../core/project-lens-colors';
 import { deliveryDrawerView } from './delivery-history.model';

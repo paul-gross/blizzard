@@ -1,0 +1,35 @@
+/* The `fleet/kit` entry point: the kit parts that reach no `@angular/cdk`, `@angular/aria`, or `@angular/forms` module (gated by `web:bundle-composition`). */
+
+export { KitAsyncState, type KitAsyncStateValue } from '../lib/kit/kit-async-state';
+export { KitAvatar } from '../lib/kit/kit-avatar';
+export { KitBackBar } from '../lib/kit/kit-back-bar';
+export { KitBadge, toneColor, toneDimColor } from '../lib/kit/kit-badge';
+export { type BeaconBlink, type BeaconTone, KitBeacon } from '../lib/kit/kit-beacon';
+export { KitButton } from '../lib/kit/kit-button';
+export { KitCardOpen } from '../lib/kit/kit-card-open';
+export { KitCheckbox } from '../lib/kit/kit-checkbox';
+export { KitCloseButton } from '../lib/kit/kit-close-button';
+export { KitColorInput } from '../lib/kit/kit-color-input';
+export { KitCountStripSkeleton } from '../lib/kit/kit-count-strip-skeleton';
+export { type KitCountCell, KitCountStrip } from '../lib/kit/kit-count-strip';
+export { KitErrorLine } from '../lib/kit/kit-error-line';
+export { type KitFact, KitFactList } from '../lib/kit/kit-fact-list';
+export { KitField } from '../lib/kit/kit-field';
+export { KitForm } from '../lib/kit/kit-form';
+export { KitGlyph } from '../lib/kit/kit-glyph';
+export { KitLinkTile } from '../lib/kit/kit-link-tile';
+export { KitMarkdown } from '../lib/kit/kit-markdown';
+export { KitMasterDetail } from '../lib/kit/kit-master-detail';
+export { KitNumberInput } from '../lib/kit/kit-number-input';
+export { KitOptionGroup } from '../lib/kit/kit-option-group';
+export { KitOption } from '../lib/kit/kit-option';
+export { KitPanel, KitPanelHeader } from '../lib/kit/kit-panel';
+export { KitProseBlock } from '../lib/kit/kit-prose-block';
+export { KitSectionHead } from '../lib/kit/kit-section-head';
+export { KitSkeleton } from '../lib/kit/kit-skeleton';
+export { KitSlotBar, type SlotBarSlot } from '../lib/kit/kit-slot-bar';
+export { projectTint } from '../lib/kit/kit-swatch-color';
+export { KitSwatch } from '../lib/kit/kit-swatch';
+export { KitTab, KitTabStrip } from '../lib/kit/kit-tab';
+export { KitTextInput } from '../lib/kit/kit-text-input';
+export type { Tone } from '../lib/kit/tone';

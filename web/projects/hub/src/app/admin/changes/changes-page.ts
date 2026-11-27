@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
-import { asyncState, type KitAsyncStateValue, ViewportService } from 'fleet';
+import { asyncState } from 'fleet/core';
+import { type KitAsyncStateValue } from 'fleet/kit';
+import { ViewportService } from 'fleet/viewport';
 
 import { injectChildRouteParam } from '../../core/route-state';
 import { changesOfPages } from '../config-history.model';

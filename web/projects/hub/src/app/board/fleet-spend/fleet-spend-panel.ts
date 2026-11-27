@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { KitAsyncState, KitPanel, asyncState, type KitAsyncStateValue } from 'fleet';
+import { asyncState } from 'fleet/core';
+import { KitAsyncState, KitPanel, type KitAsyncStateValue } from 'fleet/kit';
 
 import { FleetSpend } from './fleet-spend';
 import { injectFleetSpendDays } from './fleet-spend-days';

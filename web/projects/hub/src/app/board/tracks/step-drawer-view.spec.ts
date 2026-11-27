@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import { type Tone, toneColor } from 'fleet';
+import { type Tone, toneColor } from 'fleet/kit';
 import { chunkDetail, settle, turnSegmentView } from 'fleet/testing';
 import type { LeaseTranscript } from './lease-transcript.query';
 import type { PlacedStep, StepRef } from './step.model';

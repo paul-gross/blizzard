@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, linkedSignal, output } from '@angular/core';
 import { form } from '@angular/forms/signals';
-import { submitForm } from 'fleet';
+import { submitForm } from 'fleet/forms';
 
 import { type FindingTriageVerb } from '../../core/finding-triage-verb.domain';
 import { emptyTriageDraft, type FindingTriageDraft } from './finding-triage.domain';

@@ -1,6 +1,6 @@
 // exemplar: bzh:frontend-domain-boundary — the draft as the request, and the refusals as fields.
 
-import type { RefusalMap } from 'fleet';
+import type { RefusalMap } from 'fleet/forms';
 
 import type { ProposalAcceptVars } from './proposal-acceptance.mutations';
 import type { ProposalAcceptanceDraft } from './proposal-acceptance.domain';

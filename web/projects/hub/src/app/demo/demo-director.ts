@@ -1,6 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { type ChunkArtifact, injectHubChunkDetailQuery, sortArtifacts } from 'fleet';
+import { type ChunkArtifact, sortArtifacts } from 'fleet/chunk-detail';
+import { injectHubChunkDetailQuery } from 'fleet/chunk-page';
 import { injectDomainBoardChunksQuery } from '../core/chunks.query';
 
 import { type DemoConfig, demoQueryParams, readDemoConfig } from './demo-config';

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { harnessName, KitAsyncState, KitBadge, KitButton, KitErrorLine, type KitAsyncStateValue } from 'fleet';
+import { harnessName } from 'fleet/core';
+import { KitAsyncState, KitBadge, KitButton, KitErrorLine, type KitAsyncStateValue } from 'fleet/kit';
 
 import { selftestStatusLabel } from './selftest.domain';
 import { checkTone, type SelftestRow, selftestPhase, selftestTone } from './selftest.model';

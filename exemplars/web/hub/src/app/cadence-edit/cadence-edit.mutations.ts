@@ -3,7 +3,7 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { type CadenceEditRequest, editCadenceApiCadencesCadenceIdPatch } from 'fleet';
+import { type CadenceEditRequest, editCadenceApiCadencesCadenceIdPatch } from 'fleet/hub-api';
 import { editCadenceMutationKey } from '../core/mutation-keys';
 import { hubCadenceEditListKey } from '../core/query-keys';
 

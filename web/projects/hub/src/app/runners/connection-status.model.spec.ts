@@ -1,5 +1,5 @@
 import type { HubRunner, RunnerDeclining } from '../core/runners.domain';
-import { formatWhen } from 'fleet';
+import { formatWhen } from 'fleet/core';
 
 import { connectionState, hostLight, runnerLight, runnerStateBadges, runnerTitleState } from './connection-status.model';
 import type { RunnerRow } from './runner-rows.model';

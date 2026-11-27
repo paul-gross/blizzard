@@ -3,6 +3,7 @@ const eslint = require("@eslint/js");
 const { defineConfig } = require("eslint/config");
 const tseslint = require("typescript-eslint");
 const angular = require("angular-eslint");
+const fleetRoot = require("./eslint.fleet-root.js");
 
 // No frontend code reads the wall clock implicitly (`bzh:frontend-formatters`): a time
 // helper takes `now` from `injectNowSignal` (a display that must advance) or
@@ -29,6 +30,7 @@ const CLOCK_SELECTORS = [
 ];
 
 module.exports = defineConfig([
+  ...fleetRoot,
   {
     files: ["**/*.ts"],
     extends: [
@@ -189,22 +191,22 @@ module.exports = defineConfig([
       ],
     },
   },
-  // A sub-barrel names what's re-stackable outside its feature directory
-  // (`bzh:frontend-disjoint-diffs`); a blanket `export *` makes that decision unmakeable,
-  // since every symbol added under the feature directory becomes public with no diff on
-  // the barrel. Scoped to `projects/*/src/lib/**/index.ts` so fleet's own top-level
-  // `public-api.ts` — which legitimately stars its sub-barrels — stays legal.
+  // An entry names what a consumer outside the declaring unit imports (`bzh:frontend-disjoint-diffs`);
+  // a bare `export *` makes that decision unmakeable, since every symbol added under the file it stars
+  // becomes public with no diff on the entry. A namespace re-export (`export * as hubApi`) names what it
+  // exports and stays legal, and `public-api.ts`, the library aggregate, is not in scope.
+  // Each project reads this config from its own directory, so the globs carry no `projects/` prefix.
   // Flat config replaces a rule's options per matching block, so this block restates
   // the clock ban alongside its own selector.
   {
-    files: ["projects/*/src/lib/**/index.ts"],
+    files: ["**/src/entries/**/*.ts", "src/entries/**/*.ts", "**/src/{shell,runner-shell}-api.ts", "src/{shell,runner-shell}-api.ts"],
     rules: {
       "no-restricted-syntax": [
         "error",
         ...CLOCK_SELECTORS,
         {
-          selector: "ExportAllDeclaration",
-          message: "A sub-barrel exports only what a consumer outside the feature directory imports — name it.",
+          selector: "ExportAllDeclaration:not([exported.name])",
+          message: "An entry exports only what a consumer outside the declaring unit imports — name it.",
         },
       ],
     },

@@ -1,4 +1,4 @@
-import type { RefusalMap } from 'fleet';
+import type { RefusalMap } from 'fleet/forms';
 
 import type { GardenProposalPassVars } from './garden-proposal.mutations';
 import type { ProposalPassDraft } from './proposal-pass.domain';

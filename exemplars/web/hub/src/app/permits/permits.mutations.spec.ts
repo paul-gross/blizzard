@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, QueryObserver, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type PermitView } from 'fleet';
+import { type PermitView } from 'fleet/hub-api';
 import { hubPermitKey, hubPermitsKey } from '../core/query-keys';
 import { type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
 import { injectPermitMoveMutation, injectPermitRevokeMutation } from './permits.mutations';

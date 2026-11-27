@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { createCopyFlash } from '../../core/clipboard';
+import { createCopyFlash } from '../../core/clipboard/copy-flash';
 import { KitButton } from '../../kit/kit-button';
 
 /**

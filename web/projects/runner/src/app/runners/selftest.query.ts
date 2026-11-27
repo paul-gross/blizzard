@@ -1,7 +1,8 @@
 import { effect, inject } from '@angular/core';
 import { QueryClient, type QueryObserverResult } from '@tanstack/angular-query-experimental';
 import { injectQueries } from '@tanstack/angular-query-experimental/inject-queries-experimental';
-import { errorMessage, runnerApi } from 'fleet';
+import { errorMessage } from 'fleet/core';
+import { runnerApi } from 'fleet/runner-api';
 
 import { runnerDashboardKey, runnerSelftestKey } from '../core/query-keys';
 import type { SelftestRun } from './selftest.domain';

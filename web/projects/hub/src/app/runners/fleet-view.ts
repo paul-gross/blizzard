@@ -1,7 +1,15 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { KitAsyncState, type KitAsyncStateValue, KitMasterDetail, KitPanel, KitSectionHead, KitSelectList, KitSelectRow, KitErrorLine } from 'fleet';
+import {
+  KitAsyncState,
+  type KitAsyncStateValue,
+  KitMasterDetail,
+  KitPanel,
+  KitSectionHead,
+  KitErrorLine,
+} from 'fleet/kit';
+import { KitSelectList, KitSelectRow } from 'fleet/kit/select-list';
 import type { FleetList, FleetSelection } from './fleet-page.model';
 import { HostDetail } from './host-detail';
 import type { HostOrigin } from './host-origin.model';

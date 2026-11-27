@@ -1,3 +1,5 @@
+import type { UnknownHostValue } from 'fleet/core';
+import type { UnenforceableGate } from 'fleet/host';
 import type {
   DeclaredLever,
   RunnerCapability,
@@ -5,12 +7,10 @@ import type {
   RunnerRegistryView,
   RunnerVersionStanding,
   ServedProjectView,
-  UnenforceableGate,
   UnenforceableGateView,
   hubApi,
-  UnknownHostValue,
   VersionRefusalReason,
-} from 'fleet';
+} from 'fleet/hub-api';
 import { hostConnection, openLookup } from 'fleet/shell';
 import type {
   DeclaredLeverKind,

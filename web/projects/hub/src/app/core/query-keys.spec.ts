@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { chunkDetailKey, chunkTranscriptSegmentKey, chunkTranscriptsKey, chunkWorkItemsKey } from 'fleet';
+import { chunkDetailKey, chunkTranscriptSegmentKey, chunkTranscriptsKey, chunkWorkItemsKey } from 'fleet/core';
 import {
   hubActivityKey,
   hubAuthProvidersKey,

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, type TemplateRef, computed, input, output, viewChild } from '@angular/core';
 
-import { KitAsyncState, KitBadge, KitBeacon, type KitFact, KitFactList, KitPanel, SubscriptionPaceGroup } from 'fleet';
+import { SubscriptionPaceGroup } from 'fleet/host';
+import { KitAsyncState, KitBadge, KitBeacon, type KitFact, KitFactList, KitPanel } from 'fleet/kit';
 import { HostOriginFact } from './host-origin-fact';
 import type { HostOrigin } from './host-origin.model';
 import { FleetRunnerRow } from './fleet-runner-row';

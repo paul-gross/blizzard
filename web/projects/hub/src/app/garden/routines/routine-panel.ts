@@ -2,14 +2,12 @@ import { ChangeDetectionStrategy, Component, computed, type TemplateRef, input, 
 import { type FieldTree, FormField } from '@angular/forms/signals';
 import { RouterLink } from '@angular/router';
 
+import { compactRef, FleetWhen, type Urgency } from 'fleet/core';
 import {
-  compactRef,
-  FleetWhen,
   KitAsyncState,
   type KitAsyncStateValue,
   KitBadge,
   KitButton,
-  KitConfirmDialog,
   type KitFact,
   KitFactList,
   KitPanel,
@@ -18,10 +16,10 @@ import {
   KitField,
   KitForm,
   KitSectionHead,
-  KitSelect,
   KitTextInput,
-  type Urgency,
-} from 'fleet';
+} from 'fleet/kit';
+import { KitConfirmDialog } from 'fleet/kit/dialog';
+import { KitSelect } from 'fleet/kit/select';
 import { AppLink } from 'fleet/shell';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';

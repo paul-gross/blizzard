@@ -1,4 +1,5 @@
-import { type ChunkArtifact, type ChunkArtifactStore, formatWhenParts } from 'fleet';
+import { type ChunkArtifact, type ChunkArtifactStore } from 'fleet/chunk-detail';
+import { formatWhenParts } from 'fleet/core';
 import { projectColorOf } from '../../core/project-lens-colors';
 import type { Project } from '../../core/project.domain';
 import type { EnvTimelineStep, StepExecutor } from './timeline.domain';

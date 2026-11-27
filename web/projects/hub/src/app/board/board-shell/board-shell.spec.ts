@@ -5,7 +5,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 
-import { compactRef, type KitAsyncStateValue, KitPanel } from 'fleet';
+import { compactRef } from 'fleet/core';
+import { type KitAsyncStateValue, KitPanel } from 'fleet/kit';
 import { chunkUsageTotalView } from 'fleet/testing';
 import { BoardShell } from './board-shell';
 

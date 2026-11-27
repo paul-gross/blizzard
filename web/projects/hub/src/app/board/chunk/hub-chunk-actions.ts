@@ -1,5 +1,7 @@
 import { type Provider, computed, signal } from '@angular/core';
-import { type ChunkPageActions, type DaemonTarget, hubClient, provideChunkPageDaemon } from 'fleet';
+import { type ChunkPageActions, provideChunkPageDaemon } from 'fleet/chunk-page';
+import { type DaemonTarget } from 'fleet/core';
+import { hubClient } from 'fleet/hub-api';
 import { injectAwaitingHumanService } from '../chunks/awaiting-human.service';
 import { injectHubChunkControl } from '../chunks/hub-chunk-control';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';

@@ -1,4 +1,4 @@
-import { type Tone } from 'fleet';
+import { type Tone } from 'fleet/kit';
 
 /**
  * A hub record's enabled/retired lifecycle → badge {@link Tone} — the one owner

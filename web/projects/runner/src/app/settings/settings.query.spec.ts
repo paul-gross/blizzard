@@ -1,4 +1,4 @@
-import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
+import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/core';
 import { runnerSettingsView } from 'fleet/testing';
 
 import { SETTINGS_PENDING_POLL_MS, settingsChangesKeyOf, settingsKeyOf, settingsQueryOptions } from './settings.query';

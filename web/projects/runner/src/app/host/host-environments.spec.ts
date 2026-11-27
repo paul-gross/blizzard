@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { NavigationEnd, provideRouter, Router } from '@angular/router';
-import type { KitAsyncStateValue } from 'fleet';
+import type { KitAsyncStateValue } from 'fleet/kit';
 import { filter, firstValueFrom } from 'rxjs';
 
 import type { HostEnvGroup } from './host-environments.model';

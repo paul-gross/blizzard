@@ -1,5 +1,6 @@
 import { computed, type Signal } from '@angular/core';
-import { readRefusal, type SaveOutcome } from 'fleet';
+import { readRefusal } from 'fleet/core';
+import { type SaveOutcome } from 'fleet/forms';
 
 import type { ScopeDescriptionDraft } from '../core/scope.domain';
 import { SCOPE_DESCRIPTION_REFUSALS, toScopeDescriptionRequest } from '../core/scope.translate';

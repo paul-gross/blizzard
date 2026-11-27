@@ -7,7 +7,7 @@ import { Router, provideRouter, withRouterConfig } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { BoardShell } from './board-shell/board-shell';
-import { compactRef } from 'fleet';
+import { compactRef } from 'fleet/core';
 import { injectDeleteChunkMutation } from './chunks/delete.mutations';
 import {
   backlogPeekEntry,

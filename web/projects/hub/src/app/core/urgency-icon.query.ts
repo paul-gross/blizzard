@@ -1,7 +1,7 @@
 import { computed, effect, inject, signal, type Signal } from '@angular/core';
 import { injectQuery } from '@tanstack/angular-query-experimental';
 import { injectQueries } from '@tanstack/angular-query-experimental/inject-queries-experimental';
-import { getUrgencyIconApiUrgenciesKeyIconGet } from 'fleet';
+import { getUrgencyIconApiUrgenciesKeyIconGet } from 'fleet/hub-api';
 import { TenantContext } from './auth/tenant-context';
 import { hubUrgencyIconKey } from './query-keys';
 

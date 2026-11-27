@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, type TemplateRef } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { type KitAsyncStateValue, KitAsyncState, KitFactList, type KitFact, KitPanel, KitSkeleton, formatAbsolute, runnerDisplayName } from 'fleet';
+import { formatAbsolute, runnerDisplayName } from 'fleet/core';
+import { type KitAsyncStateValue, KitAsyncState, KitFactList, type KitFact, KitPanel, KitSkeleton } from 'fleet/kit';
 import { AppLink } from 'fleet/shell';
 
 import { fleetIdOf, type HostMembership } from '../core/runners.domain';

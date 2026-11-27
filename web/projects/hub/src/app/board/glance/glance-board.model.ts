@@ -1,4 +1,14 @@
-import { DONE_LANE, UNKNOWN_LANE, blockedLabel, domainChunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type LaneStatus, type UrgencyReference, workLines } from 'fleet';
+import { blockedLabel, workLines } from 'fleet/chunk-card';
+import {
+  DONE_LANE,
+  UNKNOWN_LANE,
+  domainChunkLane,
+  compactRef,
+  runnerBoardParts,
+  type RunnerBoardParts,
+  type LaneStatus,
+  type UrgencyReference,
+} from 'fleet/core';
 import type { BoardChunk } from '../../core/chunks.model';
 import type { GraphProgressNode } from '../../core/chunks.domain';
 import type { BoardQuestion } from '../questions/questions.domain';

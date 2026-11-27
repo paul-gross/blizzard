@@ -2,7 +2,8 @@ import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
 import { chunkUrgencyMutationKey } from '../../core/mutation-keys';
 import { injectChunkUrgencyMutation, type ChunkUrgencyVars } from './urgency.mutations';
 import { computed } from '@angular/core';
-import { type ChunkControl, errorMessage, injectPendingMutationVariables, isPendingFor } from 'fleet';
+import { type ChunkControl } from 'fleet/chunk-detail';
+import { errorMessage, injectPendingMutationVariables, isPendingFor } from 'fleet/core';
 
 import { injectCompleteChunkMutation, type CompleteVars } from './complete.mutations';
 import { type DeleteVars, injectDeleteChunkMutation } from './delete.mutations';

@@ -15,7 +15,7 @@ const REFUSED = [
   "import { injectQuery } from '@tanstack/angular-query-experimental';\nexport const inject = injectQuery;\n",
   "import type { CreateQueryResult } from '@tanstack/angular-query-experimental';\nexport type Result = CreateQueryResult<number>;\n",
 ];
-const PURE = "import type { ChunkSummary } from 'fleet';\nexport function ids(chunks: readonly ChunkSummary[]): string[] {\n  return chunks.map((chunk) => chunk.chunk_id);\n}\n";
+const PURE = "import type { ChunkSummary } from 'fleet/hub-api';\nexport function ids(chunks: readonly ChunkSummary[]): string[] {\n  return chunks.map((chunk) => chunk.chunk_id);\n}\n";
 const PROJECTS = [
   { config: 'projects/hub/eslint.config.js', model: 'projects/hub/src/app/board/board-page.model.ts', other: 'projects/hub/src/app/board/board-page.ts' },
   { config: 'projects/runner/eslint.config.js', model: 'projects/runner/src/app/runners/selftest.model.ts', other: 'projects/runner/src/app/runners/selftest.ts' },

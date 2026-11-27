@@ -3,7 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { FLEET_CLOCK, ViewportService } from 'fleet';
+import { FLEET_CLOCK } from 'fleet/core';
+import { ViewportService } from 'fleet/viewport';
 import {
   deliveredSetView,
   type RequestClientStub,

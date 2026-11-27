@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { enableGraphApiGraphsGraphIdEnablePost, retireGraphApiGraphsGraphIdRetirePost } from 'fleet';
+import { enableGraphApiGraphsGraphIdEnablePost, retireGraphApiGraphsGraphIdRetirePost } from 'fleet/hub-api';
 import { graphLifecycleMutationKey } from '../core/mutation-keys';
 import { hubGraphKey, hubGraphsKey } from '../core/query-keys';
 

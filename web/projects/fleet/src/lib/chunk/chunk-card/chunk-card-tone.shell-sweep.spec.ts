@@ -2,7 +2,8 @@ import { provideZonelessChangeDetection, type Type } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { commands, page } from 'vitest/browser';
 
-import { type Tone, toneColor } from '../../kit';
+import { toneColor } from '../../kit/kit-badge';
+import { type Tone } from '../../kit/tone';
 import { ChunkCard } from './chunk-card';
 import type { ChunkCardView } from './chunk-card.model';
 import { ChunkListRow } from './chunk-list-row';

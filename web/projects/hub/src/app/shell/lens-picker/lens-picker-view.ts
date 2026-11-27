@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { RouterLink, type UrlTree } from '@angular/router';
 
-import { KitAsyncState, type KitAsyncStateValue, KitBackBar } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitBackBar } from 'fleet/kit';
 import { KitSwatch } from 'fleet/shell';
 
 import type { LensChoice } from '../nav/project-lens.model';

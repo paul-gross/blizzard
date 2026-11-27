@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
-import { KitButton, KitDialog, KitField, KitForm, KitSelect, KitTextInput } from 'fleet';
+import { KitButton, KitField, KitForm, KitTextInput } from 'fleet/kit';
+import { KitDialog } from 'fleet/kit/dialog';
+import { KitSelect } from 'fleet/kit/select';
 
 import type { NewHubItemDraft } from './new-hub-item.domain';
 

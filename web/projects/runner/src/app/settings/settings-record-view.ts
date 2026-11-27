@@ -1,5 +1,14 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { FleetWhen, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitErrorLine, KitPanel, KitSectionHead } from 'fleet';
+import { FleetWhen } from 'fleet/core';
+import {
+  KitAsyncState,
+  type KitAsyncStateValue,
+  KitBadge,
+  KitButton,
+  KitErrorLine,
+  KitPanel,
+  KitSectionHead,
+} from 'fleet/kit';
 
 import type { InForceLineVm, SettingGroupVm } from './settings.model';
 import { SettingsInForce } from './settings-in-force';

@@ -1,7 +1,9 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { formatSeenTag, KitAsyncState, type KitAsyncStateValue, KitCardOpen, KitSkeleton, LaneIcon } from 'fleet';
+import { LaneIcon } from 'fleet/chunk-card';
+import { formatSeenTag } from 'fleet/core';
+import { KitAsyncState, type KitAsyncStateValue, KitCardOpen, KitSkeleton } from 'fleet/kit';
 import { DeliveryChunk } from './delivery-chunk';
 import { cardStageColor, deliveryWhen, type DeliveryList as DeliveryListValue, type DeliveryRow, type DeliveryWhen, STAGES } from './delivery.model';
 import { skeletonRows } from './delivery-skeleton.model';

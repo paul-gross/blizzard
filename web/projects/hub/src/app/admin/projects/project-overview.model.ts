@@ -1,4 +1,4 @@
-import type { KitTabOption } from 'fleet';
+import type { KitTabOption } from 'fleet/kit/tabs';
 import type { ProjectRunner } from '../../core/runners.domain';
 import type { ProjectChunkCounts, ProjectRepositoryLink, ProjectSourceLink } from './project-read.domain';
 

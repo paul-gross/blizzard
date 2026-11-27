@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
-import { asyncState, injectChunkUrlSelection, ViewportService } from 'fleet';
+import { asyncState, injectChunkUrlSelection } from 'fleet/core';
+import { ViewportService } from 'fleet/viewport';
 
 import type { Escalation } from '../core/escalation.domain';
 import { injectPanelAsks, injectPanelEscalations, injectPanelLeases, injectPanelProjects } from '../core/panel-reads';

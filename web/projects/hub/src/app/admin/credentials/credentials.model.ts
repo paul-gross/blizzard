@@ -2,7 +2,8 @@ import type { CredentialBinding, CredentialChange, CredentialDraft, CredentialFo
 import { type CredentialEditBaseline, toEditRequest } from './credential.translate';
 import type { ConfigFieldView } from '../config-field-tree.model';
 import type { ForgeChoice } from '../repositories/repository.domain';
-import { type Tone, errorMessage } from 'fleet';
+import { errorMessage } from 'fleet/core';
+import { type Tone } from 'fleet/kit';
 import type { Credential, CredentialCheck, CredentialCheckOperation, CredentialCheckTarget, CredentialCheckUse, CredentialDocument, CredentialListItem } from './credential.domain';
 export type { CredentialCheckTarget } from './credential.domain';
 

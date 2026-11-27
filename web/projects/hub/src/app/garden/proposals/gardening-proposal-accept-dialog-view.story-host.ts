@@ -1,6 +1,6 @@
 import { Component, input, signal } from '@angular/core';
 import { form, submit } from '@angular/forms/signals';
-import type { KitChipOption } from 'fleet';
+import type { KitChipOption } from 'fleet/kit/chips';
 
 import { GardeningProposalAcceptDialogView } from './gardening-proposal-accept-dialog-view';
 import { acceptanceDraftFor, type ProposalAcceptanceDraft } from './proposal-acceptance.domain';

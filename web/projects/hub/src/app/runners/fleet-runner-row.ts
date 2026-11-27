@@ -1,19 +1,9 @@
 import { ChangeDetectionStrategy, Component, type TemplateRef, computed, input, output, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import {
-  type LaneStatus,
-  compactRef,
-  harnessName,
-  GateBadgeGroup,
-  KitAsyncState,
-  KitBadge,
-  KitButton,
-  type KitFact,
-  KitFactList,
-  domainStatusTone,
-  type Tone,
-} from 'fleet';
+import { type LaneStatus, compactRef, harnessName, domainStatusTone } from 'fleet/core';
+import { GateBadgeGroup } from 'fleet/host';
+import { KitAsyncState, KitBadge, KitButton, type KitFact, KitFactList, type Tone } from 'fleet/kit';
 import { AppLink } from 'fleet/shell';
 import { CapabilityBadgeGroup } from './capability-badge-group';
 import { runnerLight, runnerStateBadges } from './connection-status.model';

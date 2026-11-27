@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
-import { KitBadge, KitButton, KitDialog, KitErrorLine, KitField, KitTextInput } from 'fleet';
+import { KitBadge, KitButton, KitErrorLine, KitField, KitTextInput } from 'fleet/kit';
+import { KitDialog } from 'fleet/kit/dialog';
 
 import type { SettingDraft } from './settings.domain';
 import type { SettingBadge } from './settings.model';

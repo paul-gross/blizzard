@@ -4,7 +4,7 @@ import { applicationConfig } from '@storybook/angular-vite';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { TenantContext } from '../../core/auth/tenant-context';
 import type { Meta, StoryObj } from '@storybook/angular-vite';
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import { boardDonePolicy } from '../../core/board-done-policy.model';
 import { BoardShell } from './board-shell';
 

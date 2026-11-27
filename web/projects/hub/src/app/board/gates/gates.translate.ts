@@ -1,4 +1,4 @@
-import type { DecisionView } from 'fleet';
+import type { DecisionView } from 'fleet/hub-api';
 import type { BoardDecisionPresentation } from './gates.domain';
 
 export function fromBoardDecision(decision: DecisionView): BoardDecisionPresentation {

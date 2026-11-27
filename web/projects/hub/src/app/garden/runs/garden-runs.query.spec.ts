@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { ChunkStatus } from 'fleet';
+import type { ChunkStatus } from 'fleet/hub-api';
 
 import { type RequestClientStub, runDeltaView, runRowView, settle, stubHubClient } from 'fleet/testing';
 import { injectHubRunDeltaQuery, injectHubRunRowsQuery, injectHubScopeSweepsQuery } from './garden-runs.query';

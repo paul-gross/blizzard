@@ -7,7 +7,7 @@ import {
   runDeltaApiRunsChunkIdGet,
   type RunDeltaView,
   type RunRowView,
-} from 'fleet';
+} from 'fleet/hub-api';
 import type { RunDelta, RunRow } from '../core/run.domain';
 import { fromRunDeltaView, toRunRow } from '../core/run.translate';
 import type { ScopeSweep } from '../core/scope.domain';

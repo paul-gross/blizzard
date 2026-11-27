@@ -5,13 +5,8 @@ import {
   QueryClient,
   provideTanStackQuery,
 } from '@tanstack/angular-query-experimental';
-import {
-  EVENT_SOURCE_FACTORY,
-  ViewportService,
-  provideViewportRenavigation,
-  type EventSourceFactory,
-  type FleetEventSource,
-} from 'fleet';
+import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource } from 'fleet/sse';
+import { ViewportService, provideViewportRenavigation } from 'fleet/viewport';
 import {
   OPERATOR_ME_RESPONSE,
   chunkCountsView,

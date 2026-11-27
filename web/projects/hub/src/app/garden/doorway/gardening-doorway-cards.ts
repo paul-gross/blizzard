@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { KitLinkTile, KitSkeleton, KitSwatch } from 'fleet';
+import { KitLinkTile, KitSkeleton, KitSwatch } from 'fleet/kit';
 
 import type { DoorwayCard } from './gardening-doorway.model';
 

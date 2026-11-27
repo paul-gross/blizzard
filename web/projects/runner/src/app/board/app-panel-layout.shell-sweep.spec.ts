@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type KitAsyncStateValue } from 'fleet';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import {
   capacitiesView,
   hostEnvironmentView,

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { KitBadge } from 'fleet';
+import { KitBadge } from 'fleet/kit';
 import { listOrDash, retriesLabel, sessionLabel } from './graph-node';
 import { type GraphNode, graphVocabularyText } from './graph.domain';
 

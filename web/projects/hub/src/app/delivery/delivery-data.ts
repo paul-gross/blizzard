@@ -1,6 +1,7 @@
 import { computed, type Signal } from '@angular/core';
 
-import { injectNowSignal, injectRunnerHostNames, type KitAsyncStateValue } from 'fleet';
+import { injectNowSignal, injectRunnerHostNames } from 'fleet/core';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import { injectBoardWorkItemDomainsQuery } from '../core/work-items/board-work-items.query';
 import { injectProjectDomainsQuery } from '../core/projects.query';
 import { deliveryChunkIds, deliveryList, type DeliveryList, deliveryState, flowIds } from './delivery.model';

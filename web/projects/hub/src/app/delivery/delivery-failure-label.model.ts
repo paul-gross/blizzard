@@ -1,4 +1,4 @@
-import { openLookup } from 'fleet';
+import { openLookup } from 'fleet/core';
 
 export function deliveryDiagnostic(account: string, cause: string): string {
   return account === cause ? account : `${cause}\n${account}`;

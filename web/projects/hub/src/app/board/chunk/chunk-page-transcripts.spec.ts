@@ -3,7 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ChunkPage, ViewportService } from 'fleet';
+import { ChunkPage } from 'fleet/chunk-page/view';
+import { ViewportService } from 'fleet/viewport';
 import {
   assetArtifactView,
   chunkDetail,

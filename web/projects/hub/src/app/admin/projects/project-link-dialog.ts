@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
-import { KitButton, KitDialog, KitErrorLine, KitField, KitSelect } from 'fleet';
+import { KitButton, KitErrorLine, KitField } from 'fleet/kit';
+import { KitDialog } from 'fleet/kit/dialog';
+import { KitSelect } from 'fleet/kit/select';
 
 import type { LinkChoiceVm } from './projects.model';
 

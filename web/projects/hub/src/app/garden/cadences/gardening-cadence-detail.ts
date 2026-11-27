@@ -2,15 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, u
 import { form } from '@angular/forms/signals';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import {
-  type EditBaseline,
-  errorMessage,
-  injectPendingMutationVariables,
-  isPendingFor,
-  type KitAsyncStateValue,
-  restingAsyncState,
-  submitForm,
-} from 'fleet';
+import { errorMessage, injectPendingMutationVariables, isPendingFor, restingAsyncState } from 'fleet/core';
+import { type EditBaseline, submitForm } from 'fleet/forms';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import { map } from 'rxjs';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';

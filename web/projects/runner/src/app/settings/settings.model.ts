@@ -1,4 +1,5 @@
-import { settingValueText, type Tone, unlisted, type UnknownHostValue } from 'fleet';
+import { settingValueText, unlisted, type UnknownHostValue } from 'fleet/core';
+import { type Tone } from 'fleet/kit';
 
 import type { HostRunner } from '../core/host-runner.domain';
 import {

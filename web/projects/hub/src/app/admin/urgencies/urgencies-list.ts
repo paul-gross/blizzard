@@ -1,6 +1,10 @@
 import { CdkDrag, CdkDragHandle, CdkDropList, type CdkDragDrop } from '@angular/cdk/drag-drop';
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitAsyncState, KitButton, KitChips, KitErrorLine, KitSelect, KitSelectList, KitSelectRow, type KitAsyncStateValue, type Urgency } from 'fleet';
+import { type Urgency } from 'fleet/core';
+import { KitAsyncState, KitButton, KitErrorLine, type KitAsyncStateValue } from 'fleet/kit';
+import { KitChips } from 'fleet/kit/chips';
+import { KitSelect } from 'fleet/kit/select';
+import { KitSelectList, KitSelectRow } from 'fleet/kit/select-list';
 import { UrgencyPill } from '../../core/urgency-pill';
 import { LIFECYCLE_FILTER_OPTIONS, type LifecycleFilter } from '../config-filter.model';
 import { type FieldTree } from '@angular/forms/signals';

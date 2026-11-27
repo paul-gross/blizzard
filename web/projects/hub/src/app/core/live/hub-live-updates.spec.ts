@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, QueryObserver, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
+import { chunkTranscriptSegmentKey, chunkTranscriptsKey } from 'fleet/core';
 import {
   EVENT_SOURCE_FACTORY,
   HUB_EVENT_STREAM_URL,
@@ -10,9 +11,8 @@ import {
   type EventSourceFactory,
   type FleetEventSource,
   hubEventStreamUrl,
-} from 'fleet';
+} from 'fleet/sse';
 import { HUB_PROJECT_FILTER } from '../project-filter';
-import { chunkTranscriptSegmentKey, chunkTranscriptsKey } from 'fleet';
 import { hubDecisionsKey } from '../query-keys';
 import { HubLiveUpdates } from './hub-live-updates';
 

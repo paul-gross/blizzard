@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
-import { KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, ViewportMenu } from 'fleet';
+import { KitAvatar } from 'fleet/kit';
+import { KitMenu, KitMenuItem, KitMenuPanel } from 'fleet/kit/menu';
+import { ViewportMenu } from 'fleet/viewport/menu';
 
 import { TenantMenu } from './tenant-menu';
 import { injectTenantSwitch } from './tenant-switch';

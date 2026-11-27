@@ -5,7 +5,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { FLEET_CLOCK, formatAbsolute } from 'fleet';
+import { FLEET_CLOCK, formatAbsolute } from 'fleet/core';
 import {
   bounceView,
   FIXTURE_NOW,

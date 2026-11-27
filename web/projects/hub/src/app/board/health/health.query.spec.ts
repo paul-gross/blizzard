@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
+import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/core';
 import { type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { injectHubHealthQuery } from './health.query';
 

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
-import { foldTitles, KitSkeleton } from 'fleet';
+import { foldTitles } from 'fleet/chunk-card';
+import { KitSkeleton } from 'fleet/kit';
 import type { DeliveryChunkRef } from './delivery.model';
 
 /**

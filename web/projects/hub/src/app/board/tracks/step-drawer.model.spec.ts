@@ -1,5 +1,5 @@
 import { assetChunkArtifact } from 'fleet/testing';
-import type { ChunkArtifact, ChunkArtifactStore } from 'fleet';
+import type { ChunkArtifact, ChunkArtifactStore } from 'fleet/chunk-detail';
 import type { Project } from '../../core/project.domain';
 import { describe, expect, it } from 'vitest';
 

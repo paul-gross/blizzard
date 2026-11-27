@@ -3,7 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type DecisionResolutionConflict, type DecisionResolutionResponse, formatWhen } from 'fleet';
+import { formatWhen } from 'fleet/core';
+import { type DecisionResolutionConflict, type DecisionResolutionResponse } from 'fleet/hub-api';
 import { type RequestClientStub, type StubHttpError, stubError, stubHubClient } from 'fleet/testing';
 import { injectResolveDecisionMutation, readDecisionFailure } from './human.mutations';
 import { hubDecisionsKey } from '../../core/query-keys';

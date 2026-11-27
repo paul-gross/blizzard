@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type UrgencyView } from 'fleet';
+import { type UrgencyView } from 'fleet/hub-api';
 import { type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { vi } from 'vitest';
 import { injectCreateUrgencyMutation, injectDefaultUrgencyMutation, injectEditUrgencyMutation, injectPositionUrgencyMutation, injectUrgencyLifecycleMutation } from './urgencies.mutations';

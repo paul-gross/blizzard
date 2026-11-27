@@ -1,6 +1,6 @@
 import { type InfiniteData, injectInfiniteQuery, injectQuery } from '@tanstack/angular-query-experimental';
 import { hubSettingsHistoryKey, hubSettingsKey } from '../../core/query-keys';
-import { changesApiAdminSettingsChangesGet, getSettingsApiAdminSettingsGet } from 'fleet';
+import { changesApiAdminSettingsChangesGet, getSettingsApiAdminSettingsGet } from 'fleet/hub-api';
 import type { HubSettingsHistoryPage } from './hub-settings.domain';
 import { toHubSettings, toHubSettingsHistoryPage } from './hub-settings.translate';
 

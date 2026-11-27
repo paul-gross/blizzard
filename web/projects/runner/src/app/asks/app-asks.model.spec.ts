@@ -1,4 +1,4 @@
-import { compactRef } from 'fleet';
+import { compactRef } from 'fleet/core';
 
 import type { Ask } from '../core/ask.domain';
 import type { PanelAsk, RunnerOwner } from '../core/panel-reads.model';

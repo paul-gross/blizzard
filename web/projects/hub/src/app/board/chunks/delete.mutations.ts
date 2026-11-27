@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { deleteChunkApiChunksChunkIdDelete } from 'fleet';
+import { deleteChunkApiChunksChunkIdDelete } from 'fleet/hub-api';
 import { chunkDeleteMutationKey } from '../../core/mutation-keys';
 import { hubBacklogKey, hubChunkKey, hubChunksKey, hubQueueKey } from '../../core/query-keys';
 

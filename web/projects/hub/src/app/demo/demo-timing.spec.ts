@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { FLEET_CLOCK } from 'fleet';
+import { FLEET_CLOCK } from 'fleet/core';
 import { DEMO_CLOCK, DemoAborted, nextFrame, sleepUntil, waitFor } from './demo-timing';
 import { slowScrollToBottom } from './demo-scroll';
 

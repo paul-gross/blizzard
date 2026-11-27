@@ -1,5 +1,6 @@
 // bzh:frontend-domain-boundary — the one place the event-log wire is read.
-import { hubApi, openLookup, type EventView } from 'fleet';
+import { openLookup } from 'fleet/core';
+import { hubApi, type EventView } from 'fleet/hub-api';
 
 import type { EventLogEntry, EventSeverity, KnownEventSeverity } from './event-log.domain';
 

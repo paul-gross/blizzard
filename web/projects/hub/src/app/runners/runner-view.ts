@@ -2,7 +2,17 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
-import { KitAsyncState, type KitAsyncStateValue, KitButton, KitGlyph, KitPanel, KitSkeleton, KitSlotBar, SubscriptionBlocks, KitErrorLine } from 'fleet';
+import { SubscriptionBlocks } from 'fleet/host';
+import {
+  KitAsyncState,
+  type KitAsyncStateValue,
+  KitButton,
+  KitGlyph,
+  KitPanel,
+  KitSkeleton,
+  KitSlotBar,
+  KitErrorLine,
+} from 'fleet/kit';
 import { AppLink } from 'fleet/shell';
 import { groupHostRows, type HostCard } from './host-rows.model';
 import { railVm } from './runner-rail.model';

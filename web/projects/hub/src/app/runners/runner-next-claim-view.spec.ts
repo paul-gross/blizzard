@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import { APP_SCOPE, type InAppLink } from 'fleet/shell';
 import { RunnerNextClaimView } from './runner-next-claim-view';
 import type { NextClaim, NextClaimCandidate, NextClaimPassed, NextClaimScenario } from './runner-next-claim.domain';

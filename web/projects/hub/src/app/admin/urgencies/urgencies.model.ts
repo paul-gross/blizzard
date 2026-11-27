@@ -1,4 +1,5 @@
-import type { KitChipOption, Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
+import type { KitChipOption } from 'fleet/kit/chips';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
 
 /** Keep the hub's live ordering; retired records follow the live set. */

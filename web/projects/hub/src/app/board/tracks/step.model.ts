@@ -1,4 +1,4 @@
-import { compactRef, formatCost, formatHeldFor } from 'fleet';
+import { compactRef, formatCost, formatHeldFor } from 'fleet/core';
 import type { EnvTimelineSegment, PlacedStep } from './timeline.domain';
 
 /** One node step on an environment's track. */

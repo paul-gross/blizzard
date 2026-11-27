@@ -1,8 +1,4 @@
-import type {
-  ChunkCountsView,
-  RepositoryLinkView,
-  SourceLinkView,
-} from 'fleet';
+import type { ChunkCountsView, RepositoryLinkView, SourceLinkView } from 'fleet/hub-api';
 import type {
   ProjectChunkCounts,
   ProjectRepositoryLink,

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { KitSkeleton, toneColor } from 'fleet';
+import { KitSkeleton, toneColor } from 'fleet/kit';
 import { AppLink } from 'fleet/shell';
 import type { HistoryEntry } from './delivery-history.model';
 

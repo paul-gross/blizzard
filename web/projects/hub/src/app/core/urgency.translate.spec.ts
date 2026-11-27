@@ -1,4 +1,4 @@
-import type { UrgencyView } from 'fleet';
+import type { UrgencyView } from 'fleet/hub-api';
 import { fromUrgencyRef, fromUrgencyView } from './urgency.translate';
 
 const wire: UrgencyView = {

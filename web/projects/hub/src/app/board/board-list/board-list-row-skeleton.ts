@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 
-import { KitSkeleton } from 'fleet';
+import { KitSkeleton } from 'fleet/kit';
 
 /**
  * A list row's loading stand-in, on the list's own column tracks and at a one-item row's height:

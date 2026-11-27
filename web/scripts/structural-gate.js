@@ -18,8 +18,8 @@
  * `.html` outside the kit hand-rolling `KitFactList`'s own `<dl class="kv">` grid.
  * A site that should not convert is named in `KIT_FLOOR_EXEMPT_SITES` with its reason.
  *
- * Also the kit's stories sweep (`bzh:frontend-kit-stories`): every class `fleet/src/lib/kit/index.ts`
- * exports as a `@Component` or `@Directive` needs a `*.stories.ts` beside it whose default-exported meta
+ * Also the kit's stories sweep (`bzh:frontend-kit-stories`): every class the `fleet/kit` entry points
+ * (`fleet/src/entries/kit.ts` and `entries/kit/*.ts`) export as a `@Component` or `@Directive` needs a `*.stories.ts` beside it whose default-exported meta
  * names that very class — resolved through imports and re-exports, not matched by name — as `component`.
  * A part that genuinely cannot be shown alone is named in `KIT_STORIES_EXEMPT` with its reason; an entry
  * that excuses nothing fails as stale.
@@ -39,8 +39,8 @@
  * `fleet/src/lib/` unit must be reached by both apps, and no `fleet` file imports an app.
  *
  * Also the disjoint-diffs sweep (`disjoint-diffs-sweep.js`, `bzh:frontend-disjoint-diffs`): every
- * export of a `fleet` sub-barrel needs a consumer outside that sub-barrel's directory, and
- * `public-api.ts` re-exports only sub-barrels, save the generated client and the query-key registry.
+ * export of a `fleet` entry needs a consumer outside `fleet`, and `public-api.ts` re-exports only
+ * entries.
  *
  * Also the domain-boundary sweeps (`domain-boundary-sweep.js`, `bzh:frontend-domain-boundary`). The
  * symbol-origin sweep resolves every symbol a file references to its declaration and fails a file outside
@@ -76,7 +76,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
 const { assertRetirementCensusWorks, retirementViolations } = require('./retirement-census');
-const { assertPlacementDetectorWorks, placementViolations } = require('./placement-sweep');
+const { assertPlacementDetectorWorks, placementViolations, workspacePaths } = require('./placement-sweep');
 const { assertDisjointDiffsDetectorWorks, disjointDiffsViolations } = require('./disjoint-diffs-sweep');
 const {
   assertBackendCitationDetectorWorks,
@@ -290,6 +290,7 @@ function assertKitFloorDetectorWorks() {
 }
 
 const KIT_DIR = path.join(PROJECTS_DIR, 'fleet', 'src', 'lib', 'kit');
+const ENTRIES_DIR = path.join(PROJECTS_DIR, 'fleet', 'src', 'entries');
 
 /**
  * A kit part that genuinely cannot be shown alone — a `{ file, class }` entry per part, `file` relative
@@ -337,26 +338,34 @@ function resolveKitClass(sources, file, name, seen = new Set()) {
   return null;
 }
 
-/** Every `@Component`/`@Directive` class `index.ts` exports: the kit's parts. */
-function kitParts(sources) {
-  const sf = ts.createSourceFile('index.ts', sources.get('index.ts') ?? '', ts.ScriptTarget.Latest, true);
+/** Every `@Component`/`@Directive` class the kit's entry files export: the kit's parts.
+ * @param {Map<string, string>} sources the kit's sources, keyed relative to `fleet/src/lib/kit/`
+ * @param {Map<string, string>} entries each kit entry's text, keyed relative to `fleet/src/entries/`
+ * @param {string[]} listed the entry files `web/tsconfig.json` declares for the kit, each of which must be read */
+function kitParts(sources, entries, listed) {
+  const missing = listed.filter((name) => !entries.has(name));
+  if (missing.length > 0) throw new Error(`kit-stories sweep found no entry file ${missing.join(', ')}`);
   const parts = [];
-  for (const stmt of sf.statements) {
-    if (!ts.isExportDeclaration(stmt) || stmt.isTypeOnly || !stmt.moduleSpecifier) continue;
-    if (!stmt.exportClause || !ts.isNamedExports(stmt.exportClause)) {
-      throw new Error(
-        `kit-stories sweep reads only \`export { … } from\` in kit/index.ts, not \`${stmt.getText(sf)}\`; ` +
-          'list the exported names so each part can be resolved',
-      );
-    }
-    const from = kitModule(sources, 'index.ts', stmt.moduleSpecifier.text);
-    if (from === null) continue;
-    for (const el of stmt.exportClause.elements) {
-      if (el.isTypeOnly) continue;
-      const part = resolveKitClass(sources, from, (el.propertyName ?? el.name).text);
-      if (part !== null) parts.push(part);
+  for (const [name, text] of entries) {
+    const sf = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true);
+    for (const stmt of sf.statements) {
+      if (!ts.isExportDeclaration(stmt) || stmt.isTypeOnly || !stmt.moduleSpecifier) continue;
+      if (!stmt.exportClause || !ts.isNamedExports(stmt.exportClause)) {
+        throw new Error(
+          `kit-stories sweep reads only \`export { … } from\` in entries/${name}, not \`${stmt.getText(sf)}\`; ` +
+            'list the exported names so each part can be resolved',
+        );
+      }
+      const from = /^(?:\.\.\/)+lib\/kit\/(.+)$/.exec(stmt.moduleSpecifier.text)?.[1].concat('.ts');
+      if (from === undefined || !sources.has(from)) continue;
+      for (const el of stmt.exportClause.elements) {
+        if (el.isTypeOnly) continue;
+        const part = resolveKitClass(sources, from, (el.propertyName ?? el.name).text);
+        if (part !== null) parts.push(part);
+      }
     }
   }
+  if (parts.length === 0) throw new Error('kit-stories sweep found no kit part in any kit entry');
   return parts;
 }
 
@@ -409,14 +418,14 @@ function storiedParts(sources, file) {
 }
 
 /**
- * The kit-stories sweep's report lines, over the kit's sources — a map from path (relative to
- * `fleet/src/lib/kit/`, posix) to text, the seam the detector check plants a kit through.
- * @param {Map<string, string>} sources
+ * The kit-stories sweep's report lines, over the kit's sources and entry files — maps from path (relative to
+ * `fleet/src/lib/kit/` and `fleet/src/entries/`, posix) to text, the seam the detector check plants a kit through.
+ * @param {{ sources: Map<string, string>, entries: Map<string, string>, listed: string[] }} kit
  * @param {{ file: string, class: string }[]} exempt
  * @returns {{ unstoried: string[], stale: string[] }}
  */
-function kitStoriesViolations(sources, exempt = KIT_STORIES_EXEMPT) {
-  const parts = kitParts(sources);
+function kitStoriesViolations({ sources, entries, listed }, exempt = KIT_STORIES_EXEMPT) {
+  const parts = kitParts(sources, entries, listed);
   const storied = new Set();
   for (const file of sources.keys()) {
     if (!file.endsWith('.stories.ts')) continue;
@@ -433,24 +442,32 @@ function kitStoriesViolations(sources, exempt = KIT_STORIES_EXEMPT) {
   return { unstoried, stale };
 }
 
-/** The kit directory's sources, keyed as `kitStoriesViolations` reads them. */
-function readKitSources() {
-  return new Map(
+/** The kit directory's sources and entry files, keyed as `kitStoriesViolations` reads them. */
+function readKit() {
+  const sources = new Map(
     fs
       .readdirSync(KIT_DIR)
       .filter((f) => f.endsWith('.ts') && !f.endsWith('.spec.ts'))
       .map((f) => [f, fs.readFileSync(path.join(KIT_DIR, f), 'utf8')]),
   );
+  const familyDir = path.join(ENTRIES_DIR, 'kit');
+  const families = fs.existsSync(familyDir) ? fs.readdirSync(familyDir).filter((f) => f.endsWith('.ts')) : [];
+  const names = [...(fs.existsSync(path.join(ENTRIES_DIR, 'kit.ts')) ? ['kit.ts'] : []), ...families.map((f) => `kit/${f}`)];
+  const entries = new Map(names.map((name) => [name, fs.readFileSync(path.join(ENTRIES_DIR, name), 'utf8')]));
+  const listed = Object.keys(workspacePaths())
+    .filter((specifier) => specifier === 'fleet/kit' || specifier.startsWith('fleet/kit/'))
+    .map((specifier) => `${specifier.slice('fleet/'.length)}.ts`);
+  if (listed.length === 0) throw new Error('kit-stories sweep found no fleet/kit path in tsconfig.json');
+  return { sources, entries, listed };
 }
 
 /**
  * Prove the kit-stories sweep can still fail, before trusting it over the kit — the same reasoning
  * `assertKitFloorDetectorWorks` follows. The planted kit holds a storied component, a storied
- * directive, an unstoried component, and a stale exemption.
+ * directive, an unstoried component, and a stale exemption, split across two entries.
  */
 function assertKitStoriesDetectorWorks() {
   const sources = new Map([
-    ['index.ts', "export { KitA } from './kit-a';\nexport { KitB, KitC } from './kit-b';\nexport type { Gone } from './kit-b';\n"],
     ['kit-a.ts', "@Component({ selector: 'a' })\nexport class KitA {}\n"],
     ['kit-b.ts', "@Directive({ selector: '[b]' })\nexport class KitB {}\n@Component({ selector: 'c' })\nexport class KitC {}\n"],
     ['kit-a.stories.ts', "import { KitA } from './kit-a';\nconst meta: Meta<KitA> = { title: 'Kit/A', component: KitA };\nexport default meta;\n"],
@@ -458,27 +475,42 @@ function assertKitStoriesDetectorWorks() {
     ['kit-d.stories.ts', "import { KitC } from './kit-d';\nexport default { title: 'Kit/D', component: KitC };\n"],
     ['kit-b.stories.ts', "import { KitB } from './kit-b';\nexport default { title: 'Kit/B', component: KitB };\n"],
   ]);
-  const recognized = kitParts(sources).map((p) => p.class).join(',');
+  const entries = new Map([
+    ['kit.ts', "export { KitA } from '../lib/kit/kit-a';\nexport type { Gone } from '../lib/kit/kit-b';\n"],
+    ['kit/menu.ts', "export { KitB, KitC } from '../../lib/kit/kit-b';\n"],
+  ]);
+  const listed = ['kit.ts', 'kit/menu.ts'];
+  const recognized = kitParts(sources, entries, listed).map((p) => p.class).join(',');
   if (recognized !== 'KitA,KitB,KitC') {
     throw new Error(`kit-stories detector misread the planted kit's parts: ${recognized}`);
   }
   const exempt = [{ file: 'kit-gone.ts', class: 'KitGone' }];
-  const { unstoried, stale } = kitStoriesViolations(sources, exempt);
+  const { unstoried, stale } = kitStoriesViolations({ sources, entries, listed }, exempt);
   if (unstoried.length !== 1 || unstoried[0] !== 'KitC (fleet/src/lib/kit/kit-b.ts)') {
     throw new Error(`kit-stories detector misjudged the planted kit's unstoried parts: ${JSON.stringify(unstoried)}`);
   }
   if (stale.length !== 1 || stale[0] !== 'KitGone (fleet/src/lib/kit/kit-gone.ts)') {
     throw new Error(`kit-stories detector misjudged the planted kit's stale exemptions: ${JSON.stringify(stale)}`);
   }
-  const starKit = new Map([['index.ts', "export * from './kit-a';\n"], ['kit-a.ts', sources.get('kit-a.ts') ?? '']]);
-  let starRefused = false;
-  try {
-    kitParts(starKit);
-  } catch {
-    starRefused = true;
+  const refuses = (/** @type {() => unknown} */ run) => {
+    try {
+      run();
+    } catch {
+      return true;
+    }
+    return false;
+  };
+  const starEntries = new Map([['kit.ts', "export * from '../lib/kit/kit-a';\n"]]);
+  if (!refuses(() => kitParts(sources, starEntries, ['kit.ts']))) {
+    throw new Error('kit-stories detector let an `export *` in a kit entry go unread');
   }
-  if (!starRefused) throw new Error('kit-stories detector let an `export *` in kit/index.ts go unread');
-  const storiedExempt = kitStoriesViolations(sources, [{ file: 'kit-a.ts', class: 'KitA' }]).stale;
+  if (!refuses(() => kitParts(sources, entries, [...listed, 'kit/gone.ts']))) {
+    throw new Error('kit-stories detector let a listed kit entry go missing');
+  }
+  if (!refuses(() => kitParts(sources, new Map([['kit.ts', '']]), ['kit.ts']))) {
+    throw new Error('kit-stories detector passed a kit with no part');
+  }
+  const storiedExempt = kitStoriesViolations({ sources, entries, listed }, [{ file: 'kit-a.ts', class: 'KitA' }]).stale;
   if (storiedExempt.length !== 1) throw new Error('kit-stories detector missed an exemption for a storied part');
 }
 
@@ -1407,7 +1439,7 @@ function main() {
   }
   const packageLayerLines = packageLayerViolations(LAYERED_PROJECTS, layeredFiles);
   const containersComposeLines = containersComposeViolations();
-  const kitStories = kitStoriesViolations(readKitSources());
+  const kitStories = kitStoriesViolations(readKit());
   const templateSwitchLines = templateSwitchViolations();
   const vocabularyRecordLines = vocabularyRecordViolations();
 
@@ -1450,7 +1482,7 @@ function main() {
       console.error('structural-gate: retired kit chrome outside fleet/lib/kit/:\n');
       for (const v of kitFloorViolations) console.error(`  ${v.file}: ${v.class}`);
       console.error(
-        '\nCompose the shared kit (`KitPanel`/`KitAsyncState`/`KitFactList`, from `fleet`) instead of a re-typed ' +
+        '\nCompose the shared kit (`KitPanel`/`KitAsyncState`/`KitFactList`, from `fleet/kit`) instead of a re-typed ' +
           'copy; a site that genuinely should not convert goes in KIT_FLOOR_EXEMPT_SITES with a one-line reason.',
       );
     }
@@ -1510,12 +1542,11 @@ function main() {
       );
     }
     if (disjointDiffsLines.length > 0) {
-      console.error('structural-gate: fleet barrel exports outside the disjoint-diffs rule:\n');
+      console.error('structural-gate: fleet entry exports outside the disjoint-diffs rule:\n');
       for (const line of disjointDiffsLines) console.error(line);
       console.error(
-        '\nDrop an export nothing outside its feature directory imports from its sub-barrel (delete the symbol if ' +
-          'nothing else uses it), and re-export from the root only through a sub-barrel; the generated client and ' +
-          'the query-key registry are the root\'s only direct sources (ROOT_DIRECT_EXPORT_ALLOWED).',
+        '\nDrop an export nothing outside fleet imports from its entry (delete the symbol if ' +
+          'nothing else uses it), and re-export from public-api.ts only through an entry.',
       );
     }
     if (backendCitationLines.length > 0) {

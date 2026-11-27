@@ -1,6 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import { compactRef, KitBadge, KitChip, KitSelectList, KitSelectRow, type Tone, FleetWhen } from 'fleet';
+import { compactRef, FleetWhen } from 'fleet/core';
+import { KitBadge, type Tone } from 'fleet/kit';
+import { KitChip } from 'fleet/kit/chips';
+import { KitSelectList, KitSelectRow } from 'fleet/kit/select-list';
 
 import { graphLifecycleTone } from './graph-lifecycle-tone';
 import { type GraphSummary, graphVocabularyText } from './graph.domain';

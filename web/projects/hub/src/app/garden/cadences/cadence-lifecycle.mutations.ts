@@ -1,7 +1,10 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { enableCadenceApiCadencesCadenceIdEnablePost, retireCadenceApiCadencesCadenceIdRetirePost } from 'fleet';
+import {
+  enableCadenceApiCadencesCadenceIdEnablePost,
+  retireCadenceApiCadencesCadenceIdRetirePost,
+} from 'fleet/hub-api';
 import { cadenceLifecycleMutationKey } from '../../core/mutation-keys';
 import { hubCadenceErrandsKey, hubCadencesKey } from '../core/cadences.query';
 import { hubRoutinesKey } from '../../core/query-keys';

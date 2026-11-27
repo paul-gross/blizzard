@@ -1,4 +1,4 @@
-import { asyncState, type AsyncStateQuery } from 'fleet';
+import { asyncState, type AsyncStateQuery } from 'fleet/core';
 import type { GraphSummary } from '../../graphs/graph.domain';
 import type { Routine } from '../core/routine.domain';
 import { isRoutineBlocked } from './gardening-effective-graph';

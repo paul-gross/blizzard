@@ -1,4 +1,4 @@
-import { RecordKind, type ConfigChangesPage, type ConfigChangeView } from 'fleet';
+import { RecordKind, type ConfigChangesPage, type ConfigChangeView } from 'fleet/hub-api';
 import type { ConfigChange, ConfigChangePage, ConfigRecordKind } from './config-history.domain';
 
 export function toConfigChange(change: ConfigChangeView): ConfigChange {

@@ -1,5 +1,6 @@
 import { computed, type Signal } from '@angular/core';
-import { type EditBaseline, readRefusal, type SaveOutcome } from 'fleet';
+import { readRefusal } from 'fleet/core';
+import { type EditBaseline, type SaveOutcome } from 'fleet/forms';
 
 import type { SecretCreateDraft, SecretReplaceDraft } from './secret.domain';
 import { SECRET_REFUSALS, toCreateRequest } from './secret.translate';

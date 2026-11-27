@@ -2,7 +2,7 @@ import { Component, provideZonelessChangeDetection, signal } from '@angular/core
 import { TestBed } from '@angular/core/testing';
 import { commands, page } from 'vitest/browser';
 
-import { KitPanel, KitPanelHeader } from 'fleet';
+import { KitPanel, KitPanelHeader } from 'fleet/kit';
 import { GraphDetailHeader } from './graph-detail-header';
 
 /** The design tokens are a global stylesheet loaded via each app's build `styles`,

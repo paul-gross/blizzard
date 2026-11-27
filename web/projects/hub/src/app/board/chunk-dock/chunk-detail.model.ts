@@ -1,4 +1,6 @@
-import { deriveWorkItemsState, isPendingFor, type ChunkDetailAggregate, type WorkItemsQuery, type WorkItemsState } from 'fleet';
+import { deriveWorkItemsState, type WorkItemsQuery, type WorkItemsState } from 'fleet/chunk-detail';
+import { type ChunkDetailAggregate } from 'fleet/chunk-page';
+import { isPendingFor } from 'fleet/core';
 
 /**
  * The status `detail` will read once a pending Pause or Complete on it settles, when that outcome is total

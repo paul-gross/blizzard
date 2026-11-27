@@ -4,7 +4,7 @@ import type { ChunkArtifact } from '../chunk-detail/artifact.model';
 import type { TimelineDetail } from '../chunk-detail/chunk-timeline-rows';
 import type { TranscriptContext, TranscriptSegmentIndexEntry } from '../../transcripts/transcript-turn';
 import type { KitAsyncStateValue } from '../../kit/kit-async-state';
-import { asyncState, restingAsyncState } from '../../core/query-state';
+import { asyncState, restingAsyncState } from '../../core/query-state/query-state';
 import {
   injectChunkTranscriptSegmentQuery,
   injectChunkTranscriptsQuery,

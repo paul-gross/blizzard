@@ -8,7 +8,7 @@ import {
   retireRepositoryApiRepositoriesRepositoryRetirePost,
   type RepositoryCreateRequest,
   type RepositoryPatchRequest,
-} from 'fleet';
+} from 'fleet/hub-api';
 import {
   createRepositoryMutationKey,
   editRepositoryMutationKey,

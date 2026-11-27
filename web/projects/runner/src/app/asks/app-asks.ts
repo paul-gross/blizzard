@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { asyncState, injectNowSignal, KitAsyncState } from 'fleet';
+import { asyncState, injectNowSignal } from 'fleet/core';
+import { KitAsyncState } from 'fleet/kit';
 
 import { type AskRow, LocalAsksView } from './app-asks-view';
 import { askRows } from './app-asks.model';

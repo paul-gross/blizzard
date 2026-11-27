@@ -3,7 +3,9 @@ import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 
-import { ChunkCard, ChunkUrgency, type Urgency } from 'fleet';
+import { ChunkCard } from 'fleet/chunk-card';
+import { ChunkUrgency } from 'fleet/chunk-detail';
+import { type Urgency } from 'fleet/core';
 import { chunkControlStub } from 'fleet/testing';
 import { type BoardCard, boardCardView } from './board-card-view.model';
 

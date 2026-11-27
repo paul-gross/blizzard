@@ -1,5 +1,5 @@
 // bzh:frontend-domain-boundary — the one place the hub-item create wire is written and its refusals read.
-import type { RefusalMap } from 'fleet';
+import type { RefusalMap } from 'fleet/forms';
 
 import type { NewHubItemDraft } from './new-hub-item.domain';
 

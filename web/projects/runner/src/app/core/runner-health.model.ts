@@ -1,4 +1,5 @@
-import { type BeaconTone, compactRef, type Tone, unlisted } from 'fleet';
+import { compactRef, unlisted } from 'fleet/core';
+import { type BeaconTone, type Tone } from 'fleet/kit';
 
 import type { HostRunner } from './host-runner.domain';
 import type { IdentityVerdict, RunnerStatus } from './runner-status.domain';

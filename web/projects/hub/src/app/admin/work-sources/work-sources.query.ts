@@ -1,6 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { getWorkSourceApiWorkSourcesSourceGet, listWorkSourcesApiWorkSourcesGet } from 'fleet';
+import { getWorkSourceApiWorkSourcesSourceGet, listWorkSourcesApiWorkSourcesGet } from 'fleet/hub-api';
 import { hubConfigListKey, hubConfigRecordKey } from '../../core/query-keys';
 import type { WorkSource } from './work-source.domain';
 import { fromWorkSourceSummary } from './work-source.translate';

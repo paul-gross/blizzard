@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { KitBadge, KitFactList, KitPanel, KitSlotBar, SubscriptionPaceGroup } from 'fleet';
+import { SubscriptionPaceGroup } from 'fleet/host';
+import { KitBadge, KitFactList, KitPanel, KitSlotBar } from 'fleet/kit';
 import type { RunnerDetailVm } from './fleet-page.model';
 import { FleetRunnerRow } from './fleet-runner-row';
 import { runnerLight, runnerTitleState } from './connection-status.model';

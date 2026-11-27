@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { restingAsyncState, type KitAsyncStateValue } from 'fleet';
+import { restingAsyncState } from 'fleet/core';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import type { FindingDetail } from '../core/finding.domain';
 import { FleetFindingPanel, type FindingPanelTriageVerb, type FindingPanelVm } from './finding-panel';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';

@@ -1,5 +1,5 @@
 import { boardChunk } from '../board.fixture';
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import { bannerUrgencyIcons } from '../../core/urgencies.model';
 import { withPendingUrgencies } from './urgency.model';
 

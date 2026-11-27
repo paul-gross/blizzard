@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, computed, input } from '@angular/core';
 
-import { BrandMark } from '../../core/design';
-import { KitBeacon, KitMenu } from '../../kit';
+import { BrandMark } from '../../core/design/brand-mark';
+import { KitBeacon } from '../../kit/kit-beacon';
+import { KitMenu } from '../../kit/kit-menu';
 
 /**
  * The generic mobile titlebar (mock screen C's `.appbar`,

@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import type { BoardCard } from '../board-card/board-card-view.model';
 import { BoardColumn } from './board-column';
 

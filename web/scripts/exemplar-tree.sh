@@ -2,8 +2,8 @@
 # Holds the web exemplars to a gate that bundles real files: `specs` runs their specs under the hub's own
 # unit-test builder, `structural-gate` runs `scripts/structural-gate.js`. Each lays the exemplar tree over a scratch copy
 # of `projects/`: a file new to the tree is copied in, a file that already exists there (a key registry) has the
-# exemplar's lines appended, and the hub client is regenerated with the exemplar router mounted. `fleet` resolves to the
-# exemplar's barrel. The gate's layer table gains the exemplar's `permits`, `cadence-edit` and `proposal-acceptance`
+# exemplar's lines appended, and the hub client is regenerated with the exemplar router mounted. `fleet/hub-api` resolves to the
+# exemplar's entry. The gate's layer table gains the exemplar's `permits`, `cadence-edit` and `proposal-acceptance`
 # units, as production's would. Each unit reads wire types only behind the domain boundary.
 set -euo pipefail
 
@@ -27,7 +27,43 @@ case "${1:-}" in
     cat > "$scratch/projects/hub/tsconfig.exemplars.spec.json" <<'JSON'
 {
   "extends": "./tsconfig.spec.json",
-  "compilerOptions": { "paths": { "fleet": ["../fleet/src/exemplar-api.ts"], "fleet/shell": ["../fleet/src/shell-api.ts"], "fleet/testing": ["../fleet/src/lib/testing/public-api.ts"] } }
+  "compilerOptions": {
+    "paths": {
+      "fleet/awaiting-human": ["../fleet/src/entries/awaiting-human.ts"],
+      "fleet/chrome": ["../fleet/src/entries/chrome.ts"],
+      "fleet/chrome/titlebar": ["../fleet/src/entries/chrome/titlebar.ts"],
+      "fleet/chunk-card": ["../fleet/src/entries/chunk-card.ts"],
+      "fleet/chunk-detail": ["../fleet/src/entries/chunk-detail.ts"],
+      "fleet/chunk-detail/actions": ["../fleet/src/entries/chunk-detail/actions.ts"],
+      "fleet/chunk-detail/panes": ["../fleet/src/entries/chunk-detail/panes.ts"],
+      "fleet/chunk-page": ["../fleet/src/entries/chunk-page.ts"],
+      "fleet/chunk-page/view": ["../fleet/src/entries/chunk-page/view.ts"],
+      "fleet/core": ["../fleet/src/entries/core.ts"],
+      "fleet/forms": ["../fleet/src/entries/forms.ts"],
+      "fleet/host": ["../fleet/src/entries/host.ts"],
+      "fleet/hub-api": ["../fleet/src/exemplar-hub-api.ts"],
+      "fleet/kit": ["../fleet/src/entries/kit.ts"],
+      "fleet/kit/accordion": ["../fleet/src/entries/kit/accordion.ts"],
+      "fleet/kit/chips": ["../fleet/src/entries/kit/chips.ts"],
+      "fleet/kit/combobox": ["../fleet/src/entries/kit/combobox.ts"],
+      "fleet/kit/dialog": ["../fleet/src/entries/kit/dialog.ts"],
+      "fleet/kit/grid": ["../fleet/src/entries/kit/grid.ts"],
+      "fleet/kit/menu": ["../fleet/src/entries/kit/menu.ts"],
+      "fleet/kit/select": ["../fleet/src/entries/kit/select.ts"],
+      "fleet/kit/select-list": ["../fleet/src/entries/kit/select-list.ts"],
+      "fleet/kit/tabs": ["../fleet/src/entries/kit/tabs.ts"],
+      "fleet/kit/tooltip": ["../fleet/src/entries/kit/tooltip.ts"],
+      "fleet/runner-api": ["../fleet/src/entries/runner-api.ts"],
+      "fleet/sse": ["../fleet/src/entries/sse.ts"],
+      "fleet/transcripts": ["../fleet/src/entries/transcripts.ts"],
+      "fleet/transcripts/tab": ["../fleet/src/entries/transcripts/tab.ts"],
+      "fleet/viewport": ["../fleet/src/entries/viewport.ts"],
+      "fleet/viewport/menu": ["../fleet/src/entries/viewport/menu.ts"],
+      "fleet/shell": ["../fleet/src/shell-api.ts"],
+      "fleet/runner-shell": ["../fleet/src/runner-shell-api.ts"],
+      "fleet/testing": ["../fleet/src/lib/testing/public-api.ts"]
+    }
+  }
 }
 JSON
     specs=()
@@ -45,7 +81,36 @@ JSON
     "noEmit": true,
     "types": ["vitest/globals"],
     "paths": {
-      "fleet": ["./projects/fleet/src/exemplar-api.ts"],
+      "fleet/awaiting-human": ["./projects/fleet/src/entries/awaiting-human.ts"],
+      "fleet/chrome": ["./projects/fleet/src/entries/chrome.ts"],
+      "fleet/chrome/titlebar": ["./projects/fleet/src/entries/chrome/titlebar.ts"],
+      "fleet/chunk-card": ["./projects/fleet/src/entries/chunk-card.ts"],
+      "fleet/chunk-detail": ["./projects/fleet/src/entries/chunk-detail.ts"],
+      "fleet/chunk-detail/actions": ["./projects/fleet/src/entries/chunk-detail/actions.ts"],
+      "fleet/chunk-detail/panes": ["./projects/fleet/src/entries/chunk-detail/panes.ts"],
+      "fleet/chunk-page": ["./projects/fleet/src/entries/chunk-page.ts"],
+      "fleet/chunk-page/view": ["./projects/fleet/src/entries/chunk-page/view.ts"],
+      "fleet/core": ["./projects/fleet/src/entries/core.ts"],
+      "fleet/forms": ["./projects/fleet/src/entries/forms.ts"],
+      "fleet/host": ["./projects/fleet/src/entries/host.ts"],
+      "fleet/hub-api": ["./projects/fleet/src/exemplar-hub-api.ts"],
+      "fleet/kit": ["./projects/fleet/src/entries/kit.ts"],
+      "fleet/kit/accordion": ["./projects/fleet/src/entries/kit/accordion.ts"],
+      "fleet/kit/chips": ["./projects/fleet/src/entries/kit/chips.ts"],
+      "fleet/kit/combobox": ["./projects/fleet/src/entries/kit/combobox.ts"],
+      "fleet/kit/dialog": ["./projects/fleet/src/entries/kit/dialog.ts"],
+      "fleet/kit/grid": ["./projects/fleet/src/entries/kit/grid.ts"],
+      "fleet/kit/menu": ["./projects/fleet/src/entries/kit/menu.ts"],
+      "fleet/kit/select": ["./projects/fleet/src/entries/kit/select.ts"],
+      "fleet/kit/select-list": ["./projects/fleet/src/entries/kit/select-list.ts"],
+      "fleet/kit/tabs": ["./projects/fleet/src/entries/kit/tabs.ts"],
+      "fleet/kit/tooltip": ["./projects/fleet/src/entries/kit/tooltip.ts"],
+      "fleet/runner-api": ["./projects/fleet/src/entries/runner-api.ts"],
+      "fleet/sse": ["./projects/fleet/src/entries/sse.ts"],
+      "fleet/transcripts": ["./projects/fleet/src/entries/transcripts.ts"],
+      "fleet/transcripts/tab": ["./projects/fleet/src/entries/transcripts/tab.ts"],
+      "fleet/viewport": ["./projects/fleet/src/entries/viewport.ts"],
+      "fleet/viewport/menu": ["./projects/fleet/src/entries/viewport/menu.ts"],
       "fleet/shell": ["./projects/fleet/src/shell-api.ts"],
       "fleet/runner-shell": ["./projects/fleet/src/runner-shell-api.ts"],
       "fleet/testing": ["./projects/fleet/src/lib/testing/public-api.ts"],

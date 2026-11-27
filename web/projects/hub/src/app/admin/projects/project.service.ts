@@ -1,4 +1,4 @@
-import type { EditBaseline, SaveOutcome } from 'fleet';
+import type { EditBaseline, SaveOutcome } from 'fleet/forms';
 import type { Project } from '../../core/project.domain';
 import { projectDraftErrors, type ProjectDraft } from './project.domain';
 import { projectRefusal, savedProject, toProjectColorPatch, toProjectCreate, toProjectPatch } from './project.translate';

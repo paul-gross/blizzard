@@ -1,4 +1,4 @@
-import { compactRef } from 'fleet';
+import { compactRef } from 'fleet/core';
 
 import { hostEnvironment, workspaceEnvironments } from './host-environment.builders';
 import type { HostEnvironment } from './host-environment.domain';

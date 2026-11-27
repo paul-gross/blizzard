@@ -1,4 +1,4 @@
-import type { LaneCounts } from 'fleet';
+import type { LaneCounts } from 'fleet/core';
 import { domainUsageTotal } from 'fleet/testing';
 import type { BoardChunk } from '../core/chunks.model';
 

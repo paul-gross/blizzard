@@ -1,6 +1,6 @@
 import { createEnvironmentInjector, DestroyRef, EnvironmentInjector, inject, runInInjectionContext, signal } from '@angular/core';
 import { apply, form } from '@angular/forms/signals';
-import { createRefusalState } from 'fleet';
+import { createRefusalState } from 'fleet/forms';
 import { projectLinkDraft, type ProjectLinkChoice, type ProjectLinkDraft } from './project-link.domain';
 import { projectLinkSchema } from './project-link.form';
 

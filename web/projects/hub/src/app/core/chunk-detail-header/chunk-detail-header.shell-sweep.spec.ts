@@ -4,7 +4,8 @@ import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 import { vi } from 'vitest';
 
-import { type ChunkDetailAggregate as ChunkDetail, runnerDisplayName } from 'fleet';
+import { type ChunkDetailAggregate as ChunkDetail } from 'fleet/chunk-page';
+import { runnerDisplayName } from 'fleet/core';
 import { chunkControlStub, domainChunkDetail as chunkDetail } from 'fleet/testing';
 import { ChunkDetailHeader } from './chunk-detail-header';
 

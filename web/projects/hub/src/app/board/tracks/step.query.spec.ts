@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { type hubApi } from 'fleet';
+import { type hubApi } from 'fleet/hub-api';
 import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 import { type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 import { type StepRef } from './step.model';

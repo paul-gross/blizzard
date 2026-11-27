@@ -1,14 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import {
-  asyncState,
-  asyncStateOf,
-  injectNowSignal,
-  KitAsyncState,
-  KitPanel,
-  runnerSubscriptionPaces,
-  SubscriptionPaceGroup,
-  type SubscriptionPace,
-} from 'fleet';
+import { asyncState, asyncStateOf, injectNowSignal } from 'fleet/core';
+import { runnerSubscriptionPaces, SubscriptionPaceGroup, type SubscriptionPace } from 'fleet/host';
+import { KitAsyncState, KitPanel } from 'fleet/kit';
 
 import { machineChunkRows } from '../core/chunk-rows.model';
 import { hostPoolsFor, runnerFocus, runnerNameResolver } from '../core/host-pools.model';

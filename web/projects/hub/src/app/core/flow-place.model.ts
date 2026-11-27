@@ -1,8 +1,6 @@
-import {
-  type ChunkDetailAggregate,
-  openLookup,
-  type Tone,
-} from 'fleet';
+import { type ChunkDetailAggregate } from 'fleet/chunk-page';
+import { openLookup } from 'fleet/core';
+import { type Tone } from 'fleet/kit';
 
 /** How a place's state reads, and the tone it is drawn in. A state this build does not know reads raw, in the idle
  * tone. */

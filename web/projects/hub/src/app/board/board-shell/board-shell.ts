@@ -1,11 +1,22 @@
-import { domainLaneCounts } from 'fleet';
+import { workLines } from 'fleet/chunk-card';
+import type { ChunkControl } from 'fleet/chunk-detail';
+import {
+  domainLaneCounts,
+  type Urgency,
+  type LaneCounts,
+  compactRef,
+  DONE_LANE,
+  LANES,
+  UNKNOWN_LANE,
+  domainChunkLane,
+  domainUnknownLane,
+} from 'fleet/core';
+import { KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader } from 'fleet/kit';
+import { KitTabContent, KitTabGroup, KitTabPanel, KitTabs, type KitTabOption } from 'fleet/kit/tabs';
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type Urgency, type LaneCounts, workLines, compactRef, DONE_LANE, LANES, UNKNOWN_LANE, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabContent, KitTabGroup, KitTabPanel, KitTabs, type KitTabOption } from 'fleet';
 import type { BoardWorkItems } from '../../core/work-items/board-work-items.domain';
-import { domainChunkLane, domainUnknownLane } from 'fleet';
 import type { BoardChunk } from '../../core/chunks.model';
-import type { ChunkControl } from 'fleet';
 import type { BoardCard } from '../board-card/board-card-view.model';
 import { placeLines } from '../../core/flow-place.model';
 import { boardDonePolicy, type BoardDonePolicy } from '../../core/board-done-policy.model';

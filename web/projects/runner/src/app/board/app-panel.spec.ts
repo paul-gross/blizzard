@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ViewportService } from 'fleet';
+import { ViewportService } from 'fleet/viewport';
 import {
   hostRunnerView,
   type RequestClientStub,

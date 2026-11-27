@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 import { apply, form } from '@angular/forms/signals';
-import { createRefusalState, submitForm } from 'fleet';
+import { createRefusalState, submitForm } from 'fleet/forms';
 
 import { emptyPassDraft, type ProposalPassDraft } from './proposal-pass.domain';
 import { proposalPassRules } from './proposal-pass.form';

@@ -1,4 +1,5 @@
-import { type ChunkDetailAggregate, type WorkItemsQuery } from 'fleet';
+import { type WorkItemsQuery } from 'fleet/chunk-detail';
+import { type ChunkDetailAggregate } from 'fleet/chunk-page';
 import { describe, expect, it } from 'vitest';
 
 import { openDetail, openWorkItems, pendingStatusOverride } from './chunk-detail.model';

@@ -1,4 +1,5 @@
-import { type hubApi, openLookup } from 'fleet';
+import { openLookup } from 'fleet/core';
+import { type hubApi } from 'fleet/hub-api';
 
 import type { SignInRefusal } from './sign-in-refusal.domain';
 

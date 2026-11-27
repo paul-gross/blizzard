@@ -1,4 +1,5 @@
-import { type KitFact, compactRef, formatAbsolute } from 'fleet';
+import { compactRef, formatAbsolute } from 'fleet/core';
+import { type KitFact } from 'fleet/kit';
 import { vocabularyWord } from '../core/runners.domain';
 
 import { busyAgents, declaredAgents, type HeldChunk, type HostCard, type HostGroups } from './host-rows.model';

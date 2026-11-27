@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail } from './chunk-detail.model';
 import { domainChunkDetail as chunkDetail, domainDecision as decisionView, domainQuestion as questionView, domainTransition as transitionView, workItem } from '../../testing/builders/chunk';
-import type { WorkItemsState } from '../chunk-detail';
+import type { WorkItemsState } from '../chunk-detail/work-items-state';
 import { recordingAwaitingHumanActions } from '../../testing/builders/awaiting-human';
 import { ChunkGeneralTab } from './chunk-general-tab';
 

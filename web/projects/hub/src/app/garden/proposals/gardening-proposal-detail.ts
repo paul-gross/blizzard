@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { injectPendingMutationVariables, compactRef, errorMessage, restingAsyncState, type KitAsyncStateValue, KitErrorLine } from 'fleet';
+import { injectPendingMutationVariables, compactRef, errorMessage, restingAsyncState } from 'fleet/core';
+import { type KitAsyncStateValue, KitErrorLine } from 'fleet/kit';
 import type { Finding } from '../core/finding.domain';
 import type { Proposal } from '../core/proposal.domain';
 import { FleetProposalPanel, type ProposalEvidenceRowVm, type ProposalEvidenceTriage, type ProposalEvidenceVerb, type ProposalPanelVm, type ProposalWorkItemVm } from './proposal-panel';

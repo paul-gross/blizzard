@@ -1,8 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
 import { shortCommitHash } from '../../core/commit-hash';
-import { FleetWhen } from '../../core/when-display';
-import { KitBadge, KitCardOpen, KitSkeleton, projectTint, toneColor } from '../../kit';
+import { FleetWhen } from '../../core/when-display/fleet-when';
+import { KitBadge, toneColor } from '../../kit/kit-badge';
+import { KitCardOpen } from '../../kit/kit-card-open';
+import { KitSkeleton } from '../../kit/kit-skeleton';
+import { projectTint } from '../../kit/kit-swatch-color';
 import { type ChunkCardView, foldTitles } from './chunk-card.model';
 
 /**

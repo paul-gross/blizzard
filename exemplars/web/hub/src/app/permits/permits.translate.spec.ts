@@ -1,6 +1,6 @@
 // exemplar: bzh:frontend-domain-boundary, bzh:frontend-open-vocabulary.
 
-import { type PermitState, type PermitVerb } from 'fleet';
+import { type PermitState, type PermitVerb } from 'fleet/hub-api';
 import { permitWire } from './permits.fixtures.translate';
 import { fromPermitView } from './permits.translate';
 

@@ -1,4 +1,4 @@
-import type { ChunkDetailAggregate } from 'fleet';
+import type { ChunkDetailAggregate } from 'fleet/chunk-page';
 
 export type StepExecutor =
   | { readonly kind: 'runner' | 'hub' }

@@ -1,4 +1,4 @@
-import { type SseStatus } from 'fleet';
+import { type SseStatus } from 'fleet/sse';
 import { errorMessage } from 'fleet/shell';
 
 import type { Membership, Session, TenantResolution } from '../core/auth/session.domain';

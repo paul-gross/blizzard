@@ -4,7 +4,7 @@ import * as hubApi from '../../api/hub';
 import type { ChunkDetail as WireChunkDetail, WorkItemsView } from '../../api/hub';
 import { client as hubClient } from '../../api/hub/client.gen';
 import * as runnerApi from '../../api/runner';
-import { LIVE_COVERED_POLL_BACKSTOP_MS, RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from '../../core/polling';
+import { LIVE_COVERED_POLL_BACKSTOP_MS, RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from '../../core/polling/polling';
 import { type DaemonTarget, targetKeyRoot } from '../../core/daemon-target/daemon-target';
 import { chunkDetailKey, chunkWorkItemsKey, type TranscriptPlane } from '../../core/query-keys';
 import { laneStatus } from '../../core/chunk-lanes.translate';

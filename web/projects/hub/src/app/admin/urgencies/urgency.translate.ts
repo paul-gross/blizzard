@@ -1,4 +1,6 @@
-import { ProjectColor, type EditBaseline, type RefusalMap, type Urgency, type UrgencyCreateRequest, type UrgencyPatchRequest, type SettingsView } from 'fleet';
+import { type Urgency } from 'fleet/core';
+import { type EditBaseline, type RefusalMap } from 'fleet/forms';
+import { ProjectColor, type UrgencyCreateRequest, type UrgencyPatchRequest, type SettingsView } from 'fleet/hub-api';
 import { markIsImage as isImage } from '../config-edit.model';
 import type { UrgencyDraft, UrgencySettings } from './urgency.domain';
 

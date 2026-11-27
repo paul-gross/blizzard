@@ -2,8 +2,13 @@ import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core
 import { RouterLink } from '@angular/router';
 
 import type { WorkItemAuthor as WorkItemAuthorView, WorkItem as WorkItemEntry } from '../chunk-detail/work-item.model';
-import { KitAccordionGroup, KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown, KitSectionHead } from '../../kit';
-import type { Tone } from '../../kit';
+import { KitAccordionGroup } from '../../kit/kit-accordion-group';
+import { KitAccordionSection } from '../../kit/kit-accordion-section';
+import { KitAsyncState } from '../../kit/kit-async-state';
+import { KitBadge } from '../../kit/kit-badge';
+import { KitMarkdown } from '../../kit/kit-markdown';
+import { KitSectionHead } from '../../kit/kit-section-head';
+import type { Tone } from '../../kit/tone';
 import { injectRunnerHostNames, runnerDisplayName } from '../../core/runner-display-name';
 import { AppLink } from '../../core/app-scope';
 import { openLookup } from '../../core/open-lookup';

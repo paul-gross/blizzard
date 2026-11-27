@@ -6,7 +6,7 @@ import { provideRouter } from '@angular/router';
 const fact = gardenFindingFact;
 
 import { FleetFindingPanel, type FindingPanelTriageVerb, type FindingPanelVm } from './finding-panel';
-import type { KitAsyncStateValue } from 'fleet';
+import type { KitAsyncStateValue } from 'fleet/kit';
 
 const LIVE_VM: FindingPanelVm = {
   findingId: 'fin_01M1KANH0RZEABSD44RCEH6G9B',

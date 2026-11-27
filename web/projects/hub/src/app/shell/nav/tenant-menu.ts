@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitMenuItemRadio, KitMenuPanel } from 'fleet';
+import { KitMenuItemRadio, KitMenuPanel } from 'fleet/kit/menu';
 
 import type { Membership } from '../../core/auth/session.domain';
 

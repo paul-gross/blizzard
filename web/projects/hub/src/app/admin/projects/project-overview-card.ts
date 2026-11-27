@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitAsyncState, type KitAsyncStateValue, KitButton, KitPanel, KitPanelHeader } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitButton, KitPanel, KitPanelHeader } from 'fleet/kit';
 
 import type { OverviewLineVm } from './project-overview.model';
 

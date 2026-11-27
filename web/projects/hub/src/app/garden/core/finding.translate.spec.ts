@@ -1,4 +1,4 @@
-import { type FindingFactView, type FindingView } from 'fleet';
+import { type FindingFactView, type FindingView } from 'fleet/hub-api';
 import { gardenFindingDetailView, gardenFindingFactView, gardenFindingView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 

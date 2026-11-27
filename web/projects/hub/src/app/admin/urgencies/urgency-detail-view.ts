@@ -1,5 +1,8 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitButton, KitDialog, KitErrorLine, KitSelect, type KitAsyncStateValue, type Urgency } from 'fleet';
+import { type Urgency } from 'fleet/core';
+import { KitButton, KitErrorLine, type KitAsyncStateValue } from 'fleet/kit';
+import { KitDialog } from 'fleet/kit/dialog';
+import { KitSelect } from 'fleet/kit/select';
 import type { ConfigActionsVm } from '../config-actions.model';
 import type { FieldTree } from '@angular/forms/signals';
 import type { UrgencyDraft } from './urgency.domain';

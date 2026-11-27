@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitMenu, KitMenuItemRadio, KitMenuPanel } from 'fleet';
+import { KitMenu, KitMenuItemRadio, KitMenuPanel } from 'fleet/kit/menu';
 
 import { type GardenProjectChoice, waitingLabel } from './gardening-page.model';
 

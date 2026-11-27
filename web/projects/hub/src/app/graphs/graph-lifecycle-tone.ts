@@ -1,4 +1,5 @@
-import { openLookup, type Tone } from 'fleet';
+import { openLookup } from 'fleet/core';
+import { type Tone } from 'fleet/kit';
 
 import { lifecycleTone } from '../core/lifecycle-tone';
 import type { GraphLifecycle, UnknownGraphValue } from './graph.domain';

@@ -1,7 +1,7 @@
 import { type Meta, moduleMetadata, type StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
-import type { Tone } from '../../kit';
+import type { Tone } from '../../kit/tone';
 import { ChunkCard, ChunkCardProgress } from './chunk-card';
 import type { ChunkCardView } from './chunk-card.model';
 

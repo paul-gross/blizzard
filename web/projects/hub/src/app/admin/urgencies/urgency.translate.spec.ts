@@ -1,4 +1,4 @@
-import { readRefusal, type Urgency } from 'fleet';
+import { type Urgency, readRefusal } from 'fleet/core';
 import { describe, expect, it } from 'vitest';
 
 import type { UrgencyDraft } from './urgency.domain';

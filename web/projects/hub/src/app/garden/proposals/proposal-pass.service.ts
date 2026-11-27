@@ -1,4 +1,5 @@
-import { readRefusal, type SaveOutcome } from 'fleet';
+import { readRefusal } from 'fleet/core';
+import { type SaveOutcome } from 'fleet/forms';
 
 import { injectPassGardenProposalMutation } from './garden-proposal.mutations';
 import type { ProposalPassDraft } from './proposal-pass.domain';

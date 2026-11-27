@@ -5,7 +5,7 @@ import {
   type RunDeltaView,
   type FindingDetailView,
   type GardenProposalView,
-} from 'fleet';
+} from 'fleet/hub-api';
 
 /** The project fields a garden record's own read carries. */
 export type GardenRecordProject = Pick<RunDeltaView | FindingDetailView | GardenProposalView, 'project_slug' | 'project_id'>;

@@ -1,4 +1,4 @@
-import { formatAbsolute } from 'fleet';
+import { formatAbsolute } from 'fleet/core';
 import { lifecycleTone } from '../../core/lifecycle-tone';
 import type { ConfigFieldView } from '../config-field-tree.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';

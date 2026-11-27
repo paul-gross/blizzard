@@ -1,8 +1,6 @@
 /*
- * `fleet`'s test-helper entrypoint — a **second**, tsconfig
- * path-mapped barrel (`fleet/testing`, `web/tsconfig.json`), deliberately
- * separate from `fleet`'s production `public-api.ts` so a test helper never
- * reaches a production bundle.
+ * `fleet`'s test-helper entrypoint (`fleet/testing`, `web/tsconfig.json`), deliberately
+ * separate from the weight-class entries so a test helper never reaches a production bundle.
  */
 
 export { settle } from './settle';

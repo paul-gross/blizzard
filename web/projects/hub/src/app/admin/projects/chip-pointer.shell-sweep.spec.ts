@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { KitChips } from 'fleet';
+import { KitChips } from 'fleet/kit/chips';
 import { userEvent } from 'vitest/browser';
 import { ProjectColorPicker } from './project-color-picker';
 

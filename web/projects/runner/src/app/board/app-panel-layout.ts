@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { type KitAsyncStateValue } from 'fleet';
+import { type KitAsyncStateValue } from 'fleet/kit';
 
 import type { Escalation } from '../core/escalation.domain';
 import { MachineDetail } from './chunk-dock/chunk-detail';

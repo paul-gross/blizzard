@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitPanel } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitPanel } from 'fleet/kit';
 
 import type { HostRecordKind } from './host-records.domain';
 import type { HostRecordVm } from './host-records.model';

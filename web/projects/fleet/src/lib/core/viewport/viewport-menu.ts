@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 
-import { KitMenuItemRadio, KitMenuPanel } from '../../kit';
+import { KitMenuPanel } from '../../kit/kit-menu';
+import { KitMenuItemRadio } from '../../kit/kit-menu-item';
 import { ViewportService, type ViewportOverride } from './viewport-service';
 
 interface AppearanceOption {

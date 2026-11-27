@@ -2,7 +2,7 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ViewportService } from 'fleet';
+import { ViewportService } from 'fleet/viewport';
 import {
   OPERATOR_ME_RESPONSE,
   gardenGraphSummaryView,

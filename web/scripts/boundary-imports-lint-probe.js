@@ -27,7 +27,7 @@ const ARIA = [
   "import type { Menu } from '@angular/aria/menu';\nexport type AriaMenu = Menu;\n",
 ];
 const PURE_DOMAIN = "export type Pace = 'fast' | 'slow';\nexport function isFast(pace: Pace): boolean {\n  return pace === 'fast';\n}\n";
-const PURE_TRANSLATE = "import type { ChunkSummary } from 'fleet';\nexport function ids(chunks: readonly ChunkSummary[]): string[] {\n  return chunks.map((chunk) => chunk.chunk_id);\n}\n";
+const PURE_TRANSLATE = "import type { ChunkSummary } from 'fleet/hub-api';\nexport function ids(chunks: readonly ChunkSummary[]): string[] {\n  return chunks.map((chunk) => chunk.chunk_id);\n}\n";
 const KIT = 'projects/fleet/src/lib/kit/kit-menu.ts';
 const PROJECTS = [
   { config: 'projects/hub/eslint.config.js', dir: 'projects/hub/src/app/board' },

@@ -1,6 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
-import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu, KitErrorLine } from 'fleet';
+import { MobileTitlebar as FleetMobileTitlebar } from 'fleet/chrome/titlebar';
+import { KitErrorLine } from 'fleet/kit';
+import { KitMenuItem, KitMenuPanel } from 'fleet/kit/menu';
+import { ViewportMenu } from 'fleet/viewport/menu';
 import { injectPanelDashboards } from '../../core/panel-reads';
 import { anyHubReachable } from '../../core/panel-reads.model';
 import { injectRunnerSessionQuery } from '../../core/identity/auth.query';

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, model, output, signal } from '@angular/core';
 import type { FormValueControl } from '@angular/forms/signals';
-import { KitButton, KitErrorLine, KitTextInput } from 'fleet';
+import { KitButton, KitErrorLine, KitTextInput } from 'fleet/kit';
 
 import { markIsImage, type MarkImageSource } from './config-edit.model';
 

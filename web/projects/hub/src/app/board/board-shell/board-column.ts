@@ -1,11 +1,13 @@
 import { urgencyPill } from '../../core/urgencies.model';
-import type { Urgency } from 'fleet';
+import { ChunkCard, ChunkCardProgress } from 'fleet/chunk-card';
+import { ChunkUrgency, type ChunkControl } from 'fleet/chunk-detail';
+import { type Urgency, type Lane, laneTone } from 'fleet/core';
+import { KitBeacon, type Tone, toneColor } from 'fleet/kit';
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { CdkDrag, type CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 
 import { type BoardCard, boardCardView } from '../board-card/board-card-view.model';
 import { BoardCardSkeleton } from '../board-card/board-card-skeleton';
-import { ChunkCard, ChunkCardProgress, ChunkUrgency, type ChunkControl, type Lane, KitBeacon, type Tone, laneTone, toneColor } from 'fleet';
 import { NodeStrip } from '../node-strip/node-strip';
 import { showsNodeStrip } from '../node-strip/node-strip.model';
 import { ReorderGrip } from '../reorder-grip/reorder-grip';

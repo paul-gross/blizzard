@@ -3,7 +3,10 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ChunkPage, ChunkGeneralTab, ChunkTranscriptsTab, type ChunkDetailAggregate, ViewportService } from 'fleet';
+import { type ChunkDetailAggregate } from 'fleet/chunk-page';
+import { ChunkPage, ChunkGeneralTab } from 'fleet/chunk-page/view';
+import { ChunkTranscriptsTab } from 'fleet/transcripts/tab';
+import { ViewportService } from 'fleet/viewport';
 import {
   assetArtifactView,
   chunkDetail,

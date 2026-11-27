@@ -10,7 +10,7 @@ import {
   type ProjectView,
   type RepositoryLinkView,
   type SourceLinkView,
-} from 'fleet';
+} from 'fleet/hub-api';
 
 import type { Project } from '../../core/project.domain';
 import { fromProjectView } from '../../core/project.translate';

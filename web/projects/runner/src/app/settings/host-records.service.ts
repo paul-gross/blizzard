@@ -1,4 +1,4 @@
-import type { EditBaseline, SaveOutcome } from 'fleet';
+import type { EditBaseline, SaveOutcome } from 'fleet/forms';
 
 import type { HostRecordKind, RecordDraft } from './host-records.domain';
 import {

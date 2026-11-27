@@ -1,4 +1,4 @@
-import type { UnknownHostValue } from 'fleet';
+import type { UnknownHostValue } from 'fleet/core';
 import type { runnerApi } from 'fleet/runner-shell';
 import { openLookup } from 'fleet/shell';
 

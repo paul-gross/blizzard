@@ -2,7 +2,8 @@
 
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 
-import { type KitAsyncStateValue, restingAsyncState } from 'fleet';
+import { restingAsyncState } from 'fleet/core';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import { injectRouteParam } from '../core/route-state';
 import { PermitDetailView } from './permit-detail-view';
 import { injectPermitQuery } from './permits.query';

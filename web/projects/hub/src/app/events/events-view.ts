@@ -4,7 +4,10 @@ import { AppLink } from 'fleet/shell';
 
 import { fleetIdOf, type HostMembership } from '../core/runners.domain';
 
-import { compactRef, runnerDisplayName, runnerTitle, FleetWhen, KitAsyncState, type KitAsyncStateValue, type KitChipOption, KitSelect, KitSkeleton, openLookup } from 'fleet';
+import { compactRef, runnerDisplayName, runnerTitle, FleetWhen, openLookup } from 'fleet/core';
+import { KitAsyncState, type KitAsyncStateValue, KitSkeleton } from 'fleet/kit';
+import { type KitChipOption } from 'fleet/kit/chips';
+import { KitSelect } from 'fleet/kit/select';
 import { eventFingerprints } from './event-detail.model';
 import { EVENT_SEVERITIES, eventSeverityText, type EventLogEntry, type EventSeverity } from './event-log.domain';
 

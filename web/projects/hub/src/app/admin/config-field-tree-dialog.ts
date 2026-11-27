@@ -1,6 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
-import { KitCheckbox, KitDialog, KitField, KitForm, KitNumberInput, KitOrDefault, KitSectionHead, KitSelect, KitTextInput } from 'fleet';
+import { KitCheckbox, KitField, KitForm, KitNumberInput, KitSectionHead, KitTextInput } from 'fleet/kit';
+import { KitOrDefault } from 'fleet/kit/chips';
+import { KitDialog } from 'fleet/kit/dialog';
+import { KitSelect } from 'fleet/kit/select';
 import type { ConfigFieldChange } from './config-history.domain';
 
 import { ConfigFieldDiff } from './config-field-diff';

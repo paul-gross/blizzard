@@ -1,4 +1,5 @@
-import { type BeaconBlink, type BeaconTone, type HostConnection, type Tone } from 'fleet';
+import { type HostConnection } from 'fleet/core';
+import { type BeaconBlink, type BeaconTone, type Tone } from 'fleet/kit';
 
 import { decliningLabels, localPauseHint, type RunnerRow } from './runner-rows.model';
 

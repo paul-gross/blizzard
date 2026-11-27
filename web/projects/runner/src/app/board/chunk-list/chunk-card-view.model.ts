@@ -1,4 +1,6 @@
-import { type ChunkCardView, compactRef, type WorkItem } from 'fleet';
+import { type ChunkCardView } from 'fleet/chunk-card';
+import { type WorkItem } from 'fleet/chunk-detail';
+import { compactRef } from 'fleet/core';
 
 import type { MachineChunkRow } from '../../core/chunk-rows.model';
 import { showsChunkStatus } from '../app-panel.model';

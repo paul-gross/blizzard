@@ -1,15 +1,5 @@
-import {
-  type HostFact,
-  type SubscriptionPace,
-  type WorkspaceRow,
-  ageMs,
-  compactRef,
-  formatAbsolute,
-  formatSeenTag,
-  formatSeenAgo,
-  hostSubscriptionPaces,
-  hostWorkspaceRows,
-} from 'fleet';
+import { type HostFact, ageMs, compactRef, formatAbsolute, formatSeenTag, formatSeenAgo } from 'fleet/core';
+import { type SubscriptionPace, type WorkspaceRow, hostSubscriptionPaces, hostWorkspaceRows } from 'fleet/host';
 import { type HubRunner, servedProjects } from '../core/runners.domain';
 import type { RunnerClaimChunk } from './runner-claims.domain';
 

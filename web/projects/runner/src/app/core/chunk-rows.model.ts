@@ -1,4 +1,4 @@
-import type { Tone } from 'fleet';
+import type { Tone } from 'fleet/kit';
 
 import { type MachineChunkStatus, deriveMachineChunkStatus } from './chunk-status';
 import type { Lease } from './lease.domain';

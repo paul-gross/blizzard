@@ -6,7 +6,7 @@ import {
   type QueuePeekResponse,
   repositionBacklogApiBacklogPositionPost,
   repositionQueueApiQueuePositionPost,
-} from 'fleet';
+} from 'fleet/hub-api';
 import { laneMoveScopeId, repositionBacklogMutationKey, repositionQueueMutationKey } from '../../core/mutation-keys';
 import { hubBacklogKey, hubChunksKey, hubQueueKey } from '../../core/query-keys';
 

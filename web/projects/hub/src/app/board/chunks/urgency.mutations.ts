@@ -1,6 +1,6 @@
 import { inject } from '@angular/core';
 import { injectMutation, QueryClient } from '@tanstack/angular-query-experimental';
-import { patchChunkApiChunksChunkIdPatch } from 'fleet';
+import { patchChunkApiChunksChunkIdPatch } from 'fleet/hub-api';
 import { chunkUrgencyMutationKey } from '../../core/mutation-keys';
 import { hubBacklogKey, hubChunkKey, hubChunksKey, hubQueueKey } from '../../core/query-keys';
 

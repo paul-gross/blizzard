@@ -1,4 +1,4 @@
-import { readRefusal } from 'fleet';
+import { readRefusal } from 'fleet/core';
 import { forgeDetail } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 

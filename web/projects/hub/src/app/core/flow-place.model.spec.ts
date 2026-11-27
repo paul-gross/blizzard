@@ -1,4 +1,4 @@
-import type { ChunkDetailAggregate } from 'fleet';
+import type { ChunkDetailAggregate } from 'fleet/chunk-page';
 type FlowPlace = ChunkDetailAggregate['flow_places'][number];
 type PlaceOverrides = Partial<Omit<FlowPlace, 'state'>> & { state?: string };
 

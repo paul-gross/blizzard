@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { apply, form } from '@angular/forms/signals';
-import { asyncState, createRefusalState, type EditBaseline, submitForm } from 'fleet';
+import { asyncState } from 'fleet/core';
+import { createRefusalState, type EditBaseline, submitForm } from 'fleet/forms';
 
 import type { SettingDraft } from './settings.domain';
 import { settingEditRules } from './settings.form';

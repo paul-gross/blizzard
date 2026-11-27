@@ -2,7 +2,7 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 
-import { meApiMeGet } from 'fleet';
+import { meApiMeGet } from 'fleet/hub-api';
 import {
   type RequestClientStub,
   stubError,

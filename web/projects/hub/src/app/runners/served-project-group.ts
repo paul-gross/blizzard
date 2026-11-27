@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { KitBadge } from 'fleet';
+import { KitBadge } from 'fleet/kit';
 import type { BindingLine } from './host-rows.model';
 import { RunnerSubscription } from './runner-subscription';
 

@@ -3,12 +3,9 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 
-import {
-  type KitAsyncStateValue,
-  injectHubChunkDetailQuery,
-  injectHubChunkWorkItemsQuery,
-  restingAsyncState,
-} from 'fleet';
+import { injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery } from 'fleet/chunk-page';
+import { restingAsyncState } from 'fleet/core';
+import { type KitAsyncStateValue } from 'fleet/kit';
 
 import { injectShowProjectColors } from '../../core/project-lens-colors';
 import { injectProjectDomainsQuery } from '../../core/projects.query';

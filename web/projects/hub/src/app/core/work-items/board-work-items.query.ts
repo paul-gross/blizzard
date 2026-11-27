@@ -8,7 +8,10 @@ import { injectQueries } from '@tanstack/angular-query-experimental/inject-queri
 
 import type { BoardWorkItems } from './board-work-items.domain';
 import { fromBoardWorkItems } from './board-work-items.translate';
-import { FLEET_CLOCK, fromWorkItemsView, type WorkItem, getBulkWorkItemsApiWorkItemsGet, type ChunkWorkItemsView, type WorkItemsView } from 'fleet';
+import { type WorkItem } from 'fleet/chunk-detail';
+import { fromWorkItemsView } from 'fleet/chunk-page';
+import { FLEET_CLOCK } from 'fleet/core';
+import { getBulkWorkItemsApiWorkItemsGet, type ChunkWorkItemsView, type WorkItemsView } from 'fleet/hub-api';
 import {
   mergeWorkItemBatches,
   withinHold,

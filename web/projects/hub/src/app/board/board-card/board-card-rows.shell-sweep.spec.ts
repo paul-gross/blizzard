@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { page } from 'vitest/browser';
 
-import { ChunkCard } from 'fleet';
+import { ChunkCard } from 'fleet/chunk-card';
 import { type BoardCard, boardCardView } from './board-card-view.model';
 
 /**

@@ -1,7 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { RouterLink } from '@angular/router';
-import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu, formatCost } from 'fleet';
+import { MobileTitlebar as FleetMobileTitlebar } from 'fleet/chrome/titlebar';
+import { formatCost } from 'fleet/core';
+import { KitMenuItem, KitMenuPanel } from 'fleet/kit/menu';
+import { ViewportMenu } from 'fleet/viewport/menu';
 import { KitSwatch, AppLink } from 'fleet/shell';
 
 import type { FleetSpend } from '../../board/fleet-spend/fleet-spend.domain';

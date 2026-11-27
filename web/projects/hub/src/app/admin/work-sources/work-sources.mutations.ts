@@ -8,7 +8,7 @@ import {
   retireWorkSourceApiWorkSourcesSourceRetirePost,
   type WorkSourceCreateRequest,
   type WorkSourcePatchRequest,
-} from 'fleet';
+} from 'fleet/hub-api';
 import {
   createWorkSourceMutationKey,
   editWorkSourceMutationKey,

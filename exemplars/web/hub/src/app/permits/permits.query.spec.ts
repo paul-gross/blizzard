@@ -4,7 +4,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { type PermitView } from 'fleet';
+import { type PermitView } from 'fleet/hub-api';
 import { type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 import { fromPermitView } from './permits.translate';
 import { injectPermitQuery } from './permits.query';

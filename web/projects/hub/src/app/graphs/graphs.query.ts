@@ -1,6 +1,11 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { getGraphApiGraphsGraphIdGet, listGraphsApiGraphsGet, type GraphSummaryView, type GraphView } from 'fleet';
+import {
+  getGraphApiGraphsGraphIdGet,
+  listGraphsApiGraphsGet,
+  type GraphSummaryView,
+  type GraphView,
+} from 'fleet/hub-api';
 import { hubGraphKey, hubGraphsKey } from '../core/query-keys';
 import type { GraphSummary } from './graph.domain';
 import { fromGraphSummaryView, fromGraphView } from './graph.translate';

@@ -1,4 +1,4 @@
-import type { UnknownHostValue } from 'fleet';
+import type { UnknownHostValue } from 'fleet/core';
 
 export type KnownSelftestStatus = 'running' | 'passed' | 'failed';
 /** A selftest run's status; `UnknownHostValue` carries one this build cannot name. */

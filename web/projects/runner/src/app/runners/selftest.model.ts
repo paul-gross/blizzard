@@ -1,4 +1,4 @@
-import type { Tone } from 'fleet';
+import type { Tone } from 'fleet/kit';
 
 import type { HarnessHealth } from '../core/runner-status.domain';
 import type { KnownSelftestStatus, SelftestRun, SelftestStatus } from './selftest.domain';

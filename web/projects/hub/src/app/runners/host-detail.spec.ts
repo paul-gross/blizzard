@@ -10,7 +10,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import type { WorkspaceRow } from 'fleet';
+import type { WorkspaceRow } from 'fleet/host';
 import { stubHubClient, type RequestClientStub } from 'fleet/testing';
 import { type HostDetailVm, resolveSelection } from './fleet-page.model';
 import { HostDetail } from './host-detail';

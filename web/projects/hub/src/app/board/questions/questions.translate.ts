@@ -1,4 +1,4 @@
-import type { QuestionView } from 'fleet';
+import type { QuestionView } from 'fleet/hub-api';
 import type { BoardQuestionPresentation } from './questions.domain';
 
 export function fromBoardQuestion(question: QuestionView): BoardQuestionPresentation {

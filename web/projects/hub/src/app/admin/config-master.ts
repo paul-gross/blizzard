@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitButton, KitChips, type KitAsyncStateValue, KitMasterDetail } from 'fleet';
+import { KitButton, type KitAsyncStateValue, KitMasterDetail } from 'fleet/kit';
+import { KitChips } from 'fleet/kit/chips';
 
 import { LIFECYCLE_FILTER_OPTIONS } from './config-filter.model';
 import { ConfigRecordList, type ConfigRowVm } from './config-record-list';

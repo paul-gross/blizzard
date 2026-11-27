@@ -1,5 +1,5 @@
 import { type Credential, type CredentialBinding, settingDrafts } from './credential.domain';
-import type { CredentialCheckView } from 'fleet';
+import type { CredentialCheckView } from 'fleet/hub-api';
 import { fromCredentialCheck, toCreateRequest, toDraft, toEditBaseline, toEditRequest } from './credential.translate';
 import { credentialCheckVm } from './credentials.model';
 

@@ -1,15 +1,14 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
+import { errorMessage, formatWhen } from 'fleet/core';
 import {
   type AnswerResult,
   type DecisionResolutionConflict,
   type DecisionResolutionResponse,
   answerQuestionApiQuestionsQuestionIdAnswersPost,
   resolveDecisionApiDecisionsDecisionIdResolutionsPost,
-  errorMessage,
-  formatWhen,
-} from 'fleet';
+} from 'fleet/hub-api';
 import { answerQuestionMutationKey, resolveDecisionMutationKey } from '../../core/mutation-keys';
 import { hubChunkKey, hubChunksKey, hubDecisionsKey } from '../../core/query-keys';
 

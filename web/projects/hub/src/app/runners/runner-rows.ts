@@ -1,6 +1,7 @@
 import { computed } from '@angular/core';
 
-import { type KitAsyncStateValue, injectNowSignal, asyncStateOf } from 'fleet';
+import { injectNowSignal, asyncStateOf } from 'fleet/core';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import { foldRunnerRows, lensRunners, type RunnerRow } from './runner-rows.model';
 import { foldHostCards, type HostCard } from './host-rows.model';
 import { injectHostFactsQuery } from '../core/hosts.query';

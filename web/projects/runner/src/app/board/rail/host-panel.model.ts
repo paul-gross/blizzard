@@ -1,4 +1,4 @@
-import type { BeaconTone } from 'fleet';
+import type { BeaconTone } from 'fleet/kit';
 
 import type { HostRunner, HostRunnerBinding } from '../../core/host-runner.domain';
 import type { PauseState } from '../../core/pause-state.domain';

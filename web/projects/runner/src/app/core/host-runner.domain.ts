@@ -1,4 +1,4 @@
-import type { UnknownHostValue } from 'fleet';
+import type { UnknownHostValue } from 'fleet/core';
 
 import type { PauseState } from './pause-state.domain';
 import type { Throttle } from './throttle.domain';

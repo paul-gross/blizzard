@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { injectNowSignal } from '../now-signal';
+import { injectNowSignal } from '../now-signal/now-signal';
 import { formatAbsolute, formatRelative, formatWhen } from '../when';
 
 /**

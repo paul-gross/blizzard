@@ -1,5 +1,7 @@
 // bzh:frontend-domain-boundary — what the Delivery page reads of the delivery pipeline; no wire, no Angular.
-import type { ChunkDetailAggregate, LaneStatus, WorkItem } from 'fleet';
+import type { WorkItem } from 'fleet/chunk-detail';
+import type { ChunkDetailAggregate } from 'fleet/chunk-page';
+import type { LaneStatus } from 'fleet/core';
 
 /** One fact on a flow's record — the shared chunk-detail shape, so the list and the drawer read one fact. */
 export type DeliveryFlowFact = ChunkDetailAggregate['flow_record'][number];

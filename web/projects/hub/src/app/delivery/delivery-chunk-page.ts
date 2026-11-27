@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
 
-import { KitBackBar } from 'fleet';
+import { KitBackBar } from 'fleet/kit';
 import { AppLink } from 'fleet/shell';
 import { DeliveryDrawer } from './delivery-drawer';
 import { injectDeliveryFlowsQuery, injectDeliveryRepositoriesQuery } from './delivery.query';

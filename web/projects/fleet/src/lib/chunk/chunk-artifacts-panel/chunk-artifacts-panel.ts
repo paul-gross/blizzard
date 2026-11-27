@@ -1,8 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import type { ChunkArtifact } from '../chunk-detail/artifact.model';
-import { ChunkArtifactBody, sortArtifacts } from '../chunk-detail';
-import { KitAsyncState, KitMasterDetail, KitSelectList, KitSelectRow, type KitAsyncStateValue } from '../../kit';
+import { KitAsyncState, type KitAsyncStateValue } from '../../kit/kit-async-state';
+import { KitMasterDetail } from '../../kit/kit-master-detail';
+import { KitSelectList } from '../../kit/kit-select-list';
+import { KitSelectRow } from '../../kit/kit-select-row';
+import { ChunkArtifactBody } from '../chunk-detail/chunk-artifact-body';
+import { sortArtifacts } from '../chunk-detail/sort-artifacts';
 
 /**
  * A chunk's artifact store as a nav list beside a viewer — daemon-agnostic,

@@ -1,12 +1,12 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
+import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/core';
 import {
   type BacklogPeekEntry,
   type QueuePeekEntry,
   getBacklogApiBacklogGet,
   getQueueApiQueueGet,
-  LIVE_COVERED_POLL_BACKSTOP_MS,
-} from 'fleet';
+} from 'fleet/hub-api';
 import { DRAIN_LIMIT, drainPages } from '../../core/paginated-read';
 import { hubBacklogKey, hubQueueKey, lensedKey } from '../../core/query-keys';
 import { injectProjectFilter } from '../../core/project-filter';

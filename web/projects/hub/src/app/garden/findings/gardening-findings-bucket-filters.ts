@@ -3,7 +3,8 @@ import { confirmGoneFindingsMutationKey, notAFindingFindingsMutationKey, reopenF
 import { injectHubFindingClassesQuery, injectHubFindingsBucketQuery } from '../core/finding.query';
 import { injectHubRoutinesQuery } from '../core/routines.query';
 import { injectHubScopesQuery } from '../core/scopes.query';
-import { injectPendingMutationVariables, type KitChipOption } from 'fleet';
+import { injectPendingMutationVariables } from 'fleet/core';
+import { type KitChipOption } from 'fleet/kit/chips';
 import { FINDING_STATES, type Finding, type FindingState } from '../core/finding.domain';
 import type { Routine } from '../core/routine.domain';
 import type { Scope } from '../core/scope.domain';

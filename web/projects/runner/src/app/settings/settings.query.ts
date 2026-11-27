@@ -1,5 +1,6 @@
 import { injectInfiniteQuery, injectQuery } from '@tanstack/angular-query-experimental';
-import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet';
+import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/core';
+import { runnerApi } from 'fleet/runner-api';
 
 import { hostRecordChangesKey, hostSettingsKey, runnerSettingsChangesKey, runnerSettingsKey } from '../core/query-keys';
 import { type HistoryTarget, revisionPending, type SettingsChangesPage, type SettingsTarget } from './settings.domain';

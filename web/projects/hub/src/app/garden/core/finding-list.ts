@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectList, KitSelectRow, FleetWhen, type Tone, toneColor } from 'fleet';
+import { compactRef, FleetWhen } from 'fleet/core';
+import { KitAsyncState, type KitAsyncStateValue, KitBadge, type Tone, toneColor } from 'fleet/kit';
+import { KitSelectList, KitSelectRow } from 'fleet/kit/select-list';
 import type { FindingExit, FindingSeverity, FindingSource, FindingState } from './finding.domain';
 import { findingSeverityTone, findingStateTone, isFindingExited, isFindingGoneFlagged } from './finding-state';
 import { type Vocabulary, vocabularyText } from './vocabulary.domain';

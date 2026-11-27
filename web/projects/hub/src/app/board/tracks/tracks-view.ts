@@ -13,7 +13,8 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { KitAsyncState, type KitAsyncStateValue, KitButton, KitChips, type KitChipOption } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitButton } from 'fleet/kit';
+import { KitChips, type KitChipOption } from 'fleet/kit/chips';
 import type { DataSet } from 'vis-data';
 import type { DataItem, Timeline, TimelineOptions } from 'vis-timeline/standalone';
 

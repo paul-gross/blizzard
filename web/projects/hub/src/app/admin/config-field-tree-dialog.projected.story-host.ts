@@ -1,6 +1,7 @@
 import { Component, computed, input, signal } from '@angular/core';
 import { form, FormField } from '@angular/forms/signals';
-import { KitField, KitTextInput, submitForm } from 'fleet';
+import { submitForm } from 'fleet/forms';
+import { KitField, KitTextInput } from 'fleet/kit';
 
 import { fieldChanges, type ConfigFieldView } from './config-field-tree.model';
 import { ConfigFieldTreeDialog } from './config-field-tree-dialog';

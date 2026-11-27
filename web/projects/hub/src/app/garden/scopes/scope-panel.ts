@@ -2,20 +2,20 @@ import { ChangeDetectionStrategy, Component, type TemplateRef, computed, input, 
 import { type FieldTree, FormField } from '@angular/forms/signals';
 import { RouterLink } from '@angular/router';
 
+import { FleetWhen } from 'fleet/core';
 import {
-  FleetWhen,
   KitAsyncState,
   type KitAsyncStateValue,
   KitBadge,
   KitButton,
-  KitConfirmDialog,
   type KitFact,
   KitFactList,
   KitErrorLine,
   KitField,
   KitSectionHead,
   KitTextInput,
-} from 'fleet';
+} from 'fleet/kit';
+import { KitConfirmDialog } from 'fleet/kit/dialog';
 import { AppLink } from 'fleet/shell';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';

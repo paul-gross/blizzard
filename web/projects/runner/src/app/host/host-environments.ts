@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { KitAsyncState, type KitAsyncStateValue, KitBeacon, KitPanel, KitSwatch } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitBeacon, KitPanel, KitSwatch } from 'fleet/kit';
 
 import type { HostEnvGroup } from './host-environments.model';
 

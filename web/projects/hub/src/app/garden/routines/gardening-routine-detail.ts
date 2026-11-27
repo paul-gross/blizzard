@@ -2,7 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, u
 import { form } from '@angular/forms/signals';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { FLEET_CLOCK, asyncState, type EditBaseline, errorMessage, injectPendingMutationVariables, isPendingFor, type KitAsyncStateValue, submitForm } from 'fleet';
+import { FLEET_CLOCK, asyncState, errorMessage, injectPendingMutationVariables, isPendingFor } from 'fleet/core';
+import { type EditBaseline, submitForm } from 'fleet/forms';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import { defaultRoutineWindow } from '../core/routine-window';
 import { FleetRoutinePanel, type RoutineEditField, type LastSweptRowVm, type MeasurementReadingVm, type RelatedScopeVm, type RoutinePanelVm, type StrategyStepVm } from './routine-panel';
 import {

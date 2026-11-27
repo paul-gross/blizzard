@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { form } from '@angular/forms/signals';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
 import { gardenScope } from '../core/scope.builders';
 import { EMPTY_RUN_DRAFT, type RunDraft } from '../core/run.domain';
 import { runRules } from './run.form';

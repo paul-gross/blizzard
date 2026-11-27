@@ -1,4 +1,4 @@
-import { asyncState, type AsyncStateQuery, formatAbsolute } from 'fleet';
+import { asyncState, type AsyncStateQuery, formatAbsolute } from 'fleet/core';
 
 import { type Cadence, type CadenceAttention, type CadenceErrand, type Chore, type ChoreDraft } from '../core/cadence.domain';
 import { vocabularyText } from '../core/vocabulary.domain';

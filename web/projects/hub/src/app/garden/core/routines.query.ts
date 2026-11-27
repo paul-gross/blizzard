@@ -11,7 +11,7 @@ import {
   type GardenSweepsView,
   type RoutineView,
   type TrendView,
-} from 'fleet';
+} from 'fleet/hub-api';
 import type { ScopeRoutine } from './scope.domain';
 import { fromRoutineView as toScopeRoutine } from './scope.translate';
 import { injectProjectFilter } from '../../core/project-filter';

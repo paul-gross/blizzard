@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
-import { KitDialog, KitField, KitForm, KitTextInput } from 'fleet';
+import { KitField, KitForm, KitTextInput } from 'fleet/kit';
+import { KitDialog } from 'fleet/kit/dialog';
 
 import { type FindingTriageVerb } from '../../core/finding-triage-verb.domain';
 import { type FindingTriageDraft } from './finding-triage.domain';

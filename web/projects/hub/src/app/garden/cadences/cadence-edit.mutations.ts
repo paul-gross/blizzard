@@ -7,7 +7,7 @@ import {
   type CadenceView,
   createProjectCadenceApiProjectsProjectCadencesPost,
   editCadenceApiCadencesCadenceIdPatch,
-} from 'fleet';
+} from 'fleet/hub-api';
 import { createCadenceMutationKey, editCadenceMutationKey } from '../../core/mutation-keys';
 import { hubCadenceErrandsKey, hubCadencesKey } from '../core/cadences.query';
 import { gardenProject } from '../core/garden-project';

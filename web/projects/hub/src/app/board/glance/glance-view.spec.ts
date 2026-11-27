@@ -1,7 +1,8 @@
 import { signal, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { KitAsyncStateValue, Urgency } from 'fleet';
+import type { Urgency } from 'fleet/core';
+import type { KitAsyncStateValue } from 'fleet/kit';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { TenantContext } from '../../core/auth/tenant-context';
 

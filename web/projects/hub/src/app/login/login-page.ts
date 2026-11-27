@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { asyncState, KitAsyncState, type KitAsyncStateValue } from 'fleet';
+import { asyncState } from 'fleet/core';
+import { KitAsyncState, type KitAsyncStateValue } from 'fleet/kit';
 import { LoginButtons } from '../core/auth/login-buttons';
 import { consumeReturnUrl, safeAuthorizeReturnTo } from '../core/auth/auth-redirect';
 import { injectAuthProvidersQuery } from '../core/auth/providers.query';

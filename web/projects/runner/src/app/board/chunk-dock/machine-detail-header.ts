@@ -1,24 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import {
-  KitBadge,
-  KitCloseButton,
-  KitConfirmDialog,
-  type KitConfirmDialogPrompt,
-  KitMenu,
-  KitMenuItem,
-  KitMenuItemSubtitle,
-  KitMenuPanel,
-  ageMs,
-  type ChunkPause,
-  type ChunkWorkRef,
-  formatHeldFor,
-  injectNowSignal,
-  pauseCopy,
-  resumeCopy,
-  type Tone,
-  WorkRefLink,
-} from 'fleet';
+import { WorkRefLink } from 'fleet/chunk-card';
+import { pauseCopy, resumeCopy } from 'fleet/chunk-detail';
+import { type ChunkPause, type ChunkWorkRef } from 'fleet/chunk-page';
+import { ageMs, formatHeldFor, injectNowSignal } from 'fleet/core';
+import { KitBadge, KitCloseButton, type Tone } from 'fleet/kit';
+import { KitConfirmDialog, type KitConfirmDialogPrompt } from 'fleet/kit/dialog';
+import { KitMenu, KitMenuItem, KitMenuItemSubtitle, KitMenuPanel } from 'fleet/kit/menu';
 
 import type { Lease } from '../../core/lease.domain';
 import { sessionEnding } from '../../core/worker-session';

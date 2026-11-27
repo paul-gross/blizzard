@@ -1,6 +1,6 @@
 import type { ChunkLandedRepo, ChunkPr } from '../chunk-page/chunk-detail.model';
 import { compactRef } from '../../core/compact-ref';
-import type { Tone } from '../../kit';
+import type { Tone } from '../../kit/tone';
 
 /** A group past this many titles folds to its first {@link FOLDED_TITLES} until opened. */
 const UNFOLDED_TITLES = 3;

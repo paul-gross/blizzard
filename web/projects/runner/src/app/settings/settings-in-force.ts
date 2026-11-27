@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { FleetWhen, KitBadge } from 'fleet';
+import { FleetWhen } from 'fleet/core';
+import { KitBadge } from 'fleet/kit';
 
 import type { InForceLineVm } from './settings.model';
 

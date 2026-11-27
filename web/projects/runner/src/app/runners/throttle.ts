@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
-import { asyncState, errorMessage } from 'fleet';
+import { asyncState, errorMessage } from 'fleet/core';
 
 import { injectHostRunnerDomainsQuery, injectHostSubscriptionsQuery } from '../core/host.query';
 import { injectFloorClearMutation, injectRunnerDashboardStatusQuery } from '../core/status.query';

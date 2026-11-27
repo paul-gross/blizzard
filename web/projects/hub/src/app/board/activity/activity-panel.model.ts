@@ -1,11 +1,5 @@
-import {
-  asyncState,
-  type AsyncStateQuery,
-  compactRef,
-  formatClockTime,
-  type KitAsyncStateValue,
-  runnerDisplayName,
-} from 'fleet';
+import { asyncState, type AsyncStateQuery, compactRef, formatClockTime, runnerDisplayName } from 'fleet/core';
+import { type KitAsyncStateValue } from 'fleet/kit';
 import { HubEventKind, hubEventTypeName, type ActivityFact } from 'fleet/shell';
 import { type ActivityRow } from './activity-view';
 import { summarizeChunkChange } from './chunk-change-summary';

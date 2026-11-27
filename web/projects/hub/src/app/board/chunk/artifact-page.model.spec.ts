@@ -1,4 +1,4 @@
-import { type ChunkArtifact } from 'fleet';
+import { type ChunkArtifact } from 'fleet/chunk-detail';
 import { assetChunkArtifact } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 

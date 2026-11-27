@@ -1,7 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { form } from '@angular/forms/signals';
 import { Router, RouterOutlet } from '@angular/router';
-import { asyncState, type KitAsyncStateValue, submitForm, ViewportService } from 'fleet';
+import { asyncState } from 'fleet/core';
+import { submitForm } from 'fleet/forms';
+import { type KitAsyncStateValue } from 'fleet/kit';
+import { ViewportService } from 'fleet/viewport';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectChildRouteParam, injectQueryFilters } from '../../core/route-state';

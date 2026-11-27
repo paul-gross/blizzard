@@ -1,7 +1,8 @@
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import { KitMenuItem, KitMenuPanel } from '../../kit';
+import { KitMenuPanel } from '../../kit/kit-menu';
+import { KitMenuItem } from '../../kit/kit-menu-item';
 import { MobileTitlebar } from './mobile-titlebar';
 
 /** The titlebar takes its menu as a template, so every spec mounts it through a

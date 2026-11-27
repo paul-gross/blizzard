@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { harnessName } from 'fleet';
+import { harnessName } from 'fleet/core';
 import type { GraphSession } from './graph.domain';
 
 /**

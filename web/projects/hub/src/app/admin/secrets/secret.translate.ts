@@ -1,10 +1,6 @@
 // bzh:frontend-domain-boundary — the one place the secret wire is read and written.
-import {
-  type EditBaseline,
-  type RefusalMap,
-  type SecretCreateRequestWritable,
-  type SecretView,
-} from 'fleet';
+import { type EditBaseline, type RefusalMap } from 'fleet/forms';
+import { type SecretCreateRequestWritable, type SecretView } from 'fleet/hub-api';
 
 import type { ConfigRecordRef } from '../config-history.domain';
 import type { Secret, SecretCreateDraft, SecretReplaceDraft } from './secret.domain';

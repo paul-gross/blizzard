@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
 import { domainChunkDetail as chunkDetail, domainDecision as decisionView, domainQuestion as questionView, domainTransition as transitionView, workItem } from '../../testing/builders/chunk';
-import type { AwaitingHumanFormActions } from '../awaiting-human';
+import type { AwaitingHumanFormActions } from '../awaiting-human/awaiting-human.domain';
 import { ChunkGeneralTab } from './chunk-general-tab';
 
 const HISTORY = [
