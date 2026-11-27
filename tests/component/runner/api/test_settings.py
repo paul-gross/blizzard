@@ -93,13 +93,65 @@ def test_first_registration_seeds_settings_for_http_without_another_tick(
             unresolvable.release()
             stepper.request()
             assert RunnerIdentityStore(base.connections).runner_identity() is not None
-            assert runner.stores.settings.snapshot().entries == {}
+            assert runner.stores.settings.snapshot().entries["agents"] == Entry(3)
             response = client.get("/api/settings")
             assert response.status_code == 200, response.text
             rows = {row["key"]: row for row in response.json()["settings"]}
             assert rows["agents"]["value"] == 3
             assert runner.stores.settings.snapshot().entries["agents"] == Entry(3)
             assert runner.stores.settings.snapshot().entries["projects"] == Entry([])
+    finally:
+        stepper.close()
+        graph.close()
+
+
+def test_reading_an_identified_unseeded_record_writes_nothing_and_an_edit_needs_no_prior_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
+    url = f"sqlite:///{tmp_path / 'host.db'}"
+    write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner="agents = 3\n")
+    host = load_host_config(tmp_path)
+    base = make_store(url, TEST_RUNNER_ID)
+    store = RunnerSettingsStore(base.connections, SystemClock())
+    reader = RunnerSettingsReader(host, host.runners[0], store)
+    assert host.runners[0].own is not None
+    app = create_runner_app(
+        host.config_for_runner(host.runners[0], host.runners[0].own, host.token_for(host.runners[0]).value)
+    )
+    seams = runner_seams(app)
+    seams.settings_reader = reader
+    seams.settings_authoring = RunnerSettingsAuthoring(reader, store, HOST_REGISTRY)
+    ready, halted = seed_runners(host, clock=SystemClock())
+    assert not halted
+    graph = build_host_process(host, ready)
+    stepper = RunnerStepper(graph.runners[0].config, process_graph=graph.runners[0])
+    seams.stepper = stepper
+    # Identified since the start, so the start seeded nothing and the record is unwritten.
+    RunnerIdentityStore(base.connections).record_runner_identity(
+        RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
+    )
+    try:
+        assert reader.snapshot_record().revision == 0
+        assert reader.snapshot_with_provenance()[0].revision == 0
+        with runner_client(app) as client:
+            view = client.get("/api/settings")
+            assert view.status_code == 200, view.text
+            assert view.json()["revision"] == 0
+            assert {row["key"]: row for row in view.json()["settings"]}["agents"]["value"] == 3
+            assert client.get("/api/settings/changes").json()["changes"] == []
+            assert store.snapshot().revision == 0
+
+            # Nothing fills the record in first: an edit is judged on its own entries alone.
+            partial = client.patch("/api/settings", headers={"If-Match": "0"}, json={"set": {"agents": 2}})
+            assert partial.status_code == 422, partial.text
+            assert store.snapshot().revision == 0
+            edited = client.patch(
+                "/api/settings", headers={"If-Match": "0"}, json={"set": {"agents": 2, "projects": []}}
+            )
+            assert edited.status_code == 200, edited.text
+            changes = client.get("/api/settings/changes").json()["changes"]
+            assert [(c["op"], c["revision"]) for c in changes] == [("edit", 1)]
     finally:
         stepper.close()
         graph.close()
@@ -120,7 +172,7 @@ def test_settings_writes_are_revision_conditioned_and_history_is_paged(
     reader = RunnerSettingsReader(host, host.runners[0], store)
     assert host.runners[0].authored is not None
     assert host.runners[0].own is not None
-    store.seed(host.runners[0].authored, reader.seed_keys({}), validate=reader.validate)
+    store.seed(host.runners[0].authored, (*reader.keys, *reader.aliases), validate=reader.validate)
     app = create_runner_app(
         host.config_for_runner(host.runners[0], host.runners[0].own, host.token_for(host.runners[0]).value)
     )
@@ -298,7 +350,7 @@ def test_settings_human_roles_and_worker_credential(
     reader = RunnerSettingsReader(host, host.runners[0], store)
     assert host.runners[0].authored is not None
     assert host.runners[0].own is not None
-    store.seed(host.runners[0].authored, reader.seed_keys({}), validate=reader.validate)
+    store.seed(host.runners[0].authored, (*reader.keys, *reader.aliases), validate=reader.validate)
     now = datetime.now(UTC)
     base.record_mint(
         new_mint(
@@ -393,7 +445,7 @@ def test_legacy_entry_projects_provenance_and_can_be_unset(
     reader = RunnerSettingsReader(host, host.runners[0], store)
     assert host.runners[0].authored is not None
     assert host.runners[0].own is not None
-    store.seed(host.runners[0].authored, reader.seed_keys({}), validate=reader.validate)
+    store.seed(host.runners[0].authored, (*reader.keys, *reader.aliases), validate=reader.validate)
     app = create_runner_app(
         host.config_for_runner(host.runners[0], host.runners[0].own, host.token_for(host.runners[0]).value)
     )

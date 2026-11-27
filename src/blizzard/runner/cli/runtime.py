@@ -1305,10 +1305,7 @@ def _seed_runner(
             # that happens; do not persist settings without the identity that owns them.
             resolved = reader.preview_seed()
         else:
-            assert entry.authored is not None
-            settings.seed(
-                entry.authored, (*reader.keys, *reader.aliases), validate=reader.seed_validate, aliases=reader.aliases
-            )
+            reader.seeder(settings).run()
             _, resolved = reader.snapshot()
     except (SettingsInvalid, ValueError) as exc:
         return HaltedRunner(entry.name, entry.id, (str(exc),))
@@ -1828,20 +1825,15 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None, host_pass: 
                 token=runner_built.token,
                 host_token=config.host_token.value,
             )
-        identity_store = graph.stores.identity
-        graph = replace(
-            graph,
-            settings_reader=RunnerSettingsReader(
-                config,
-                entry,
-                graph.stores.settings,
-                deferred_seed=graph.stores.settings if identity_store.runner_identity() is None else None,
-                identity_present=lambda: identity_store.runner_identity() is not None,
-                host_settings=HostSettingsReader(
-                    config, graph.host.host_stores.settings, host_record_reads(graph.host.host_stores)
-                ),
+        reader = RunnerSettingsReader(
+            config,
+            entry,
+            graph.stores.settings,
+            host_settings=HostSettingsReader(
+                config, graph.host.host_stores.settings, host_record_reads(graph.host.host_stores)
             ),
         )
+        graph = replace(graph, settings_reader=reader, settings_seed=reader.seeder(graph.stores.settings))
         try:
             if snapshot := graph.harness_sets.current.bundle:
                 click.echo(snapshot.summary())

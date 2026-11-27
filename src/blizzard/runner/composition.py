@@ -163,6 +163,7 @@ from blizzard.runner.hub.sealed_tokens import (
 )
 from blizzard.runner.hub.served_projects import ServedProjectsAnswer
 from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain
+from blizzard.runner.lifecycle.registration import ISeedRunnerSettings
 from blizzard.runner.listeners import Listeners
 from blizzard.runner.loop.host_tick import HostTick
 from blizzard.runner.loop.wake import WakeSignals
@@ -474,6 +475,8 @@ class RunnerProcess:
     #: Whether closing this runner closes the host it was built over — the host-of-one a standalone build makes.
     closes_host: bool = False
     settings_reader: RunnerSettingsReader | None = None
+    #: The seed of this runner's settings record, built beside ``settings_reader`` over the same entry.
+    settings_seed: ISeedRunnerSettings | None = None
     harness_key: Callable[[RunnerConfig], HarnessAssemblyKey] | None = None
 
     @property
@@ -1106,18 +1109,14 @@ def compose_runner(
     entry = built.entry or next((entry for entry in host_config.runners if entry.id == built.id), None)
     if entry is None:
         return runner
-    identity_store = runner.stores.identity
-    return replace(
-        runner,
-        settings_reader=RunnerSettingsReader(
-            host_config,
-            entry,
-            runner.stores.settings,
-            deferred_seed=runner.stores.settings if identity_store.runner_identity() is None else None,
-            identity_present=lambda: identity_store.runner_identity() is not None,
-            host_settings=host.host_settings.reader if host.host_settings is not None else None,
-        ),
+    reader = RunnerSettingsReader(
+        host_config,
+        entry,
+        runner.stores.settings,
+        host_settings=host.host_settings.reader if host.host_settings is not None else None,
     )
+    seed = reader.seeder(runner.stores.settings) if entry.authored is not None else None
+    return replace(runner, settings_reader=reader, settings_seed=seed)
 
 
 def add_runner(

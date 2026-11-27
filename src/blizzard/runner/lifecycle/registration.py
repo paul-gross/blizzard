@@ -1,15 +1,9 @@
-"""The registration step — register at the hub, keep the identity and the served projects its reply
-names, mirror the hub's pause brake.
+"""The registration step — register at the hub, record the identity and served projects its reply names, seed the
+runner's settings, and mirror the hub's pause brake.
 
-The hub resolves who this runner is from its bearer token; the runner declares its configured name and
-the bindings and subscription its host file gives it. The runner's id is configured and its store is bound to
-it, so a registration never adopts one: it records the reply's name and tenant against the configured id (a
-reply naming no tenant, from a hub that predates tenants, keeps the row's). A reply naming another runner — a
-token rotated since the tick's identity check, or a hub with no identity read — turns the verdict to a mismatch
-and mirrors no brake. The registration declares the configured projects, and a reply answering them replaces the
-stored answer whole once the identity row is recorded; a reply answering none, from a hub that predates
-projects, keeps it. A failed registration leaves the row, the answer, the holder and the mirrored brake as they
-stood. A refused version halts the runner alone until an admitted registration lifts it."""
+The hub resolves who this runner is from its bearer token, and a registration never adopts an id: a reply naming
+another runner writes nothing and turns the verdict to a mismatch. A failed registration leaves what stood, and a
+refused version halts the runner alone until an admitted registration lifts it."""
 
 from __future__ import annotations
 
@@ -20,6 +14,7 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.runner_identity_state import IdentityState
+from blizzard.foundation.settings_record.refusals import SettingsInvalid
 from blizzard.runner.environments.workspaces import IWorkspaceHomes
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import (
@@ -76,6 +71,13 @@ class RegistrationStores(GateStores, Protocol):
     def pause(self) -> IWritePauseRepository: ...
 
 
+class ISeedRunnerSettings(Protocol):
+    def run(self) -> None:
+        """Seed the bound runner's record from its file entry, never overwriting a held entry. Raises
+        :class:`SettingsInvalid` or ``ValueError`` on a refusal, writing nothing."""
+        ...
+
+
 class RegistrationConfig(GateConfig, Protocol):
     @property
     def runner_id(self) -> str: ...
@@ -123,6 +125,11 @@ class RegistrationContext(GateContext, Protocol):
     def subscriptions(self) -> Sequence[DeclaredSubscription]: ...
     @property
     def workspaces(self) -> IWorkspaceHomes: ...
+    @property
+    def settings_seed(self) -> ISeedRunnerSettings | None:
+        """The seed of this runner's settings record — ``None`` for a runner composed over no file entry."""
+        ...
+
     def capability_snapshot(self) -> tuple[HarnessCapability, ...]: ...
 
 
@@ -218,8 +225,18 @@ class Registration:
                 checked_at=now,
             )
             log_transition(ctx.identity_verdict, was)
+        self._seed_settings()
         try:
             paused = ctx.hub.fetch_runner_paused(reply.runner_id)
         except HubClientError:
             return  # keep the last-mirrored brake
         ctx.stores.pause.set_hub_paused(paused=paused, at=ctx.clock.now())
+
+    def _seed_settings(self) -> None:
+        seed = self.ctx.settings_seed
+        if seed is None:
+            return
+        try:
+            seed.run()
+        except (SettingsInvalid, ValueError) as exc:
+            _log.warning("runner settings seed refused", runner_id=self.ctx.config.runner_id, detail=str(exc))

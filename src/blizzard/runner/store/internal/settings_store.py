@@ -10,7 +10,7 @@ from sqlalchemy import Connection
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.config_keys import ConfigView
-from blizzard.foundation.settings_record.decision import decide, seed_choice
+from blizzard.foundation.settings_record.decision import decide, plan_seed
 from blizzard.foundation.settings_record.refusals import SettingsInvalid
 from blizzard.foundation.settings_record.validator import Validate
 from blizzard.foundation.settings_record.vocabulary import SEED, Change, Door, Entry, FieldChange
@@ -150,28 +150,21 @@ class RunnerSettingsStore:
             self._lock_identity(conn)
             # Validate the complete resulting file seed, not transient prefixes:
             # related authored keys can be valid only when considered together.
-            existing = self._record.entries(conn)
-            if aliases:
-                blocked = {alias for alias, key in aliases.items() if key in existing}
-                blocked.update(key for alias, key in aliases.items() if alias in existing)
-                keys = tuple(key for key in keys if key not in blocked)
-            pending = {key: Entry(value) for key, value in seed_choice(existing, keys, file).items()}
+            plan = plan_seed(self._record.entries(conn), keys, file, aliases)
 
             def validate_seed(entries: Mapping[str, Entry]) -> Mapping[str, str]:
-                return validate({**pending, **entries})
+                return validate({**plan.pending, **entries})
 
-            for key in keys:
-                chosen = seed_choice(self._record.entries(conn), (key,), file)
-                if chosen:
-                    self._apply(
-                        conn,
-                        Change("seed", sets=chosen),
-                        if_match=self._record.revision(conn),
-                        validate=validate_seed,
-                        door=SEED,
-                        actor=SEED,
-                        apply_id=None,
-                    )
+            for key, entry in plan.pending.items():
+                self._apply(
+                    conn,
+                    Change("seed", sets={key: entry.value}),
+                    if_match=self._record.revision(conn),
+                    validate=validate_seed,
+                    door=SEED,
+                    actor=SEED,
+                    apply_id=None,
+                )
 
     def write(
         self,
