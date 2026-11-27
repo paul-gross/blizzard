@@ -562,7 +562,7 @@ def test_stored_launch_settings_reach_replacement_harness_without_mutating_old_s
         graph.close()
 
 
-def test_seed_requires_identity_and_preserves_unset_after_file_edit(
+def test_registration_not_a_read_seeds_and_a_later_start_preserves_unset_after_file_edit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
@@ -578,8 +578,10 @@ def test_seed_requires_identity_and_preserves_unset_after_file_edit(
     assert settings.snapshot().entries == {}
     assert RunnerIdentityStore(base.connections).runner_identity() is None
     graph = build_host_process(host, ready)
+    runner = graph.runners[0]
+    stepper = RunnerStepper(runner.config, process_graph=runner)
     try:
-        reader = graph.runners[0].settings_reader
+        reader = runner.settings_reader
         assert reader is not None
         assert reader.snapshot()[1].agents == 3
         assert settings.snapshot().entries == {}
@@ -587,8 +589,13 @@ def test_seed_requires_identity_and_preserves_unset_after_file_edit(
             RunnerIdentity(TEST_RUNNER_ID, entry.name, datetime.now(UTC))
         )
         assert reader.snapshot()[1].agents == 3
+        assert reader.snapshot_with_provenance()[0].revision == 0
+        assert settings.snapshot().revision == 0 and settings.changes(limit=1) == ()
+        ctx = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        Registration(replace(ctx, hub=FakeHub(default_runner_id=TEST_RUNNER_ID))).run()
         assert settings.snapshot().entries["agents"] == Entry(3)
     finally:
+        stepper.close()
         graph.close()
     ready, halted = seed_runners(host, clock=SystemClock())
     assert not halted and ready[0].config.agents == 3

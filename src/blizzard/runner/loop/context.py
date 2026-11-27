@@ -48,6 +48,7 @@ from blizzard.runner.leases.worker_stdout import IWorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.check_runner import ICheckRunner
 from blizzard.runner.lifecycle.judgement.elicitation_files import IElicitationFiles
+from blizzard.runner.lifecycle.registration import ISeedRunnerSettings
 from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.process.probe import IProcessProbe
@@ -242,6 +243,8 @@ class LoopContext:
     #: This runner's flags as they stand — its own resolved answer with its hub's ``fleet`` answer applied, which the
     #: tick's identity check refreshes. The default holds an empty registry's answer.
     flags: FlagsHolder = field(default_factory=lambda: FlagsHolder(resolve_flags(FlagRegistry(), "runner", {}).flags))
+    #: The seed registration runs once the identity is recorded; ``None`` on a runner composed over no file entry.
+    settings_seed: ISeedRunnerSettings | None = None
     #: The hub's version and window, as the latest registration reply answered them.
     hub_version: HubVersionHolder = field(default_factory=HubVersionHolder)
     #: This tick's capability memo (``tick()`` wires it); ``None`` rebuilds it per read.

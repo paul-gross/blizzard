@@ -5,6 +5,7 @@ identity row into the store — each write completed by running init again after
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import tomllib
 from contextlib import closing
@@ -20,7 +21,8 @@ from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.foundation.secrets.sealing import SealedValue
 from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.composition import build_host_stores, build_runner_admission
+from blizzard.runner.cli.runtime import seed_runners
+from blizzard.runner.composition import build_host_stores, build_runner_admission, build_settings_stores
 from blizzard.runner.config import ProjectBinding
 from blizzard.runner.host_config import runner_toml, scaffold_runner
 from blizzard.runner.host_file import append_runner
@@ -64,6 +66,29 @@ def test_init_writes_the_joined_runners_id_into_the_host_file_and_its_identity_r
     assert _configured_id(root) == "rn_init1"
     assert _identity_rows(root) == [("rn_init1", "runner-local")]
     assert load_runner_config(root).runner_id == "rn_init1"
+
+
+def test_init_leaves_the_settings_record_unwritten_so_a_later_file_edit_is_what_the_first_start_seeds(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = tmp_path / "host"
+    assert _init(fake_init_hub, root).exit_code == 0
+    engine = create_engine_from_url(load_host_config(root).db_url)
+    try:
+        _, settings = build_settings_stores(engine, errors=runner_store_errors(), runner_id="rn_init1")
+        assert settings.snapshot().revision == 0
+        assert settings.changes(limit=1) == ()
+
+        layout = HostLayout(root)
+        host_file = layout.config_path.read_text()
+        assert "\nagents = " in host_file
+        layout.config_path.write_text(re.sub(r"\nagents = \d+\n", "\nagents = 7\n", host_file))
+        _, halted = seed_runners(load_host_config(root), clock=SystemClock())
+
+        assert not halted
+        assert settings.snapshot().entries["agents"] == Entry(7)
+    finally:
+        engine.dispose()
 
 
 def test_a_kept_runner_gets_its_id_and_identity_row_from_the_hubs_answer(

@@ -196,6 +196,7 @@ class LoopWiring:
             clock=clock,
             hub=verified,
             identity=graph.identity,
+            settings_seed=graph.settings_seed,
             token_identity=hub,
             identity_verdict=graph.identity_verdict,
             hub_token=graph.hub_token,

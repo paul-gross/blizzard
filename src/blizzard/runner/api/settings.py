@@ -138,7 +138,7 @@ def _view(wiring: RunnerWiring) -> SettingsView:
         failed=FailureView(revision=failure[0], error=failure[1], since=failure[2]) if failure else None,
     )
     try:
-        resolved = service.resolve_for_read(snapshot.entries)
+        resolved = service.resolve_for_read(snapshot)
     except Exception as exc:
         return SettingsView(
             revision=snapshot.revision, in_force=in_force, settings=[], settings_error=str(exc) or type(exc).__name__

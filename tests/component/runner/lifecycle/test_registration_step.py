@@ -14,6 +14,7 @@ from structlog.testing import capture_logs
 from blizzard.foundation.clock import FixedClock, SystemClock
 from blizzard.foundation.gate_enforceability import UnenforceableGateReason
 from blizzard.foundation.runner_identity_state import IdentityState
+from blizzard.foundation.settings_record.vocabulary import Change, Entry
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.identity import SessionReference
@@ -26,7 +27,11 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.steps import Fill, Pull, Reap, Resume
+from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.status.view import RunnerStatusService
+from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
+from tests.support.config_inputs import load_host_config
+from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.runner_fakes import (
     FIXTURE_PROJECT_ID,
     FakeHarness,
@@ -412,3 +417,55 @@ def test_the_flags_a_registration_reply_carries_are_held_and_a_failed_registrati
     hub.unenforceable_gates = None
     Registration(ctx).run()
     assert ctx.hub_version.current().unenforceable_gates == (flag,)
+
+
+def _seeding_ctx(tmp_path: Path, hub: FakeHub, runner: str) -> tuple[LoopContext, RunnerSettingsStore]:
+    """A context whose registration seeds the settings record from a ``[[runner]]`` carrying ``runner``'s keys."""
+    url = f"sqlite:///{tmp_path / 'runner.db'}"
+    write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner=runner)
+    host = load_host_config(tmp_path)
+    ctx = _ctx(tmp_path / "runner.db", hub, runner_id=TEST_RUNNER_ID)
+    store = RunnerSettingsStore(make_store(url, runner_id=TEST_RUNNER_ID).connections, SystemClock())
+    seed = RunnerSettingsReader(host, host.runners[0], store).seeder(store)
+    return replace(ctx, settings_seed=seed), store
+
+
+def test_the_first_registration_seeds_the_settings_record_and_a_later_one_writes_nothing(tmp_path: Path) -> None:
+    ctx, settings = _seeding_ctx(tmp_path, FakeHub(default_runner_id=TEST_RUNNER_ID), "agents = 3\n")
+
+    Registration(ctx).run()
+
+    assert settings.snapshot().entries["agents"] == Entry(3)
+    changes = settings.changes(limit=20)
+    assert changes and {change.door for change in changes} == {"seed"}
+    revision = settings.snapshot().revision
+    Registration(ctx).run()
+    assert settings.snapshot().revision == revision
+    assert settings.changes(limit=20) == changes
+
+
+def test_a_registration_over_an_identified_unseeded_record_seeds_around_a_held_entry(tmp_path: Path) -> None:
+    hub = FakeHub(default_runner_id=TEST_RUNNER_ID)
+    ctx, settings = _seeding_ctx(tmp_path, hub, 'agents = 3\ngates = ["ci"]\n')
+    Registration(replace(ctx, settings_seed=None)).run()
+    settings.write(Change("edit", sets={"agents": 2}), if_match=0, validate=lambda _: {}, door="api", actor="test")
+
+    Registration(ctx).run()
+
+    assert settings.snapshot().entries["agents"] == Entry(2)
+    assert settings.snapshot().entries["gates"] == Entry(["ci"])
+
+
+def test_a_refused_seed_is_warned_of_and_leaves_the_rest_of_the_registration(tmp_path: Path) -> None:
+    hub = FakeHub(default_runner_id=TEST_RUNNER_ID)
+    hub.paused = True
+    ctx, settings = _seeding_ctx(tmp_path, hub, 'agents = "invalid"\n')
+
+    with capture_logs() as logs:
+        Registration(ctx).run()
+
+    assert settings.snapshot().revision == 0
+    assert ctx.stores.identity.runner_identity() is not None
+    assert ctx.identity_verdict.matched()
+    assert ctx.stores.pause.hub_paused() is True
+    assert [e["log_level"] for e in logs if e["event"] == "runner settings seed refused"] == ["warning"]

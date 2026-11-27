@@ -12,7 +12,7 @@ from sqlalchemy import Connection, and_, select
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.config_keys import ConfigView
-from blizzard.foundation.settings_record.decision import decide, plan_seed, seed_choice
+from blizzard.foundation.settings_record.decision import decide, plan_seed
 from blizzard.foundation.settings_record.refusals import SettingsInvalid
 from blizzard.foundation.settings_record.validator import Validate
 from blizzard.foundation.settings_record.vocabulary import SEED, Change, Door, Entry, FieldChange
@@ -145,18 +145,16 @@ class HostSettingsStore:
             def validate_seed(entries: Mapping[str, Entry]) -> Mapping[str, str]:
                 return validate({**plan.pending, **entries})
 
-            for key in plan.keys:
-                chosen = seed_choice(self._record.entries(conn), (key,), source)
-                if chosen:
-                    self._apply(
-                        conn,
-                        Change("seed", sets=chosen),
-                        if_match=self._record.revision(conn),
-                        validate=validate_seed,
-                        door=SEED,
-                        actor=SEED,
-                        apply_id=None,
-                    )
+            for key, entry in plan.pending.items():
+                self._apply(
+                    conn,
+                    Change("seed", sets={key: entry.value}),
+                    if_match=self._record.revision(conn),
+                    validate=validate_seed,
+                    door=SEED,
+                    actor=SEED,
+                    apply_id=None,
+                )
 
     def write(
         self,

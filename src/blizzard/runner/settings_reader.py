@@ -18,6 +18,7 @@ from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import HostConfig, RunnerEntry, parse_runner_entry
 from blizzard.runner.host_records.model import HostRecord, HostRecordsSnapshot, RecordKind
 from blizzard.runner.host_settings_reader import HostSettingsReader
+from blizzard.runner.lifecycle.registration import ISeedRunnerSettings
 from blizzard.runner.settings.keys import runner_keys
 from blizzard.runner.settings.ports import (
     IJudgeHostApply,
@@ -27,6 +28,7 @@ from blizzard.runner.settings.ports import (
     SettingsPair,
     SettingsSnapshot,
 )
+from blizzard.runner.settings.seed import RunnerSettingsSeed
 
 
 @domain_model
@@ -109,6 +111,13 @@ class RunnerEntriesJudge:
                 value_from, identity_value = "identity", self.entry.name
             result[key] = EffectiveRunnerSetting(lifetime, entry, selected, source, value_from, identity_value)
         return result
+
+    def seeder(self, store: IWriteRunnerSettings) -> RunnerSettingsSeed:
+        """The seed of this entry's record into ``store``, judged by :meth:`seed_validate`."""
+        assert self.entry.authored is not None
+        return RunnerSettingsSeed(
+            store, self.entry.authored, tuple(self.keys), self.aliases, validate=self.seed_validate
+        )
 
     def validate(self, entries: Mapping[str, Entry]) -> Mapping[str, str]:
         """A write's judgement: every error the entries resolve to, and each binding or subscription they name that
@@ -224,16 +233,12 @@ class RunnerSettingsReader(RunnerEntriesJudge):
         entry: RunnerEntry,
         store: IReadRunnerSettings,
         *,
-        deferred_seed: IWriteRunnerSettings | None = None,
-        identity_present: Callable[[], bool] | None = None,
         host_settings: HostSettingsReader | None = None,
     ) -> None:
         super().__init__(host, entry)
         #: The host's own record, whose entries every resolution lays over ``host``; ``None`` resolves against it.
         self.host_settings = host_settings
         self.store = store
-        self._deferred_seed = deferred_seed
-        self._identity_present = identity_present
 
     def snapshot(self) -> tuple[SettingsSnapshot, RunnerConfig]:
         pair, config = self.snapshot_pair()
@@ -257,7 +262,7 @@ class RunnerSettingsReader(RunnerEntriesJudge):
                 return SettingsPair(host, runner)
 
     def resolve_pair(self, pair: SettingsPair) -> RunnerConfig:
-        return self.resolve_for_read(pair.runner.entries, host=self._host_at(pair.host))
+        return self.resolve_for_read(pair.runner, host=self._host_at(pair.host))
 
     def _judging_host(self) -> HostConfig:
         return self._host_at(None)
@@ -268,20 +273,9 @@ class RunnerSettingsReader(RunnerEntriesJudge):
         return self.host_settings.resolve(snapshot if snapshot is not None else self.host_settings.snapshot_record())
 
     def snapshot_record(self) -> SettingsSnapshot:
-        """Acquire the revision before resolving entries, including any deferred seed."""
-        seed = self._deferred_seed
-        if seed is not None and self._identity_present is not None:
-            if not self._identity_present():
-                return self.store.snapshot()
-            assert self.entry.authored is not None
-            seed.seed(
-                self.entry.authored, (*self.keys, *self.aliases), validate=self.seed_validate, aliases=self.aliases
-            )
-            self._deferred_seed = None
         return self.store.snapshot()
 
     def snapshot_with_provenance(self) -> tuple[SettingsSnapshot, Mapping[str, SettingsChange]]:
-        self.snapshot_record()
         return self.store.snapshot_with_provenance()
 
     def changes(self, *, limit: int, before: int | None = None) -> tuple[SettingsChange, ...]:
@@ -291,13 +285,13 @@ class RunnerSettingsReader(RunnerEntriesJudge):
         """Resolve the entries a first seed would produce, without writing them."""
         return self._preview_entries(self.store.snapshot().entries, host=self._host_at(None))
 
-    def resolve_for_read(self, entries: Mapping[str, Entry], *, host: HostConfig | None = None) -> RunnerConfig:
-        """Show authored inputs until registration makes a durable seed possible. ``host`` is the effective host
-        configuration to resolve against, the host record's current one when absent."""
+    def resolve_for_read(self, snapshot: SettingsSnapshot, *, host: HostConfig | None = None) -> RunnerConfig:
+        """Resolve ``snapshot``, showing the authored inputs while its record is unwritten. ``host`` is the effective
+        host configuration to resolve against, the host record's current one when absent."""
         effective = host if host is not None else self._host_at(None)
-        if self._deferred_seed is not None:
-            return self._preview_entries(entries, host=effective)
-        return self.resolve(entries, host=effective)
+        if snapshot.revision == 0 and self.entry.authored is not None:
+            return self._preview_entries(snapshot.entries, host=effective)
+        return self.resolve(snapshot.entries, host=effective)
 
     def _preview_entries(self, current: Mapping[str, Entry], *, host: HostConfig) -> RunnerConfig:
         entries = dict(current)
@@ -344,3 +338,4 @@ class HostApplyJudge:
 
 
 _judge_conforms: type[IJudgeHostApply] = HostApplyJudge
+_seed_conforms: type[ISeedRunnerSettings] = RunnerSettingsSeed

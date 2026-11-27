@@ -28,13 +28,10 @@ from blizzard.runner.settings.ports import (
     IWriteHostSettings,
     IWriteRunnerSettings,
     PreparedApply,
-    SettingsSnapshot,
 )
 
 
 class SettingsAuthoringReader(Protocol):
-    def snapshot_record(self) -> SettingsSnapshot: ...
-
     def validate(self, entries: Mapping[str, Entry]) -> Mapping[str, str]: ...
 
 
@@ -51,7 +48,6 @@ class RunnerSettingsAuthoring:
         if both:
             raise SettingsInvalid(dict.fromkeys(sorted(both), "cannot both set and unset"))
         check_keys(self._registry, [*sets, *unsets])
-        self._reader.snapshot_record()
         self._store.write(
             Change("edit", sets=sets, unsets=unsets),
             if_match=if_match,
