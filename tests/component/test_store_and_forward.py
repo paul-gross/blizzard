@@ -234,6 +234,50 @@ def test_buffered_completion_reason_survives_store_reopen_and_drain(tmp_path: Pa
     assert build[0]["reason"] == reason
 
 
+def test_old_buffered_completion_without_reason_drains_after_store_reopen(tmp_path: Path) -> None:
+    double = forge_holding("acme/widget", branch="b", commit=_COMMIT)
+    hub = build_hub(tmp_path, forges=double.forges)
+    chunk_id, node_id = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    now = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
+    url = f"sqlite:///{tmp_path / 'runner.db'}"
+    store = make_store(url)
+    submission: dict[str, object] = {**_completion(node_id, epoch=1), "check_results": []}
+    store.enqueue_outbound(
+        kind=COMPLETION_KIND,
+        chunk_id=chunk_id,
+        lease_id="lease_gone",
+        payload=json.dumps({"submission": submission}),
+        created_at=now,
+    )
+
+    reopened = make_store(url)
+    pending = reopened.pending_outbound()
+    assert len(pending) == 1
+    assert "reason" not in json.loads(pending[0].payload)["submission"]
+    ctx = make_context(
+        reopened,
+        hub=cast(FakeHub, HttpHubClient(hub.client)),
+        provider=FakeProvider({"e": "/ws/e"}),
+        harness=FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="1", pgid=1), verdict=None),
+        probe=FakeProbe(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID),
+        clock=FixedClock(now),
+        registered=False,
+    )
+    identity = registered_identity("r1", "r1").current()
+    assert identity is not None
+    reopened.record_runner_identity(identity)
+    ctx.identity.hold(identity)
+    OutboundDrain(ctx).run()
+    assert reopened.pending_outbound() == []
+    hub.settle_turns()
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    build = [t for t in detail["history"] if t["from_node_name"] == "build"]
+    assert len(build) == 1
+    assert build[0]["reason"] is None
+
+
 def test_escalation_fact_rides_events_and_derives_needs_human(tmp_path: Path) -> None:
     """The other buffered hub fact: escalation.recorded lands via /events, dedup and
     all, carrying ``wrapped_takeover_command`` through the round trip."""

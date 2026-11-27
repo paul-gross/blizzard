@@ -130,7 +130,7 @@ def test_stale_epoch_is_rejected_and_nothing_lands(tmp_path: Path) -> None:
 def test_accepted_reason_survives_replay_with_different_prose(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, node_id = _claimed(hub)
-    completion = {**_completion(node_id, epoch=1), "reason": "Checks passed; ready to deliver."}
+    completion: dict[str, Any] = {**_completion(node_id, epoch=1), "reason": "Checks passed; ready to deliver."}
 
     first = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=completion)
     assert first.status_code == 200
