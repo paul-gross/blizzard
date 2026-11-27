@@ -32,8 +32,6 @@ from blizzard.runner.api.settings import (
 )
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.session import RunnerSession
-from blizzard.runner.config import DEFAULT_TICK_SECONDS
-from blizzard.runner.host_config import HostConfig
 from blizzard.runner.settings.apply import ApplyInvalid, ApplyRefusal, DocumentOutcome
 from blizzard.runner.settings.policy import SettingRefusal
 from blizzard.runner.settings.ports import HostSettingsChange, SettingsSnapshot
@@ -59,28 +57,6 @@ class HostChangesPage(WireModel):
     next_before: int | None
 
 
-def _values(config: HostConfig) -> dict[str, object]:
-    """Every host key's value in the effective configuration, in the record's wire vocabulary."""
-    tracing = config.tracing
-    return {
-        "tick_seconds": config.tick_seconds if config.tick_seconds is not None else DEFAULT_TICK_SECONDS,
-        "transcripts.ship": config.transcripts.ship,
-        "transcripts.record_max_bytes": config.transcripts.record_max_bytes,
-        "transcripts.chunk_max_bytes": config.transcripts.chunk_max_bytes,
-        "worker_stdout.retention_days": config.worker_stdout.retention_days,
-        "tracing.sweep_seconds": tracing.sweep_seconds,
-        "tracing.settle_seconds": tracing.settle_seconds,
-        "tracing.batch_limit": tracing.batch_limit,
-        "tracing.max_lag_seconds": tracing.max_lag_seconds,
-        "tracing.replay_max_window": tracing.replay_max_window,
-        "tracing.worker_programs": tracing.worker_programs,
-        "tracing.worker_program_services": dict(tracing.worker_program_services),
-        "tracing.harness_telemetry": tracing.harness_telemetry,
-        "tools.path_prepend": list(config.tool_path_prepend),
-        "tools.env_passthrough": list(config.tool_env_passthrough),
-    }
-
-
 def _view(wiring: RunnerWiring) -> SettingsView:
     held = wiring.host_settings()
     reader = held.reader
@@ -93,7 +69,7 @@ def _view(wiring: RunnerWiring) -> SettingsView:
         failed=FailureView(revision=failure[0], error=failure[1], since=failure[2]) if failure else None,
     )
     try:
-        values = _values(reader.resolve(snapshot))
+        values = reader.resolve(snapshot).settings_values()
     except ValueError as exc:
         return SettingsView(revision=snapshot.revision, in_force=in_force, settings=[], settings_error=str(exc))
     rows: list[SettingRow] = []

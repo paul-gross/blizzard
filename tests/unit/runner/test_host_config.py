@@ -8,10 +8,12 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.config_keys import Lifetime
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
 from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.runner import config as runner_config
 from blizzard.runner.config import ConfigError
+from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.host_config import (
     BuiltRunner,
     HaltedRunner,
@@ -30,6 +32,21 @@ from tests.support.config_inputs import FLAG_REGISTRY, STRICT, load_host_config
 from tests.support.host_files import TEST_WORKSPACE_ID
 
 _TOKEN = {"BZ_HUB_TOKEN_R_ONE": "tok-one"}
+
+
+def test_settings_values_cover_registry_and_parser_defaults(tmp_path: Path) -> None:
+    host = HostConfig(tmp_path, "sqlite://")
+    values = host.settings_values()
+    expected = {
+        key.path
+        for key in HOST_REGISTRY.keys
+        if "[]" not in key.path and not key.deprecated and key.lifetime in (Lifetime.PASS, Lifetime.SESSION)
+    }
+    assert set(values) == expected
+    assert values["tick_seconds"] == runner_config.DEFAULT_TICK_SECONDS
+    assert values["transcripts.ship"] == host.transcripts.ship
+    assert values["tracing.worker_program_services"] == dict(host.tracing.worker_program_services)
+
 
 _VALID = """
 hub_url = "https://hub.example"

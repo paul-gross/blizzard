@@ -467,11 +467,13 @@ def test_settings_mapping_annotations_require_unreassigned_receivers() -> None:
     _, unknown = discover(source, root)
     assert not any("snapshot.entries.get" in item or "provenance.get" in item for item in unknown)
     changed = source.replace(
-        "    for key, lifetime in keys.items():", "    provenance = dynamic()\n    for key, lifetime in keys.items():"
+        "    for key, selection in service.effective(snapshot).items():",
+        "    provenance = dynamic()\n    for key, selection in service.effective(snapshot).items():",
     )
     _, unknown = discover(changed, root)
     assert any("provenance.get" in item for item in unknown)
-    changed = source.replace("    snapshot: SettingsSnapshot", "    snapshot: object")
+    source = (root / "src/blizzard/runner/settings_reader.py").read_text()
+    changed = source.replace("def effective(self, snapshot: SettingsSnapshot)", "def effective(self, snapshot: object)")
     _, unknown = discover(changed, root)
     assert any("snapshot.entries.get" in item for item in unknown)
 

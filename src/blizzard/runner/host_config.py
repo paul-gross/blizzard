@@ -41,6 +41,7 @@ from blizzard.runner.config import (
     DEFAULT_PORT,
     DEFAULT_RUNNER_NAME,
     DEFAULT_SESSION_SECRET_ENV,
+    DEFAULT_TICK_SECONDS,
     ENV_ENV_PASSTHROUGH,
     ENV_GATES,
     ENV_HOST,
@@ -337,6 +338,27 @@ class HostConfig:
     #: The file's document as the load read it, which the host's settings entries are laid over; ``None`` for a
     #: config built in code.
     authored: Mapping[str, Any] | None = field(default=None, repr=False, compare=False)
+
+    def settings_values(self) -> dict[str, object]:
+        """Every host key's value in the effective configuration, in the record's wire vocabulary."""
+        tracing = self.tracing
+        return {
+            "tick_seconds": self.tick_seconds if self.tick_seconds is not None else DEFAULT_TICK_SECONDS,
+            "transcripts.ship": self.transcripts.ship,
+            "transcripts.record_max_bytes": self.transcripts.record_max_bytes,
+            "transcripts.chunk_max_bytes": self.transcripts.chunk_max_bytes,
+            "worker_stdout.retention_days": self.worker_stdout.retention_days,
+            "tracing.sweep_seconds": tracing.sweep_seconds,
+            "tracing.settle_seconds": tracing.settle_seconds,
+            "tracing.batch_limit": tracing.batch_limit,
+            "tracing.max_lag_seconds": tracing.max_lag_seconds,
+            "tracing.replay_max_window": tracing.replay_max_window,
+            "tracing.worker_programs": tracing.worker_programs,
+            "tracing.worker_program_services": dict(tracing.worker_program_services),
+            "tracing.harness_telemetry": tracing.harness_telemetry,
+            "tools.path_prepend": list(self.tool_path_prepend),
+            "tools.env_passthrough": list(self.tool_env_passthrough),
+        }
 
     @property
     def layout(self) -> HostLayout:
