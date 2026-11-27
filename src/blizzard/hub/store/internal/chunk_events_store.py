@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, ColumnElement, Connection, Row, Select, Table, and_, case, or_, select, true
+from sqlalchemy import Column, ColumnElement, Connection, Row, Select, Table, and_, case, or_, true
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import (
@@ -145,7 +145,7 @@ def route_created_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -
 def transitions_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     def node_name(node_id: ColumnElement[str]) -> ColumnElement[str]:
         return (
-            select(s.graph_nodes.c.name)
+            stmts.select(s.graph_nodes, s.graph_nodes.c.name)
             .where(
                 s.graph_nodes.c.node_id == node_id,
                 s.graph_nodes.c.graph_id == s.transitions.c.graph_id,
