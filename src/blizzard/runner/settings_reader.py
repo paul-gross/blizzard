@@ -5,9 +5,11 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Mapping
 from copy import deepcopy
-from typing import Any, cast
+from dataclasses import dataclass
+from typing import Any, Literal, cast
 
-from blizzard.foundation.config_keys import ConfigView
+from blizzard.foundation.config_keys import ConfigView, Lifetime
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_keys import HOST_REGISTRY
@@ -26,6 +28,32 @@ from blizzard.runner.settings.ports import (
 )
 
 
+@domain_model
+@dataclass(frozen=True)
+class EffectiveRunnerSetting:
+    """A setting's selected record entry and the origin of its displayed value."""
+
+    lifetime: Lifetime
+    entry: Entry | None
+    provenance_key: str
+    source: Literal["entry", "default"]
+    value_from: Literal["entry", "resolved", "identity"]
+    identity_value: object = None
+
+
+@domain_model
+@dataclass(frozen=True)
+class RunnerAlias:
+    """A legacy spelling and whether its entry substitutes for the replacement on reads."""
+
+    replacement: str
+    substitutes: bool = True
+
+
+# Permission mode is a separate harness override, not a value of autonomy.
+_ALIAS_SUBSTITUTION = {"harness_permission_mode": False}
+
+
 class RunnerEntriesJudge:
     """Judges a runner's settings entries laid over its file entry — reading no stored record, so a runner with none
     yet is judged the same as one with its record."""
@@ -35,8 +63,10 @@ class RunnerEntriesJudge:
         self.entry = entry
         self.keys = runner_keys(HOST_REGISTRY)
         prefix = "runner[]."
-        self.aliases = {
-            key.path.removeprefix(prefix): key.replaced_by.removeprefix(prefix)
+        self.alias_metadata = {
+            key.path.removeprefix(prefix): RunnerAlias(
+                key.replaced_by.removeprefix(prefix), _ALIAS_SUBSTITUTION.get(key.path.removeprefix(prefix), True)
+            )
             for key in HOST_REGISTRY.keys
             if key.deprecated
             and key.path.startswith(prefix)
@@ -45,6 +75,39 @@ class RunnerEntriesJudge:
             and "[]" not in key.path.removeprefix(prefix)
             and key.replaced_by.removeprefix(prefix) in self.keys
         }
+        self.aliases = {alias: metadata.replacement for alias, metadata in self.alias_metadata.items()}
+
+    def effective(self, snapshot: SettingsSnapshot) -> Mapping[str, EffectiveRunnerSetting]:
+        """Select visible settings and their record provenance from one snapshot."""
+        keys = dict(self.keys)
+        keys.update(
+            {
+                key.path.removeprefix("runner[]."): key.lifetime
+                for key in HOST_REGISTRY.keys
+                if key.path.startswith("runner[].") and key.lifetime == Lifetime.IMMUTABLE and not key.deprecated
+            }
+        )
+        result: dict[str, EffectiveRunnerSetting] = {}
+        for key, lifetime in keys.items():
+            selected = key
+            entry = snapshot.entries.get(key)
+            if entry is None:
+                for alias, metadata in self.alias_metadata.items():
+                    if metadata.replacement == key and metadata.substitutes and alias in snapshot.entries:
+                        selected = alias
+                        entry = snapshot.entries[alias]
+                        break
+            source: Literal["entry", "default"] = "entry" if entry is not None and not entry.at_default else "default"
+            value_from: Literal["entry", "resolved", "identity"] = (
+                "entry" if source == "entry" and selected == key else "resolved"
+            )
+            identity_value: object = None
+            if key == "id":
+                value_from, identity_value = "identity", self.entry.id
+            elif key == "name" and source == "default":
+                value_from, identity_value = "identity", self.entry.name
+            result[key] = EffectiveRunnerSetting(lifetime, entry, selected, source, value_from, identity_value)
+        return result
 
     def validate(self, entries: Mapping[str, Entry]) -> Mapping[str, str]:
         """A write's judgement: every error the entries resolve to, and each binding or subscription they name that

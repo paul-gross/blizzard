@@ -74,7 +74,12 @@ def test_first_registration_seeds_settings_for_http_without_another_tick(
             assert before.status_code == 200, before.text
             preview = before.json()
             assert preview["settings_error"] is None
-            assert next(row for row in preview["settings"] if row["key"] == "agents")["value"] == 3
+            preview_agents = next(row for row in preview["settings"] if row["key"] == "agents")
+            assert preview_agents["value"] == 3
+            assert preview_agents["source"] == "default"
+            assert preview_agents["revision"] is None
+            assert preview_agents["written_at"] is None
+            assert preview_agents["written_by"] is None
             assert RunnerIdentityStore(base.connections).runner_identity() is None
             assert runner.stores.settings.snapshot().entries == {}
             unresolvable = UnresolvableSettings(monkeypatch)
@@ -405,10 +410,33 @@ def test_legacy_entry_projects_provenance_and_can_be_unset(
         assert row["value"] == expected
         assert row["source"] == source
         assert row["written_by"] == ("seed" if source == "entry" else None)
+        if key == "claude_code.binary":
+            assert row["revision"] is not None
+            assert row["written_at"]
+            override = client.patch(
+                "/api/settings",
+                headers={"If-Match": str(view["revision"])},
+                json={"set": {key: "canonical-claude"}},
+            )
+            assert override.status_code == 200, override.text
+            view = override.json()
+            row = next(row for row in view["settings"] if row["key"] == key)
+            assert (row["value"], row["source"], row["revision"], row["written_by"]) == (
+                "canonical-claude",
+                "entry",
+                view["revision"],
+                "operator",
+            )
         response = client.patch("/api/settings", headers={"If-Match": str(view["revision"])}, json={"unset": [key]})
         assert response.status_code == 200, response.text
         row = next(row for row in response.json()["settings"] if row["key"] == key)
         assert row["source"] == "default"
+        assert row["revision"] == response.json()["revision"]
+        assert row["written_by"] == "operator"
+        assert row["written_at"]
+        if key == "claude_code.binary":
+            assert row["value"] != "legacy-claude"
+            assert row["value"] != "canonical-claude"
         section = reader.snapshot()[1].harness_sections.of("claude_code")
         assert isinstance(section, ClaudeCodeSection)
         assert section.permission_mode is None

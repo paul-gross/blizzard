@@ -83,6 +83,10 @@ def test_the_host_view_lists_every_host_key_with_its_source_and_in_force(
             "written_by": "seed",
         }
         assert rows["tracing.batch_limit"]["value"] == 10
+        assert rows["tracing.batch_limit"]["source"] == "entry"
+        assert rows["tracing.batch_limit"]["revision"] == 2
+        assert rows["tracing.batch_limit"]["written_by"] == "seed"
+        assert rows["tracing.batch_limit"]["written_at"]
         assert (rows["tracing.sweep_seconds"]["value"], rows["tracing.sweep_seconds"]["source"]) == (60, "default")
         assert rows["tools.path_prepend"] == {
             "key": "tools.path_prepend",
@@ -110,6 +114,10 @@ def test_host_writes_are_revision_conditioned_refused_whole_and_wake_the_drivers
     signal = host.wakes.signal()
     with TestClient(app.app) as client:
         revision = client.get(_ROUTE).json()["revision"]
+        malformed = client.patch(_ROUTE, content="{", headers={"content-type": "application/json"})
+        assert malformed.status_code == 422
+        assert malformed.headers["content-type"] == "application/json"
+        assert malformed.json()["detail"][0]["type"] == "json_invalid"
         missing = client.patch(_ROUTE, json={"set": {"tick_seconds": 2}})
         assert _problem(missing, 409, "revision_conflict").current == revision
         stale = client.patch(_ROUTE, headers={"If-Match": str(revision - 1)}, json={"set": {"tick_seconds": 2}})

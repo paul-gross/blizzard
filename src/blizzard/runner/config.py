@@ -858,6 +858,56 @@ class RunnerConfig:
     #: Whether the host's load read its file strictly, which later loads in the same process repeat.
     strict: bool = False
 
+    def settings_values(self) -> dict[str, object]:
+        """Project parser-owned defaults in the record's wire vocabulary."""
+        throttle = self.throttle
+        pace = throttle.pace if throttle else None
+        schedule = throttle.schedule if throttle else None
+        budget = throttle.budget if throttle else None
+        utilization = throttle.utilization if throttle else None
+        return {
+            "id": self.runner_id,
+            "name": self.name,
+            "subscription": self.subscriptions[0].slug if self.subscriptions else None,
+            "projects": [{"project": b.project, "workspace": b.workspace} for b in self.bindings or ()],
+            "agents": self.agents,
+            "gates": list(self.gates),
+            "runner_prompt": self.runner_prompt,
+            "runner_prompt_file": self.runner_prompt_file,
+            "transcripts_root": self.transcripts_root,
+            "harness.autonomy": self.autonomy.value,
+            "harness.config_dir": str(self.harness_config_dir) if self.harness_config_dir else None,
+            "worker.env_passthrough": list(self.worker_env_passthrough),
+            "worker.path_prepend": list(self.worker_path_prepend),
+            "worker.shell": self.worker_shell,
+            "queue.strict": self.queue_strict,
+            "cost.chunk_cap_usd": self.chunk_cap_usd,
+            "cost.runner_ceiling_usd": self.runner_ceiling_usd,
+            "cost.window_hours": self.runner_ceiling_window_hours,
+            "throttle.pace.window": pace.window if pace else None,
+            "throttle.pace.lead_pct": pace.lead_pct if pace else DEFAULT_PACE_LEAD_PCT,
+            "throttle.pace.taper": [{"from_pct": step.from_pct, "lead_pct": step.lead_pct} for step in pace.taper]
+            if pace
+            else [],
+            "throttle.schedule.days": [DAY_NAMES[day] for day in schedule.days] if schedule else None,
+            "throttle.schedule.hours": [
+                f"{span.start_minute // 60:02d}:{span.start_minute % 60:02d}-"
+                f"{span.end_minute // 60:02d}:{span.end_minute % 60:02d}"
+                for span in schedule.spans
+            ]
+            if schedule
+            else None,
+            "throttle.utilization.below_pct": utilization.below_pct if utilization else None,
+            "throttle.utilization.windows": utilization.windows if utilization else None,
+            "throttle.budget.usd": budget.usd if budget else None,
+            "throttle.budget.window_hours": budget.window_hours if budget else DEFAULT_BUDGET_WINDOW_HOURS,
+            "throttle.on_decline": throttle.on_decline.value if throttle else HoldOrRelease.HOLD.value,
+            "throttle.on_usage_limit": throttle.on_usage_limit.value if throttle else HoldOrRelease.HOLD.value,
+            "context.warn_tokens": self.context_warn_tokens,
+            "context.sample_interval_seconds": self.context_sample_interval_seconds,
+            **{key: value for section in self.harness_sections for key, value in section.settings_values().items()},
+        }
+
     def worker_env(self, tracing: TracingSettings) -> AllowlistedEnv:
         """The one allowlisted env every runner-spawned child is built from
         (``bzh:worker-env-allowlist``) — the sole accessor a composition root reads instead
