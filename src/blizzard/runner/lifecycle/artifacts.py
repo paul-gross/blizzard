@@ -1,5 +1,5 @@
 """The graph-mint artifact-declaration repository seam, and the rules of a worker's read of
-one artifact by name across node, graph, and system scope."""
+artifacts: one by name across node, graph, and system scope, or one epoch of a node's series."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from blizzard.foundation.unrecognized import Unrecognized
 __all__ = [
     "ArtifactAmbiguous",
     "ArtifactCandidate",
+    "ArtifactEpochNotHeld",
     "ArtifactNotFound",
     "ArtifactRead",
     "ArtifactReadContradiction",
@@ -24,6 +25,7 @@ __all__ = [
     "carries_content",
     "has_producing_node",
     "read_only_reason",
+    "refuse_epochs_outside_node",
 ]
 
 
@@ -53,17 +55,39 @@ def read_only_reason(scope: ArtifactScope) -> str | None:
 
 
 class ArtifactReadContradiction(Exception):
-    """``--node`` paired with a scope that has no producing node — mapped to ``400``."""
+    """A node-scope-only flag paired with a graph or system scope — mapped to ``400``. ``flag``
+    is the offending flag, ``given`` the flag as the caller passed it, and ``because`` what only
+    node scope has."""
 
-    def __init__(self, node: str, scope: ArtifactScope) -> None:
+    def __init__(self, flag: str, scope: ArtifactScope, *, given: str, verb: str, because: str) -> None:
         super().__init__(
-            f"--node {node!r} cannot narrow {scope.value} scope — only node scope has a producing "
-            f"node; drop one of --node / --scope {scope.value}"
+            f"{given} cannot {verb} {scope.value} scope — only node scope {because}; "
+            f"drop one of {flag} / --scope {scope.value}"
+        )
+
+
+def refuse_epochs_outside_node(scope: ArtifactScope | None) -> None:
+    """Refuse a listing of superseded epochs narrowed to a scope that has none."""
+    if scope is not None and not has_producing_node(scope):
+        raise ArtifactReadContradiction(
+            "--all-epochs", scope, given="--all-epochs", verb="include", because="has epochs"
         )
 
 
 class ArtifactNotFound(Exception):
     """No artifact by that name in what the read searched — mapped to ``404``."""
+
+
+class ArtifactEpochNotHeld(Exception):
+    """The node-scope series exists but holds no such epoch — mapped to ``404``, naming the
+    epochs it does hold, newest first."""
+
+    def __init__(self, name: str, node: str | None, epoch: int, held: Sequence[int]) -> None:
+        source = f" from node {node!r}" if node is not None else ""
+        plural = "epoch" if len(held) == 1 else "epochs"
+        super().__init__(
+            f"artifact {name!r}{source} holds no epoch {epoch} — it holds {plural} {', '.join(map(str, held))}"
+        )
 
 
 class ArtifactAmbiguous(Exception):
@@ -103,41 +127,65 @@ def _label(candidate: ArtifactCandidate) -> str:
 @dataclass(frozen=True)
 class ArtifactRead:
     """A worker's read of one artifact by ``name`` against its lease's mint ``graph_id``, optionally
-    narrowed by ``node`` (a producing node) and ``scope``. A supplied ``node`` settles scope to node —
-    neither a graph declaration nor a system artifact has a producing node — so graph and system join
-    the search only when neither flag is given."""
+    narrowed by ``node`` (a producing node), ``epoch`` (one entry of a node's series) and ``scope``.
+    A supplied ``node`` or ``epoch`` settles scope to node — neither a graph declaration nor a system
+    artifact has a producing node or epochs — so graph and system join the search only when no
+    narrowing flag is given."""
 
     name: str
     graph_id: str
     node: str | None = None
     scope: ArtifactScope | None = None
+    epoch: int | None = None
 
     def validate(self) -> None:
-        """Refuse ``node`` paired with a scope that has no producing node."""
-        if self.node is not None and self.scope is not None and not has_producing_node(self.scope):
-            raise ArtifactReadContradiction(self.node, self.scope)
+        """Refuse ``node`` or ``epoch`` paired with a scope that has neither."""
+        if self.scope is None or has_producing_node(self.scope):
+            return
+        if self.node is not None:
+            raise ArtifactReadContradiction(
+                "--node", self.scope, given=f"--node {self.node!r}", verb="narrow", because="has a producing node"
+            )
+        if self.epoch is not None:
+            raise ArtifactReadContradiction(
+                "--epoch", self.scope, given=f"--epoch {self.epoch}", verb="narrow", because="has epochs"
+            )
 
     def searches_node(self) -> bool:
         return self.scope is None or self.scope is ArtifactScope.NODE
 
     def searches_graph(self) -> bool:
-        return self.scope is ArtifactScope.GRAPH or (self.scope is None and self.node is None)
+        return self.scope is ArtifactScope.GRAPH or self._searches_everywhere()
 
     def searches_system(self) -> bool:
-        return self.scope is ArtifactScope.SYSTEM or (self.scope is None and self.node is None)
+        return self.scope is ArtifactScope.SYSTEM or self._searches_everywhere()
+
+    def _searches_everywhere(self) -> bool:
+        return self.scope is None and self.node is None and self.epoch is None
 
     def resolve[C: ArtifactCandidate](self, candidates: Sequence[C]) -> C:
         """The one candidate the searched scopes found, else :class:`ArtifactNotFound`
         naming what was searched, or :class:`ArtifactAmbiguous` for a name in several scopes.
+        With ``epoch``, ``candidates`` is the whole node series and only that epoch's entries
+        survive — :class:`ArtifactEpochNotHeld` when there are none.
         Node candidates collapse to the newest by epoch first — each lease mints a fresh, rising
-        epoch, so two producing nodes never tie; a tie keeps the first, the envelope's newest-first
-        order."""
+        epoch, so two producing nodes never tie; a tie keeps the first, the envelope's
+        newest-first order."""
         if not candidates:
             raise ArtifactNotFound(self._not_found())
+        if self.epoch is not None:
+            candidates = self._at_epoch(self.epoch, candidates)
         survivors = self._collapse_node_series(candidates)
         if len(survivors) > 1:
             raise ArtifactAmbiguous(self.name, sorted({_label(c) for c in survivors}), self._levers())
         return survivors[0]
+
+    def _at_epoch[C: ArtifactCandidate](self, epoch: int, series: Sequence[C]) -> list[C]:
+        matches = [c for c in series if c.epoch == epoch]
+        if not matches:
+            held = sorted({c.epoch for c in series if c.epoch is not None}, reverse=True)
+            raise ArtifactEpochNotHeld(self.name, self.node, epoch, held)
+        return matches
 
     @staticmethod
     def _collapse_node_series[C: ArtifactCandidate](candidates: Sequence[C]) -> list[C]:
@@ -165,8 +213,8 @@ class ArtifactRead:
     def _levers(self) -> tuple[str, ...]:
         """The narrowing flag that could change this result. Node candidates have already
         collapsed to one, so a refusal is a cross-scope collision and only ``--scope`` settles it;
-        a supplied ``--node`` or ``--scope`` leaves at most one candidate, so no lever."""
-        return ("--scope",) if self.node is None and self.scope is None else ()
+        a supplied ``--node``, ``--epoch`` or ``--scope`` leaves at most one candidate, so no lever."""
+        return ("--scope",) if self._searches_everywhere() else ()
 
 
 @domain_model

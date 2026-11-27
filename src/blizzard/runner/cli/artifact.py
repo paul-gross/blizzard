@@ -90,17 +90,32 @@ def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[dict[str, o
     "mint's baked-in declarations), or `system` (blizzard's own published documents). Omitted "
     "reads all three.",
 )
-def artifact_list(content: bool, scope: str | None) -> None:
-    """Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch,
-    plus the graph mint's own baked-in declarations and blizzard's published system-artifact
-    set — ``--scope`` narrows to one. Content is elided by default; ``--content`` includes it.
-    Also includes this node-step's own staged, not-yet-published submissions,
+@click.option(
+    "--all-epochs",
+    "all_epochs",
+    is_flag=True,
+    default=False,
+    help="Include each node-scope series' superseded epochs, newest first, each entry naming its node "
+    "and epoch. Graph and system scope have no epochs, so pairing this with `--scope graph`/`--scope "
+    "system` is refused.",
+)
+def artifact_list(content: bool, scope: str | None, all_epochs: bool) -> None:
+    """Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch
+    unless ``--all-epochs`` includes the superseded ones, plus the graph mint's own baked-in
+    declarations and blizzard's published system-artifact set — ``--scope`` narrows to one. Content
+    is elided by default; ``--content`` includes it. ``--all-epochs`` with ``--scope graph`` or
+    ``--scope system`` is refused. Also includes this node-step's own staged, not-yet-published submissions,
     each carrying ``"staged": true`` — everything published carries ``"staged": false``."""
     worker = WorkerCall.of("artifact list")
+    params: dict[str, str] = {}
+    if scope:
+        params["scope"] = scope
+    if all_epochs:
+        params["all_epochs"] = "true"
     resp = worker.get(
         worker.leased("artifacts"),
         failure="could not read the artifacts",
-        params={"scope": scope} if scope else None,
+        params=params or None,
     )
     raw, _ = decode_answer(resp, TypeAdapter(list[WorkerArtifact]), verb="artifact list", where=worker.runner_url)
     published = cast("list[dict[str, object]]", raw)
@@ -153,12 +168,22 @@ def _is_not_found(exc: click.ClickException) -> bool:
     "and is refused.",
 )
 @click.option(
+    "--epoch",
+    "epoch",
+    type=click.IntRange(min=0),
+    default=None,
+    help="Read that one epoch of a node-scope series, superseded or not (a bare read returns the "
+    "newest). This narrows to node scope on its own, so pairing it with `--scope graph`/`--scope "
+    "system` is refused. An epoch the series does not hold is refused, naming the epochs it holds.",
+)
+@click.option(
     "--scope",
     "scope",
     type=_SCOPE_CHOICE,
     default=None,
     help="Resolve NAME from one scope only — `node`, `graph`, or `system`. Omitted searches "
-    "all three, and a NAME present in more than one scope is ambiguous — unless `--node` narrows to node scope.",
+    "all three, and a NAME present in more than one scope is ambiguous — unless `--node` or `--epoch` "
+    "narrows to node scope.",
 )
 @click.option(
     "--content",
@@ -168,13 +193,19 @@ def _is_not_found(exc: click.ClickException) -> bool:
     help="Print the raw asset text to stdout instead of JSON (errors on a git-commit artifact).",
 )
 def artifact_get(
-    name_arg: str | None, name_opt: str | None, node: str | None, scope: str | None, content: bool
+    name_arg: str | None,
+    name_opt: str | None,
+    node: str | None,
+    epoch: int | None,
+    scope: str | None,
+    content: bool,
 ) -> None:
     """Worker: read one published artifact by NAME, passed literally, slashes included — a ``produces:`` name
     (node scope), a baked-in graph declaration (graph scope), or one of blizzard's own published documents
-    (system scope). Refused when NAME is unknown, when NAME resolves in more than one scope (naming them), or when
-    this node-step has only staged it (pointing at ``artifact staged``). ``--content`` prints raw asset text,
-    refused for a git-commit artifact, which carries none."""
+    (system scope). Refused when NAME is unknown, when NAME resolves in more than one scope (naming them), when
+    this node-step has only staged it (pointing at ``artifact staged``), when the series does not hold the
+    ``--epoch`` asked for (naming the epochs it holds), or when ``--node`` or ``--epoch`` is paired with a graph or
+    system scope. ``--content`` prints raw asset text, refused for a git-commit artifact, which carries none."""
     name = name_opt if name_opt is not None else name_arg
     if name_arg is not None and name_opt is not None and name_arg != name_opt:
         raise click.ClickException("artifact get: NAME given both positionally and via --name — pick one")
@@ -186,6 +217,8 @@ def artifact_get(
         params["node"] = node
     if scope:
         params["scope"] = scope
+    if epoch is not None:
+        params["epoch"] = str(epoch)
     try:
         resp = worker.get(
             worker.leased(f"artifacts/{quote(name, safe='/')}"),
@@ -193,7 +226,8 @@ def artifact_get(
             params=params or None,
         )
     except click.ClickException as exc:
-        staged_scope = scope in (None, ArtifactScope.NODE.value)
+        # A staged submission has no epoch yet, so a read that names one gets no staged detour.
+        staged_scope = scope in (None, ArtifactScope.NODE.value) and epoch is None
         if _is_not_found(exc) and staged_scope and name in (_staged_names(worker) or set()):
             raise click.ClickException(
                 f"artifact get: {name!r} is staged but not yet published for this node-step — "

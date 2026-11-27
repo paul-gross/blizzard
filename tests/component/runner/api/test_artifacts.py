@@ -14,15 +14,19 @@ from typing import Unpack
 from urllib.parse import quote
 
 import httpx2
+import pytest
 from fastapi import FastAPI
+from pydantic import ValidationError
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.artifacts import PinnedGraphArtifact
+from blizzard.wire.chunk import ArtifactView, ChunkDetail
 from tests.support.config_inputs import create_runner_app
 from tests.support.factory_fields import NewLeaseFields
 from tests.support.runner_client import runner_client
@@ -779,3 +783,154 @@ def test_get_node_alone_settles_a_system_collision(tmp_path: Path) -> None:
     assert resp.status_code == 200, resp.text
     assert resp.json()["scope"] == "node"
     assert resp.json()["content"] == "a node's own docket"
+
+
+# Superseded epochs — node rows read from the hub's chunk detail
+
+_DETAIL_URL = f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}"
+
+
+def _view(epoch: int, content: str, *, produced_at: str | None = None) -> ArtifactView:
+    return ArtifactView(
+        key=f"verify.verification-report.{epoch}",
+        kind=ArtifactKind.ASSET,
+        name="verification-report",
+        node_id="nd_verify",
+        node_name="verify",
+        epoch=epoch,
+        produced_at=produced_at,
+        content=content,
+    )
+
+
+def _detail(*views: ArtifactView) -> _FakeHubResponse:
+    detail = ChunkDetail(
+        chunk_id=_CHUNK,
+        graph_id="gr_1",
+        status=ChunkStatus.RUNNING,
+        current_node_id="nd_build",
+        latest_epoch=9,
+        history=[],
+        artifacts=list(views),
+    )
+    return _FakeHubResponse(200, detail.model_dump(mode="json"))
+
+
+# Served as the hub orders them: ascending epoch, the earlier write first within one key.
+_SERIES = (_view(5, "round-1"), _view(9, "round-2"), _view(9, "round-2 duplicate"))
+
+
+def _read(tmp_path: Path, path: str, response: _FakeHubResponse) -> tuple[httpx2.Response, list[str]]:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _seed_graph_artifacts(store)
+    seen: list[str] = []
+    _stub_hub(app, response, seen)
+    with runner_client(app) as client:
+        resp = client.get(f"/api/leases/lease_1/{path}", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    return resp, seen
+
+
+def test_get_epoch_reads_that_superseded_entry(tmp_path: Path) -> None:
+    resp, seen = _read(tmp_path, "artifacts/verification-report?node=verify&epoch=5", _detail(*_SERIES))
+
+    assert resp.status_code == 200, resp.text
+    assert (resp.json()["epoch"], resp.json()["content"], resp.json()["scope"]) == (5, "round-1", "node")
+    assert seen == [_DETAIL_URL]
+
+
+def test_get_epoch_with_duplicate_rows_reads_the_first_served(tmp_path: Path) -> None:
+    resp, _ = _read(tmp_path, "artifacts/verification-report?epoch=9", _detail(*_SERIES))
+
+    assert resp.json()["content"] == "round-2"
+
+
+def test_get_an_unheld_epoch_is_404_naming_the_held_ones(tmp_path: Path) -> None:
+    resp, _ = _read(tmp_path, "artifacts/verification-report?node=verify&epoch=7", _detail(*_SERIES))
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"].endswith("holds no epoch 7 — it holds epochs 9, 5")
+
+
+def test_get_epoch_under_a_scope_without_epochs_never_calls_the_hub(tmp_path: Path) -> None:
+    resp, seen = _read(tmp_path, "artifacts/verification-report?epoch=5&scope=graph", _detail(*_SERIES))
+
+    assert resp.status_code == 400
+    assert "--epoch 5 cannot narrow graph scope" in resp.json()["detail"]
+    assert seen == []
+
+
+def test_list_all_epochs_lists_each_epoch_newest_first_beside_the_other_scopes(tmp_path: Path) -> None:
+    resp, seen = _read(tmp_path, "artifacts?all_epochs=true", _detail(*_SERIES))
+
+    assert resp.status_code == 200, resp.text
+    rows = resp.json()
+    node_rows = [(r["node_name"], r["name"], r["epoch"], r["content"]) for r in rows if r["scope"] == "node"]
+    assert node_rows == [
+        ("verify", "verification-report", 9, "round-2"),
+        ("verify", "verification-report", 5, "round-1"),
+    ]
+    assert any(r["scope"] == "graph" for r in rows)
+    assert seen == [_DETAIL_URL, _SYSTEM_ARTIFACTS_PATH]
+
+
+def test_list_all_epochs_orders_a_shared_epoch_by_production_time(tmp_path: Path) -> None:
+    older = _view(5, "older")
+    newer = _view(5, "newer", produced_at="2026-07-21T12:00:00+00:00").model_copy(update={"node_name": "build"})
+    resp, _ = _read(tmp_path, "artifacts?all_epochs=true&scope=node", _detail(older, newer))
+
+    assert [r["content"] for r in resp.json()] == ["newer", "older"]
+
+
+@pytest.mark.parametrize("scope", ["graph", "system"])
+def test_list_all_epochs_under_a_scope_without_epochs_is_refused(tmp_path: Path, scope: str) -> None:
+    resp, seen = _read(tmp_path, f"artifacts?all_epochs=true&scope={scope}", _detail(*_SERIES))
+
+    assert resp.status_code == 400
+    assert "--all-epochs cannot include" in resp.json()["detail"]
+    assert seen == []
+
+
+@pytest.mark.parametrize("path", ["artifacts?scope=node", "artifacts/plan?scope=node"])
+def test_a_read_naming_no_epoch_forwards_only_to_the_envelope(tmp_path: Path, path: str) -> None:
+    resp, seen = _read(tmp_path, path, _FakeHubResponse(200, _ENVELOPE))
+
+    assert resp.status_code == 200, resp.text
+    assert seen == [f"{_DETAIL_URL}/envelope"]
+
+
+def test_a_detail_without_artifacts_is_unreadable_not_an_empty_series(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError):
+        _read(tmp_path, "artifacts?all_epochs=true", _FakeHubResponse(200, {"chunk_id": _CHUNK}))
+
+
+@pytest.mark.parametrize("path", ["artifacts?all_epochs=true", "artifacts/plan?epoch=1"])
+def test_an_epoch_read_passes_through_the_hub_status(tmp_path: Path, path: str) -> None:
+    resp, _ = _read(tmp_path, path, _FakeHubResponse(404, text="no such chunk"))
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.parametrize("path", ["artifacts?all_epochs=true", "artifacts/plan?epoch=1"])
+def test_an_epoch_read_is_502_when_the_hub_is_unreachable(tmp_path: Path, path: str) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("refused", request=request)
+
+    app.state.hub_router.handler = handler
+    with runner_client(app) as client:
+        resp = client.get(f"/api/leases/lease_1/{path}", headers={"X-Blizzard-Lease-Token": _TOKEN})
+
+    assert resp.status_code == 502
+
+
+@pytest.mark.parametrize("path", ["artifacts?all_epochs=true", "artifacts/plan?epoch=1"])
+def test_an_epoch_read_needs_the_lease_token(tmp_path: Path, path: str) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    with runner_client(app) as client:
+        resp = client.get(f"/api/leases/lease_1/{path}", headers={"X-Blizzard-Lease-Token": "nope"})
+
+    assert resp.status_code == 403
