@@ -120,7 +120,7 @@ nodes:
     expect(response.status).toBe(200);
     const feed = response.body.activity;
     const fields = new Set(['type', 'key', 'at', 'chunk_id', 'status', 'prev_status', 'node', 'prev_node',
-      'runner_id', 'runner_name', 'cause', 'graph_id', 'severity', 'kind', 'by', 'reason']);
+      'transition_from', 'transition_to', 'runner_id', 'runner_name', 'cause', 'graph_id', 'severity', 'kind', 'by', 'reason']);
     for (const row of feed) {
       expect(Object.keys(row).every((field) => fields.has(field))).toBe(true);
       for (const field of ['type', 'key', 'at']) {
@@ -131,6 +131,8 @@ nodes:
     const causes = new Set(feed.filter((row: { chunk_id: string; type: string }) => row.chunk_id === chunkId && row.type === 'chunk-changed')
       .map((row: { cause: string }) => row.cause));
     for (const cause of ['minted', 'promoted', 'claimed', 'node-completed', 'escalated', 'paused', 'resumed']) expect(causes.has(cause)).toBe(true);
+    expect(feed.find((row: { chunk_id: string; cause: string }) => row.chunk_id === chunkId && row.cause === 'node-completed'))
+      .toMatchObject({ transition_from: 'build', transition_to: 'review' });
     const eventRows = feed.filter((row: { type: string; kind: string }) => row.type === 'event-logged' && row.kind === 'worker-context-warned');
     expect(eventRows).toHaveLength(1);
     expect(eventRows[0]).toMatchObject({ severity: 'warning', chunk_id: chunkId });

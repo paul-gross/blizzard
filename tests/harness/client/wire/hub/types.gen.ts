@@ -118,6 +118,14 @@ export type ActivityView = {
      */
     status: string | null;
     /**
+     * Transition From
+     */
+    transition_from: string | null;
+    /**
+     * Transition To
+     */
+    transition_to: string | null;
+    /**
      * Type
      */
     type: string;
@@ -1646,6 +1654,14 @@ export type ChunkChangedPayload = {
      * Terminal
      */
     terminal: boolean;
+    /**
+     * Transition From
+     */
+    transition_from?: string | null;
+    /**
+     * Transition To
+     */
+    transition_to?: string | null;
 };
 
 /**
