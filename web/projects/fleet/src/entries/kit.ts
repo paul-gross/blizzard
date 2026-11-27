@@ -23,7 +23,6 @@ export { KitMasterDetail } from '../lib/kit/kit-master-detail';
 export { KitNumberInput } from '../lib/kit/kit-number-input';
 export { KitOptionGroup } from '../lib/kit/kit-option-group';
 export { KitOption } from '../lib/kit/kit-option';
-export { KitPaceBar } from '../lib/kit/kit-pace-bar';
 export { KitPanel, KitPanelHeader } from '../lib/kit/kit-panel';
 export { KitProseBlock } from '../lib/kit/kit-prose-block';
 export { KitSectionHead } from '../lib/kit/kit-section-head';

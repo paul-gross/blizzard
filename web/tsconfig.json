@@ -9,7 +9,6 @@
       "fleet/chrome": ["./projects/fleet/src/entries/chrome.ts"],
       "fleet/chrome/titlebar": ["./projects/fleet/src/entries/chrome/titlebar.ts"],
       "fleet/chunk-card": ["./projects/fleet/src/entries/chunk-card.ts"],
-      "fleet/chunk-card/issue-list": ["./projects/fleet/src/entries/chunk-card/issue-list.ts"],
       "fleet/chunk-detail": ["./projects/fleet/src/entries/chunk-detail.ts"],
       "fleet/chunk-detail/actions": ["./projects/fleet/src/entries/chunk-detail/actions.ts"],
       "fleet/chunk-detail/panes": ["./projects/fleet/src/entries/chunk-detail/panes.ts"],

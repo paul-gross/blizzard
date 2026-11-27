@@ -39,8 +39,8 @@
  * `fleet/src/lib/` unit must be reached by both apps, and no `fleet` file imports an app.
  *
  * Also the disjoint-diffs sweep (`disjoint-diffs-sweep.js`, `bzh:frontend-disjoint-diffs`): every
- * export of a `fleet` entry needs a consumer outside the unit that declares it, and `public-api.ts`
- * re-exports only entries.
+ * export of a `fleet` entry needs a consumer outside `fleet`, and `public-api.ts` re-exports only
+ * entries.
  *
  * Also the domain-boundary sweeps (`domain-boundary-sweep.js`, `bzh:frontend-domain-boundary`). The
  * symbol-origin sweep resolves every symbol a file references to its declaration and fails a file outside
@@ -356,9 +356,8 @@ function kitParts(sources, entries, listed) {
             'list the exported names so each part can be resolved',
         );
       }
-      const kitPath = stmt.moduleSpecifier.text.replace(/^(\.\.\/)+lib\/kit\//, './');
-      const from = kitModule(sources, 'index.ts', kitPath);
-      if (from === null) continue;
+      const from = /^(?:\.\.\/)+lib\/kit\/(.+)$/.exec(stmt.moduleSpecifier.text)?.[1].concat('.ts');
+      if (from === undefined || !sources.has(from)) continue;
       for (const el of stmt.exportClause.elements) {
         if (el.isTypeOnly) continue;
         const part = resolveKitClass(sources, from, (el.propertyName ?? el.name).text);
@@ -1483,7 +1482,7 @@ function main() {
       console.error('structural-gate: retired kit chrome outside fleet/lib/kit/:\n');
       for (const v of kitFloorViolations) console.error(`  ${v.file}: ${v.class}`);
       console.error(
-        '\nCompose the shared kit (`KitPanel`/`KitAsyncState`/`KitFactList`, from `fleet`) instead of a re-typed ' +
+        '\nCompose the shared kit (`KitPanel`/`KitAsyncState`/`KitFactList`, from `fleet/kit`) instead of a re-typed ' +
           'copy; a site that genuinely should not convert goes in KIT_FLOOR_EXEMPT_SITES with a one-line reason.',
       );
     }
@@ -1546,7 +1545,7 @@ function main() {
       console.error('structural-gate: fleet entry exports outside the disjoint-diffs rule:\n');
       for (const line of disjointDiffsLines) console.error(line);
       console.error(
-        '\nDrop an export nothing outside the unit that declares it imports from its entry (delete the symbol if ' +
+        '\nDrop an export nothing outside fleet imports from its entry (delete the symbol if ' +
           'nothing else uses it), and re-export from public-api.ts only through an entry.',
       );
     }

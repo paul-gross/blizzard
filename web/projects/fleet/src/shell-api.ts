@@ -10,14 +10,14 @@ export { EVENT_SOURCE_FACTORY, FetchEventSource, SseService, type EventSourceFac
 export { INVALIDATION_COALESCE_WINDOW_MS, LiveInvalidationSpine } from './lib/sse/live-invalidation-spine';
 export { HUB_EVENT_TYPES, hubEventStreamUrl } from './lib/sse/hub-events';
 export { HubEventKind, hubEventTypeName, type HubEventType, type HubEventData, type ActivityFact } from './lib/sse/hub-events.domain';
-export { translateHubEvent, translateHubEventType } from './lib/sse/hub-events.translate';
+export { translateHubEvent } from './lib/sse/hub-events.translate';
 export { openLookup } from './lib/core/open-lookup';
 export { chunkDetailKey, chunkWorkItemsKey } from './lib/core/query-keys';
 export { FLEET_CLOCK, injectNowSignal } from './lib/core/now-signal/now-signal';
 export { RUNNER_HOST_NAMES, RUNNER_NAMES } from './lib/core/runner-display-name';
 export { FlagStore, provideFlags, type FlagsRead } from './lib/core/flags/flag-store';
 export { flagGuard } from './lib/core/flags/flag-guard';
-export { APP_SCOPE, AppLink, AppPath, AppScope, type AppScopePolicy, type InAppLink, type TargetQuery } from './lib/core/app-scope';
+export { APP_SCOPE, AppLink, AppScope, type AppScopePolicy, type InAppLink } from './lib/core/app-scope';
 
 export { ViewportService } from './lib/core/viewport/viewport-service';
 export { matchesMobileViewport } from './lib/core/viewport/matches-mobile-viewport';

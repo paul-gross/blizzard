@@ -20,7 +20,8 @@
  * Fails when a source file reachable that eagerly is one esbuild cannot drop from the
  * initial chunk even when nothing on the eager path uses its exports (the barrel-leak
  * failure mode this check exists to catch): the fleet `chunk/chunk-detail/`, `chunk/awaiting-human/`, or
- * `transcripts/` folders and `@angular/cdk`'s `menu`/`overlay`/`listbox` bundles in either app, and
+ * `transcripts/` folders, a `fleet` weight-class entry file or the `fleet` root (the eager shell imports `fleet/shell`),
+ * and `@angular/cdk`'s `menu`/`overlay`/`listbox` bundles in either app, and
  * for the hub also its `garden/`, `graphs/`, or `board/chunk-dock/` folders and `@dagrejs/*`.
  *
  * It also fails when the light `fleet/kit` entry's source closure reaches `@angular/cdk`, `@angular/aria`, or
@@ -56,6 +57,10 @@ const SHARED_FORBIDDEN = [
   { name: 'fleet chunk-detail/', test: (f) => f.startsWith('projects/fleet/src/lib/chunk/chunk-detail/') },
   { name: 'fleet awaiting-human/', test: (f) => f.startsWith('projects/fleet/src/lib/chunk/awaiting-human/') },
   { name: 'fleet transcripts/', test: (f) => f.startsWith('projects/fleet/src/lib/transcripts/') },
+  {
+    name: 'fleet weight-class entry or root',
+    test: (f) => f.startsWith('projects/fleet/src/entries/') || f === 'projects/fleet/src/public-api.ts',
+  },
   {
     name: '@angular/cdk menu/overlay/listbox',
     test: (f) => f.startsWith('node_modules/@angular/cdk/') && (f.includes('menu') || f.includes('overlay') || f.includes('listbox')),
@@ -203,8 +208,41 @@ function assertBundleCompositionDetectorWorks() {
   if (hit?.importer !== 'projects/hub/src/app/shell/app.ts') {
     throw new Error(`bundle-composition detector attributed the wrong importer: ${hit?.importer}`);
   }
+  assertEagerEntryDetectorWorks();
   assertLightKitDetectorWorks();
   assertRootReachDetectorWorks();
+}
+
+/** The eager-shell condition: a value import of a weight-class entry or of the root on the eager path is caught; a
+ * type-only one and `fleet/shell` pass. */
+function assertEagerEntryDetectorWorks() {
+  const main = APPS[0].main;
+  const entry = 'projects/fleet/src/entries/core.ts';
+  const typed = 'projects/fleet/src/entries/host.ts';
+  const root = 'projects/fleet/src/public-api.ts';
+  const shell = 'projects/fleet/src/shell-api.ts';
+  const fixture = {
+    inputs: {
+      [main]: {
+        imports: [
+          { path: entry, kind: 'import-statement' },
+          { path: typed, kind: 'import-statement', external: true },
+          { path: root, kind: 'import-statement' },
+          { path: shell, kind: 'import-statement' },
+        ],
+      },
+    },
+  };
+  const { visited, parent } = sourceClosure(fixture, main);
+  for (const app of APPS) {
+    const found = findViolations(visited, parent, app.forbidden)
+      .map((v) => v.file)
+      .sort()
+      .join();
+    if (found !== [entry, root].join()) {
+      throw new Error(`bundle-composition detector misjudged the eager ${app.name} fleet imports: ${found}`);
+    }
+  }
 }
 
 /** The light-kit condition: a heavy module reached through the entry is caught, a type-only edge to one passes, and
@@ -232,6 +270,10 @@ function assertLightKitDetectorWorks() {
   ]);
   if (lightKitViolations(passing, true).length !== 0) {
     throw new Error('bundle-composition detector false-positived on a type-only, lazy, or light import in the light kit');
+  }
+  const outside = '../shared/node_modules/@angular/cdk/fesm2022/x.mjs';
+  if (lightKitViolations(build([{ path: outside, kind: 'import-statement' }]), true)[0]?.file !== outside) {
+    throw new Error('bundle-composition detector missed a heavy package resolved outside web/');
   }
   if (lightKitViolations({ inputs: {} }, true).length !== 1) {
     throw new Error('bundle-composition detector passed a build with no light kit entry');

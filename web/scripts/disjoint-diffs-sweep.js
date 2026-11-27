@@ -6,12 +6,12 @@
  * Two checks keep the `fleet` entry points a feature's only shared edit, one export line apiece:
  *
  * - **Unconsumed entry export.** Every export of an entry file (`fleet/src/entries/**`) needs a
- *   consumer outside the placement unit that declares it. Consumption is judged per symbol: a file
- *   outside the unit imports a name that resolves, through any alias chain, to the same declaration,
- *   by whichever route (an entry, `fleet/shell`, a deep relative path). A re-export is not
- *   consumption, a spec counts as a consumer, and a namespace or dynamic `import()` of a module
- *   consumes all its exports. A name declared in the generated `lib/api/` has no feature owner and
- *   is not judged.
+ *   consumer outside `fleet`: `fleet` imports itself by file, so an entry serves only the apps.
+ *   Consumption is judged per symbol: a file outside `projects/fleet/` imports a name that resolves,
+ *   through any alias chain, to the same declaration, by whichever route (an entry, `fleet/shell`, a
+ *   deep relative path). A re-export is not consumption, a spec counts as a consumer, and a namespace
+ *   or dynamic `import()` of a module consumes all its exports. A name declared in the generated
+ *   `lib/api/` is not judged.
  * - **Library aggregate.** A `public-api.ts` statement re-exports only from an entry file.
  *   `shell-api.ts` is not read: its deep named re-exports are what `bzh:frontend-eager-shell-entry`
  *   requires.
@@ -22,11 +22,12 @@
 
 const path = require('node:path');
 const ts = require('typescript');
-const { createProgram, unitOf, walkTs, isUnder, toPosix } = require('./placement-sweep');
+const { createProgram, walkTs, isUnder, toPosix } = require('./placement-sweep');
 
 const ROOT = path.resolve(__dirname, '..');
 
-const FLEET_SRC = 'projects/fleet/src';
+const FLEET = 'projects/fleet';
+const FLEET_SRC = `${FLEET}/src`;
 const FLEET_LIB = `${FLEET_SRC}/lib`;
 const ENTRIES = `${FLEET_SRC}/entries`;
 const AGGREGATE = `${FLEET_SRC}/public-api.ts`;
@@ -120,13 +121,14 @@ function exportLines(checker, sf) {
  *
  * @param {{ root: string, memory?: Map<string, string> | null }} opts
  * @returns {{ unconsumed: { file: string, line: number, name: string }[], aggregate: { file: string, line: number, source: string }[] }}
- *   every entry export no file outside its declaring unit imports, and every aggregate
+ *   every entry export no file outside `fleet` imports, and every aggregate
  *   re-export that bypasses the entries
  */
 function sweepDisjointDiffs({ root, memory = null }) {
   const abs = (/** @type {string} */ rel) => toPosix(path.join(root, rel));
   const rel = (/** @type {string} */ file) => path.relative(root, file);
-  const fleetLib = abs(FLEET_LIB);
+  const fleet = abs(FLEET);
+  const fleetApi = abs(`${FLEET_LIB}/api`);
   const entries = abs(ENTRIES);
   const files = memory ? [...memory.keys()] : walkTs(abs('projects'));
   const program = createProgram(root, files, memory);
@@ -149,10 +151,9 @@ function sweepDisjointDiffs({ root, memory = null }) {
     for (const exported of checker.getExportsOfModule(moduleSymbol)) {
       const target = resolveAlias(checker, exported);
       const declared = target.declarations?.[0]?.getSourceFile().fileName;
-      if (!declared || isUnder(toPosix(declared), `${fleetLib}/api`)) continue;
-      const unit = unitOf(toPosix(declared), fleetLib);
+      if (!declared || isUnder(toPosix(declared), fleetApi)) continue;
       const users = consumers.get(target);
-      if (users && [...users].some((user) => unitOf(user, fleetLib) !== unit)) continue;
+      if (users && [...users].some((user) => !isUnder(user, fleet))) continue;
       unconsumed.push({ file: rel(file), line: lines.get(exported.name) ?? 1, name: exported.name });
     }
   }
@@ -175,8 +176,8 @@ function sweepDisjointDiffs({ root, memory = null }) {
 
 /**
  * Prove the sweep can still fail, before trusting it over the tree (`bzh:case-pins-its-own-name`):
- * an export nothing outside its unit imports, and an aggregate line bypassing the entries, must
- * each be caught; an export reached through an entry or a deep relative path, from an outside spec,
+ * an export nothing outside `fleet` imports, and an aggregate line bypassing the entries, must
+ * each be caught; an export an app reaches through an entry or a deep relative path, from a spec,
  * by an `import()` type, or by a namespace or dynamic import must pass, and so must a generated name.
  */
 function assertDisjointDiffsDetectorWorks() {
@@ -193,22 +194,25 @@ function assertDisjointDiffsDetectorWorks() {
     [`${entries}/hub-api.ts`, "export { unreadApi } from '../lib/api/hub';\n"],
     [
       `${entries}/core.ts`,
-      "export { usedByApp, unusedAnywhere, usedInsideOnly } from '../lib/feat-a/a';\n" +
+      "export { usedByApp, unusedAnywhere, usedInsideFleetOnly } from '../lib/feat-a/a';\n" +
         "export { usedByDeepImport, usedBySpec, type UsedByImportType } from '../lib/feat-b/b';\n",
     ],
     [`${lib}/loose.ts`, 'export const loose = 1;\n'],
     [
       `${lib}/feat-a/a.ts`,
-      'export const usedByApp = 1;\nexport const unusedAnywhere = 2;\nexport const usedInsideOnly = 3;\n',
+      'export const usedByApp = 1;\nexport const unusedAnywhere = 2;\nexport const usedInsideFleetOnly = 3;\n',
     ],
-    [`${lib}/feat-a/b.ts`, "import { usedInsideOnly } from './a';\nexport const inside = usedInsideOnly;\n"],
+    [
+      `${lib}/feat-b/c.ts`,
+      "import { usedInsideFleetOnly } from '../feat-a/a';\nexport const inside = usedInsideFleetOnly;\n",
+    ],
     [
       `${lib}/feat-b/b.ts`,
       'export const usedByDeepImport = 1;\nexport const usedBySpec = 2;\nexport type UsedByImportType = string;\n',
     ],
     [
-      `${lib}/feat-a/c.ts`,
-      "import { usedByDeepImport } from '../feat-b/b';\nexport const deep = usedByDeepImport;\n",
+      `${root}/projects/hub/src/deep.ts`,
+      "import { usedByDeepImport } from '../../fleet/src/lib/feat-b/b';\nexport const deep = usedByDeepImport;\n",
     ],
     [
       `${root}/projects/hub/src/main.ts`,
@@ -222,9 +226,9 @@ function assertDisjointDiffsDetectorWorks() {
   ]);
   const found = sweepDisjointDiffs({ root, memory: main });
   const names = found.unconsumed.map((u) => u.name).sort().join(',');
-  if (names !== 'unusedAnywhere,usedInsideOnly') {
+  if (names !== 'unusedAnywhere,usedInsideFleetOnly') {
     throw new Error(
-      `disjoint-diffs self-test: expected exactly the unconsumed and inside-only exports to be caught, saw [${names}]`,
+      `disjoint-diffs self-test: expected exactly the unconsumed and fleet-only exports to be caught, saw [${names}]`,
     );
   }
   if (found.aggregate.map((r) => r.source).join(',') !== './lib/loose') {
@@ -263,7 +267,7 @@ function disjointDiffsViolations() {
   /** @type {string[]} */
   const lines = [];
   for (const u of unconsumed) {
-    lines.push(`  ${u.file}:${u.line}: ${u.name} — no consumer outside the unit that declares it`);
+    lines.push(`  ${u.file}:${u.line}: ${u.name} — no consumer outside fleet`);
   }
   for (const r of aggregate) {
     lines.push(`  ${r.file}:${r.line}: re-exports ${r.source} directly — export it through an entry`);

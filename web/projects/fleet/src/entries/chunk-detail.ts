@@ -12,8 +12,6 @@ export { ChunkTimeline } from '../lib/chunk/chunk-detail/chunk-timeline';
 export { ChunkUrgency } from '../lib/chunk/chunk-detail/chunk-urgency';
 export { compactBounce } from '../lib/chunk/chunk-detail/compact-bounce';
 export { EscalationTakeover } from '../lib/chunk/chunk-detail/escalation-takeover';
-export { filterArtifactsByStep } from '../lib/chunk/chunk-detail/filter-artifacts-by-step';
-export { chunkGraphLabel } from '../lib/chunk/chunk-detail/graph-label';
 export { hasDelivery } from '../lib/chunk/chunk-detail/has-delivery';
 export { bounceReason, parseBounceEnvelope } from '../lib/chunk/chunk-detail/parse-bounce-envelope';
 export { sortArtifacts } from '../lib/chunk/chunk-detail/sort-artifacts';

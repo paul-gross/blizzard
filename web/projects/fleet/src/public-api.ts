@@ -1,14 +1,9 @@
-/*
- * The library build's aggregate (`ng-package.json`'s entry file): one `export *` line per weight-class entry
- * under `entries/`. No code imports it — apps, specs, stories, and exemplars import a `fleet/<entry>`
- * (`bzh:frontend-weight-class-entries`).
- */
+/* The library build's aggregate (`ng-package.json`'s entry file, `bzh:frontend-weight-class-entries`). */
 
 export * from './entries/awaiting-human';
 export * from './entries/chrome';
 export * from './entries/chrome/titlebar';
 export * from './entries/chunk-card';
-export * from './entries/chunk-card/issue-list';
 export * from './entries/chunk-detail';
 export * from './entries/chunk-detail/actions';
 export * from './entries/chunk-detail/panes';

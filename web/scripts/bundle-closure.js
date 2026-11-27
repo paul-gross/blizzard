@@ -50,12 +50,20 @@ function sourceClosure(meta, start) {
   return { visited, parent };
 }
 
+/** Is `file` a module of the package `pkg`. The metafile names a `node_modules` that resolves outside `web/` with a
+ * leading path, so the segment is matched anywhere.
+ * @param {string} file
+ * @param {string} pkg */
+function inPackage(file, pkg) {
+  return `/${file}`.includes(`/node_modules/${pkg}/`);
+}
+
 /** The heavy `@angular` packages among `files`.
  * @param {Iterable<string>} files */
 function heavyPackages(files) {
   const found = new Set();
   for (const file of files) {
-    const hit = HEAVY_PACKAGES.find((pkg) => file.startsWith(`node_modules/${pkg}/`));
+    const hit = HEAVY_PACKAGES.find((pkg) => inPackage(file, pkg));
     if (hit) found.add(hit);
   }
   return HEAVY_PACKAGES.filter((pkg) => found.has(pkg));
@@ -161,7 +169,7 @@ function lightKitViolations(meta, required) {
     return required ? [{ file: LIGHT_KIT_ENTRY, importer: '<absent from the build>' }] : [];
   }
   const { visited, parent } = sourceClosure(meta, LIGHT_KIT_ENTRY);
-  const heavy = (/** @type {string} */ file) => HEAVY_PACKAGES.some((pkg) => file.startsWith(`node_modules/${pkg}/`));
+  const heavy = (/** @type {string} */ file) => HEAVY_PACKAGES.some((pkg) => inPackage(file, pkg));
   // Only the edge into the heavy packages is reported: what a heavy module imports of its own is noise.
   return [...visited]
     .filter((file) => heavy(file) && !heavy(parent.get(file) ?? LIGHT_KIT_ENTRY))

@@ -1,7 +1,8 @@
 // @ts-check
 // Proves `web:lint`'s fleet-root ban (`bzh:frontend-weight-class-entries`): a runtime import, an `import type`, a
 // re-export, a dynamic `import()`, and an `import('fleet')` type of the `fleet` root are each refused, and a
-// `fleet/<entry>` import passes — under each project's config and the exemplars', the way `ng lint` reads it.
+// `fleet/<entry>` import passes — under each project's config as `ng lint` reads it, and the exemplars' as
+// `exemplar-check` does.
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { ESLint } = require('eslint');
@@ -24,13 +25,16 @@ const PROJECTS = [
   { config: 'projects/hub/eslint.config.js', file: 'projects/hub/src/app/board/board-page.spec.ts' },
   { config: 'projects/runner/eslint.config.js', file: 'projects/runner/src/app/runners/selftest.ts' },
   { config: 'projects/fleet/eslint.config.js', file: 'projects/fleet/src/lib/host/gate.domain.ts' },
+  { config: 'eslint.exemplars.config.js', file: 'hub/src/app/exemplar.ts', cwd: '../exemplars/web' },
 ];
 
 async function main() {
-  // Rooted at `web/` with each project's own config, as `ng lint` runs, from any working directory.
-  const cwd = path.resolve(__dirname, '..');
+  // Each config read from the directory its gate runs in (`web/` for `ng lint`, the exemplar tree for
+  // `exemplar-check`), whatever the working directory here.
+  const web = path.resolve(__dirname, '..');
   for (const project of PROJECTS) {
-    const eslint = new ESLint({ cwd, overrideConfigFile: path.join(cwd, project.config) });
+    const cwd = path.resolve(web, project.cwd ?? '.');
+    const eslint = new ESLint({ cwd, overrideConfigFile: path.join(web, project.config) });
     const flagged = async (code) => {
       const [result] = await eslint.lintText(code, { filePath: project.file });
       return result.messages.some((message) => message.ruleId === RULE);
