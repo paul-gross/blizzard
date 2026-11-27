@@ -6,6 +6,7 @@ import {
 import { TestBed } from '@angular/core/testing';
 import { commands, page, userEvent } from 'vitest/browser';
 
+import { KitAsyncState } from './kit-async-state';
 import { KitSelectList } from './kit-select-list';
 import { KitSelectRow } from './kit-select-row';
 
@@ -67,6 +68,35 @@ class Host {
 })
 class LinkHost {
   readonly opened: string[] = [];
+}
+
+/** The list inside an async state, as a filtered page composes it: an empty filter result takes every
+ * row away and hides the list, and the next one brings both back. */
+@Component({
+  imports: [KitAsyncState, KitSelectList, KitSelectRow],
+  template: `
+    <button data-testid="before" type="button">before</button>
+    <fleet-kit-async-state [state]="rows().length === 0 ? 'empty' : 'ready'" emptyText="none">
+      <div
+        fleetKitSelectList
+        selectionMode="explicit"
+        [softDisabled]="false"
+        [wrap]="false"
+        focusMode="activedescendant"
+        ariaLabel="Filtered rows"
+        [value]="value()"
+        (valueChange)="value.set($event)"
+      >
+        @for (row of rows(); track row) {
+          <fleet-kit-select-row [value]="row" [label]="row" [testid]="row">{{ row }}</fleet-kit-select-row>
+        }
+      </div>
+    </fleet-kit-async-state>
+  `,
+})
+class FilteredHost {
+  readonly rows = signal(['alpha', 'bravo', 'charlie']);
+  readonly value = signal<string | null>(null);
 }
 
 async function loadDesignTokens(): Promise<void> {
@@ -206,6 +236,38 @@ describe('KitSelectList keyboard model shell sweep', () => {
       await expect.poll(() => outline(rows[1])).toBe('solid');
       await userEvent.keyboard('{Enter}');
       expect(fixture.componentInstance.opened).toEqual(['bravo']);
+    } finally {
+      root.remove();
+    }
+  });
+
+  it('outlines the selected row again after the list is filtered to nothing and back', async () => {
+    await page.viewport(800, 600);
+    await loadDesignTokens();
+    await TestBed.configureTestingModule({
+      imports: [FilteredHost],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(FilteredHost);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+    const row = (id: string) => root.querySelector<HTMLElement>(`[data-testid="${id}"]`)!;
+    try {
+      await userEvent.click(row('bravo'));
+      fixture.componentInstance.rows.set([]);
+      await fixture.whenStable();
+      fixture.componentInstance.rows.set(['alpha', 'bravo', 'charlie']);
+      await fixture.whenStable();
+
+      root.querySelector<HTMLElement>('[data-testid="before"]')!.focus();
+      await userEvent.keyboard('{Tab}');
+      const list = root.querySelector<HTMLElement>('[role="listbox"]')!;
+      expect(document.activeElement).toBe(list);
+      await expect.poll(() => list.getAttribute('aria-activedescendant')).toBe(row('bravo').id);
+      expect(getComputedStyle(row('bravo').querySelector<HTMLElement>('.row')!).outlineStyle).toBe('solid');
+      await userEvent.keyboard('{ArrowDown}');
+      expect(list.getAttribute('aria-activedescendant')).toBe(row('charlie').id);
     } finally {
       root.remove();
     }

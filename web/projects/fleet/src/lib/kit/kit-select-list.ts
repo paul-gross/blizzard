@@ -32,6 +32,8 @@ const MOVE_KEYS = ['ArrowUp', 'ArrowDown', 'Home', 'End'];
  * changes, and only a person's click or key press writes it back — Aria's own writes (pruning the
  * values of rows that have not registered yet, its default state) never do. Pressing the row that is
  * already open emits it again and keeps the consumer's value, so a re-open is possible.
+ * A list with rows highlights one: when the selected row arrives or returns while focus is elsewhere it
+ * takes the highlight, and rows that return with no selected row among them highlight the first.
  *
  * Every list binds `selectionMode="explicit" [softDisabled]="false" [wrap]="false"
  * focusMode="activedescendant"`: Aria's defaults would open rows as the highlight moves, let disabled
@@ -116,6 +118,7 @@ export class KitSelectList<V = unknown> implements OnInit {
         const count = this.rows().length;
         untracked(() => {
           this.push(want);
+          if (count > 0) this.keepHighlight(want);
           // Aria leaves an empty list tabbable, and its binding does not change when rows return, so the
           // attribute is both removed and put back here: an empty list owns no Tab stop.
           if (count === 0) host.removeAttribute('tabindex');
@@ -148,6 +151,11 @@ export class KitSelectList<V = unknown> implements OnInit {
     const aria = this.listbox.value();
     const wanted = want === null ? [] : [want];
     if (aria.length !== wanted.length || aria[0] !== wanted[0]) this.listbox.value.set(wanted);
+    // A row that is not here has not been moved to: its arrival, or return, is a new selection.
+    if (want !== null && this.rowFor(want) === undefined) {
+      this.lastPushed = undefined;
+      return;
+    }
     if (want === null || this.lastPushed === want) {
       this.lastPushed = want;
       return;
@@ -172,9 +180,25 @@ export class KitSelectList<V = unknown> implements OnInit {
     if (aria.length !== restore.length || aria[0] !== restore[0]) this.listbox.value.set(restore);
   }
 
+  /** Aria leaves no row highlighted when every row goes and rows return after a person has used the list:
+   * highlight the selected row again, or else the first. */
+  private keepHighlight(want: V | null): void {
+    const highlighted = () => this.rows().some((row) => row.active());
+    if (highlighted()) return;
+    if (want !== null) this.moveStopTo(want);
+    // After a move's own retry, and after Aria has re-sorted, so "first" is first in the document.
+    queueMicrotask(() => {
+      if (!highlighted()) this.listbox.gotoFirst();
+    });
+  }
+
   private moveStopTo(value: V): void {
-    const row = this.rows().find((r) => r.value() === value);
+    const row = this.rowFor(value);
     if (row !== undefined) this.moveStop(row);
+  }
+
+  private rowFor(value: V): KitSelectRow | undefined {
+    return this.rows().find((row) => row.value() === value);
   }
 
   /** Move the highlight, and with it the list's stop, to `row`: no focus (in `activedescendant`

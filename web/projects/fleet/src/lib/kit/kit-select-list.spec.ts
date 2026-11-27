@@ -76,6 +76,22 @@ class WrappedHost {
   readonly shown = signal(true);
 }
 
+@Component({
+  selector: 'fleet-rebuilt-host',
+  imports: [KitSelectList, KitSelectRow],
+  template: `
+    @if (shown()) {
+      <div fleetKitSelectList selectionMode="explicit" [softDisabled]="false" [wrap]="false" focusMode="activedescendant" value="bravo">
+        <fleet-kit-select-row value="alpha" testid="row-alpha">alpha</fleet-kit-select-row>
+        <fleet-kit-select-row value="bravo" testid="row-bravo">bravo</fleet-kit-select-row>
+      </div>
+    }
+  `,
+})
+class RebuiltHost {
+  readonly shown = signal(true);
+}
+
 function key(el: Element, name: string): void {
   el.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true }));
 }
@@ -284,6 +300,39 @@ describe('KitSelectList', () => {
     fixture.componentInstance.shown.set(false);
     await settle(fixture);
     expect(list.hasAttribute('tabindex')).toBe(false);
+  });
+
+  // A person who has been on the list stops Aria placing the highlight by itself, so the list has to.
+  it.each([
+    ['bravo', [], 'row-bravo'],
+    ['bravo', [{ id: 'alpha' }], 'row-bravo'],
+    [null, [], 'row-alpha'],
+  ])('with %s selected, highlights again after the rows drop to %j and return', async (selected, meanwhile, expected) => {
+    const { fixture, list, row, highlighted, host } = await setup();
+    const all = host.rows();
+    row('charlie').click();
+    host.value.set(selected);
+    await settle(fixture);
+    list.focus();
+    list.blur();
+    host.rows.set(meanwhile);
+    await settle(fixture);
+    host.rows.set(all);
+    await settle(fixture);
+    expect(highlighted()).toBe(expected);
+  });
+
+  it('highlights the selected row of a list destroyed and created again', async () => {
+    const fixture = TestBed.createComponent(RebuiltHost);
+    await settle(fixture);
+    const first = read(fixture);
+    first.row('bravo').click();
+    await settle(fixture);
+    fixture.componentInstance.shown.set(false);
+    await settle(fixture);
+    fixture.componentInstance.shown.set(true);
+    await settle(fixture);
+    expect(read(fixture).highlighted()).toBe('row-bravo');
   });
 
   async function interacted() {
