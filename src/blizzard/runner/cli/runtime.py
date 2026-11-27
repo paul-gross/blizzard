@@ -76,7 +76,8 @@ from blizzard.runner.composition import (
     build_host_stores,
     build_read_stores,
     build_runner_process,
-    build_sealing_hub_tokens,
+    build_running_host_seeding_store,
+    build_seeding_store,
     build_settings_stores,
     host_record_reads,
     recorded_host_config,
@@ -1192,10 +1193,14 @@ def seed_runners(
     entries = hosted_entries(config, clock=clock)
     engine = create_engine_from_url(config.db_url)
     try:
-        stores = build_host_stores(
-            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock
+        store = build_seeding_store(
+            engine,
+            config.root,
+            errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")),
+            environ=os.environ,
+            clock=clock,
         )
-        projections = _seed_entries(config, SeedingStore(engine, stores), entries, clock, RUNNER_SEEDED.reached)
+        projections = _seed_entries(config, store, entries, RUNNER_SEEDED.reached)
     finally:
         engine.dispose()
     for projection in projections:
@@ -1210,7 +1215,6 @@ def _seed_entries(
     config: HostConfig,
     store: SeedingStore,
     entries: Sequence[RunnerEntry],
-    clock: IClock,
     after_each: Callable[[], None] | None = None,
 ) -> list[BuiltRunner | HaltedRunner]:
     """Each hosted runner's token imported, its settings seeded, and the runner projected over its stored token, in
@@ -1219,7 +1223,7 @@ def _seed_entries(
     projections: list[BuiltRunner | HaltedRunner] = []
     host_settings = HostSettingsReader(config, store.host_stores.settings, host_record_reads(store.host_stores))
     with click_exception_on(ConfigError):
-        tokens = build_sealing_hub_tokens(store.engine, config.root, environ=os.environ, clock=clock)
+        tokens = store.tokens()
     for entry in entries:
         assert entry.id is not None
         stored = _import_token(config, entry, tokens)
@@ -1234,15 +1238,14 @@ def _seed_entries(
 class StoreHostedRunners:
     """The running host's source of a runner the store hosts, seeded as a start seeds it: the ``[[runner]]`` naming
     it, else its stored ``name``, its token imported and its settings seeded at the tick that starts it, over the
-    running host's own engine and host stores."""
+    running host's own store."""
 
     config: HostConfig
     store: SeedingStore
-    clock: IClock
 
     @classmethod
     def over(cls, config: HostConfig, host: HostProcess) -> StoreHostedRunners:
-        return cls(config, SeedingStore(host.engine, host.host_stores), host.clock)
+        return cls(config, build_running_host_seeding_store(host, config.root, environ=os.environ))
 
     def built(self, runner_id: str) -> BuiltRunner | HaltedRunner:
         entry = next((entry for entry in self.config.runners if entry.id == runner_id), None)
@@ -1254,7 +1257,7 @@ class StoreHostedRunners:
             )
             entry = self.config.hosted_entry(runner_id, stored_name(identity, settings, runner_id))
         try:
-            (projection,) = _seed_entries(self.config, self.store, [entry], self.clock)
+            (projection,) = _seed_entries(self.config, self.store, [entry])
         except click.ClickException as exc:
             return HaltedRunner(entry.name, runner_id, (exc.message,))
         return projection

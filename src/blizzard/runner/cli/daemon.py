@@ -158,7 +158,7 @@ class RunnerDaemon:
     def runner_id(self) -> str:
         """The id of the runner this door addresses, resolved against the host's runner list once: the one ``--runner``
         names by name or id, or the host's only runner when it is omitted. Fails naming the host's runners when the
-        selector matches none or, omitted, the host holds several; fails naming why when the runner is halted."""
+        selector matches none or, omitted, the host holds several; fails on one not served, as starting or halted."""
         if "id" not in self._runner:
             self._runner["id"] = self._resolve_runner_id()
         return self._runner["id"]
@@ -193,12 +193,18 @@ class RunnerDaemon:
             raise click.ClickException(f"{self.verb}: the host at {self.where} serves no runner: none")
         # A runner its hub halts is still served, and its own views — the status naming why — still read.
         if not chosen.served:
-            serves_none = all(not item.served for item in items)
-            raise click.ClickException(
-                f"{self.verb}: the host at {self.where} {'serves no runner: ' if serves_none else 'holds '}"
-                f"runner {chosen.name} "
-                f"({chosen.runner_id or 'no id'}) is halted: {'; '.join(chosen.halted_reasons)}"
+            named = f"runner {chosen.name} ({chosen.runner_id or 'no id'})"
+            condition = (
+                "is starting: the host serves it once its tick has started it"
+                if chosen.state == "starting"
+                else f"is halted: {'; '.join(chosen.halted_reasons)}"
             )
+            held = (
+                f"serves no runner: {named} {condition}"
+                if all(not item.served for item in items)
+                else f"holds {named}, which {condition}"
+            )
+            raise click.ClickException(f"{self.verb}: the host at {self.where} {held}")
         return str(chosen.runner_id)
 
     def unreachable(self, exc: Exception) -> click.ClickException:
