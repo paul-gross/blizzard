@@ -6,6 +6,7 @@ route itself (store round-trip, hub forward, 403/404/503) is the component tier'
 
 from __future__ import annotations
 
+import json
 import re
 
 import httpx2
@@ -61,6 +62,18 @@ def test_history_gets_the_lease_scoped_route_with_inherited_identity_and_token(
         ("http://127.0.0.1:8431/api/leases/lease_9/history", {"X-Blizzard-Lease-Token": "the-lease-token"})
     ]
     assert result.output.strip() == _HISTORY_TEXT
+
+
+@pytest.mark.parametrize("detail", ["Tests passed after retry", None])
+def test_history_outputs_transition_detail_as_json(detail: str | None) -> None:
+    history = json.loads(_HISTORY_TEXT)
+    history[0]["detail"] = detail
+    bound = bind_stubs(get=lambda *a, **k: _FakeResponse(text=json.dumps(history)))
+
+    result = bound.runner.invoke(runner_group, ["chunk", "history"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)[0]["detail"] == detail
 
 
 def test_history_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:

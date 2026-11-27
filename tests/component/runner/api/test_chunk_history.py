@@ -6,11 +6,13 @@ a stubbed ``httpx2.Client``."""
 from __future__ import annotations
 
 from collections.abc import Callable
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Unpack
 
 import httpx2
+import pytest
 from fastapi import FastAPI
 
 from blizzard.foundation.tokens import TokenHash
@@ -180,6 +182,25 @@ def test_forwards_to_the_hub_chunk_detail_route_and_returns_merged_rows(tmp_path
     assert seen == [f"{_HUB_URL}/api/fleet/chunks/{CHUNK}"]
     body = resp.json()
     assert [row["kind"] for row in body] == ["migration", "transition", "bounce", "transition"]
+
+
+@pytest.mark.parametrize("reason", ["Tests passed after retry", None])
+def test_transition_reason_reaches_history_detail(tmp_path: Path, reason: str | None) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    detail = deepcopy(DETAIL)
+    history = detail["history"]
+    assert isinstance(history, list)
+    history[0]["reason"] = reason
+    _stub_hub(app, 200, detail)
+
+    with runner_client(app) as client:
+        resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
+
+    assert resp.status_code == 200, resp.text
+    transitions = [row for row in resp.json() if row["kind"] == "transition"]
+    assert transitions[0]["detail"] == reason
+    assert transitions[1]["detail"] is None
 
 
 def test_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path) -> None:
