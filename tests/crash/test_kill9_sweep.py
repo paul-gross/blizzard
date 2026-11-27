@@ -43,6 +43,7 @@ from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.http_hub import HttpHostHubClient
 from blizzard.runner.hub.internal.token_file import HubTokenFile
+from blizzard.runner.hub.outbound import COMPLETION_KIND
 from blizzard.runner.hub.sealed_tokens import StoredTokenState
 from blizzard.runner.hub.token_file import assigned_token
 from blizzard.runner.leases.model import NewLease
@@ -606,6 +607,16 @@ def test_kill9_at_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -
         _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
         if point == _MINT_POINT:
             _assert_mint_whole(runner_dir, chunk_id)
+        if point == "advance.after-buffer.before-flush":
+            with _audit_connection(runner_dir) as conn:
+                payload = conn.execute(
+                    select(runner_schema.outbound_buffer.c.payload)
+                    .where(runner_schema.outbound_buffer.c.chunk_id == chunk_id)
+                    .where(runner_schema.outbound_buffer.c.kind == COMPLETION_KIND)
+                ).scalar_one()
+            assert json.loads(payload)["submission"]["reason"] == (
+                "the mock harness committed the change; checks are green"
+            )
 
         # Restart the killed daemon unarmed (startup = REAP first, for the runner) and
         # let it converge.
@@ -619,6 +630,11 @@ def test_kill9_at_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -
         assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
 
         _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
+        if point == "advance.after-buffer.before-flush":
+            detail = hub.get(f"/api/chunks/{chunk_id}").json()
+            build = [transition for transition in detail["history"] if transition["from_node_name"] == "build"]
+            assert len(build) == 1
+            assert build[0]["reason"] == "the mock harness committed the change; checks are green"
 
         # Exactly-once delivery: the file is reachable from bare main exactly once.
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)

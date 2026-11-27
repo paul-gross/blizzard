@@ -17,10 +17,14 @@ _REVISION = "20261031_1800_terminal_close"
 _AT = datetime(2026, 1, 1, tzinfo=UTC)
 
 
+def _transitions(conn: sa.Connection) -> sa.Table:
+    return sa.Table("transitions", sa.MetaData(), autoload_with=conn)
+
+
 def _terminal(conn: sa.Connection, chunk: str) -> None:
     conn.execute(sa.insert(s.chunks).values(stamp(s.chunks, chunk_id=chunk, graph_id="gr_1", minted_at=_AT)))
     conn.execute(
-        sa.insert(s.transitions).values(
+        sa.insert(_transitions(conn)).values(
             stamp(
                 s.transitions,
                 transition_id=f"tr_{chunk}",
@@ -136,7 +140,7 @@ def test_upgrade_does_not_match_terminal_facts_across_tenants(tmp_path: Path) ->
         conn.execute(sa.insert(s.chunks).values(stamp(s.chunks, chunk_id="unfinished", graph_id="gr_1", minted_at=_AT)))
         _ref(conn, "unfinished", "two")
         conn.execute(
-            sa.insert(s.transitions).values(
+            sa.insert(_transitions(conn)).values(
                 stamp(
                     s.transitions,
                     tenant_id="other",
@@ -166,7 +170,7 @@ def test_upgrade_only_backfills_latest_terminal_movement(tmp_path: Path) -> None
 
         def transition(chunk: str, at: datetime, node: str, tenant: str | None = None) -> None:
             conn.execute(
-                sa.insert(s.transitions).values(
+                sa.insert(_transitions(conn)).values(
                     stamp(
                         s.transitions,
                         **({"tenant_id": tenant} if tenant is not None else {}),

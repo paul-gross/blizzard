@@ -6204,6 +6204,23 @@
             ],
             "title": "Lease Id"
           },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "reason_truncated": {
+            "default": false,
+            "title": "Reason Truncated",
+            "type": "boolean"
+          },
           "route_token": {
             "anyOf": [
               {
@@ -29595,6 +29612,17 @@
             ],
             "title": "Graph Name"
           },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
           "recorded_at": {
             "title": "Recorded At",
             "type": "string"
@@ -29624,7 +29652,8 @@
           "epoch",
           "recorded_at",
           "graph_id",
-          "graph_name"
+          "graph_name",
+          "reason"
         ],
         "title": "TransitionView",
         "type": "object"

@@ -3606,6 +3606,14 @@ export type CompletionSubmission = {
      */
     lease_id?: string | null;
     /**
+     * Reason
+     */
+    reason?: string | null;
+    /**
+     * Reason Truncated
+     */
+    reason_truncated?: boolean;
+    /**
      * Route Token
      */
     route_token?: string | null;
@@ -18111,6 +18119,10 @@ export type TransitionView = {
      * Graph Name
      */
     graph_name: string | null;
+    /**
+     * Reason
+     */
+    reason: string | null;
     /**
      * Recorded At
      */

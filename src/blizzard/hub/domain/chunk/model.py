@@ -470,6 +470,7 @@ class TransitionFact:
     graph_id: str | None = None
     #: The recorded row's identity — what keys the activity feed's row for this fact; ``None`` when unhydrated.
     transition_id: str | None = None
+    reason: str | None = None
 
 
 @domain_model

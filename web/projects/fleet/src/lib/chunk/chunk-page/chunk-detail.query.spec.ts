@@ -29,10 +29,21 @@ describe('projectChunkDetail', () => {
     expect(projectChunkDetail(chunkDetail({ artifacts: [] })).artifacts).toEqual([]);
   });
   it('copies history and projects transcript history and current-step facts', () => {
-    const history = [transitionView({ from_node_id: 'build', from_node_name: 'Build', epoch: 7 })];
+    const history = [transitionView({ from_node_id: 'build', from_node_name: 'Build', epoch: 7, reason: 'Assessment passed' })];
     const wire = chunkDetail({ history, current_node_id: 'review', current_node_name: null, latest_epoch: 8, current_node_terminal: false });
     const projected = projectChunkDetail(wire);
-    expect(projected.history).toEqual(history);
+    expect(projected.history).toEqual([{
+      choice_name: history[0].choice_name,
+      epoch: 7,
+      from_node_id: 'build',
+      from_node_name: 'Build',
+      graph_id: history[0].graph_id,
+      graph_name: history[0].graph_name,
+      recorded_at: history[0].recorded_at,
+      to_node_id: history[0].to_node_id,
+      to_node_name: history[0].to_node_name,
+    }]);
+    expect(history[0].reason).toBe('Assessment passed');
     expect(projected.history).not.toBe(history);
     expect(projected.history[0]).not.toBe(history[0]);
     expect(projected.transcriptContext).toEqual({

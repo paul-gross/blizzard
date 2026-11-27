@@ -7,9 +7,10 @@ write**. A stale epoch is rejected before either enters the store.
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.transition_reason import TRANSITION_REASON_MAX_LENGTH
 
 
 class SubmittedArtifact(BaseModel):
@@ -50,3 +51,6 @@ class CompletionSubmission(BaseModel):
     route_token: str | None = None
     # Optional owning-lease check; absent it, match the runner alone.
     lease_id: str | None = None
+    reason: str | None = Field(default=None, max_length=TRANSITION_REASON_MAX_LENGTH)
+    # Set when the trimmed assessment exceeded the cap: its clipped boundary whitespace is meaningful.
+    reason_truncated: bool = False

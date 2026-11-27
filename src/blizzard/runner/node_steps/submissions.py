@@ -54,6 +54,8 @@ class Completion:
     decision_id: str | None = None
     route_token: str | None = None
     lease_id: str | None = None
+    reason: str | None = None
+    reason_truncated: bool = False
 
 
 @domain_model

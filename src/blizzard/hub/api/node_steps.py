@@ -34,6 +34,8 @@ def completion_of(submission: CompletionSubmission, *, runner_id: str) -> Comple
         decision_id=submission.decision_id,
         route_token=submission.route_token,
         lease_id=submission.lease_id,
+        reason=submission.reason,
+        reason_truncated=submission.reason_truncated,
     )
 
 

@@ -84,6 +84,7 @@ class ChunkMovementStore:
         artifacts: list[StoredArtifact],
         close_decision: CloseEnqueueDecision,
         decision_id: str | None = None,
+        reason: str | None = None,
         transaction: LockedTransaction,
     ) -> TransitionWrite | FenceRefusal:
         return self._record_transition_conn(
@@ -102,6 +103,7 @@ class ChunkMovementStore:
             artifacts=artifacts,
             close_decision=close_decision,
             decision_id=decision_id,
+            reason=reason,
         )
 
     def _record_transition_conn(
@@ -122,6 +124,7 @@ class ChunkMovementStore:
         artifacts: list[StoredArtifact],
         close_decision: CloseEnqueueDecision,
         decision_id: str | None = None,
+        reason: str | None = None,
     ) -> TransitionWrite | FenceRefusal:
         refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, terminal=terminal, claimant=claimant)
         if refusal is not None:
@@ -135,6 +138,7 @@ class ChunkMovementStore:
                 to_node_id=to_node_id,
                 choice_name=choice_name,
                 decision_id=decision_id,
+                reason=reason,
                 epoch=epoch,
                 runner_id=runner_id,
                 recorded_at=at,

@@ -54,6 +54,7 @@ class _TransitionEntry(_HistoryEntry):
             choice=t.choice_name,
             epoch=t.epoch,
             graph_name=t.graph_name,
+            detail=t.reason,
             recorded_at=t.recorded_at,
         )
 

@@ -5,6 +5,8 @@ becomes a row, a migration becomes its own row, and everything merges oldest-fir
 
 from __future__ import annotations
 
+import pytest
+
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.runner.api.history import rows
 from blizzard.wire.chunk import BounceView, MigrationView, TransitionView
@@ -69,7 +71,8 @@ def test_a_migration_becomes_its_own_row_with_a_graph_hop_label() -> None:
     assert views[0].epoch is None
 
 
-def test_a_transition_row_carries_epoch_and_choice() -> None:
+@pytest.mark.parametrize("reason", [None, "Tests failed"])
+def test_a_transition_row_carries_epoch_choice_and_reason(reason: str | None) -> None:
     detail = ChunkHistoryView(
         migrations=[],
         bounces=[],
@@ -84,6 +87,7 @@ def test_a_transition_row_carries_epoch_and_choice() -> None:
                 recorded_at="2026-07-21T12:00:00+00:00",
                 graph_id="gr_1",
                 graph_name="adv-dwf",
+                reason=reason,
             )
         ],
     )
@@ -95,3 +99,4 @@ def test_a_transition_row_carries_epoch_and_choice() -> None:
     assert row.choice == "fail"
     assert row.epoch == 2
     assert row.graph_name == "adv-dwf"
+    assert row.detail == reason

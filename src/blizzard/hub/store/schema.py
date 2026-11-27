@@ -1170,6 +1170,7 @@ transitions = Table(
     Column("from_node_id", String, nullable=True),  # null on the first transition out of entry
     Column("to_node_id", String, nullable=False),  # a node_id, or 'done' terminal
     Column("choice_name", String, nullable=True),  # the judgement's selected choice
+    Column("reason", Text, nullable=True),
     Column("decision_id", String, nullable=True),  # gates only; shaped for P7
     Column("epoch", Integer, nullable=False),  # the fencing epoch checked against latest
     Column("runner_id", String, nullable=False),  # reporting author, or the hub coordinator

@@ -16,7 +16,6 @@ import type {
   WorkRefView,
 } from '../../api/hub';
 import { fixtureInstant } from './clock';
-
 /** A work item as the hub resolves it from its source. */
 export function workRefView(overrides: Partial<WorkRefView> = {}): WorkRefView {
   return {
@@ -36,6 +35,7 @@ export function transitionView(overrides: Partial<TransitionView> = {}): Transit
     to_node_id: 'nd_build',
     to_node_name: 'build',
     choice_name: null,
+    reason: null,
     epoch: 1,
     graph_id: 'gr_build',
     graph_name: 'build',

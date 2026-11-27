@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261116_0900_egress_order",
+  "head_revision": "20261117_0900_transition_reason",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -9793,6 +9793,12 @@
           "nullable": false,
           "server_default": false,
           "type": "String"
+        },
+        "reason": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Text"
         },
         "recorded_at": {
           "deprecated": null,

@@ -784,6 +784,7 @@ class ChunkHistoryView:
                 recorded_at=iso_utc(t.recorded_at),
                 graph_id=t.graph_id,
                 graph_name=self.names.graph_name(t.graph_id),
+                reason=t.reason,
             )
             for t in self.facts.transition_history()
         ]

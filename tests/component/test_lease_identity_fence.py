@@ -317,6 +317,26 @@ def _complete(hub: HubHarness, chunk_id: str, node_id: str, *, lease_id: str | N
     return resp.json()
 
 
+def test_a_fenced_completion_does_not_record_its_reason(tmp_path: Path) -> None:
+    hub, chunk_id, nodes = _minted(tmp_path, lease_id="lease_owner")
+    response = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={
+            "choice": "pass",
+            "epoch": 1,
+            "runner_id": "rA",
+            "from_node_id": nodes["build"],
+            "lease_id": "lease_other",
+            "reason": "This stale worker must not land.",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["outcome"] == "failure"
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["current_node_id"] == nodes["build"]
+    assert detail["history"] == []
+
+
 def test_a_completion_naming_another_lease_at_a_bound_epoch_is_refused(tmp_path: Path) -> None:
     hub, chunk_id, nodes = _minted(tmp_path, lease_id="lease_owner")
 
