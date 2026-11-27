@@ -350,6 +350,7 @@ class TransitionView(WireModel):
     recorded_at: str
     graph_id: str | None = None
     graph_name: str | None = None
+    reason: str | None = None
 
 
 class MigrationView(WireModel):

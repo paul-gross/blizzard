@@ -103,6 +103,7 @@ def test_history_view_resolves_each_step_name_against_its_own_graph() -> None:
                 from_node_id=a_build.node_id,
                 choice_name="go",
                 graph_id=graph_a.graph_id,
+                reason="Tests passed",
             ),
             TransitionFact(
                 to_node_id=b_fix.node_id,
@@ -124,6 +125,7 @@ def test_history_view_resolves_each_step_name_against_its_own_graph() -> None:
     ).transitions()
 
     assert [(v.from_node_name, v.to_node_name) for v in views] == [("build", "review"), ("triage", "fix")]
+    assert [v.reason for v in views] == ["Tests passed", None]
     # No raw-id degradation: every name resolved against its own graph.
     assert all(v.from_node_name is not None and v.to_node_name is not None for v in views)
 
@@ -290,6 +292,7 @@ def test_load_facts_resolves_each_transition_executor_against_its_own_graph(tmp_
                     from_node_id="nd_run",
                     to_node_id="nd_hub",
                     choice_name="go",
+                    reason="Tests passed",
                     epoch=1,
                     runner_id="r",
                     recorded_at=datetime(2026, 1, 1, 2, tzinfo=UTC),
@@ -305,5 +308,7 @@ def test_load_facts_resolves_each_transition_executor_against_its_own_graph(tmp_
     # gr_b, not the pin.
     assert by_target["nd_hub"].to_node_executor is Executor.HUB
     assert by_target["nd_hub"].graph_id == "gr_b"
+    assert by_target["nd_hub"].reason == "Tests passed"
+    assert by_target["nd_run"].reason is None
     assert by_target["nd_run"].to_node_executor is Executor.RUNNER
     assert by_target["nd_run"].graph_id == "gr_a"

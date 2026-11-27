@@ -12,6 +12,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_ids import StepKey, step_root
+from blizzard.foundation.transition_reason import normalize_transition_reason
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
 from blizzard.runner.harness.harness_set import IOwnedHarnessSet, JudgeInvocation, WorkerInvocation
@@ -675,7 +676,7 @@ class Judgement:
         def completion(unit: ILeaseUnit, pointers: list[CompletionArtifact]) -> tuple[str, int]:
             attachments = self.ctx.stores.attachments.attachments_for_lease(lease.lease_id, unit=unit)
             artifacts = pointers + produces.collect_assets(pointers, assessment, attachments)
-            return COMPLETION_KIND, self._completion_facts(selected.name, checks, artifacts, unit)
+            return COMPLETION_KIND, self._completion_facts(selected.name, checks, artifacts, unit, assessment)
 
         self._capture(DeclaredCommits(self.ctx, lease, self.bindings), completion)
         self._buffered(selected.name)
@@ -733,6 +734,7 @@ class Judgement:
         checks: list[ExecutedCheck],
         artifacts: list[CompletionArtifact],
         unit: ILeaseUnit | None,
+        assessment: str | None = None,
     ) -> int:
         lease = self.lease
         submission = Completion(
@@ -744,6 +746,7 @@ class Judgement:
             artifacts=artifacts,
             route_token=self.ctx.stores.tokens.route_token(lease.chunk_id),
             lease_id=lease.lease_id,
+            reason=normalize_transition_reason(assessment),
         )
         return OutboundFacts(self.ctx).completion(lease, submission, at=self.ctx.clock.now(), unit=unit)
 

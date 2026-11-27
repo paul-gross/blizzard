@@ -9206,6 +9206,17 @@
             ],
             "title": "Graph Name"
           },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
           "recorded_at": {
             "title": "Recorded At",
             "type": "string"
@@ -9235,7 +9246,8 @@
           "epoch",
           "recorded_at",
           "graph_id",
-          "graph_name"
+          "graph_name",
+          "reason"
         ],
         "title": "TransitionView",
         "type": "object"

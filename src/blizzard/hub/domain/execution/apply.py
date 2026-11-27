@@ -16,6 +16,7 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.transition_reason import normalize_transition_reason
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.event_log import EventLogService, close_skipped_events
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, WorkRefLabel, decide_close_enqueue
@@ -414,6 +415,7 @@ class ApplyService:
                     artifacts=artifact_rows,
                     close_decision=decide_close_enqueue(chunk.work_refs, self._closer_available),
                     decision_id=submission.decision_id,
+                    reason=normalize_transition_reason(submission.reason),
                     transaction=transaction,
                 )
                 if isinstance(transitioned, FenceRefusal):

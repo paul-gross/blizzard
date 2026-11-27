@@ -71,6 +71,7 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         artifacts: list[StoredArtifact],
         close_decision: CloseEnqueueDecision,
         decision_id: str | None = None,
+        reason: str | None = None,
         transaction: LockedTransaction,
     ) -> TransitionWrite | FenceRefusal:
         """One node-step's transition and its artifacts, written in ``transaction``, a unit that locks

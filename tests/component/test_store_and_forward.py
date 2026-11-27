@@ -165,22 +165,73 @@ def test_reflushed_completion_applies_exactly_once(tmp_path: Path) -> None:
     chunk_id, build_node_id = _claim(hub)
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
-    first = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
+    submission = {**_completion(build_node_id, epoch=1), "reason": "Checks passed; ready to deliver."}
+    first = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=submission)
     assert first.json()["outcome"] == "hub_node_taken"
     hub.settle_turns()
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "done"
     assert len([t for t in detail["history"] if t["from_node_name"] == "build"]) == 1
+    assert next(t for t in detail["history"] if t["from_node_name"] == "build")["reason"] == submission["reason"]
 
     # The runner's flush ack was lost, so it re-submits the same completion. The hub
     # returns the original outcome — no second transition, no re-run.
-    replay = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
+    replay = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions", json={**submission, "reason": "A different replay reason"}
+    )
     assert replay.json()["outcome"] == "hub_node_taken"
     hub.settle_turns()
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "done"
     assert len([t for t in detail["history"] if t["from_node_name"] == "build"]) == 1  # still exactly one transition
+    assert next(t for t in detail["history"] if t["from_node_name"] == "build")["reason"] == submission["reason"]
     assert len(double.named("merge")) == 1
+
+
+def test_buffered_completion_reason_survives_store_reopen_and_drain(tmp_path: Path) -> None:
+    double = forge_holding("acme/widget", branch="b", commit=_COMMIT)
+    hub = build_hub(tmp_path, forges=double.forges)
+    chunk_id, node_id = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    now = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
+    url = f"sqlite:///{tmp_path / 'runner.db'}"
+    store = make_store(url)
+    reason = "The implementation is complete.\nAll checks passed."
+    submission: dict[str, object] = {**_completion(node_id, epoch=1), "check_results": [], "reason": reason}
+    store.enqueue_outbound(
+        kind=COMPLETION_KIND,
+        chunk_id=chunk_id,
+        lease_id="lease_gone",
+        payload=json.dumps({"submission": submission}),
+        created_at=now,
+    )
+
+    # Reopen the durable runner store as a restarted runner would before flushing.
+    reopened = make_store(url)
+    pending = reopened.pending_outbound()
+    assert len(pending) == 1
+    assert json.loads(pending[0].payload)["submission"]["reason"] == reason
+    ctx = make_context(
+        reopened,
+        hub=cast(FakeHub, HttpHubClient(hub.client)),
+        provider=FakeProvider({"e": "/ws/e"}),
+        harness=FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="1", pgid=1), verdict=None),
+        probe=FakeProbe(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID),
+        clock=FixedClock(now),
+        registered=False,
+    )
+    identity = registered_identity("r1", "r1").current()
+    assert identity is not None
+    reopened.record_runner_identity(identity)
+    ctx.identity.hold(identity)
+    OutboundDrain(ctx).run()
+    assert reopened.pending_outbound() == []
+    hub.settle_turns()
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    build = [t for t in detail["history"] if t["from_node_name"] == "build"]
+    assert len(build) == 1
+    assert build[0]["reason"] == reason
 
 
 def test_escalation_fact_rides_events_and_derives_needs_human(tmp_path: Path) -> None:

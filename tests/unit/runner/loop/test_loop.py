@@ -2010,7 +2010,18 @@ def test_resumed_preamble_reuses_the_same_scratch_directory_a_fresh_spawn_got(tm
     assert resumed.tmpdir == fresh_tmpdir
 
 
-def test_advance_review_harvests_findings_asset_from_assessment(tmp_path: Path):
+@pytest.mark.parametrize(
+    ("choice", "assessment", "reason"),
+    [
+        ("fail", "BLOCKING: guard the empty input", "BLOCKING: guard the empty input"),
+        ("pass", "  " + "🍦" * 1999 + " " + "more  ", "🍦" * 1999 + " "),
+        ("pass", " \n ", None),
+        ("pass", "", None),
+    ],
+)
+def test_advance_review_harvests_findings_asset_from_assessment(
+    tmp_path: Path, choice: str, assessment: str, reason: str | None
+):
     """A node that `produces` a name no git commit covers emits the assessment as an asset."""
     from blizzard.foundation.artifacts import ArtifactKind
     from tests.support.runner_fakes import make_envelope
@@ -2046,7 +2057,7 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path: Path):
     )
     hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=_build_envelope())]
     # Review is read-only: no git commit produced, but the judgement carries findings.
-    harness = FakeHarness(handle=_HANDLE, verdict="fail", assessment="BLOCKING: guard the empty input")
+    harness = FakeHarness(handle=_HANDLE, verdict=choice, assessment=assessment)
     ctx = make_context(
         store,
         hub=hub,
@@ -2065,10 +2076,12 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path: Path):
     Pull(ctx).run()  # the flusher delivers it to the hub (store-and-forward)
 
     _, submission = hub.completions[0]
+    assert submission.choice == choice
+    assert submission.reason == reason
     findings = [a for a in submission.artifacts if a.name == "review-findings"]
     assert len(findings) == 1
     assert findings[0].kind is ArtifactKind.ASSET
-    assert findings[0].content == "BLOCKING: guard the empty input"
+    assert findings[0].content == assessment
     assert findings[0].attached is False
 
 

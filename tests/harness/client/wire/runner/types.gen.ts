@@ -5090,6 +5090,10 @@ export type TransitionView = {
      */
     graph_name: string | null;
     /**
+     * Reason
+     */
+    reason: string | null;
+    /**
      * Recorded At
      */
     recorded_at: string;

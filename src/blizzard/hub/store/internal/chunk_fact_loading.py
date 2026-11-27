@@ -165,6 +165,7 @@ def _load_batch(conn: Connection, batch: Sequence[str] | None, families: frozens
                 choice_name=t.choice_name,
                 graph_id=t.graph_id,
                 transition_id=t.transition_id,
+                reason=t.reason,
             )
         )
 

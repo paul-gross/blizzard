@@ -102,6 +102,7 @@ def completion_submission(completion: Completion) -> CompletionSubmission:
         decision_id=completion.decision_id,
         route_token=completion.route_token,
         lease_id=completion.lease_id,
+        reason=completion.reason,
     )
 
 
@@ -115,6 +116,7 @@ def completion_of(wire: CompletionSubmission) -> Completion:
         decision_id=wire.decision_id,
         route_token=wire.route_token,
         lease_id=wire.lease_id,
+        reason=wire.reason,
     )
 
 
