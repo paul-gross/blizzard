@@ -6,7 +6,7 @@ source has its labels cleared once; a fresh process runs full, and the floor bou
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from functools import partial
@@ -334,9 +334,9 @@ class AnnotationReconciler:
 
     def sweep(self) -> None:
         """One reconciliation pass over every due tenant (never converged, floor elapsed, or probe
-        changed); the corpus is read once, only when some tenant is due. A closed tenant is skipped and
-        a fault in one tenant's half is caught at that tenant; only a converged tenant records its
-        probe, so any other is retried alone next pass."""
+        changed); the corpus is read once, only when some tenant is due, and of the due tenants alone. A closed
+        tenant is skipped and a fault in one tenant's half is caught at that tenant; only a converged tenant
+        records its probe, so any other is retried alone next pass."""
         tenants = sorted(self._tenants())
         signatures = self._corpus.live_work_refs_signature()
         probes = {tenant: _probe(tenant, signatures) for tenant in tenants}
@@ -349,7 +349,7 @@ class AnnotationReconciler:
             _log.info("forge-status sweep skipped", reason="probe unchanged", tenants_skipped=len(tenants))
             return
         unconverged: list[TenantId] = []
-        corpus = _PassCorpus(self._corpus)
+        corpus = _PassCorpus(self._corpus, due)
         tally = AnnotationTally()
         reconciled = 0
         for tenant in due:
@@ -383,7 +383,7 @@ class AnnotationReconciler:
         )
 
     def sweep_tenant(self, tenant: TenantId) -> TenantFault | None:
-        """:meth:`sweep` narrowed to ``tenant``: the same probe and corpus reads, ``tenant``'s share alone,
+        """:meth:`sweep` narrowed to ``tenant``: the same probe, its corpus read narrowed to ``tenant``,
         and only ``tenant``'s convergence entry touched; a tenant not due is skipped. Its fault is
         returned; a closed tenant's refusal propagates."""
         with bound_contextvars(tenant_id=tenant):
@@ -396,7 +396,7 @@ class AnnotationReconciler:
             if isinstance(half, TenantFault):
                 return half
             tally = AnnotationTally()
-            converged = self._converge(tenant, half, probe, now, _PassCorpus(self._corpus), tally)
+            converged = self._converge(tenant, half, probe, now, _PassCorpus(self._corpus, [tenant]), tally)
             _log.info(
                 "forge-status sweep completed",
                 written=tally.written,
@@ -462,16 +462,17 @@ def _probe(tenant: TenantId, signatures: Mapping[TenantId, WorkRefsSignature]) -
 
 
 class _PassCorpus:
-    """One pass's read of the corpus, made once, on first use, and handed out per tenant."""
+    """One pass's read of its ``tenants``' corpus, made once, on first use, and handed out per tenant."""
 
-    def __init__(self, corpus: IReadWorkRefsCorpus) -> None:
+    def __init__(self, corpus: IReadWorkRefsCorpus, tenants: Collection[TenantId]) -> None:
         self._corpus = corpus
+        self._tenants = tenants
         self._by_tenant: dict[TenantId, list[TenantWorkRef]] | None = None
 
     def rows_of(self, tenant: TenantId) -> list[TenantWorkRef]:
         if self._by_tenant is None:
             self._by_tenant = {}
-            for row in self._corpus.live_work_refs():
+            for row in self._corpus.live_work_refs(self._tenants):
                 self._by_tenant.setdefault(row.tenant, []).append(row)
         return self._by_tenant.get(tenant, [])
 

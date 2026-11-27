@@ -39,6 +39,7 @@ from blizzard.hub.domain.observability.forge_status import IReadAnnotatedSources
 from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceStatus, IReadTraceSteps
 from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
+from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
 from blizzard.hub.open_tenants import IReadOpenTenants
 from blizzard.hub.settings.model import IReadHubSettingsAdmin
 from blizzard.runner.host_records.ports import IReadHostRecordRepository
@@ -141,7 +142,8 @@ _ANALYTICS_REASON = (
 # The transcript-event derivation sweep's candidacy and markers reads.
 _DERIVATION_SWEEP_REASON = (
     "the transcript-event derivation sweep reads every segment and derivation marker of the tenant (hub-scoped: of "
-    "every open tenant) to find what is not yet derived — a corpus pass, not a per-chunk lookup."
+    "every open tenant, or of each tenant the read is narrowed to) to find what is not yet derived — a corpus pass, "
+    "not a per-chunk lookup."
 )
 
 # The tenant's flows: one per branch any of its chunks has landed on.
@@ -428,8 +430,9 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         "candidacy",
         "transcript_event_derivations",
         200,
-        "the derivation sweep's whole-corpus read: every open tenant's markers for one extractor_version, read "
-        "together; no tenant-led key narrows a read across tenants, and none leads with extractor_version.",
+        "the derivation sweep's whole-corpus read with no tenant subset (None): every open tenant's markers for one "
+        "extractor_version, read together; no tenant-led key narrows a read across every tenant, and none leads with "
+        "extractor_version.",
     ),
     # --- fleet-wide-by-design snapshot reads ------------------------------
     TableWideAllowance("chunk_work_refs", 200, _FLEET_SNAPSHOT_REASON),
@@ -817,6 +820,14 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         ("artifacts",),
         _ONE_SHOT_IMPORT_REASON,
     ),
+    IndexWalkAllowance(
+        IReadCloseIntentCorpus,
+        "pending_close_intents",
+        ("close_intents",),
+        "a one-tenant drain pass reads every close intent its tenant holds to keep the unretired ones: due-ness is the "
+        "domain's backoff filter over the tenant's whole pending set, and no tenant-led key narrows to unretired.",
+    ),
+    IndexWalkAllowance(IReadDerivationCorpus, "candidacy", ("transcript_segments",), _DERIVATION_SWEEP_REASON),
     IndexWalkAllowance(
         IReadDerivationCorpus, "derivation_signature", ("chunks", "transcript_segments"), _DERIVATION_SWEEP_REASON
     ),

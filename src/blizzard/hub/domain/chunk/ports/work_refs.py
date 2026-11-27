@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -89,10 +89,11 @@ def live_work_ref_statuses(
 
 
 class IReadWorkRefsCorpus(Protocol):
-    """Every open tenant's live work refs."""
+    """The open tenants' live work refs."""
 
-    def live_work_refs(self) -> Sequence[TenantWorkRef]:
-        """Every open tenant's work-ref rows whose chunk is neither grouped away nor deleted."""
+    def live_work_refs(self, tenants: Collection[TenantId] | None = None) -> Sequence[TenantWorkRef]:
+        """The work-ref rows whose chunk is neither grouped away nor deleted, of every open tenant (``None``)
+        or of the open tenants among ``tenants``; an empty collection reads nothing."""
         ...
 
     def live_work_refs_signature(self) -> Mapping[TenantId, WorkRefsSignature]:

@@ -15,7 +15,7 @@ closed tenant, tenant administration's own reads."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from typing import Any
 
 import sqlalchemy as sa
@@ -25,6 +25,7 @@ from sqlalchemy.sql import CompoundSelect, FromClause, Join, Select
 from blizzard.foundation.store.key_scoping import preserved
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.scoped import TENANT_COLUMN, is_tenant_owned
+from blizzard.hub.tenancy import TenantId
 
 
 def open_tenant_predicate(from_: FromClause) -> ColumnElement[bool]:
@@ -73,6 +74,16 @@ class _Statements:
         join sides included."""
         predicates = [p for from_ in statement.get_final_froms() for p in self.predicates(from_)]
         return statement.where(*predicates) if predicates else statement
+
+    def within_tenants(
+        self, statement: Select[Any], table: FromClause, tenants: Collection[TenantId] | None
+    ) -> Select[Any]:
+        """``statement``, narrowed to ``table``'s rows of ``tenants``: ``None`` leaves it as built, and an empty
+        collection admits no row. The qualifier only narrows: the table's predicate comes from the :meth:`select`
+        that built ``statement``."""
+        if tenants is None:
+            return statement
+        return statement.where(table.c[TENANT_COLUMN].in_(list(tenants)))
 
     def within_chunks(
         self, table: FromClause, chunk_id: ColumnElement[Any], chunk_ids: Sequence[str]

@@ -38,18 +38,20 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.app import Sweep
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId
+from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectId
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.store import schema
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
-from blizzard.hub.tenancy import StoreScope
+from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support.route_classes import FLEET, FLEET_CLAIM, HUB_LEVEL, HUMAN, live_routes
 from tests.support.scaffolding import (
     OP,
@@ -60,6 +62,7 @@ from tests.support.scaffolding import (
     close_tenant,
     drain_stream,
     first_color,
+    hub_level_connections,
     hub_scoped,
     runner_token,
     second_core,
@@ -915,6 +918,20 @@ def _rows(hub: HubHarness, table: sa.Table, tenant: str) -> int:
         return conn.execute(hub_scoped(count)).scalar_one()
 
 
+def _one_bind(sql: str) -> str:
+    """``sql`` with each expanded ``IN`` list as one placeholder, so reads of different tenant counts match."""
+    return re.sub(r"\(\?(, \?)*\)", "(?)", sql)
+
+
+def _narrowed_derivation_reads(hub: HubHarness, tenant: TenantId) -> set[str]:
+    """The statements of the derivation corpus reads narrowed to ``tenant``."""
+    corpus = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
+    with capture_statements(hub.engine) as statements:
+        corpus.candidacy(EXTRACTOR_VERSION, [tenant])
+        corpus.derived_segment_ids([tenant])
+    return {_one_bind(sql) for sql, _ in statements}
+
+
 def test_every_sweep_acts_in_each_open_tenant_and_opens_no_closed_one(tmp_path: Path) -> None:
     hub = build_hub(
         tmp_path,
@@ -947,7 +964,9 @@ def test_every_sweep_acts_in_each_open_tenant_and_opens_no_closed_one(tmp_path: 
     assert closed.harness.tenant not in repr(spans.batches)
     written = b"".join(path.read_bytes() for path in (tmp_path / "egress").rglob("*") if path.is_file())
     assert closed.harness.tenant.encode() not in written
-    assert not [sql for sql, params in statements if closed.harness.tenant in repr(params)]
+    # The derivation probe counts a closed tenant, so a due set may name it to the two derivation corpus reads.
+    named = {_one_bind(sql) for sql, params in statements if closed.harness.tenant in repr(params)}
+    assert named <= _narrowed_derivation_reads(hub, closed.harness.tenant)
 
     sweeps["tenant_teardown"]()
 

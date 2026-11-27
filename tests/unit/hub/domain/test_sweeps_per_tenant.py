@@ -4,7 +4,7 @@ tenant's row, and never on a tenant closed since the pass read its corpus."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from datetime import timedelta
 from typing import cast
 from unittest.mock import Mock
@@ -55,6 +55,15 @@ _B = TenantId("ten_b")
 _log = get_logger("test.sweep_tenants")
 
 
+def _asked(tenants: Collection[TenantId] | None) -> list[TenantId] | None:
+    """The tenant subset a corpus read was called with, as a fake records it."""
+    return None if tenants is None else list(tenants)
+
+
+def _of[T](rows: Mapping[TenantId, T], tenants: Collection[TenantId] | None) -> dict[TenantId, T]:
+    return {tenant: row for tenant, row in rows.items() if tenants is None or tenant in tenants}
+
+
 def _refused(tenant: TenantId) -> object:
     raise TenantClosed(tenant)
 
@@ -65,11 +74,11 @@ def _refused(tenant: TenantId) -> object:
 class _Intents:
     def __init__(self, rows: Sequence[TenantCloseIntent]) -> None:
         self.rows = list(rows)
-        self.reads = 0
+        self.asked: list[list[TenantId] | None] = []
 
-    def pending_close_intents(self) -> list[TenantCloseIntent]:
-        self.reads += 1
-        return self.rows
+    def pending_close_intents(self, tenants: Collection[TenantId] | None = None) -> list[TenantCloseIntent]:
+        self.asked.append(_asked(tenants))
+        return [row for row in self.rows if tenants is None or row.tenant in tenants]
 
 
 class _TenantDrainer:
@@ -95,7 +104,7 @@ def test_one_drain_pass_hands_each_tenant_only_its_own_intents_in_intent_order()
 
     sweep.sweep()
 
-    assert corpus.reads == 1
+    assert corpus.asked == [None]  # fair share needs every tenant's due set
     assert drainers[_A].drained == ["ch_a1", "ch_a2"]
     assert drainers[_B].drained == ["ch_b1"]
 
@@ -120,16 +129,22 @@ class _Segments:
     def __init__(self, candidacy: dict[TenantId, CandidacyRead], derived: dict[TenantId, frozenset[str]]) -> None:
         self._candidacy = candidacy
         self._derived = derived
+        self.candidacy_asked: list[list[TenantId] | None] = []
+        self.derived_asked: list[list[TenantId] | None] = []
 
     def derivation_signature(self) -> dict[TenantId, DerivationSignature]:
         signature = DerivationSignature(segment_count=1, max_segment_id=1, max_received_at=_NOW, chunk_count=1)
         return dict.fromkeys({*self._candidacy, *self._derived}, signature)
 
-    def candidacy(self, extractor_version: str) -> dict[TenantId, CandidacyRead]:
-        return self._candidacy
+    def candidacy(
+        self, extractor_version: str, tenants: Collection[TenantId] | None = None
+    ) -> dict[TenantId, CandidacyRead]:
+        self.candidacy_asked.append(_asked(tenants))
+        return _of(self._candidacy, tenants)
 
-    def derived_segment_ids(self) -> dict[TenantId, frozenset[str]]:
-        return self._derived
+    def derived_segment_ids(self, tenants: Collection[TenantId] | None = None) -> dict[TenantId, frozenset[str]]:
+        self.derived_asked.append(_asked(tenants))
+        return _of(self._derived, tenants)
 
 
 class _TenantDerivation:
@@ -157,6 +172,28 @@ def test_a_derivation_pass_keys_each_segment_by_its_tenant() -> None:
 
     assert units[_A].handed == [(["sg_1"], frozenset())]
     assert units[_B].handed == [([], frozenset({"sg_1"}))]
+    assert corpus.candidacy_asked == [[_A, _B]]
+    assert corpus.derived_asked == [None]  # a fresh process looks for tenants that are gone
+
+
+def test_a_first_derivation_pass_reads_and_hands_stale_segments_for_its_due_tenants_alone() -> None:
+    """``ten_a``, converged by a pass of its own, is not due when the first hub-wide pass runs, and that pass's
+    every-tenant derived read still holds its markers."""
+    visible = CandidacyRead(visible_segment_ids=frozenset({"sg_1"}), candidate_segment_ids=["sg_1"])
+    corpus = _Segments({_A: visible, _B: visible}, {_A: frozenset({"sg_1"}), _B: frozenset({"sg_1", "sg_2"})})
+    units = {_A: _TenantDerivation(), _B: _TenantDerivation()}
+    reconciler = EventDerivationReconciler(
+        corpus=corpus, tenant=lambda tenant: cast(TenantEventDerivation, units[tenant]), clock=FixedClock(_NOW)
+    )
+    reconciler.sweep_tenant(_A)
+
+    reconciler.sweep()
+    reconciler.sweep_tenant(_B)
+
+    assert units[_A].handed == [(["sg_1"], frozenset())]
+    assert units[_B].handed == [(["sg_1"], frozenset({"sg_2"}))]
+    assert corpus.candidacy_asked == [[_A], [_B]]
+    assert corpus.derived_asked == [[_A], None]
 
 
 def test_a_derivation_pass_skips_a_tenant_closed_since_its_corpus_read() -> None:
@@ -179,12 +216,12 @@ def test_a_derivation_pass_skips_a_tenant_closed_since_its_corpus_read() -> None
 class _WorkRefs:
     def __init__(self, rows: Sequence[TenantWorkRef]) -> None:
         self.rows = list(rows)
-        self.reads = 0
         self.changes: dict[TenantId, int] = {}
+        self.asked: list[list[TenantId] | None] = []
 
-    def live_work_refs(self) -> list[TenantWorkRef]:
-        self.reads += 1
-        return self.rows
+    def live_work_refs(self, tenants: Collection[TenantId] | None = None) -> list[TenantWorkRef]:
+        self.asked.append(_asked(tenants))
+        return [row for row in self.rows if tenants is None or row.tenant in tenants]
 
     def live_work_refs_signature(self) -> dict[TenantId, WorkRefsSignature]:
         counts: dict[TenantId, int] = {}
@@ -238,7 +275,7 @@ def test_an_annotation_pass_reconciles_each_tenants_rows_against_its_own_sources
 
     reconciler.sweep()
 
-    assert corpus.reads == 1
+    assert corpus.asked == [[_A, _B]]
     assert units[_A].reconciled == [(_A, ["forge-a"], ["ch_a"])]
     assert units[_B].reconciled == [(_B, ["forge-b"], ["ch_b"])]
 
@@ -266,7 +303,7 @@ def test_unchanged_annotation_probes_open_no_tenants_and_a_config_edit_selects_o
     opened.clear()
     reconciler.sweep()
     assert opened == []
-    assert corpus.reads == 1
+    assert len(corpus.asked) == 1
 
     corpus.changes[_B] = 1
     reconciler.sweep()
@@ -279,6 +316,7 @@ def test_unchanged_annotation_probes_open_no_tenants_and_a_config_edit_selects_o
     reconciler.sweep()
     assert opened == [_A]
     assert units[_A].reconciled[-1] == (_A, ["forge"], [f"ch_{_A}", "ch_new"])
+    assert corpus.asked == [sorted(tenants), [_B], [_A]]
 
     opened.clear()
     clock.advance(timedelta(minutes=10))
@@ -633,7 +671,7 @@ def test_a_one_tenant_annotation_pass_reconciles_that_tenant_alone_against_the_s
 
     assert reconciler.sweep_tenant(_B) is None
 
-    assert corpus.reads == 1
+    assert corpus.asked == [[_B]]
     assert units[_A].reconciled == []
     assert units[_B].reconciled == [(_B, ["forge-b"], ["ch_b"])]
 
@@ -650,16 +688,20 @@ def test_a_one_tenant_derivation_pass_hands_that_tenant_alone_its_candidates_and
 
     assert units[_A].handed == [(["sg_1"], frozenset({"sg_2"}))]
     assert units[_B].handed == []
+    assert (corpus.candidacy_asked, corpus.derived_asked) == ([[_A]], [[_A]])
 
 
 def test_a_one_tenant_drain_pass_drains_that_tenants_due_intents_alone_up_to_the_pass_limit() -> None:
     rows = [_intent(_A, "ch_a1"), *(_intent(_B, f"ch_b{n}") for n in range(CLOSE_DRAIN_PASS_LIMIT + 5))]
     drainers = {_A: _TenantDrainer(), _B: _TenantDrainer()}
+    corpus = _Intents(rows)
     sweep = CloseDrainSweep(
-        corpus=_Intents(rows), tenant=lambda tenant: cast(CloseIntentDrainer, drainers[tenant]), clock=FixedClock(_NOW)
+        corpus=corpus, tenant=lambda tenant: cast(CloseIntentDrainer, drainers[tenant]), clock=FixedClock(_NOW)
     )
 
     assert sweep.sweep_tenant(_B) is None
+
+    assert corpus.asked == [[_B]]
 
     assert drainers[_A].drained == []
     assert drainers[_B].drained == [f"ch_b{n}" for n in range(CLOSE_DRAIN_PASS_LIMIT)]
@@ -704,7 +746,7 @@ def test_a_one_tenant_pass_skips_a_tenant_not_due_and_completes() -> None:
         assert reconciler.sweep_tenant(_A) is None
 
     assert len(unit.reconciled) == 1
-    assert corpus.reads == 1
+    assert len(corpus.asked) == 1
     assert [entry["event"] for entry in logs] == ["forge-status sweep skipped"]
 
 

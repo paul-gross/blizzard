@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Protocol
@@ -148,20 +148,24 @@ def derivation_due(
 
 
 class IReadDerivationCorpus(Protocol):
-    """Every open tenant's derivation corpus and change probe, each read keyed by tenant."""
+    """The open tenants' derivation corpus and change probe, each read keyed by tenant. A corpus read takes
+    the tenants it reads: ``None`` is every open tenant, and a collection is the open tenants among it, an
+    empty one reading nothing."""
 
     def derivation_signature(self) -> Mapping[TenantId, DerivationSignature]:
         """The hub-wide change probe, one statement, its value per tenant over that tenant's segments
         and chunks; a tenant holding neither has no entry."""
         ...
 
-    def candidacy(self, extractor_version: str) -> Mapping[TenantId, CandidacyRead]:
-        """Each open tenant's visible segments and its candidates for ``extractor_version``, keyed
+    def candidacy(
+        self, extractor_version: str, tenants: Collection[TenantId] | None = None
+    ) -> Mapping[TenantId, CandidacyRead]:
+        """Each read tenant's visible segments and its candidates for ``extractor_version``, keyed
         by tenant; a tenant with no visible segment has no entry."""
         ...
 
-    def derived_segment_ids(self) -> Mapping[TenantId, frozenset[str]]:
-        """Each open tenant's segments carrying any derivation marker, keyed by tenant."""
+    def derived_segment_ids(self, tenants: Collection[TenantId] | None = None) -> Mapping[TenantId, frozenset[str]]:
+        """Each read tenant's segments carrying any derivation marker, keyed by tenant."""
         ...
 
 
@@ -367,11 +371,11 @@ class EventDerivationReconciler:
         self._unconverged: set[TenantId] = set()
 
     def sweep(self) -> None:
-        """One convergence pass over every due tenant (never converged, floor elapsed, or signature
-        changed), or a skip when none is; the corpus is read only then. A segment is a
-        ``(tenant, segment_id)`` pair — segment ids are runner-minted — and the stale set is the derived
-        pairs less the visible ones. A closed tenant is skipped; one whose pins fail or whose half
-        raises is left unconverged and retried alone next tick."""
+        """One convergence pass over every due tenant (never converged, floor elapsed, or signature changed), or a
+        skip when none is; only then are the due tenants' corpora read, save a fresh process's every-tenant derived
+        read. A segment is a ``(tenant, segment_id)`` pair (ids are runner-minted), stale when derived and not
+        visible. A closed tenant is skipped; one whose pins fail or whose half raises is left unconverged and
+        retried alone next tick."""
         signatures = self._corpus.derivation_signature()
         now = self._clock.now()
         self._converged = {
@@ -388,11 +392,12 @@ class EventDerivationReconciler:
             return
         self._swept = True
 
-        reads = self._corpus.candidacy(self._extractor_version)
+        reads = self._corpus.candidacy(self._extractor_version, due)
         visible = {(tenant, segment) for tenant, read in reads.items() for segment in read.visible_segment_ids}
         if derived is None:
-            derived = self._corpus.derived_segment_ids()
-        derived_pairs = {(tenant, segment) for tenant, segments in derived.items() for segment in segments}
+            derived = self._corpus.derived_segment_ids(due)
+        # A fresh process's derived read spans every tenant, and only the due ones have their visible half.
+        derived_pairs = {(tenant, segment) for tenant in due for segment in derived.get(tenant, frozenset())}
         stale: dict[TenantId, set[str]] = {}
         for tenant, segment in derived_pairs - visible:
             stale.setdefault(tenant, set()).add(segment)
@@ -425,7 +430,7 @@ class EventDerivationReconciler:
         )
 
     def sweep_tenant(self, tenant: TenantId) -> TenantFault | None:
-        """:meth:`sweep` narrowed to ``tenant``: the same probe and corpus reads, ``tenant``'s share alone,
+        """:meth:`sweep` narrowed to ``tenant``: the same probe, its corpus reads narrowed to ``tenant``,
         and only ``tenant``'s entries of the convergence state touched; a tenant not due is skipped. Its
         fault is returned; a closed tenant's refusal propagates."""
         with bound_contextvars(tenant_id=tenant):
@@ -434,8 +439,8 @@ class EventDerivationReconciler:
             if not self._is_due(tenant, signature, now):
                 _log.info("transcript event derivation sweep skipped", reason="signature unchanged")
                 return None
-            read = self._corpus.candidacy(self._extractor_version).get(tenant)
-            derived = self._corpus.derived_segment_ids().get(tenant, frozenset())
+            read = self._corpus.candidacy(self._extractor_version, [tenant]).get(tenant)
+            derived = self._corpus.derived_segment_ids([tenant]).get(tenant, frozenset())
             stale = set(derived - (read.visible_segment_ids if read is not None else frozenset()))
             tally = DerivationTally()
             try:

@@ -204,6 +204,31 @@ def test_pending_close_intents_are_the_open_tenants_rows_each_with_its_tenant(wo
     assert rows == {(world.carried, _live(world.carried)), (_OPEN, _live(_OPEN))}
 
 
+_Read = Callable[[_World, Collection[TenantId] | None], Sequence[tuple[TenantId, object]]]
+
+#: Each corpus read a sweep narrows, answered as its rows keyed by tenant.
+_NARROWED_READS: dict[str, _Read] = {
+    "live_work_refs": lambda w, tenants: [(row.tenant, row) for row in w.corpus.live_work_refs(tenants)],
+    "pending_close_intents": lambda w, tenants: [(row.tenant, row) for row in w.corpus.pending_close_intents(tenants)],
+    "candidacy": lambda w, tenants: list(w.corpus.candidacy(_EXTRACTOR, tenants).items()),
+    "derived_segment_ids": lambda w, tenants: list(w.corpus.derived_segment_ids(tenants).items()),
+}
+
+
+@pytest.mark.parametrize("read", _NARROWED_READS.values(), ids=_NARROWED_READS.keys())
+def test_a_corpus_read_of_some_tenants_returns_exactly_their_share_of_the_whole_read(
+    world: _World, read: _Read
+) -> None:
+    every = read(world, None)
+    assert {tenant for tenant, _ in every} == {world.carried, _OPEN}
+
+    for tenant in (world.carried, _OPEN):
+        assert read(world, [tenant]) == [row for row in every if row[0] == tenant]
+    assert read(world, {world.carried, _OPEN, _CLOSED}) == every
+    assert read(world, [_CLOSED]) == []
+    assert read(world, []) == []
+
+
 def _cadence(world: _World, tenant: TenantId, cadence_id: str, *retired: bool) -> None:
     """A cadence of ``tenant`` whose lifecycle facts read ``retired`` in order, newest last."""
     world.insert(

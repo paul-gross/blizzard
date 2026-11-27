@@ -5,7 +5,7 @@ covers the drain that retires what the enqueue queued."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -40,6 +40,7 @@ from blizzard.hub.domain.work_items.closure import (
     TenantCloseIntent,
     close_intent_is_due,
 )
+from blizzard.hub.tenancy import TenantId
 from tests.support.scaffolding import (
     FakeCloser,
     WorkSourceRegistry,
@@ -110,6 +111,7 @@ class _FakeCloseChunks:
         self.sources: dict[str, DeliverySources] = {}
         self.projects: dict[str, str] = {}
         self.record_reads: list[list[str]] = []
+        self.corpus_asked: list[list[TenantId] | None] = []
 
     def get_many(self, chunk_ids: list[str]) -> dict[str, SimpleNamespace]:
         """The record's batched read, holding only the chunks ``projects`` names."""
@@ -120,7 +122,10 @@ class _FakeCloseChunks:
         self.delivery_reads.append(list(chunk_ids))
         return {c: self.sources[c] for c in chunk_ids if c in self.sources}
 
-    def pending_close_intents(self) -> list[TenantCloseIntent]:
+    def pending_close_intents(self, tenants: Collection[TenantId] | None = None) -> list[TenantCloseIntent]:
+        self.corpus_asked.append(None if tenants is None else list(tenants))
+        if tenants is not None and FAKE_TENANT not in tenants:
+            return []
         return [TenantCloseIntent(tenant=FAKE_TENANT, intent=intent) for intent in self.candidates]
 
     def record_close_attempt_skipped(self, intent_id: int, *, at: object) -> None:
@@ -225,6 +230,7 @@ def test_sweep_closes_a_pending_intents_pointer_and_records_an_info_event() -> N
 
     _drainer(chunks, {"default": closer}).sweep()
 
+    assert chunks.corpus_asked == [None]
     assert closer.closed == [pointer]
     assert chunks.closures == [("ch_1", pointer, WorkItemCloseOutcome.CLOSED, None)]
     assert chunks.retired == [("ch_1", pointer)]
