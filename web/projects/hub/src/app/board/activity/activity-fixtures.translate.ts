@@ -12,6 +12,8 @@ export const activityView = (overrides: Partial<ActivityView>): ActivityView => 
   kind: null,
   node: null,
   prev_node: null,
+  transition_from: null,
+  transition_to: null,
   prev_status: null,
   reason: null,
   runner_id: null,

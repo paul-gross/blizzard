@@ -70,6 +70,8 @@ export const HUB_FRAME_FIELD_SPECS: HubFrameFieldSpecs = {
     optional: exactOptional<ChunkChangedFrame>()({
       prev_status: true,
       prev_node: true,
+      transition_from: true,
+      transition_to: true,
       node: true,
       runner_id: true,
       runner_name: true,
@@ -179,4 +181,3 @@ export const RUNNER_CAUSE_VALUES: Readonly<Record<RunnerEventType, readonly stri
   'environment-changed': ENVIRONMENT_CHANGE_CAUSES,
   'fact-changed': null,
 };
-

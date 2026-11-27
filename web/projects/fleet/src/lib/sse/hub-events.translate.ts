@@ -20,7 +20,7 @@ export function translateHubEventType(type: string): HubEventType {
   return kinds(type) ?? { kind: 'unknown', raw: type };
 }
 const fields = ['key', 'chunk_id', 'runner_id', 'runner_name', 'host_id', 'host_name', 'question_id', 'decision_id',
-  'flow_id', 'submission_id', 'project_id', 'graph_id', 'status', 'prev_status', 'node', 'prev_node', 'cause', 'kind',
+  'flow_id', 'submission_id', 'project_id', 'graph_id', 'status', 'prev_status', 'node', 'prev_node', 'transition_from', 'transition_to', 'cause', 'kind',
   'by', 'reason', 'severity', 'outcome'] as const;
 
 /** Translate once at ingress; unknown frames retain their vocabulary and payload for diagnostics. */

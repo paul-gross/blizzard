@@ -826,6 +826,8 @@ class ActivityEntry:
     prev_status: str | None = None
     node: str | None = None
     prev_node: str | None = None
+    transition_from: str | None = None
+    transition_to: str | None = None
     runner_id: str | None = None
     cause: ActivityChunkChangeCause | None = None
     graph_id: str | None = None

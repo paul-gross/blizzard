@@ -267,6 +267,28 @@
             ],
             "title": "Status"
           },
+          "transition_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transition From"
+          },
+          "transition_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transition To"
+          },
           "type": {
             "title": "Type",
             "type": "string"
@@ -281,6 +303,8 @@
           "prev_status",
           "node",
           "prev_node",
+          "transition_from",
+          "transition_to",
           "runner_id",
           "runner_name",
           "cause",
@@ -2896,6 +2920,30 @@
           "terminal": {
             "title": "Terminal",
             "type": "boolean"
+          },
+          "transition_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Transition From"
+          },
+          "transition_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Transition To"
           }
         },
         "required": [

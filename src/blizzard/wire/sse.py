@@ -43,6 +43,8 @@ class ChunkChangedPayload(SseFramePayload):
     prev_status: str | None = None
     prev_node: str | None = None
     node: str | None = None
+    transition_from: str | None = None
+    transition_to: str | None = None
     runner_id: str | None = None
     #: The routed runner's registered name at publish time; omitted whenever ``runner_id`` is.
     runner_name: str | None = None

@@ -197,6 +197,8 @@ def _activity_view(row: ActivityEntry, runner_names: Mapping[str, str]) -> Activ
         prev_status=row.prev_status,
         node=row.node,
         prev_node=row.prev_node,
+        transition_from=row.transition_from,
+        transition_to=row.transition_to,
         runner_id=row.runner_id,
         runner_name=runner_names.get(row.runner_id) if row.runner_id is not None else None,
         cause=row.cause,

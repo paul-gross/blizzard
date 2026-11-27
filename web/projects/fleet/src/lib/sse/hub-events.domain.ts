@@ -33,6 +33,8 @@ export interface HubEventData {
   readonly prev_status?: string | null;
   readonly node?: string | null;
   readonly prev_node?: string | null;
+  readonly transition_from?: string | null;
+  readonly transition_to?: string | null;
   readonly cause?: string | null;
   readonly kind?: string | null;
   readonly by?: string | null;

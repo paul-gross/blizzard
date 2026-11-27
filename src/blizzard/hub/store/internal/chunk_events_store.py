@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, ColumnElement, Connection, Row, Select, Table, and_, case, or_, true
+from sqlalchemy import Column, ColumnElement, Connection, Row, Select, Table, and_, case, or_, select, true
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import (
@@ -143,6 +143,17 @@ def route_created_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -
 
 
 def transitions_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+    def node_name(node_id: ColumnElement[str]) -> ColumnElement[str]:
+        return (
+            select(s.graph_nodes.c.name)
+            .where(
+                s.graph_nodes.c.node_id == node_id,
+                s.graph_nodes.c.graph_id == s.transitions.c.graph_id,
+                s.graph_nodes.c.tenant_id == s.transitions.c.tenant_id,
+            )
+            .scalar_subquery()
+        )
+
     return stmts.select(
         s.transitions,
         s.transitions.c.transition_id,
@@ -150,6 +161,10 @@ def transitions_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> 
         s.transitions.c.runner_id,
         s.transitions.c.graph_id,
         s.transitions.c.recorded_at,
+        node_name(s.transitions.c.from_node_id).label("transition_from"),
+        case((s.transitions.c.to_node_id == "done", "done"), else_=node_name(s.transitions.c.to_node_id)).label(
+            "transition_to"
+        ),
     ).where(s.transitions.c.chunk_id.not_in(deleted))
 
 
@@ -371,6 +386,8 @@ def _event_builder(source: _EventSource, entry: FactTable) -> Callable[[Row[Any]
             cause=source.cause(r) if callable(source.cause) else source.cause,
             graph_id=getattr(r, source.graph_column),
             by=getattr(r, source.by_column) if source.by_column else None,
+            transition_from=r.transition_from if entry.table is s.transitions else None,
+            transition_to=r.transition_to if entry.table is s.transitions else None,
         )
 
     return build

@@ -7,7 +7,7 @@ const NO_HOSTS: ReadonlyMap<string, string> = new Map();
 type ChunkChangedData = LoggedEvent['data'];
 
 describe('summarizeChunkChange', () => {
-  it('renders the full transition and runner lines from a fully-populated frame', () => {
+  it('renders the cause and runner rather than current state', () => {
     const data: ChunkChangedData = {
       chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN1RJ1',
       status: 'failed',
@@ -66,7 +66,7 @@ describe('summarizeChunkChange', () => {
     expect(summarizeChunkChange(data, NO_HOSTS).transition).toBe('C-3YJ9');
   });
 
-  it('drops only the missing segment when one node is absent', () => {
+  it('ignores current-state nodes even when one is absent', () => {
     // No prev_node (e.g. a fresh promote — the chunk has never transitioned).
     const noPrev: ChunkChangedData = { chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', status: 'ready', node: 'build' };
     expect(summarizeChunkChange(noPrev, NO_HOSTS).transition).toBe('C-3YJ9');
