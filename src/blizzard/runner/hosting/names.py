@@ -12,8 +12,8 @@ from blizzard.runner.settings.ports import IReadRunnerSettings
 @domain_model
 @dataclass(frozen=True)
 class RecordedName:
-    """What a store records of one runner's name, unjudged: its ``name`` settings entry and its identity row's name,
-    each ``None`` where the store holds none."""
+    """What a store records of one runner's name, unjudged: its ``name`` settings entry when that is a string, and its
+    identity row's name, each ``None`` where the store holds none."""
 
     stored: str | None = None
     identity_name: str | None = None

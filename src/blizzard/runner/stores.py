@@ -305,8 +305,7 @@ class IRunnerAudit(Protocol):
         ...
 
     def recorded_names(self) -> dict[str, RecordedName]:
-        """What the store records of each runner's name, by id, read in one pass and unjudged: its ``name`` settings
-        entry, when that is a string, and its identity row's name."""
+        """Each runner's :class:`~blizzard.runner.hosting.names.RecordedName`, by id, read in one pass."""
         ...
 
     def unhosted_runners(self) -> tuple[str, ...]:

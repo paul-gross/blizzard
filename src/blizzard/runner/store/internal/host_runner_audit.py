@@ -50,8 +50,6 @@ class RunnerAudit:
         return tuple(str(row.runner_id) for row in rows)
 
     def recorded_names(self) -> dict[str, RecordedName]:
-        """What the store records of each runner's name, by id, unjudged: its ``name`` settings entry, when that is a
-        string, and its identity row's name."""
         entries = runner_setting_entries
         with self.read_transaction() as conn:
             rows = {
