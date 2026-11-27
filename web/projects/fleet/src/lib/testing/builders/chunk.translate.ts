@@ -16,7 +16,6 @@ import type {
   WorkRefView,
 } from '../../api/hub';
 import { fixtureInstant } from './clock';
-
 /** A work item as the hub resolves it from its source. */
 export function workRefView(overrides: Partial<WorkRefView> = {}): WorkRefView {
   return {

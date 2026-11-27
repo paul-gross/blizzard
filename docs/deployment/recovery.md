@@ -1,5 +1,13 @@
 # Recovery
 
+## Diagnosing a transition
+
+Run `blizzard hub chunk get <chunk>` and inspect the transition history and its reason to understand why a judgement
+selected an edge. A reason may be absent, including on older transitions; absence is not evidence of a successful
+judgement. Compare the choice and destination with the graph and investigate the underlying issue before choosing a
+recovery action. For what a transition records, see
+[the domain owner](https://github.com/paul-gross/blizzard-context/blob/master/domain/work/transitions.md).
+
 ## Graceful restart
 
 A graceful restart — `systemctl restart`, or stop-then-start on a wheel upgrade — lets the SIGTERM run the daemon's

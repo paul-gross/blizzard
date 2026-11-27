@@ -96,6 +96,13 @@ class ChunkDetailLines:
             yield f"  prerequisites: {', '.join(_neighbor_label(n) for n in prerequisites)}"
         if dependents:
             yield f"  dependents: {', '.join(_neighbor_label(n) for n in dependents)}"
+        if body.history:
+            yield "  history:"
+            for transition in body.history:
+                origin = transition.from_node_name or transition.from_node_id or "-"
+                destination = transition.to_node_name or transition.to_node_id
+                reason = f" — {transition.reason}" if transition.reason else ""
+                yield f"    {origin} -> {destination}{reason}"
         yield f"  cost: {Cost.of(body.cost).rendered}"
         if body.escalation:
             yield from _escalation_lines(body.escalation)

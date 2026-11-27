@@ -484,6 +484,7 @@ class _DetailFields(TypedDict, total=False):
     route: dict[str, object]
     cost: dict[str, object]
     urgency: dict[str, str]
+    history: list[dict[str, object]]
 
 
 def _detail(chunk_id: str, **extra: Unpack[_DetailFields]) -> _FakeResponse:
@@ -547,6 +548,34 @@ def test_show_gains_no_lines_when_no_blocked_marking_or_edges() -> None:
     assert "blocked" not in result.output
     assert "prerequisites" not in result.output
     assert "dependents" not in result.output
+    assert "history:" not in result.output
+
+
+def test_show_renders_transition_history_with_optional_reasons() -> None:
+    history: list[dict[str, object]] = [
+        {
+            "from_node_id": "nd_review",
+            "from_node_name": "review",
+            "to_node_id": "nd_build",
+            "to_node_name": "build",
+            "choice_name": "fail",
+            "epoch": 1,
+            "recorded_at": "2026-07-21T12:00:00+00:00",
+            "reason": "Tests failed",
+        },
+        {
+            "from_node_id": "nd_build",
+            "to_node_id": "nd_review",
+            "choice_name": None,
+            "epoch": 2,
+            "recorded_at": "2026-07-21T13:00:00+00:00",
+        },
+    ]
+    bound = bind_stubs(get=lambda *a, **k: _detail("ch_1", history=history))
+    result = bound.runner.invoke(hub_group, ["chunk", "get", "ch_1"])
+
+    assert result.exit_code == 0, result.output
+    assert "  history:\n    review -> build — Tests failed\n    nd_build -> nd_review\n" in result.output
 
 
 @pytest.mark.parametrize(("status", "shown"), [("running", True), ("done", False), ("stopped", False)])

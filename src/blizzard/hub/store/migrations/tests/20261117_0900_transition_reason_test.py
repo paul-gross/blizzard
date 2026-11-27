@@ -21,8 +21,8 @@ _COLUMNS = (
 )
 
 
-def _rows(conn: sa.Connection) -> list[sa.Row[object]]:
-    return conn.execute(sa.text(f"SELECT {_COLUMNS} FROM transitions ORDER BY transition_id")).all()
+def _rows(conn: sa.Connection) -> list[tuple[object, ...]]:
+    return [tuple(row) for row in conn.execute(sa.text(f"SELECT {_COLUMNS} FROM transitions ORDER BY transition_id"))]
 
 
 def test_populated_parent_upgrade_downgrade_upgrade(tmp_path: Path) -> None:
