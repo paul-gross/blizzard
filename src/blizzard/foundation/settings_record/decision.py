@@ -1,4 +1,4 @@
-"""Pure decisions for one settings-record write: the revision check, the overlay, the diff and the seed choice."""
+"""Pure decisions for one settings-record write: the revision check, the overlay, the diff and the seed plan."""
 
 from __future__ import annotations
 
@@ -39,3 +39,25 @@ def seed_choice(existing: Mapping[str, Entry], keys: Sequence[str], file: Config
 
     An existing entry, tombstone included, is skipped, as is a key the file does not state."""
     return {key: file.value(key) for key in keys if key not in existing and file.states(key)}
+
+
+@domain_model
+@dataclass(frozen=True)
+class SeedPlan:
+    """What a whole seed would take from the file: the keys still open to it, and every entry it would make."""
+
+    keys: tuple[str, ...]
+    pending: Mapping[str, Entry]
+
+
+def plan_seed(
+    existing: Mapping[str, Entry], keys: Sequence[str], file: ConfigView, aliases: Mapping[str, str] | None = None
+) -> SeedPlan:
+    """Plan the whole seed of ``keys``; ``aliases`` maps a legacy spelling to its replacement.
+
+    An alias and its replacement are one authored setting: once either has an entry, neither spelling is seeded."""
+    if aliases:
+        blocked = {alias for alias, key in aliases.items() if key in existing}
+        blocked.update(key for alias, key in aliases.items() if alias in existing)
+        keys = [key for key in keys if key not in blocked]
+    return SeedPlan(tuple(keys), {key: Entry(value) for key, value in seed_choice(existing, keys, file).items()})

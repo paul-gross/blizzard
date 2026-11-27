@@ -10,6 +10,7 @@ from typing import Any, Literal, cast
 
 from blizzard.foundation.config_keys import ConfigView, Lifetime
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.settings_record.decision import plan_seed
 from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_keys import HOST_REGISTRY
@@ -234,13 +235,6 @@ class RunnerSettingsReader(RunnerEntriesJudge):
         self._deferred_seed = deferred_seed
         self._identity_present = identity_present
 
-    def seed_keys(self, entries: Mapping[str, Entry]) -> tuple[str, ...]:
-        # An alias and its replacement represent one authored setting. Once either
-        # has an entry, a later file edit must not seed the other spelling.
-        blocked = {alias for alias, key in self.aliases.items() if key in entries}
-        blocked.update(key for alias, key in self.aliases.items() if alias in entries)
-        return tuple(key for key in (*self.keys, *self.aliases) if key not in blocked)
-
     def snapshot(self) -> tuple[SettingsSnapshot, RunnerConfig]:
         pair, config = self.snapshot_pair()
         return pair.runner, config
@@ -309,13 +303,7 @@ class RunnerSettingsReader(RunnerEntriesJudge):
         entries = dict(current)
         authored = self.entry.authored
         assert authored is not None
-        entries.update(
-            {
-                key: Entry(authored.value(key))
-                for key in self.seed_keys(entries)
-                if key not in entries and authored.states(key)
-            }
-        )
+        entries.update(plan_seed(entries, (*self.keys, *self.aliases), authored, self.aliases).pending)
         return self.resolve(entries, host=host)
 
     def resolve(self, entries: Mapping[str, Entry], *, host: HostConfig | None = None) -> RunnerConfig:

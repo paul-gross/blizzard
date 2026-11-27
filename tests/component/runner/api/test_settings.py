@@ -120,7 +120,7 @@ def test_settings_writes_are_revision_conditioned_and_history_is_paged(
     reader = RunnerSettingsReader(host, host.runners[0], store)
     assert host.runners[0].authored is not None
     assert host.runners[0].own is not None
-    store.seed(host.runners[0].authored, reader.seed_keys({}), validate=reader.validate)
+    store.seed(host.runners[0].authored, (*reader.keys, *reader.aliases), validate=reader.validate)
     app = create_runner_app(
         host.config_for_runner(host.runners[0], host.runners[0].own, host.token_for(host.runners[0]).value)
     )
@@ -298,7 +298,7 @@ def test_settings_human_roles_and_worker_credential(
     reader = RunnerSettingsReader(host, host.runners[0], store)
     assert host.runners[0].authored is not None
     assert host.runners[0].own is not None
-    store.seed(host.runners[0].authored, reader.seed_keys({}), validate=reader.validate)
+    store.seed(host.runners[0].authored, (*reader.keys, *reader.aliases), validate=reader.validate)
     now = datetime.now(UTC)
     base.record_mint(
         new_mint(
@@ -393,7 +393,7 @@ def test_legacy_entry_projects_provenance_and_can_be_unset(
     reader = RunnerSettingsReader(host, host.runners[0], store)
     assert host.runners[0].authored is not None
     assert host.runners[0].own is not None
-    store.seed(host.runners[0].authored, reader.seed_keys({}), validate=reader.validate)
+    store.seed(host.runners[0].authored, (*reader.keys, *reader.aliases), validate=reader.validate)
     app = create_runner_app(
         host.config_for_runner(host.runners[0], host.runners[0].own, host.token_for(host.runners[0]).value)
     )

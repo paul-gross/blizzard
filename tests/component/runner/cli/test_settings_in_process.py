@@ -43,7 +43,7 @@ def test_cli_and_real_settings_routes_round_trip(tmp_path: Path, monkeypatch: py
     reader = RunnerSettingsReader(host, host.runners[0], store)
     assert host.runners[0].authored is not None
     assert host.runners[0].own is not None
-    store.seed(host.runners[0].authored, reader.seed_keys({}), validate=reader.validate)
+    store.seed(host.runners[0].authored, (*reader.keys, *reader.aliases), validate=reader.validate)
     app = create_runner_app(
         host.config_for_runner(host.runners[0], host.runners[0].own, host.token_for(host.runners[0]).value)
     )

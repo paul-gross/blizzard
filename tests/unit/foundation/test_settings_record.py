@@ -7,7 +7,7 @@ from collections.abc import Mapping
 import pytest
 
 from blizzard.foundation.config_keys import INTEGER, ConfigKey, ConfigRegistry, ConfigView, Lifetime
-from blizzard.foundation.settings_record.decision import Decision, decide, seed_choice
+from blizzard.foundation.settings_record.decision import Decision, SeedPlan, decide, plan_seed, seed_choice
 from blizzard.foundation.settings_record.refusals import SettingsRevisionConflict
 from blizzard.foundation.settings_record.vocabulary import Change, Entry, FieldChange
 
@@ -87,3 +87,20 @@ def test_seed_skips_a_key_the_file_does_not_state() -> None:
 def test_seed_returns_stated_unseeded_keys_in_order_with_their_authored_values() -> None:
     chosen = seed_choice({"b": Entry(1)}, ("c", "b", "a"), _file({"a": 9, "b": 2, "c": 4}))
     assert list(chosen.items()) == [("c", 4), ("a", 9)]
+
+
+@pytest.mark.parametrize("held", ["a", "b"], ids=["alias-held", "replacement-held"])
+@pytest.mark.parametrize("entry", [Entry(5), Entry(None, at_default=True)], ids=["value", "tombstone"])
+def test_a_plan_blocks_both_spellings_once_either_has_an_entry(held: str, entry: Entry) -> None:
+    plan = plan_seed({held: entry}, ("a", "b", "c"), _file({"a": 1, "b": 2, "c": 3}), {"a": "b"})
+    assert plan == SeedPlan((held, "c"), {"c": Entry(3)})
+
+
+def test_a_plan_without_a_held_alias_keeps_both_spellings() -> None:
+    plan = plan_seed({}, ("a", "b"), _file({"a": 1, "b": 2}), {"a": "b"})
+    assert plan.keys == ("a", "b")
+
+
+def test_a_plan_keeps_every_open_key_and_pends_the_whole_resulting_seed() -> None:
+    plan = plan_seed({"a": Entry(None, at_default=True)}, ("a", "b", "c"), _file({"a": 9, "c": 4}))
+    assert plan == SeedPlan(("a", "b", "c"), {"c": Entry(4)})
