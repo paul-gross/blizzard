@@ -293,6 +293,14 @@ def _receiver_tracing(host: HostConfig | RunnerConfig) -> ReceiverTracing:
     )
 
 
+@dataclass(frozen=True)
+class SeedingStore:
+    """The open engine and host stores a hosted runner is seeded over: its opener's to dispose."""
+
+    engine: Engine
+    host_stores: HostStores
+
+
 @dataclass
 class HostProcess:
     """The per-host graph: the pieces one daemon shares across every runner it hosts, and the runners themselves.

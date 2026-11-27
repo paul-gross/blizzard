@@ -14,6 +14,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+import blizzard.foundation.store.engine as store_engine
 import blizzard.runner.composition as composition
 import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import SystemClock
@@ -166,7 +167,7 @@ def _boot(root: Path) -> tuple[HostConfig, HostProcess, HostedApp]:
     assert not halted
     host = build_host_process(config, ready)
     hosted = build_hosted_app(
-        config.host_view(), host, host_config=config, source=StoreHostedRunners(config, SystemClock())
+        config.host_view(), host, host_config=config, source=StoreHostedRunners.over(config, host)
     )
     return config, host, hosted
 
@@ -210,6 +211,23 @@ def test_an_added_runner_starts_at_the_next_tick_and_its_neighbour_keeps_ticking
     assert world.ticks.of(world.runner(_ADDED)) == 1
     assert world.runner(_ADDED).config.name == "night-1"
     assert world.resolves(_ADDED) == 200
+
+
+def test_starting_a_runner_from_the_tick_opens_no_engine(world: _World, monkeypatch: pytest.MonkeyPatch) -> None:
+    world.add()
+    opened: list[object] = []
+
+    def counting(*args: Any, **kwargs: Any) -> Any:
+        opened.append(args)
+        return create_engine(*args, **kwargs)
+
+    create_engine = store_engine.create_engine
+    monkeypatch.setattr(store_engine, "create_engine", counting)
+
+    world.host_pass()
+
+    assert world.served() == {TEST_RUNNER_ID, _ADDED}
+    assert opened == []
 
 
 def test_a_restart_runs_every_hosted_runner(world: _World) -> None:

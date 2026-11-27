@@ -68,6 +68,7 @@ from blizzard.runner.composition import (
     NoDrivers,
     RunnerProcess,
     RunnerStartFailed,
+    SeedingStore,
     StartupNote,
     build_host_process,
     build_host_read_stores,
@@ -1058,7 +1059,7 @@ def host(
                 InitCollaborators.of(ctx),
                 tcp_socket=sock,
                 listening_file=listening_file,
-                clock=clock if verdict.foreign is None else None,
+                store_is_hosts=verdict.foreign is None,
             )
 
 
@@ -1188,7 +1189,16 @@ def seed_runners(
     seed_hosted_runners(config, clock=clock)
     ready: list[BuiltRunner] = []
     halted: list[HaltedRunner] = []
-    for projection in _seed_entries(config, hosted_entries(config, clock=clock), clock, RUNNER_SEEDED.reached):
+    entries = hosted_entries(config, clock=clock)
+    engine = create_engine_from_url(config.db_url)
+    try:
+        stores = build_host_stores(
+            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock
+        )
+        projections = _seed_entries(config, SeedingStore(engine, stores), entries, clock, RUNNER_SEEDED.reached)
+    finally:
+        engine.dispose()
+    for projection in projections:
         if isinstance(projection, HaltedRunner):
             halted.append(projection)
         else:
@@ -1197,51 +1207,54 @@ def seed_runners(
 
 
 def _seed_entries(
-    config: HostConfig, entries: Sequence[RunnerEntry], clock: IClock, after_each: Callable[[], None] | None = None
+    config: HostConfig,
+    store: SeedingStore,
+    entries: Sequence[RunnerEntry],
+    clock: IClock,
+    after_each: Callable[[], None] | None = None,
 ) -> list[BuiltRunner | HaltedRunner]:
-    """Each hosted runner's token imported, its settings seeded, and the runner projected over its stored token;
-    ``after_each`` runs once each is seeded."""
-    engine = create_engine_from_url(config.db_url)
+    """Each hosted runner's token imported, its settings seeded, and the runner projected over its stored token, in
+    ``store``, which the caller owns; ``after_each`` runs once each is seeded."""
     errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
     projections: list[BuiltRunner | HaltedRunner] = []
-    try:
-        host_stores = build_host_stores(engine, errors=errors, clock=clock)
-        host_settings = HostSettingsReader(config, host_stores.settings, host_record_reads(host_stores))
-        with click_exception_on(ConfigError):
-            tokens = build_sealing_hub_tokens(engine, config.root, environ=os.environ, clock=clock)
-        for entry in entries:
-            assert entry.id is not None
-            stored = _import_token(config, entry, tokens)
-            identity, settings = build_settings_stores(engine, errors=errors, runner_id=entry.id)
-            projections.append(_seed_runner(config, entry, stored, identity, settings, host_settings))
-            if after_each is not None:
-                after_each()
-    finally:
-        engine.dispose()
+    host_settings = HostSettingsReader(config, store.host_stores.settings, host_record_reads(store.host_stores))
+    with click_exception_on(ConfigError):
+        tokens = build_sealing_hub_tokens(store.engine, config.root, environ=os.environ, clock=clock)
+    for entry in entries:
+        assert entry.id is not None
+        stored = _import_token(config, entry, tokens)
+        identity, settings = build_settings_stores(store.engine, errors=errors, runner_id=entry.id)
+        projections.append(_seed_runner(config, entry, stored, identity, settings, host_settings))
+        if after_each is not None:
+            after_each()
     return projections
 
 
 @dataclass(frozen=True)
 class StoreHostedRunners:
     """The running host's source of a runner the store hosts, seeded as a start seeds it: the ``[[runner]]`` naming
-    it, else its stored ``name``, its token imported and its settings seeded at the tick that starts it."""
+    it, else its stored ``name``, its token imported and its settings seeded at the tick that starts it, over the
+    running host's own engine and host stores."""
 
     config: HostConfig
+    store: SeedingStore
     clock: IClock
+
+    @classmethod
+    def over(cls, config: HostConfig, host: HostProcess) -> StoreHostedRunners:
+        return cls(config, SeedingStore(host.engine, host.host_stores), host.clock)
 
     def built(self, runner_id: str) -> BuiltRunner | HaltedRunner:
         entry = next((entry for entry in self.config.runners if entry.id == runner_id), None)
         if entry is None:
-            engine = create_engine_from_url(self.config.db_url)
-            try:
-                identity, settings = build_settings_stores(
-                    engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), runner_id=runner_id
-                )
-                entry = self.config.hosted_entry(runner_id, stored_name(identity, settings, runner_id))
-            finally:
-                engine.dispose()
+            identity, settings = build_settings_stores(
+                self.store.engine,
+                errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")),
+                runner_id=runner_id,
+            )
+            entry = self.config.hosted_entry(runner_id, stored_name(identity, settings, runner_id))
         try:
-            (projection,) = _seed_entries(self.config, [entry], self.clock)
+            (projection,) = _seed_entries(self.config, self.store, [entry], self.clock)
         except click.ClickException as exc:
             return HaltedRunner(entry.name, runner_id, (exc.message,))
         return projection
@@ -1335,12 +1348,12 @@ def start(
     *,
     tcp_socket: socket.socket | None = None,
     listening_file: Path | None = None,
-    clock: IClock | None = None,
+    store_is_hosts: bool = False,
 ) -> None:
     """Start the host over its built runners, reporting each halted one; returns when the host has stopped.
     ``tcp_socket`` is the TCP listener already bound at ``config``'s port; ``listening_file`` receives the local
-    API's URL once the host is serving. With ``clock``, the store is the host's: its tick starts each runner the store
-    comes to host and drains each it comes to hold retired."""
+    API's URL once the host is serving. With ``store_is_hosts``, the host's tick starts each runner the store comes to
+    host and drains each it comes to hold retired."""
     for runner in halted:
         click.echo(f"warning: {runner.describe()}")
     for built in runners:
@@ -1375,7 +1388,7 @@ def start(
                 click.echo(snapshot.summary())
         # The app is built over the host's own keys, never a runner's.
         shared = config.host_view()
-        source: IHostedRunnerSource | None = StoreHostedRunners(config, clock) if clock is not None else None
+        source: IHostedRunnerSource | None = StoreHostedRunners.over(config, process) if store_is_hosts else None
         # A configured-but-missing prompt file raises while the steppers are built, before any socket binds.
         with click_exception_on(ConfigError):
             hosted = build_hosted_app(shared, process, host_config=config, source=source)
