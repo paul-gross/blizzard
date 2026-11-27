@@ -86,7 +86,7 @@ def _served(config: HostConfig, hub: _Hub, *, registered: bool = True) -> Genera
     ready, halted = seed_runners(config, clock=SystemClock())
     graph = build_host_process(config, ready, halted=halted)
     hosted = build_hosted_app(
-        ready[0].config, host=graph, host_config=config, source=StoreHostedRunners(config, SystemClock())
+        ready[0].config, host=graph, host_config=config, source=StoreHostedRunners.over(config, graph)
     )
     hosted.app.state.hub_auth_mode = SimpleNamespace(enabled=lambda: False)
     hosted.app.state.hosted_runners = build_running_host_runner_service(config, graph, hub) if registered else None

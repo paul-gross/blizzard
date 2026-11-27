@@ -54,7 +54,7 @@ def _serving(root: Path) -> Generator[HostConfig]:
     assert not halted
     graph = build_host_process(config, ready)
     served = replace(ready[0].config, port=0)
-    hosted = build_hosted_app(served, host=graph, host_config=config, source=StoreHostedRunners(config, SystemClock()))
+    hosted = build_hosted_app(served, host=graph, host_config=config, source=StoreHostedRunners.over(config, graph))
     sockets = Listeners.of(served).bound()
     server = uvicorn.Server(uvicorn.Config(hosted.app, log_level="warning"))
     thread = threading.Thread(target=lambda: server.run(sockets=sockets), daemon=True)

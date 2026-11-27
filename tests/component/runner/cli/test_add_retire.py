@@ -770,7 +770,7 @@ def _serving(root: Path, hub: FakeInitHub) -> Generator[HostConfig]:
     assert not halted
     graph = build_host_process(config, ready)
     served = replace(ready[0].config, port=0)
-    hosted = build_hosted_app(served, host=graph, host_config=config, source=StoreHostedRunners(config, SystemClock()))
+    hosted = build_hosted_app(served, host=graph, host_config=config, source=StoreHostedRunners.over(config, graph))
     with hub.host_clients(config.hub_url) as host_clients:
         hosted.app.state.hosted_runners = build_running_host_runner_service(
             config, graph, host_clients(config.host_token.value)

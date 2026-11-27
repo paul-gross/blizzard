@@ -40,6 +40,20 @@ def test_unserved_runner_is_not_addressable_even_if_state_is_serving() -> None:
         daemon.runner_id()
 
 
+def test_a_runner_not_started_yet_is_named_starting_rather_than_halted() -> None:
+    items = [
+        {"name": "alpha", "runner_id": "rn_a", "state": "serving", "served": True},
+        {"name": "beta", "runner_id": "rn_b", "state": "starting", "served": False},
+    ]
+    with (
+        _daemon(httpx2.Response(200, json={"items": items}), "beta") as daemon,
+        pytest.raises(ClickException) as caught,
+    ):
+        daemon.runner_id()
+    assert "holds runner beta (rn_b), which is starting" in str(caught.value)
+    assert "halted" not in str(caught.value)
+
+
 @pytest.mark.parametrize("body", [b'{"items":', b'{"items": [{"name": "secret"}]}'])
 def test_bad_runner_list_is_redacted(body: bytes) -> None:
     with _daemon(httpx2.Response(200, content=body)) as daemon, pytest.raises(ClickException) as caught:

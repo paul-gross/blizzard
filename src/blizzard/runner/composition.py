@@ -293,6 +293,16 @@ def _receiver_tracing(host: HostConfig | RunnerConfig) -> ReceiverTracing:
     )
 
 
+@dataclass(frozen=True)
+class SeedingStore:
+    """The open engine and host stores a hosted runner is seeded over, its opener's to dispose, and the sealed tokens
+    its token is imported into."""
+
+    engine: Engine
+    host_stores: HostStores
+    tokens: Callable[[], HubTokens]
+
+
 @dataclass
 class HostProcess:
     """The per-host graph: the pieces one daemon shares across every runner it hosts, and the runners themselves.
@@ -896,6 +906,23 @@ def _sealing_hub_tokens(
 ) -> HubTokens:
     keys = sealing_key_provider(environ, HostLayout(root), sealed_under=repository.key_ids())
     return HubTokens(repository, secret_cipher(keys), clock)
+
+
+def build_seeding_store(
+    engine: Engine, root: Path, *, errors: RunnerStoreErrorFactory, environ: Mapping[str, str], clock: IClock
+) -> SeedingStore:
+    """The seeding store of a stopped-host start over ``engine``, its tokens sealed as
+    :func:`build_sealing_hub_tokens` seals."""
+    stores = build_host_stores(engine, errors=errors, clock=clock)
+    tokens = functools.partial(_sealing_hub_tokens, stores.hub_tokens, root, environ=environ, clock=clock)
+    return SeedingStore(engine, stores, tokens)
+
+
+def build_running_host_seeding_store(host: HostProcess, root: Path, *, environ: Mapping[str, str]) -> SeedingStore:
+    """The running ``host``'s seeding store: its own engine, host stores and token sealer."""
+    return SeedingStore(
+        host.engine, host.host_stores, functools.partial(_running_host_tokens, host, root, environ=environ)
+    )
 
 
 def stored_hub_token(engine: Engine, root: Path, runner_id: str, *, environ: Mapping[str, str]) -> StoredToken:

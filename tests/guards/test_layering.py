@@ -4095,9 +4095,7 @@ _RUNNER_STORE_WIRING_ALLOWED = (
     "runner/cli/host_records.py::_Host.write",
     "runner/cli/runners.py::add",
     "runner/cli/runners.py::retire",
-    "runner/cli/runtime.py::StoreHostedRunners.built",
     "runner/cli/runtime.py::_check",
-    "runner/cli/runtime.py::_seed_entries",
     "runner/cli/runtime.py::_stored_token",
     "runner/cli/runtime.py::hosted_entries",
     "runner/cli/runtime.py::read_host_stores",
@@ -4105,6 +4103,7 @@ _RUNNER_STORE_WIRING_ALLOWED = (
     "runner/cli/runtime.py::seed_host",
     "runner/cli/runtime.py::seed_host_records",
     "runner/cli/runtime.py::seed_hosted_runners",
+    "runner/cli/runtime.py::seed_runners",
     "runner/cli/token.py::_set_on_stopped_host",
 )
 
