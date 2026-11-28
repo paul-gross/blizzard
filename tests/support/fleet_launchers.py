@@ -282,12 +282,9 @@ def drive_until_done(
     *,
     timeout: float = 120.0,
 ) -> str:
-    """Tick the reconciliation loop until the chunk is terminal; return its last status.
-
-    Each tick is one synchronous REAP->PULL->FILL->ADVANCE pass, interleaved with short
-    waits so the asynchronously spawned mock worker can commit before ADVANCE judges it.
-    The local API serves on ``api_socket``, the held socket ``config`` took its port from.
-    """
+    """Tick the reconciliation loop until the chunk is terminal; return its last status. Each tick is one
+    synchronous REAP->PULL->FILL->ADVANCE pass, with short waits so the spawned mock worker commits before ADVANCE
+    judges it. The local API serves on ``api_socket``, the held socket ``config`` took its port from."""
     prior = dict(os.environ)
     os.environ.update(fenced_env)  # the runner spawns the fenced mock harness in-process
     try:

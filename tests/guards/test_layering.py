@@ -272,8 +272,7 @@ _SINGLE_SIDE_KERNEL_ALLOWLIST: dict[str, str] = {
         "only the hub reaches it until the host rotates the key its runners' tokens are sealed under"
     ),
     "blizzard.foundation.registry.legacy": (
-        "the leaf-and-bag vocabulary for legacy-built state; only the runner host's root declares through it, while "
-        "its runner children hold legacy leaves and the hub's graph holds none"
+        "the leaf-and-bag vocabulary for legacy-built state; only the runner host's root declares through it"
     ),
     "blizzard.foundation.platform_tracing.wiring": (
         "the platform tracing registration; only the hub reaches it until the runner registers its own handle"
@@ -1396,10 +1395,8 @@ def _concrete_runner_store_namers(src_root: Path) -> list[str]:
 
 
 def test_the_host_composition_is_the_only_code_naming_a_concrete_runner_store_adapter() -> None:
-    """AC4: every concrete ``store/internal/`` adapter is named by the host's composition modules
-    (``src/blizzard/runner/composition.py``, ``src/blizzard/runner/host_root.py``) or the adapter package's own wiring
-    module, and nowhere else under ``src/`` — every other collaborator takes a Protocol seam or the ``RunnerStores``
-    bundle the composition builds."""
+    """A concrete ``store/internal/`` adapter is named only by the host's composition modules or the adapter package's
+    own wiring module — every other collaborator takes a Protocol seam or the ``RunnerStores`` bundle."""
     violations = _concrete_runner_store_namers(_SRC_DIR)
     assert not violations, f"I — only the host's composition may name a concrete runner-store adapter: {violations}"
 

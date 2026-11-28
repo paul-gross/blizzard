@@ -21,7 +21,7 @@ import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.registry.interface import ScopeClosed
-from blizzard.runner.app import build_hosted_app
+from blizzard.runner.app import build_hosted_app_over_process
 from blizzard.runner.cli.runtime import host_tick_driver
 from blizzard.runner.composition import HostProcess, RunnerProcess
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
@@ -746,7 +746,7 @@ def test_the_boot_composes_each_runner_as_its_child_opens_and_closes_child_then_
     config = _config(tmp_path)
     host = composition.build_host_process(host_config_of(config))
     assert host.runners == ()
-    hosted = build_hosted_app(
+    hosted = build_hosted_app_over_process(
         config,
         host,
         host_config=host_config_of(config),
@@ -788,7 +788,7 @@ def test_a_boot_compose_failure_fails_the_host_start_and_leaves_no_child_open(
     host = composition.build_host_process(host_config_of(config))
     try:
         with pytest.raises(ConfigError, match="a bad entry"):
-            build_hosted_app(
+            build_hosted_app_over_process(
                 config,
                 host,
                 host_config=host_config_of(config),

@@ -146,7 +146,7 @@ def _transcript_config(
         clock=clock,
         refuse_foreign=True,
     ):
-        yield host, BuiltRunner(config.runner_id, config, entry=entry)
+        yield Standalone(host, BuiltRunner(config.runner_id, config, entry=entry))
 
 
 def _loop_wiring(ctx: click.Context, config: RunnerConfig) -> LoopWiring:
@@ -191,7 +191,7 @@ def transcript_reship(ctx: click.Context, segment_id: str, directory: str, runne
         clock=CliCollaborators.of(ctx).wall_clock,
     ) as standalone:
         try:
-            report = _loop_wiring(ctx, standalone[1].config).reship_transcript(standalone, segment_id)
+            report = _loop_wiring(ctx, standalone.built.config).reship_transcript(standalone, segment_id)
         except TranscriptReshipError as exc:
             raise click.ClickException(str(exc)) from exc
     click.echo(
@@ -249,7 +249,9 @@ def transcript_backfill(
         door=Door.of(ctx),
         clock=CliCollaborators.of(ctx).wall_clock,
     ) as standalone:
-        report = _loop_wiring(ctx, standalone[1].config).backfill_transcripts(standalone, dry_run=dry_run, limit=limit)
+        report = _loop_wiring(ctx, standalone.built.config).backfill_transcripts(
+            standalone, dry_run=dry_run, limit=limit
+        )
     prefix = "would import" if dry_run else "imported"
     click.echo(f"{prefix} {report.imported}, already present {report.already_present}, gone {report.gone}")
     if report.deferred:

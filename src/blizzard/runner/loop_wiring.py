@@ -19,7 +19,7 @@ import httpx2
 from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
-from blizzard.foundation.roles import collaborator
+from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.runner.composition import HostProcess, RunnerProcess
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.git import SubprocessEnvGit
@@ -82,8 +82,13 @@ _HTTP_TIMEOUT = 30.0
 _T = TypeVar("_T")
 
 
-#: A host file and one of its runners, which a standalone verb opens its own graph over.
-type Standalone = tuple[HostConfig, BuiltRunner]
+@domain_model
+@dataclass(frozen=True)
+class Standalone:
+    """A host file and one of its runners, which a standalone verb opens its own graph over."""
+
+    host_config: HostConfig
+    built: BuiltRunner
 
 
 @collaborator
@@ -263,11 +268,8 @@ class LoopWiring:
 
     def with_context(self, use: Callable[[LoopContext], _T], over: RunnerProcess | Standalone) -> _T:
         """Run ``use`` on one context over ``over``'s graph and a hub client — the standalone verbs' one shared
-        lifecycle.
-
-        A caller's process graph is used as it is, with its platform tracing on the client and the tick, and is left
-        open for the caller to close; a standalone host file and runner open their own graph, closed with the
-        client."""
+        lifecycle. A caller's process graph, its platform tracing on the client, is left open for the caller; a
+        standalone opens its own graph, closed with the client."""
         graph = self._graph(over)
         try:
             with httpx2.Client(
@@ -296,8 +298,7 @@ class LoopWiring:
         """``over`` itself, or the standalone runner it names opened under this wiring's broker and bundle."""
         if isinstance(over, RunnerProcess):
             return over
-        host_config, built = over
-        return build_runner_process(host_config, built, events=self.events, bundle=self.bundle)
+        return build_runner_process(over.host_config, over.built, events=self.events, bundle=self.bundle)
 
     def backfill_transcripts(
         self, over: Standalone, *, dry_run: bool, limit: int | None = None

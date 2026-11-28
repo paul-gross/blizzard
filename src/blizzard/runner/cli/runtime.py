@@ -48,7 +48,7 @@ from blizzard.foundation.store.migrations import (
 )
 from blizzard.foundation.sweep_passes import SweepPassOutcome
 from blizzard.foundation.trace_export.settings import TracingSettings
-from blizzard.runner.app import HostedApp, build_hosted_app
+from blizzard.runner.app import HostedApp, build_hosted_app_over_process
 from blizzard.runner.cli.children import command_children
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, daemon_holding, runner_option
 from blizzard.runner.cli.directory import load_host
@@ -1386,7 +1386,7 @@ def start(
         # A runner's bad entry, or a configured-but-missing prompt file, raises while the app composes and wires its
         # runners, before any socket binds. The boot publishes each runner's harness bundle; a later start does not.
         with click_exception_on(ConfigError):
-            hosted = build_hosted_app(
+            hosted = build_hosted_app_over_process(
                 shared,
                 process,
                 host_config=config,

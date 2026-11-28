@@ -1,9 +1,8 @@
-"""The runner host's registered graph validates and keeps every registration rule, and every host-root route's
-container dependency resolves from the host's process scope.
+"""The runner host's registered graph keeps every registration rule, every host-root route's container dependency
+resolves from its process scope, and the host-free graph refuses each as absent.
 
-Each gate runs over the production host registration and over that registration with a planted violation it must
-fail. The legacy leaves the root declares over its borrowed host are inventoried, not refused: the runner children
-still hold them."""
+Each gate runs over the production graph and over a planted violation it must fail. The legacy leaves over the
+borrowed host are inventoried, not refused: the runner children still hold them."""
 
 from __future__ import annotations
 
@@ -17,7 +16,7 @@ from fastapi import FastAPI
 
 from blizzard.cli.config_inputs import packaged_flag_registry
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.registry.interface import Lifetime, port
+from blizzard.foundation.registry.interface import Lifetime, Registry, port
 from blizzard.foundation.registry.internal.translation import HOST_LIFETIMES
 from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import OwnedChild, ScopeValues, supply
@@ -26,7 +25,8 @@ from blizzard.runner.app import create_app_for_export
 from blizzard.runner.composition import HostProcess, RunnerCompose
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import HostConfig
-from blizzard.runner.host_root import HostRoot, register_host
+from blizzard.runner.host_root import HostRoot, open_host_free, register_host
+from blizzard.runner.throttle import wiring as throttle
 from blizzard.runner.throttle.floor_clear import IRecordSubscriptionFloorClear, SubscriptionFloorClearService
 from blizzard.runner.throttle.usage_limits import IWriteSubscriptionUsageLimitRepository
 from tests.support.container_guards import (
@@ -39,7 +39,13 @@ from tests.support.container_guards import (
     role_key_violations,
 )
 from tests.support.host_files import host_config_of
-from tests.support.route_resolution import RouteDependency, route_dependencies, unresolved_process_dependencies
+from tests.support.route_resolution import (
+    RouteDependency,
+    route_dependencies,
+    runner_route_dependencies,
+    unrefused_absent_dependencies,
+    unresolved_process_dependencies,
+)
 from tests.support.runner_fakes import make_store
 
 #: The context values the host root opens with; validation reads only their keys.
@@ -71,6 +77,10 @@ class _Defaulted:
     def __init__(self, clears: IRecordSubscriptionFloorClear, limit: int = 3) -> None:
         self.clears = clears
         self.limit = limit
+
+
+def _declares_nothing(registry: Registry) -> None:
+    del registry
 
 
 def _second_floor_clear(clears: IRecordSubscriptionFloorClear) -> SubscriptionFloorClearService:
@@ -161,8 +171,40 @@ def test_every_host_routes_container_dependencies_resolve_from_the_process_scope
     assert {(each.route, each.dependency) for each in _host_routes} >= {
         ("POST /api/host/subscriptions/{slug}/floor/clear", SubscriptionFloorClearService),
     }
-    assert [each.route for each in _host_routes if each.route.split(" ")[1].startswith("/runners/")] == []
+    assert runner_route_dependencies(_host_routes) == []
     assert unresolved_process_dependencies(_host_routes, _process) == []
+
+
+def test_the_runner_route_gate_fails_a_planted_runner_route_taking_a_container_dependency() -> None:
+    planted = [
+        RouteDependency("POST /runners/{runner_id}/api/planted", tenant=False, dependency=_Unregistered),
+        RouteDependency("POST /api/host/planted", tenant=False, dependency=_Unregistered),
+    ]
+    assert runner_route_dependencies(planted) == ["POST /runners/{runner_id}/api/planted: _Unregistered"]
+
+
+def test_the_host_free_graph_refuses_every_host_routes_dependency_as_absent(
+    _host_routes: list[RouteDependency],
+) -> None:
+    host_free = open_host_free()
+    try:
+        assert unrefused_absent_dependencies(_host_routes, host_free) == []
+    finally:
+        host_free.close()
+
+
+def test_the_host_free_gate_fails_an_area_that_declares_nothing_absent(
+    _host_routes: list[RouteDependency], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(throttle, "register_absent", _declares_nothing)
+    host_free = open_host_free()
+    try:
+        assert unrefused_absent_dependencies(_host_routes, host_free) == [
+            "POST /api/host/subscriptions/{slug}/floor/clear: SubscriptionFloorClearService is not absent: "
+            "NoFactoryError"
+        ]
+    finally:
+        host_free.close()
 
 
 def test_the_host_route_gate_fails_a_planted_unregistered_dependency(_process: OwnedChild) -> None:

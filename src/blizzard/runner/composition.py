@@ -1,10 +1,7 @@
 """The runner host, runner process and store composition root.
 
-The only module under ``src/`` that names a concrete ``runner/store/internal/`` adapter,
-asserted by
-``tests/guards/test_layering.py::test_composition_is_the_only_module_naming_a_concrete_runner_store_adapter``
-— every other collaborator takes a Protocol seam or the
-:class:`~blizzard.runner.stores.RunnerStores` bundle this builds."""
+One of the host's composition modules that may name a concrete ``runner/store/internal/`` adapter; every other
+collaborator takes a Protocol seam or the :class:`~blizzard.runner.stores.RunnerStores` bundle this builds."""
 
 from __future__ import annotations
 
@@ -474,8 +471,7 @@ class RunnerProcess:
     flags: FlagsHolder = field(default_factory=lambda: FlagsHolder(resolve_flags(FlagRegistry(), "runner", {}).flags))
     #: The hub's version and window, as this runner's latest registration reply answered them.
     hub_version: HubVersionHolder = field(default_factory=HubVersionHolder)
-    #: What closing this runner closes after its own graph — the child, host root and host a standalone opening
-    #: holds; ``None`` for a runner a host's runner set closes.
+    #: What a standalone opening closes after this runner's graph; ``None`` when a host's runner set closes it.
     closes: Callable[[], None] | None = None
     settings_reader: RunnerSettingsReader | None = None
     #: The seed of this runner's settings record, built beside ``settings_reader`` over the same entry.
@@ -940,19 +936,18 @@ def stored_hub_token(engine: Engine, root: Path, runner_id: str, *, environ: Map
 
 @dataclass(frozen=True)
 class RunnerCompose:
-    """What a host composes each runner child with beyond its :class:`BuiltRunner`, for the host's lifetime.
+    """What a host composes each runner child with beyond its :class:`BuiltRunner`, for the host's lifetime; the
+    per-runner options are keyed by runner id."""
 
-    ``publish`` names the runners whose harness bundle the composition publishes — the boot's — so a runner a later
-    reconcile starts publishes none. ``bundles`` are the harness-config snapshots and ``selections`` the bindings each
-    runner chose, by runner id. ``environ`` decides whether tracing is enabled; ``trace_exporter`` replaces the OTLP
-    binding an enabled sweep would otherwise build. ``settings`` is whether each runner is composed with its
-    settings reader; a standalone runner is not, its one settings-reading verb attaching its own."""
-
+    #: The runners whose harness bundle is published — the boot's; a later reconcile's start publishes none.
     publish: frozenset[str] = frozenset()
     bundles: Mapping[str, BundleSnapshot | None] = field(default_factory=dict[str, BundleSnapshot | None])
     selections: Mapping[str, BindingSelection] = field(default_factory=dict[str, BindingSelection])
+    #: Decides whether tracing is enabled.
     environ: Mapping[str, str] | None = None
+    #: Replaces the OTLP binding an enabled sweep would build.
     trace_exporter: ITraceExporter | None = None
+    #: Whether each runner gets its settings reader; a standalone one's settings-reading verb attaches its own.
     settings: bool = True
 
     def runner(self, host_config: HostConfig, host: HostProcess, built: BuiltRunner) -> RunnerProcess:
@@ -982,15 +977,10 @@ def build_host_process(
     tcp_socket: socket.socket | None = None,
     monotonic_clock: IMonotonicClock | None = None,
 ) -> HostProcess:
-    """Construct the host graph from its file, with no runner on it yet: its runners are composed as children of the
-    host root opened over it. ``halted`` are the runners left unbuilt; the host keeps them to report. Its records are
-    reconciled before any runner resumes. Disposes partial resources on failure.
-
-    ``environ`` decides whether tracing is enabled. ``trace_platform`` builds the platform-tracing and
-    received-telemetry handles the config and environment decide; otherwise ``platform_tracing`` and
-    ``received_telemetry`` are used as given. ``tcp_socket`` is a TCP listener already bound at ``host``'s port,
-    adopted rather than bound again. ``monotonic_clock`` is what every runner measures its deadlines on, the system's
-    when absent."""
+    """The host graph from its file, with no runner yet, its records reconciled; ``halted`` it keeps to report.
+    ``trace_platform`` builds the tracing handles config and ``environ`` decide, else the given ones are used.
+    ``tcp_socket`` is a listener already bound at the port; ``monotonic_clock`` defaults to the system's. Disposes
+    partial resources on failure."""
     graph = _build_host_graph(
         host.host_view(),
         subscriptions=host.subscriptions,
@@ -1250,9 +1240,20 @@ class HostRunnerSet[W: IWiredRunner, R: IRunnerResume]:
             for dependency_type in self._eager:
                 child.resolver.get(dependency_type)
         except BaseException as failure:
-            _close_after(functools.partial(child.close, failure), failure)
+            close_after(functools.partial(child.close, failure), failure)
             raise
         return child
+
+    def open_composed(self, built: BuiltRunner) -> tuple[RunnerProcess, OwnedChild]:
+        """Open ``built``'s child and read the runner it composes; a failure closes the child. Refused unbound."""
+        child = self.open_runner(built)
+        if child is None:
+            raise RuntimeError(f"runner {built.id}: the host's runners open no child")
+        try:
+            return child.resolver.get(RunnerProcess), child
+        except BaseException as failure:
+            close_after(functools.partial(self.close_graph, None, child), failure)
+            raise
 
     def close_graph(self, runner: RunnerProcess | None, child: OwnedChild | None) -> None:
         """Close one runner's graph, in reverse construction order: its process graph, then its child. ``runner`` is
@@ -1361,7 +1362,7 @@ class HostRunnerSet[W: IWiredRunner, R: IRunnerResume]:
                 closing.callback(self.close_graph, live.runner, live.child)
 
 
-def _close_after(close: Callable[[], None], failure: BaseException) -> None:
+def close_after(close: Callable[[], None], failure: BaseException) -> None:
     """Close what ``failure`` abandoned; a cleanup error is noted on it rather than raised over it."""
     try:
         close()
@@ -1470,21 +1471,14 @@ def start_runner[W: IWiredRunner, R: IRunnerResume](
     """Open ``built``'s child, which composes its runner, run its startup steps, and place it among the host's
     runners. Raises :class:`RunnerStartFailed` naming the step, with nothing of the runner left behind."""
     with _start_step(built.id, "compose"):
-        child = runners.open_runner(built)
-        if child is None:
-            raise RuntimeError(f"runner {built.id}: the host's runners open no child")
-        try:
-            runner = child.resolver.get(RunnerProcess)
-        except BaseException as failure:
-            _close_after(functools.partial(runners.close_graph, None, child), failure)
-            raise
+        runner, child = runners.open_composed(built)
     try:
         live = LiveRunner[W, R](runner, start.resume(runner), child=child)
         run_startup_steps(live, start)
         with _start_step(built.id, "serve"):
             runners.place(live)
     except BaseException as failure:
-        _close_after(functools.partial(runners.close_graph, runner, child), failure)
+        close_after(functools.partial(runners.close_graph, runner, child), failure)
         raise
     return StartingRunner(live, runners, start)
 

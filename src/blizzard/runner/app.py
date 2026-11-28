@@ -132,6 +132,7 @@ from blizzard.runner.composition import (
     StartupNote,
     build_host_record_services,
     build_running_host_runner_service,
+    close_after,
     host_settings_reader,
 )
 from blizzard.runner.config import HostWorkspace, RunnerConfig, SubscriptionDeclaration
@@ -458,19 +459,10 @@ def create_app(
     host_resolver: Resolver | None = None,
     flags: Flags,
 ) -> FastAPI:
-    """Build the host's app from resolved config: its own routes at the root, and each of ``runners`` under its
-    prefix, keyed by id; ``halted`` are the runners the host holds unbuilt.
-
-    With ``runners`` omitted, the app serves one runner composed from the runner seams passed here by
-    :func:`runner_seams` — a host of one. ``workspaces`` defaults to each of ``config``'s declared workspaces, over
-    ``workspace_registry``'s pool for it, and ``subscriptions`` to ``config``'s. A store-free build is
-    possible; the store-backed routes then answer 503 and ``/api/ready`` reports ``ready=false``. ``events`` defaults
-    absent, leaving the stream silent. ``platform_tracing`` is off unless the composition root passes a handle.
-    ``telemetry_receiver`` is the host's worker telemetry receiver; absent, the OTLP routes answer 503. ``identity`` is
-    the process's holder; absent, the federation routes answer 503. ``host_stores`` are the host-scoped stores;
-    ``jti_cache`` defaults to theirs. ``host_resolver`` is the host root's process scope the host routes resolve
-    through; absent, the app opens the host-free graph, closed with the app, whose host services answer 503.
-    ``flags`` is the host's resolved answer."""
+    """The host's app: its own routes at the root, and each of ``runners`` under its id, or a host of one from the
+    seams :func:`runner_seams` passes; ``halted`` are the runners it holds unbuilt. A collaborator left absent
+    answers its routes 503 — a store-free build reports ``ready=false``. Host routes resolve through
+    ``host_resolver``, the host root's process scope, else through a host-free graph closed with the app."""
     log = get_logger("blizzard.runner")
     clock = clock or SystemClock()
     process = process or LinuxProcessProbe()
@@ -738,10 +730,8 @@ _wired_runner_conforms: type[IWiredRunner] = _WiredRunner
 class HostedApp:
     """The served app over one host graph, and the host's live runner set it serves.
 
-    Closing releases wrapper resources, the host root — the graphs of the runners its set holds, then its process
-    scope — and an opened host it was handed. The exposed engine belongs to the host; a supplied host process remains
-    caller-owned.
-    """
+    Closing releases wrapper resources, the host root and an opened host it was handed; a caller's host process stays
+    the caller's, its engine exposed here."""
 
     app: FastAPI
     engine: Engine
@@ -879,45 +869,58 @@ class _FirstServedIdentity:
 
 def build_hosted_app(
     config: RunnerConfig,
-    host: HostProcess | OpenedHost,
+    host: OpenedHost,
     *,
     host_config: HostConfig | None = None,
+    source: IHostedRunnerSource | None = None,
+) -> HostedApp:
+    """The served app over an opened ``host``, the host's own keys in ``config``: it serves from the host's root and
+    each runner child opened beneath it, and closing the app closes ``host``. With ``host_config`` and ``source``,
+    the host tick reconciles its live runners against the store's hosted ones."""
+    with contextlib.ExitStack() as startup:
+        startup.callback(host.close)
+        hosted = _wire_hosted_app(
+            config,
+            host.host,
+            cast("HostRoot[_WiredRunner, ResumeMarking]", host.root),
+            startup,
+            opened=tuple(zip(host.runners, host.children, strict=True)),
+            opened_host=host,
+            host_config=host_config,
+            source=source,
+            boot=(),
+        )
+        startup.pop_all()  # HostedApp.close releases the registered wrapper resources and the opened host.
+        return hosted
+
+
+def build_hosted_app_over_process(
+    config: RunnerConfig,
+    host: HostProcess,
+    host_config: HostConfig,
+    *,
     source: IHostedRunnerSource | None = None,
     boot: Sequence[BuiltRunner] = (),
     compose: RunnerCompose | None = None,
 ) -> HostedApp:
-    """Wire the served app over the host graph, the host's own keys in ``config``, and serve each runner it starts
-    with.
-
-    Over a caller's host process, the host root is opened here over ``host`` and ``host_config``, which a host process
-    always comes with; over an opened host, the app serves from its root and each of its children, and closing the app
-    closes it. ``boot`` are further runners the host starts with, each composed under ``compose`` as its child opens
-    beneath the host root; a bad entry raises its ``ConfigError`` before anything serves. With ``host_config`` and
-    ``source``, the host tick reconciles its live runners against the store's hosted ones."""
+    """The served app over a caller's ``host`` and its ``host_config``, the root opened here: each of ``boot`` is
+    composed under ``compose`` as its child opens, a bad entry raising its ``ConfigError`` before anything serves.
+    With ``source``, the host tick reconciles its live runners against the store's hosted ones."""
     with contextlib.ExitStack() as startup:
-        if isinstance(host, OpenedHost):
-            startup.callback(host.close)
-            root = cast("HostRoot[_WiredRunner, ResumeMarking]", host.root)
-            opened: Sequence[tuple[RunnerProcess, OwnedChild]] = tuple(zip(host.runners, host.children, strict=True))
-            process = host.host
-        else:
-            if host_config is None:
-                raise TypeError("a host process is served over its host file: pass host_config")
-            root = HostRoot[_WiredRunner, ResumeMarking].serving(host, host_config, compose=compose)
-            startup.callback(root.close)
-            opened, process = (), host
+        root = HostRoot[_WiredRunner, ResumeMarking].serving(host, host_config, compose=compose)
+        startup.callback(root.close)
         hosted = _wire_hosted_app(
             config,
-            process,
+            host,
             root,
             startup,
-            opened=opened,
-            opened_host=host if isinstance(host, OpenedHost) else None,
+            opened=(),
+            opened_host=None,
             host_config=host_config,
             source=source,
             boot=boot,
         )
-        startup.pop_all()  # HostedApp.close releases the registered wrapper resources and any opened host.
+        startup.pop_all()  # HostedApp.close releases the registered wrapper resources and the root.
         return hosted
 
 
@@ -942,11 +945,8 @@ def _wire_hosted_app(
     for graph, child in opened:
         _serve_at_boot(runners, start, graph, child)
     for built in boot:
-        child = runners.open_runner(built)
-        if child is None:
-            raise RuntimeError(f"runner {built.id}: the host's runners open no child")
-        # Built as the child opened: a bad entry has already raised, its child closed.
-        _serve_at_boot(runners, start, child.resolver.get(RunnerProcess), child)
+        # Composed as the child opens: a bad entry raises, its child closed.
+        _serve_at_boot(runners, start, *runners.open_composed(built))
     reconcile = (
         HostRunnerReconcile(host, runners, start, source) if host_config is not None and source is not None else None
     )
@@ -1026,10 +1026,7 @@ def _serve_at_boot(
         wired = start.wire(graph)
         runners.place(LiveRunner(graph, start.resume(graph), wired=wired, child=child))
     except BaseException as failure:
-        try:
-            runners.close_graph(graph, child)
-        except Exception as cleanup:  # the boot failure is the one reported
-            failure.add_note(f"closing the runner after it also failed: {cleanup!r}")
+        close_after(functools.partial(runners.close_graph, graph, child), failure)
         raise
     start.serve(graph, wired)
 

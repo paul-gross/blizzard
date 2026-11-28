@@ -148,6 +148,24 @@ def test_the_wiring_gate_catches_a_domain_wiring_reaching_outside_the_domain(tmp
     ]
 
 
+def test_the_wiring_gate_catches_a_runner_area_wiring_reaching_outside_its_package(tmp_path: Path) -> None:
+    root = _plant(
+        tmp_path,
+        {
+            "runner/throttle/wiring.py": (
+                "from blizzard.foundation.registry.interface import Lifetime, Registry\n"
+                "from blizzard.runner.throttle.floor_clear import SubscriptionFloorClearService\n"
+                "from blizzard.runner.leases.takeover import TakeoverService\n"
+                "from blizzard.foundation.clock import IClock\n"
+            ),
+        },
+    )
+    assert wiring_boundary_violations(root) == [
+        "runner/throttle/wiring.py: imports blizzard.foundation.clock from outside its own package",
+        "runner/throttle/wiring.py: imports blizzard.runner.leases.takeover from outside its own package",
+    ]
+
+
 def test_the_wiring_gate_admits_an_adapter_wiring_its_own_internal_and_a_process_root(tmp_path: Path) -> None:
     root = _plant(
         tmp_path,

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.app import build_hosted_app
+from blizzard.runner.app import build_hosted_app_over_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_layout import HostLayout
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, migrated_store_at
@@ -21,7 +21,7 @@ def test_hosted_close_respects_engine_ownership(tmp_path: Path, ownership: str) 
     if graph is None:
         hosted = hosted_app(config)
     else:
-        hosted = build_hosted_app(config, graph.host, host_config=standalone_of(config)[0])
+        hosted = build_hosted_app_over_process(config, graph.host, host_config=standalone_of(config).host_config)
     usage_client = graph.host.usage_http_client() if graph is not None else None
 
     try:

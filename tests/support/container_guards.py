@@ -24,16 +24,14 @@ from blizzard.hub.scopes.tenants import TenantContainers
 
 _INTERFACE = "blizzard.foundation.registry.interface"
 _REGISTRY_PACKAGE = ("foundation", "registry")
-#: The route edges, the hub's and the runner host's, and the one dishka module each may import: the FastAPI
-#: integration's ``FromDishka`` and ``inject_sync``.
+#: The hub's and the runner host's route edges, and the one dishka module each may import.
 _ROUTE_EDGES = (("hub", "api"), ("runner", "api"))
 _ROUTE_EDGE_DISHKA = "dishka.integrations.fastapi"
 
 #: The CLI's command roots, relative to the source root; they compose areas and register nothing themselves.
 CLI_ROOTS: tuple[Path, ...] = (Path("cli/command_root.py"), Path("hub/cli/container_command.py"))
 
-#: The roots that compose adapters and areas, so the wiring boundary exempts them: the CLI's, the hub's process root and
-#: hosted app, and the runner host's root, composition and hosted app.
+#: The hub's, the CLI's and the runner host's roots, relative to the source root, which the wiring boundary exempts.
 PROCESS_ROOTS: frozenset[Path] = frozenset(
     {
         Path("hub/process_root.py"),
@@ -183,12 +181,10 @@ _DOMAIN_WIRING_REACH = ("blizzard.hub.domain.", "blizzard.foundation.", "blizzar
 
 
 def wiring_boundary_violations(source_root: Path, *, roots: frozenset[Path] = PROCESS_ROOTS) -> list[str]:
-    """Wiring modules (those importing the registry interface) that reach another area's wiring or an adapter, and
-    domain wiring modules that reach outside the domain.
-
-    An adapter package's own wiring module may import that package's ``internal/``; the process ``roots`` compose
-    adapters and areas, and are exempt. A domain area's wiring names only domain types, the foundation, and the
-    tenancy vocabulary: what lives outside the domain is the root's to hand in, or its owner's to register."""
+    """Wiring modules (those importing the registry interface) that reach another area's wiring or an adapter; domain
+    wiring reaching beyond the domain, the foundation and the tenancy vocabulary; and runner area wiring reaching
+    beyond the registry interface and its own package. An adapter package's own wiring may import its ``internal/``;
+    the process ``roots`` are exempt."""
     problems: list[str] = []
     for path in sorted(source_root.rglob("*.py")):
         relative = path.relative_to(source_root)
@@ -218,6 +214,15 @@ def wiring_boundary_violations(source_root: Path, *, roots: frozenset[Path] = PR
                 and name.rpartition(".")[0] not in imports
             ):
                 problems.append(f"{relative}: imports {name} from outside the domain")
+            elif (
+                relative.parts[0] == "runner"
+                and _is_wiring(_module(relative))
+                and name != _INTERFACE
+                and name != own_area
+                and not name.startswith(f"{own_area}.")
+                and name.rpartition(".")[0] not in imports
+            ):
+                problems.append(f"{relative}: imports {name} from outside its own package")
     return problems
 
 

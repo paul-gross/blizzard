@@ -19,7 +19,7 @@ from jwt.algorithms import RSAAlgorithm
 
 import blizzard.runner.app as runner_app
 from blizzard.foundation.host_registration_state import HostRegistrationState
-from blizzard.runner.app import build_hosted_app
+from blizzard.runner.app import build_hosted_app_over_process
 from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.composition import HostProcess
 from blizzard.runner.config import RunnerConfig
@@ -95,7 +95,7 @@ def _serve(
         return real(transport=httpx2.MockTransport(handler), base_url="http://hub.example")
 
     monkeypatch.setattr(runner_app.httpx2, "Client", mocked)
-    hosted = build_hosted_app(config, host, host_config=host_config)
+    hosted = build_hosted_app_over_process(config, host, host_config=host_config)
     try:
         yield TestClient(hosted.app, base_url="https://host.example")
     finally:

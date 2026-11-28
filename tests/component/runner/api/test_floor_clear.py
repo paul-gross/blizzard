@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner import composition
-from blizzard.runner.app import HostedApp, build_hosted_app
+from blizzard.runner.app import HostedApp, build_hosted_app_over_process
 from blizzard.runner.composition import HostProcess
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
@@ -51,7 +51,7 @@ def _served_host(tmp_path: Path) -> Generator[tuple[TestClient, HostedApp, HostP
     make_store(config.db_url)
     host = composition.build_host_process(host_config_of(config))
     host.clock = FixedClock(_NOW)
-    hosted = build_hosted_app(config, host, host_config=host_config_of(config))
+    hosted = build_hosted_app_over_process(config, host, host_config=host_config_of(config))
     try:
         with TestClient(hosted.app) as client:
             yield client, hosted, host

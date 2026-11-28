@@ -1,10 +1,9 @@
 """Every route's container dependencies, resolved at the lifetime the route runs in.
 
-A route reaches the container through each ``inject_sync`` callable in its dependency tree — the endpoint or a
-dependency — whose ``FromDishka`` parameters name the types it resolves. A route whose tree admits a tenant
-(:func:`~blizzard.hub.api.auth_session.tenant_request`) resolves them through a request scope beneath that tenant's
-scope; every other route resolves them through the process scope. A process whose routes admit no tenant resolves every
-dependency from its process scope. Each helper returns the problems it finds."""
+A route reaches the container through each ``inject_sync`` callable in its dependency tree, whose ``FromDishka``
+parameters name the types it resolves. A route whose tree admits a tenant
+(:func:`~blizzard.hub.api.auth_session.tenant_request`) resolves them beneath that tenant's scope, every other route
+through the process scope. Each helper returns the problems it finds."""
 
 from __future__ import annotations
 
@@ -17,7 +16,7 @@ from dishka import FromDishka
 from fastapi import FastAPI
 from fastapi.dependencies.models import Dependant
 
-from blizzard.foundation.registry.interface import Lifetime, port
+from blizzard.foundation.registry.interface import Lifetime, ServiceAbsent, port
 from blizzard.foundation.registry.scopes import OwnedChild, ScopeValues, open_child, supply
 from blizzard.hub.api.auth_session import tenant_request
 from blizzard.hub.tenancy import StoreScope, TenantId
@@ -84,6 +83,30 @@ def unresolved_process_dependencies(dependencies: list[RouteDependency], process
             process.resolver.get(each.dependency)
         except Exception as error:  # every refusal is a finding this gate reports
             problems.append(f"{each.route}: {_name(each.dependency)} in the process: {type(error).__name__}")
+    return problems
+
+
+def runner_route_dependencies(dependencies: list[RouteDependency]) -> list[str]:
+    """Each container dependency a ``/runners/{id}`` route takes; such a route reads its runner's seams."""
+    return [
+        f"{each.route}: {_name(each.dependency)}"
+        for each in dependencies
+        if each.route.split(" ")[1].startswith("/runners/")
+    ]
+
+
+def unrefused_absent_dependencies(dependencies: list[RouteDependency], process: OwnedChild) -> list[str]:
+    """Each route dependency ``process`` does not refuse as absent, for a graph that declares every service absent."""
+    problems: list[str] = []
+    for each in dependencies:
+        try:
+            process.resolver.get(each.dependency)
+        except ServiceAbsent:
+            continue
+        except Exception as error:  # any other refusal answers 500, not the absent service's 503
+            problems.append(f"{each.route}: {_name(each.dependency)} is not absent: {type(error).__name__}")
+        else:
+            problems.append(f"{each.route}: {_name(each.dependency)} resolves")
     return problems
 
 

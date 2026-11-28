@@ -30,7 +30,7 @@ from blizzard.foundation.platform_tracing.handle import build_platform_tracing
 from blizzard.foundation.registry.scopes import OwnedChild
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_spans import FinishedSpan
-from blizzard.runner.app import build_hosted_app
+from blizzard.runner.app import build_hosted_app, build_hosted_app_over_process
 from blizzard.runner.composition import HostProcess, HostRunnerSet, RunnerCompose, RunnerProcess
 from blizzard.runner.config import (
     ConfigError,
@@ -816,7 +816,7 @@ def test_failed_hosted_app_wiring_closes_partial_clients_and_only_its_own_graph(
             if ownership == "owned":
                 build_hosted_app(config, opened)
             else:
-                build_hosted_app(config, graph, host_config=standalone_of(config)[0])
+                build_hosted_app_over_process(config, graph, host_config=standalone_of(config).host_config)
         # The hub client, and the served runner's own two when the app serves the opened host's runner.
         assert len(clients) == (3 if ownership == "owned" else 1)
         assert all(instance.is_closed for instance in clients)

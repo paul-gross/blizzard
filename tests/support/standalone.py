@@ -10,28 +10,31 @@ from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import BuiltRunner, HostConfig
 from blizzard.runner.host_root import OpenedHost, StandaloneOptions, build_runner_process, open_standalone
+from blizzard.runner.loop_wiring import Standalone
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID
 
 
-def standalone_of(config: RunnerConfig, runner_id: str | None = None) -> tuple[HostConfig, BuiltRunner]:
+def standalone_of(config: RunnerConfig, runner_id: str | None = None) -> Standalone:
     """The host file ``config``'s runner stands alone on, and the runner, bound to ``runner_id``, else to the id
     ``config`` carries, else to the fixture runner."""
     built = BuiltRunner(runner_id or config.runner_id or FIXTURE_RUNNER_ID, config)
-    return HostConfig(root=config.root, db_url=config.db_url), built
+    return Standalone(HostConfig(root=config.root, db_url=config.db_url), built)
 
 
 def standalone_runner(
     config: RunnerConfig, *, runner_id: str | None = None, **options: Unpack[StandaloneOptions]
 ) -> RunnerProcess:
     """``config``'s runner on a host of one, through the production opener; closing it closes the host too."""
-    return build_runner_process(*standalone_of(config, runner_id), **options)
+    standalone = standalone_of(config, runner_id)
+    return build_runner_process(standalone.host_config, standalone.built, **options)
 
 
 def open_standalone_of(
     config: RunnerConfig, *, runner_id: str | None = None, **options: Unpack[StandaloneOptions]
 ) -> OpenedHost:
     """``config``'s runner opened on a host of one, its child not yet served."""
-    return open_standalone(*standalone_of(config, runner_id), **options)
+    standalone = standalone_of(config, runner_id)
+    return open_standalone(standalone.host_config, standalone.built, **options)
 
 
 def hosted_app(

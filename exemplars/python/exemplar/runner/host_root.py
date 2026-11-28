@@ -6,13 +6,10 @@ It opens the root over a host its caller built and runs no runner, so the served
 
 from __future__ import annotations
 
-import contextlib
-from typing import Any
-
 from blizzard.foundation.registry.legacy import LegacyRegistry
-from blizzard.runner.composition import HostProcess, RunnerProcess
+from blizzard.runner.composition import HostProcess
 from blizzard.runner.host_config import HostConfig
-from blizzard.runner.host_root import HostRoot, OpenedHost, register_host
+from blizzard.runner.host_root import OpenedHost, open_host, register_host
 from exemplar.runner.disk import wiring as disk
 
 
@@ -22,8 +19,4 @@ def open_serving(host: HostProcess, host_config: HostConfig) -> OpenedHost:
     registry = LegacyRegistry()
     register_host(registry)
     disk.register(registry)
-    with contextlib.ExitStack() as closing:
-        closing.callback(host.close)
-        root = HostRoot[Any, Any].open(registry, host, host_config, eager=(RunnerProcess,))
-        closing.callback(root.close)
-        return OpenedHost(host, root, (), (), closing.pop_all())
+    return open_host(host, host_config, registry=registry)

@@ -27,7 +27,7 @@ from blizzard.foundation.secrets.sealing import SealedValue
 from blizzard.foundation.secrets.value import SecretValue
 from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.foundation.sweep_passes import SweepPassOutcome
-from blizzard.runner.app import HostedApp, build_hosted_app
+from blizzard.runner.app import HostedApp, build_hosted_app_over_process
 from blizzard.runner.cli.runtime import StoreHostedRunners, build_runner_threads, seed_runners
 from blizzard.runner.composition import (
     HostProcess,
@@ -172,7 +172,7 @@ def _boot(root: Path) -> tuple[HostConfig, HostProcess, HostedApp]:
     ready, halted = seed_runners(config, clock=SystemClock())
     assert not halted
     host = composition.build_host_process(config)
-    hosted = build_hosted_app(
+    hosted = build_hosted_app_over_process(
         config.host_view(),
         host,
         host_config=config,

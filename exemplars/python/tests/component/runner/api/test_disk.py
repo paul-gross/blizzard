@@ -19,7 +19,7 @@ from blizzard.runner.api.resolution import host_request
 from blizzard.runner.app import HostedApp, Lane, build_hosted_app
 from blizzard.runner.config import RunnerConfig
 from exemplar.runner.api import disk
-from exemplar.runner.disk.reading import HostDiskReader
+from exemplar.runner.disk.reading import DiskReading, HostDiskReader
 from exemplar.runner.host_root import open_serving
 from tests.support.host_files import host_config_of
 from tests.support.runner_fakes import make_store
@@ -53,10 +53,21 @@ def test_the_disk_route_answers_the_host_roots_free_space_at_the_hosts_clock(hos
     assert resp.json()["read_at"] == "2026-10-15T12:00:00+00:00"
 
 
-def test_every_request_resolves_the_one_reader_the_host_scope_holds(hosted: HostedApp) -> None:
+def test_every_request_resolves_the_one_reader_the_host_scope_holds(
+    hosted: HostedApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    served: list[HostDiskReader] = []
+    read = HostDiskReader.read
+
+    def recording(reader: HostDiskReader) -> DiskReading:
+        served.append(reader)
+        return read(reader)
+
+    monkeypatch.setattr(HostDiskReader, "read", recording)
     with TestClient(hosted.app) as client:
         assert client.get("/api/host/disk").status_code == 200
         assert client.get("/api/host/disk").status_code == 200
 
-    reader = hosted.root.owner.resolver.get(HostDiskReader)
-    assert reader is hosted.root.owner.resolver.get(HostDiskReader)
+    held = hosted.root.owner.resolver.get(HostDiskReader)
+    assert len(served) == 2
+    assert all(reader is held for reader in served)

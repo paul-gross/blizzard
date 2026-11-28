@@ -1,16 +1,9 @@
 """The runner host's composition root: it registers the host's keys, then opens the validated container over them.
 
-``HostRunnerSet`` owns the runner scopes beneath the process scope; each runner it hosts opens a child scope there,
-whose one context value is its :class:`~blizzard.runner.host_config.BuiltRunner`. The process scope borrows the
-:class:`~blizzard.runner.composition.HostProcess` it opens with, whose supplier closes it. Registering and building are
-separate steps, so a caller declares its runner graph before the build.
-
-What the host and each runner are still built by — the host's process graph and a runner's composition — is reached
-through named legacy leaves over the borrowed host; an adopted area depends on a leaf only by the ``Ref`` the root
-hands it.
-
-A standalone command driving one runner opens the same root over a host of one it builds, through
-:func:`open_standalone`, and owns what it opened."""
+The process scope borrows its :class:`~blizzard.runner.composition.HostProcess`; ``HostRunnerSet`` opens each runner's
+child scope beneath it, keyed by its :class:`~blizzard.runner.host_config.BuiltRunner`. What is not yet adopted is
+reached through named legacy leaves over the borrowed host, which an area depends on only by the ``Ref`` it is handed.
+A standalone command opens the same root over a host of one through :func:`open_standalone`."""
 
 from __future__ import annotations
 
@@ -124,12 +117,18 @@ class HostRoot[W: IWiredRunner, R: IRunnerResume]:
 
     @classmethod
     def serving(
-        cls, host: HostProcess, host_config: HostConfig, *, compose: RunnerCompose | None = None
+        cls,
+        host: HostProcess,
+        host_config: HostConfig,
+        *,
+        compose: RunnerCompose | None = None,
+        registry: LegacyRegistry | None = None,
     ) -> HostRoot[W, R]:
-        """The production root over ``host``: :func:`register_host`'s graph, each runner child composing its runner
-        as it opens, so a bad entry fails the child's opening."""
-        registry = LegacyRegistry()
-        register_host(registry)
+        """The serving root over ``host``: ``registry``, else :func:`register_host`'s graph, each runner child
+        composing its runner as it opens, so a bad entry fails the child's opening."""
+        if registry is None:
+            registry = LegacyRegistry()
+            register_host(registry)
         return cls.open(registry, host, host_config, compose=compose, eager=(RunnerProcess,))
 
     def close(self) -> None:
@@ -158,22 +157,24 @@ class OpenedHost:
 
 
 def open_host(
-    host: HostProcess, host_config: HostConfig, runners: Sequence[BuiltRunner], *, compose: RunnerCompose | None = None
+    host: HostProcess,
+    host_config: HostConfig,
+    runners: Sequence[BuiltRunner] = (),
+    *,
+    compose: RunnerCompose | None = None,
+    registry: LegacyRegistry | None = None,
 ) -> OpenedHost:
-    """The production root over ``host``, a child opened beneath it for each of ``runners``, its runner composed under
+    """:meth:`HostRoot.serving` over ``host`` and a child beneath it for each of ``runners``, composed under
     ``compose`` and held among the host's runners. The opened host owns ``host``: a failure closes what opened, then
     ``host``."""
     with contextlib.ExitStack() as closing:
         closing.callback(host.close)
-        root = HostRoot[Any, Any].serving(host, host_config, compose=compose)
+        root = HostRoot[Any, Any].serving(host, host_config, compose=compose, registry=registry)
         closing.callback(root.close)
         children: list[OwnedChild] = []
         composed: list[RunnerProcess] = []
         for built in runners:
-            child = root.runners.open_runner(built)
-            if child is None:
-                raise RuntimeError(f"runner {built.id}: the host's runners open no child")
-            runner = child.resolver.get(RunnerProcess)
+            runner, child = root.runners.open_composed(built)
             closing.callback(root.runners.close_graph, runner, child)
             children.append(child)
             composed.append(runner)
