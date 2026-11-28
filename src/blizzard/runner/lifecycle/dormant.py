@@ -8,8 +8,8 @@ from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.crash import CrashPoint, crashpoint
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.workspaces import IWorkspaceSessions
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle

@@ -11,9 +11,9 @@ from datetime import datetime
 
 from sqlalchemy import Connection, and_, func
 
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
-from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.leases import closure
 from blizzard.runner.leases.model import ClosedLease, Lease, NewLease, NewMint
 from blizzard.runner.leases.record import ClosureFact, IWriteLeaseRecordRepository

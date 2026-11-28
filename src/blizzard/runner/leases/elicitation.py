@@ -14,8 +14,8 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Protocol
 
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import as_utc
 
 __all__ = [
     "ELICITATION_STALENESS_THRESHOLD",

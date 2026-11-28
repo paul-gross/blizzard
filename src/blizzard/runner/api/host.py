@@ -11,7 +11,7 @@ from collections.abc import Sequence
 
 from fastapi import APIRouter, Request
 
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring, ServedWorkspace
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.workspaces import held_workspace_id

@@ -19,9 +19,9 @@ from fastapi.responses import JSONResponse
 
 from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import collaborator, dto
-from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.api import chunk_events, node_steps, problems
 from blizzard.hub.api import chunk_statuses as chunk_statuses_api
 from blizzard.hub.api import chunks as chunks_api

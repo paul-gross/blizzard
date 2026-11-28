@@ -20,8 +20,8 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.foundation.hub_event_types import RunnerChangeKind
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.node_steps import Executor
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.hub.api import chunk_events, problems, problems_runners
 from blizzard.hub.api import queue as queue_api

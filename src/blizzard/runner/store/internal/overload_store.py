@@ -7,8 +7,8 @@ from typing import Any
 
 from sqlalchemy import ColumnElement, Row, and_, func
 
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.leases.overload import InvocationKind, IWriteOverloadRepository, OverloadExit
 from blizzard.runner.store.internal.base import Unclosed, Unsuperseded
 from blizzard.runner.store.schema import lease_closures, overload_facts, overload_resets

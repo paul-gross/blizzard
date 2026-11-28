@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.harness.observation import ExecutionObservation
 
 __all__ = [

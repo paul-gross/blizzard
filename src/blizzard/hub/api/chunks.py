@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from blizzard.auth_core import Permission
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.foundation.instants import as_utc, iso_utc
 from blizzard.hub.api import chunk_events, problems, problems_chunks
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound

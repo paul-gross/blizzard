@@ -16,8 +16,8 @@ import sqlalchemy as sa
 import structlog
 
 from blizzard.auth_core import Permission, Role
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.project_colors import ProjectColor
-from blizzard.foundation.store.utc import as_utc
 from blizzard.foundation.tenants import TenantState
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions

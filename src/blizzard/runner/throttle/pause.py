@@ -17,9 +17,9 @@ from typing import ClassVar, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.spend import SpendFigure
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 
 __all__ = [

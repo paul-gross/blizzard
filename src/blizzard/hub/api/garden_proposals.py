@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, Query, status
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.hub.api import chunk_events, problems, problems_admin, problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound

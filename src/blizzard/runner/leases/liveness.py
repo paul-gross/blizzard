@@ -9,8 +9,8 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import Lease, ParkResume
 

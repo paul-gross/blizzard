@@ -1,8 +1,7 @@
-"""UTC-explicit instants, store to wire (``bzh:utc-instants``).
+"""UTC-explicit instants at the store boundary (``bzh:utc-instants``).
 
-Three primitives, one per boundary a naive datetime could otherwise cross: the
-:class:`UtcDateTime` store column type, the :func:`as_utc` comparison coercion, and
-the :func:`iso_utc` wire serializer."""
+The :class:`UtcDateTime` column type and the sqlite adapters. The comparison coercion and the wire
+serializer need no store, and live in :mod:`blizzard.foundation.instants`."""
 
 from __future__ import annotations
 
@@ -32,23 +31,6 @@ class UtcDateTime(TypeDecorator[datetime]):
         if value is None:
             return None
         return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
-
-
-def as_utc(value: datetime) -> datetime:
-    """Read a datetime back as UTC-aware, idempotent on an already-aware value.
-
-    The comparison-site coercion: a pure domain function's inputs are not guaranteed
-    to have come through the store (``bzh:domain-core``).
-    """
-    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
-
-
-def iso_utc(value: datetime) -> str:
-    """Serialize an instant for the wire — always with an explicit UTC offset.
-
-    An offset-less stamp is silently reinterpreted in the reader's local zone.
-    """
-    return as_utc(value).isoformat()
 
 
 def sqlite_adapt_datetime(value: datetime) -> str:

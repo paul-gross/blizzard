@@ -12,9 +12,8 @@ from pathlib import Path
 import httpx2
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.instants import epoch_millis_instant
+from blizzard.foundation.instants import epoch_millis_instant, iso_utc
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.foundation.untyped import as_table
 from blizzard.runner.subscriptions.internal.reset_instants import reset_instant

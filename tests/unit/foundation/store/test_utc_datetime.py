@@ -10,8 +10,9 @@ from datetime import UTC, datetime, timedelta, timezone
 
 from sqlalchemy import Column, Integer, MetaData, Table, select
 
+from blizzard.foundation.instants import as_utc, iso_utc
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.foundation.store.utc import UtcDateTime, as_utc, iso_utc
+from blizzard.foundation.store.utc import UtcDateTime
 
 _metadata = MetaData()
 _probe = Table(

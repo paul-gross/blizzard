@@ -10,10 +10,10 @@ from dataclasses import dataclass, replace
 from typing import Any, cast
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.settings_record.vocabulary import Entry
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.config import HostWorkspace
 from blizzard.runner.config_keys import HOST_REGISTRY

@@ -26,8 +26,8 @@ from blizzard.foundation.fact_kinds import (
     RUNNER_LOCALLY_PAUSED,
     RUNNER_LOCALLY_RESUMED,
 )
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.node_steps import ApplyOutcome
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.identity import SessionReference

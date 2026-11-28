@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.roles import collaborator
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     IReadRepositoryRecordRepository,

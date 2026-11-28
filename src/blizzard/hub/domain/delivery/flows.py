@@ -18,9 +18,9 @@ from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.flow_place_state import FlowPlaceState
 from blizzard.foundation.flow_verdict import FlowVerdict
 from blizzard.foundation.hub_event_types import FlowChangeKind
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import BounceFact, ChunkFacts, HubNodePollFact
 from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY

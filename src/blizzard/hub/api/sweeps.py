@@ -14,8 +14,8 @@ from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import Permission
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import AdmittedTenant, require, require_hub, resolve_tenant, tenant_bound

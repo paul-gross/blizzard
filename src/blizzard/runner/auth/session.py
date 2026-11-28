@@ -16,8 +16,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from blizzard.auth_core import Role
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import iso_utc
 
 _COOKIE_NAME_UNSAFE = re.compile(r"[^A-Za-z0-9!#$%&'*+.^_`|~-]")
 #: Runner sessions are short: hours, not days — renewal is a silent bounce

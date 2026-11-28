@@ -6,9 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TypeGuard
 
-from blizzard.foundation.instants import epoch_millis_instant, epoch_seconds_instant, iso_instant
+from blizzard.foundation.instants import as_utc, epoch_millis_instant, epoch_seconds_instant, iso_instant, iso_utc
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.foundation.untyped import as_mapping
 
 # A Unix timestamp past this many seconds is read as milliseconds.

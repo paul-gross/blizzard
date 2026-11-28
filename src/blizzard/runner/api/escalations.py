@@ -11,7 +11,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Query, Request
 
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.status.view import EscalationView, RunnerStatusService

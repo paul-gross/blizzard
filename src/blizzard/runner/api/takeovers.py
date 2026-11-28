@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.runner.api.chunk_scope import resolved_takeover_close_scope, resolved_takeover_open_scope
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.lifecycle.takeover import TakeoverEndedElsewhere, TakeoverError

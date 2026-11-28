@@ -11,8 +11,8 @@ from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.egress_reset import EgressResetDirection
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import ExportPaths, missing_key_reason
 from blizzard.hub.domain.observability.egress.lifecycle import ExportVerb, export_allows

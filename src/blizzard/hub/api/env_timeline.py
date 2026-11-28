@@ -12,8 +12,8 @@ from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from blizzard.auth_core import Permission
+from blizzard.foundation.instants import as_utc, iso_utc
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.foundation.usage_kind import UsageKind
 from blizzard.hub.api import problems, problems_runners
 from blizzard.hub.api import transcripts as transcripts_api

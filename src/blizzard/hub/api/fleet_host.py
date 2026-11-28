@@ -13,8 +13,8 @@ from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events, problems
 from blizzard.hub.api.auth import HostPrincipal, require_host_principal
 from blizzard.hub.api.auth_session import tenant_bound

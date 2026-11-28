@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from blizzard.foundation.event_log import EventLogKind
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.config.credential_bindings import secret_of_authority
 from blizzard.hub.forge.budget import BudgetNotice, BudgetNoticeKind, ForgeBudgets

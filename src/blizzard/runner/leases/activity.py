@@ -13,9 +13,9 @@ from datetime import datetime, timedelta
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.leases import LeaseClosureReason, LeaseDisplayStatus, LeaseLiveness, LeaseState
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.environments.repository import EnvBinding, IReadEnvironmentRepository, group_bindings_by_chunk
 from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository

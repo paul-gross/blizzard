@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends
 from pydantic import TypeAdapter
 
 from blizzard.auth_core import Permission
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.hub.api import problems, problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound

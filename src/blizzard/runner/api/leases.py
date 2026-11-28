@@ -10,8 +10,8 @@ from typing import TypedDict
 
 from fastapi import APIRouter, Request
 
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.leases import LeaseDisplayStatus, LeaseLiveness
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD, ClosedLeaseActivity, LeaseActivity
 from blizzard.wire.git_commits import LeaseGitCommitView

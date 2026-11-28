@@ -24,8 +24,8 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.events.stream import Cursor, CursorRefused, Stream
+from blizzard.foundation.instants import as_utc, iso_utc
 from blizzard.foundation.roles import dto
-from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import PresentedSession, RequestTenant, require, tenant_bound
 from blizzard.hub.api.project_params import QueryProject

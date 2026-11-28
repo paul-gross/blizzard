@@ -11,7 +11,7 @@ from typing import Any
 import sqlalchemy as sa
 
 from blizzard.foundation.ids import Id, IdPrefix
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.store import schema as s
 from tests.support.scaffolding import (

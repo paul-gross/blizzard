@@ -14,7 +14,7 @@ from typing import NoReturn
 import pytest
 
 from blizzard.foundation.event_log import EventLogSeverity
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from tests.support.scaffolding import (
     HubHarness,

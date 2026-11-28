@@ -7,10 +7,10 @@ from dataclasses import dataclass, replace
 from typing import Protocol
 
 from blizzard.foundation.crash import crashpoint
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.foundation.transition_reason import TRANSITION_REASON_MAX_LENGTH, normalize_transition_reason
 from blizzard.runner.environments.repository import EnvBinding
