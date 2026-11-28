@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import math
-import tomllib
 from datetime import date, time
 from pathlib import Path
 from typing import Any, cast
@@ -17,7 +16,14 @@ from blizzard.hub.cli.command import AdminCommand
 from blizzard.hub.cli.config import ApplyListing
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
-from blizzard.hub.documents import TOML_CODEC, ConfigDecodeError, ConfigEncodeError, accepted_extensions, codec_for_path
+from blizzard.hub.documents import (
+    TOML_CODEC,
+    ConfigDecodeError,
+    ConfigEncodeError,
+    accepted_extensions,
+    codec_for_path,
+    decode_toml_value,
+)
 from blizzard.wire.config import ConfigApplyResponse
 from blizzard.wire.hub_settings import (
     SETTINGS_EXPORT_ADAPTER,
@@ -113,8 +119,8 @@ def _write(cli: CliContext, body: dict[str, object]) -> None:
 def settings_set(cli: CliContext, key: str, value: str) -> None:
     """Set KEY to VALUE, a TOML value."""
     try:
-        parsed = tomllib.loads(f"value = {value}")["value"]
-    except tomllib.TOMLDecodeError as exc:
+        parsed = decode_toml_value(value)
+    except ConfigDecodeError as exc:
         raise click.ClickException(f"VALUE is not valid TOML: {exc}") from exc
     _json_value(parsed, what="VALUE")
     _write(cli, {"set": {key: parsed}, "unset": []})

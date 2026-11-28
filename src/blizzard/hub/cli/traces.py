@@ -8,9 +8,9 @@ from datetime import datetime
 import click
 from pydantic import TypeAdapter
 
-from blizzard.cli.collaborators import CliCollaborators
 from blizzard.cli.refusal import refusal_of
 from blizzard.cli.window import refuse_bad_window, replay_windows, resume_since, since_option, until_option
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import AdminCommand
@@ -70,15 +70,15 @@ def traces_status(cli: CliContext) -> None:
     cli.show(raw, StatusView(status))
 
 
-@traces_group.command("replay", cls=AdminCommand)
+@traces_group.command("replay", cls=AdminCommand, collaborators={"cli": CliContext, "wall_clock": IClock})
 @since_option(required=True)
 @until_option(required=True)
 @click.option("--dry-run", is_flag=True, default=False, help="Count what would be told; export nothing.")
-def traces_replay(cli: CliContext, since: datetime, until: datetime, dry_run: bool) -> None:
+def traces_replay(cli: CliContext, wall_clock: IClock, since: datetime, until: datetime, dry_run: bool) -> None:
     """Export again every step that closed and chunk that finished in [since, until). Spans keep the ids they
     were first exported with, so the trace backend can drop duplicates, and ongoing export is unaffected. A range
     over the hub's replay_max_window is sent in windows; a failure names the --since to resume from."""
-    refuse_bad_window(since, until, CliCollaborators.of(click.get_current_context()).wall_clock)
+    refuse_bad_window(since, until, wall_clock)
     _, status = cli.decode(cli.get("/api/traces/status", "GET /traces/status"), _STATUS, "GET /traces/status")
     windows = replay_windows(since, until, status.replay_max_window_seconds)
     total = {"steps": 0, "chunks": 0, "spans": 0, "batches": 0, "windows": 0}

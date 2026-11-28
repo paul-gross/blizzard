@@ -10,7 +10,7 @@ from pathlib import PurePath
 
 from blizzard.hub.documents.codec import ConfigDecodeError, ConfigEncodeError, IConfigCodec
 from blizzard.hub.documents.internal.json_codec import JSON_CODEC
-from blizzard.hub.documents.internal.toml_codec import TOML_CODEC
+from blizzard.hub.documents.internal.toml_codec import TOML_CODEC, decode_toml_value
 from blizzard.hub.documents.internal.yaml_codec import YAML_CODEC
 
 __all__ = [
@@ -24,6 +24,7 @@ __all__ = [
     "accepted_extensions",
     "codec_for_media_type",
     "codec_for_path",
+    "decode_toml_value",
 ]
 
 #: Every binding, YAML first.

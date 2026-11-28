@@ -1,11 +1,13 @@
-"""The ``hub status`` command graph validates and keeps every registration rule (``bzh:dependency-injection``).
+"""Every hub client verb's command graph validates and keeps its registration rules (``bzh:dependency-injection``).
 
-Each gate runs over the real registration the verb builds from and over that registration with a planted violation."""
+The walk covers the whole ``hub`` tree. Each rule gate runs over the real registration ``hub status`` builds from and
+over that registration with a planted violation."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 
+import click
 import pytest
 
 from blizzard.cli import command_root
@@ -14,7 +16,8 @@ from blizzard.foundation.registry.internal.recording import OWNING, Kind, Record
 from blizzard.foundation.registry.internal.translation import COMMAND_LIFETIMES
 from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import Resolver, ScopeValues
-from blizzard.hub.cli.container_command import ContainerFleetCommand
+from blizzard.hub.cli import hub
+from blizzard.hub.cli.command import HubCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.status import status
 from tests.support.container_guards import (
@@ -117,8 +120,8 @@ _CHECKS: list[tuple[Check, Callable[[RecordingRegistry], None]]] = [
 ]
 
 
-def _status() -> ContainerFleetCommand:
-    assert isinstance(status, ContainerFleetCommand)
+def _status() -> HubCommand:
+    assert isinstance(status, HubCommand)
     return status
 
 
@@ -145,12 +148,63 @@ def test_the_status_graph_declares_no_legacy_registration() -> None:
     assert legacy_registrations(planted) == ["_LegacyState is a legacy leaf"]
 
 
+#: The hub verbs that run against local state, and so build no client container.
+_LOCAL_VERBS = frozenset(
+    {"init", "migrate", "host", "config import-legacy", "config check-forges", "secret rotate-key"}
+)
+
+
+def _walk(group: click.Group, prefix: str = "") -> Iterator[tuple[str, click.Command]]:
+    context = click.Context(group)
+    for name in group.list_commands(context):
+        command = group.get_command(context, name)
+        assert command is not None
+        path = f"{prefix}{name}"
+        if isinstance(command, click.Group):
+            yield from _walk(command, f"{path} ")
+        else:
+            yield path, command
+
+
+def _outside_the_root(commands: Iterable[tuple[str, click.Command]]) -> list[str]:
+    return sorted(
+        path for path, command in commands if not isinstance(command, HubCommand) and path not in _LOCAL_VERBS
+    )
+
+
+def _client_verbs() -> list[tuple[str, HubCommand]]:
+    return [(path, command) for path, command in _walk(hub) if isinstance(command, HubCommand)]
+
+
+def test_every_hub_command_is_a_client_verb_or_a_named_local_verb() -> None:
+    commands = list(_walk(hub))
+
+    assert _outside_the_root(commands) == []
+    assert {path for path, _ in commands} >= _LOCAL_VERBS
+    assert _outside_the_root([*commands, ("chunk planted", click.Command("planted"))]) == ["chunk planted"]
+
+
 def _unregistered(registry: RecordingRegistry, collaborators: Iterable[type[object]]) -> list[type[object]]:
     keys = {entry.key for entry in registry.entries if entry.kind in OWNING or entry.kind is Kind.ALIAS}
     return [wanted for wanted in collaborators if wanted not in keys]
 
 
-def test_every_collaborator_status_declares_is_registered() -> None:
-    declared = list(_status().collaborators.values())
-    assert _unregistered(_graph(), declared) == []
-    assert _unregistered(_graph(), [*declared, _Missing]) == [_Missing]
+def test_every_client_verb_builds_its_graph_and_registers_what_it_declares() -> None:
+    verbs = _client_verbs()
+    graphs = {tuple(command.areas()): command_root.registered(command.areas()) for _, command in verbs}
+
+    assert verbs
+    for graph in graphs.values():
+        assert _builds(graph) == []
+        assert _lifetimes(graph) == []
+    assert {
+        path: missing
+        for path, command in verbs
+        if (missing := _unregistered(graphs[tuple(command.areas())], command.collaborators.values()))
+    } == {}
+
+
+def test_an_unregistered_collaborator_is_reported() -> None:
+    declared: list[type[object]] = [*_status().collaborators.values(), _Missing]
+
+    assert _unregistered(_graph(), declared) == [_Missing]

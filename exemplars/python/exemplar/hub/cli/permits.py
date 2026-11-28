@@ -6,13 +6,13 @@ from __future__ import annotations
 
 import click
 
-from blizzard.hub.cli.container_command import ContainerFleetCommand
+from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.project_option import project_option
 from exemplar.hub.cli import wiring
 from exemplar.hub.cli.permit_reader import PermitReader
 
 
-@click.command(name="permits", cls=ContainerFleetCommand, collaborators={"reader": PermitReader}, area=wiring.register)
+@click.command(name="permits", cls=FleetCommand, collaborators={"reader": PermitReader}, area=wiring.register)
 @project_option(required_by_hub=False)
 def permits(reader: PermitReader, project: str | None) -> None:
     """The tenant's permits, newest requested first."""

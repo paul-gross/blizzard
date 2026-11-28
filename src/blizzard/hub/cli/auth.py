@@ -5,9 +5,12 @@ from __future__ import annotations
 import click
 
 from blizzard.hub.cli import login as cli_login
-from blizzard.hub.cli.command import AuthCommand, SessionServiceCommand
+from blizzard.hub.cli.command import AuthCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.session_service import SessionService
+
+#: ``login`` and ``logout`` also write through the session service, which stays off the recorded surface.
+_SESSION_VERB: dict[str, type[object]] = {"cli": CliContext, "session_service": SessionService}
 
 
 @click.command("rotate-signing-key", cls=AuthCommand)
@@ -23,7 +26,7 @@ def rotate_signing_key(cli: CliContext) -> None:
     click.echo("signing key rotated")
 
 
-@click.command(cls=SessionServiceCommand)
+@click.command(cls=AuthCommand, collaborators=_SESSION_VERB)
 @click.option(
     "--paste",
     "paste",
@@ -54,7 +57,7 @@ def login(cli: CliContext, session_service: SessionService, paste: bool, no_brow
     click.echo(f"logged in to {cli.hub_url}")
 
 
-@click.command(cls=SessionServiceCommand)
+@click.command(cls=AuthCommand, collaborators=_SESSION_VERB)
 def logout(cli: CliContext, session_service: SessionService) -> None:
     """Log out of the hub — deletes the locally stored session token and
     revokes it at the hub, so it stops resolving even if it leaked. A no-op (locally)

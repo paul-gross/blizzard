@@ -2,7 +2,7 @@
 
 1. **Structural guard** — AST-walks every module under ``src/blizzard/`` for a call to
    ``.isoformat()`` (``src/blizzard/foundation/instants.py``, ``iso_utc``'s own impl, and
-   ``foundation/store/utc.py``, the sqlite storage adapters, excluded).
+   ``src/blizzard/foundation/store/utc.py``, the sqlite storage adapters, excluded).
 2. **Schema guard** — every ``DateTime``-family column in both stores is
    ``UtcDateTime``-typed."""
 

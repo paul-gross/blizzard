@@ -18,7 +18,7 @@ import pytest
 from blizzard.foundation.registry.interface import Lifetime, Registry
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.collaborators import HubCliCollaborators
-from blizzard.hub.cli.container_command import ContainerFleetCommand
+from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import DEFAULT_HUB_URL, CliContext
 from blizzard.hub.cli.status import status
 from tests.support.worker_http import Bound, bind_stubs, bind_transport
@@ -430,7 +430,7 @@ def test_a_service_added_through_its_own_area_is_consumed_the_way_status_resolve
         if fail:
             raise click.ClickException("refused")
 
-    assert isinstance(status, ContainerFleetCommand)
+    assert isinstance(status, FleetCommand)
     probe = type(status)(
         "probe",
         callback=run,
