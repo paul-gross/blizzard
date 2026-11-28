@@ -52,7 +52,7 @@ def _reads(broker: EventBroker) -> StreamReads:
 async def test_stream_endpoint_returns_an_sse_response() -> None:
     # Direct call bypasses FastAPI's dependency resolution — the stream's reads (normally
     # resolved via `Depends`) are supplied directly here.
-    response = await events_stream(_FakeRequest(), _reads(EventBroker()))
+    response = await events_stream(_FakeRequest(), _reads(EventBroker()), asyncio.Event())
     assert response.status_code == 200
     assert response.media_type == "text/event-stream"
     # The generator opens with the reserved comment so an EventSource connects cleanly.
@@ -79,7 +79,7 @@ async def test_stream_endpoint_binds_the_default_keepalive_cadence(monkeypatch: 
         return _capturing_stream
 
     monkeypatch.setattr("blizzard.hub.api.events.Stream", _capturing(real_stream))
-    await events_stream(_FakeRequest(), _reads(EventBroker()))
+    await events_stream(_FakeRequest(), _reads(EventBroker()), asyncio.Event())
     assert bound["keepalive_seconds"] == DEFAULT_KEEPALIVE_SECONDS
 
 
@@ -177,10 +177,22 @@ async def test_a_stream_opened_on_a_closed_broker_replays_its_tail_and_ends() ->
     assert broker.subscriber_count() == 0
 
 
-def test_a_tenants_stream_carries_only_its_own_events(tmp_path: Path) -> None:
+def test_a_tenants_stream_carries_only_its_own_events(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Two tenants publishing at once: the stream the second tenant opens carries its events alone.
     Closing that tenant's broker ends the stream, which lets the buffering client read it."""
     hub = build_hub(tmp_path)
+    real_stream = Stream
+    shutdowns: list[asyncio.Event | None] = []
+
+    def capture[**P](make: Callable[P, Stream]) -> Callable[P, Stream]:
+        def build(*args: P.args, **kwargs: P.kwargs) -> Stream:
+            stream = make(*args, **kwargs)
+            shutdowns.append(stream.shutdown)
+            return stream
+
+        return build
+
+    monkeypatch.setattr("blizzard.hub.api.events.Stream", capture(real_stream))
     other, tenant = default_tenant(hub.engine), add_tenant(hub.engine, "bravo")
     hub.resolve_hub(OpenTenants).refresh()
     brokers = {named: hub.resolve(named, EventBroker) for named in (other, tenant)}
@@ -195,6 +207,8 @@ def test_a_tenants_stream_carries_only_its_own_events(tmp_path: Path) -> None:
         resp = stream.result(timeout=5.0)
 
     assert resp.status_code == 200
+    assert len(shutdowns) == 1
+    assert shutdowns[0] is hub.wired_app.state.shutdown
     frames = parse_sse_frames(resp.text)
     assert [frame["event"] for frame in frames] == ["runner-changed"]
     assert f'"rn_{tenant}"' in frames[0]["data"]

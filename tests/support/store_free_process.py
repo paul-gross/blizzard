@@ -12,6 +12,7 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.hub.api.trace_continuation import TraceGatedFastAPI
 from blizzard.hub.app import trace_principal_check
+from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.action_registry import SHIPPED_ACTIONS
 from blizzard.hub.process_root import open_store_free
 
@@ -22,15 +23,16 @@ def store_free(app: FastAPI) -> Generator[None]:
     process = app.state.hub_process
     gate = cast(TraceGatedFastAPI, app)
     checker = gate.principal_check
+    config = process.resolver.get(HubConfig)
     free = open_store_free(
         clock=SystemClock(),
-        config=app.state.config,
+        config=config,
         platform_tracing=DisabledPlatformTracing(),
         environ={},
         actions=SHIPPED_ACTIONS,
     )
     app.state.hub_process = free
-    gate.principal_check = trace_principal_check(free, app.state.config)
+    gate.principal_check = trace_principal_check(free, config)
     try:
         yield
     finally:

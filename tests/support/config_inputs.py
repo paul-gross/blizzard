@@ -7,8 +7,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final
+from weakref import WeakKeyDictionary
 
 from fastapi import FastAPI
+from sqlalchemy.engine import Engine
 
 from blizzard.cli.config_inputs import packaged_flag_registry
 from blizzard.foundation.clock import SystemClock
@@ -38,6 +40,12 @@ RUNNER_FLAGS: Final[Flags] = resolve_flags(FLAG_REGISTRY, "runner", {}).flags
 VERSION_WINDOW: Final[VersionWindow] = VersionWindow(floor="0.2", opening=None)
 #: Whether the suite's in-process config reads are strict.
 STRICT: Final = True
+_HOSTED_ENGINES: WeakKeyDictionary[FastAPI, Engine] = WeakKeyDictionary()
+
+
+def hosted_engine(app: FastAPI) -> Engine:
+    """The engine borrowed by a hosted app built by this test root."""
+    return _HOSTED_ENGINES[app]
 
 
 def load_hub_config(
@@ -175,9 +183,7 @@ def migrate_host(root: Path, *, down: str | None = None) -> None:
 
 
 def create_hub_app(config: HubConfig, **kwargs: Any) -> FastAPI:
-    """:func:`blizzard.hub.app.create_app`, its flags the packaged defaults unless ``flags`` is given."""
-    if kwargs.get("flags") is None:
-        kwargs["flags"] = HUB_FLAGS
+    """:func:`blizzard.hub.app.create_app`."""
     return hub_app.create_app(config, **kwargs)
 
 
@@ -231,6 +237,7 @@ def build_hosted_hub_app(config: HubConfig, **kwargs: Any) -> FastAPI:
             kwargs.update(engine=engine, connections=connections)
         kwargs["platform_tracing"] = tracing
         app = hub_app.build_hosted_app(config, **kwargs)
+        _HOSTED_ENGINES[app] = kwargs["engine"]
         cleanup.callback(app.state.hosted_cleanup.close)
         app.state.hosted_cleanup = cleanup.pop_all()
         return app

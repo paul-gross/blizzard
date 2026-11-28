@@ -43,14 +43,15 @@ from blizzard.hub.auth.service import CLI_CLIENT_ID, AuthService
 from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.users import IReadUserRepository
-from blizzard.hub.config import AUTH_MODE_NONE
+from blizzard.hub.config import AUTH_MODE_NONE, HubConfig
 from blizzard.hub.domain.runners.federation import FederationClient, UnknownFederationClient
 from blizzard.wire.cli_token import CliTokenResponse
 
 
-def idp_enabled(request: Request) -> None:
+@inject_sync
+def idp_enabled(config: FromDishka[HubConfig]) -> None:
     """Refuse the whole IdP before any route or authentication dependencies resolve."""
-    if request.app.state.config.auth.mode == AUTH_MODE_NONE:
+    if config.auth.mode == AUTH_MODE_NONE:
         raise ProblemHTTPException(problems.idp_disabled_problem)
 
 
@@ -192,6 +193,7 @@ def authorize(
     auth: FromDishka[AuthService | None],
     sessions: FromDishka[IReadSessionRepository | None],
     clock: FromDishka[IClock],
+    config: FromDishka[HubConfig],
     machine: Annotated[MachineCredentials, Depends(machine_credentials)],
     client: str,
     redirect_uri: str,
@@ -225,7 +227,7 @@ def authorize(
         except UnknownFederationClient:
             return _unknown_client(request)
 
-    identity = resolve_identity(request, sessions, auth)
+    identity = resolve_identity(request, sessions, auth, config)
     if identity is None:
         available_providers = _required(providers).list()
         if not available_providers:

@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, FastAPI
+from sqlalchemy import Engine
 
 from blizzard import __version__
 from blizzard.cli.config_inputs import packaged_flag_registry
@@ -18,12 +19,13 @@ from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.flags import FlagRegistry
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
-from blizzard.foundation.registry.interface import Lifetime, port
-from blizzard.foundation.registry.internal.recording import RecordingRegistry
+from blizzard.foundation.registry.interface import Lifetime, ServiceAbsent, port
+from blizzard.foundation.registry.internal.recording import Kind, RecordingRegistry
 from blizzard.foundation.registry.internal.translation import HUB_LIFETIMES, build_container
 from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import OwnedChild, Resolver, ScopeValues, supply
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub.api.auth import MachineCredentials
@@ -99,6 +101,7 @@ from blizzard.hub.process_root import HubProcess, register_hub, registered
 from blizzard.hub.scopes.environ import HubEnviron
 from blizzard.hub.settings.footing import HubSettingsFooting
 from blizzard.hub.settings.graph import HubSettingsGraph
+from blizzard.hub.settings.service import HubSettingsAuthoring
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
@@ -274,6 +277,7 @@ def _process(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[OwnedCh
         values=ScopeValues(
             (
                 supply(port(HubStoreConnections), connections),
+                supply(port(Engine), engine),
                 supply(port(IClock), clock),
                 supply(port(HubSettingsGraph), build_hub_settings(connections, clock, footing)),
                 supply(port(HubConfig), HubConfig(root=Path(), db_url="sqlite://")),
@@ -399,6 +403,50 @@ def test_every_routes_container_dependencies_resolve_at_the_lifetime_it_runs_in(
     assert unresolved_route_dependencies(_hub_routes, _process) == []
 
 
+def test_optional_services_share_their_process_instances(_process: OwnedChild) -> None:
+    resolver = _process.resolver
+    assert resolver.get(ReadinessService | None) is resolver.get(ReadinessService)
+    assert resolver.get(HubSettingsAuthoring | None) is resolver.get(HubSettingsAuthoring)
+
+
+@pytest.mark.parametrize("store_backed", [True, False], ids=["store-backed", "store-free"])
+def test_missing_optional_settings_and_readiness(store_backed: bool) -> None:
+    owner = build_container(_hub(store_backed=store_backed), HUB_LIFETIMES, owner="guard", values=ScopeValues())
+    try:
+        assert owner.resolver.get(HubSettingsAuthoring | None) is None
+        with pytest.raises(ServiceAbsent):
+            owner.resolver.get(HubSettingsAuthoring)
+        if not store_backed:
+            assert owner.resolver.get(ReadinessService | None) is None
+            with pytest.raises(ServiceAbsent):
+                owner.resolver.get(ReadinessService)
+    finally:
+        owner.close()
+
+
+@_EVERY_GRAPH
+def test_optional_readiness_and_authoring_are_process_scoped(
+    store_backed: bool, settings: bool, versions: bool, exports: bool, controlled: bool
+) -> None:
+    registry = _hub(
+        store_backed=store_backed,
+        settings=settings,
+        versions=versions,
+        trace_export=exports,
+        egress_export=exports,
+        controlled_clock=controlled,
+    )
+    for key, target in (
+        (ReadinessService | None, ReadinessService if store_backed else None),
+        (HubSettingsAuthoring | None, HubSettingsAuthoring if settings else None),
+    ):
+        entries = [entry for entry in registry.entries if entry.key == key]
+        assert len(entries) == 1
+        assert entries[0].kind is Kind.OPTIONAL
+        assert entries[0].lifetime is Lifetime.PROCESS
+        assert entries[0].target_key is target
+
+
 def test_the_every_route_gate_fails_a_planted_unregistered_and_a_tenant_service_off_a_tenant(
     _process: OwnedChild,
 ) -> None:
@@ -436,6 +484,7 @@ def test_the_every_route_walk_finds_a_container_dependency_on_a_planted_route() 
         RouteDependency("GET /planted/tenant", tenant=True, dependency=IReadMembershipRepository),
         RouteDependency("GET /planted/tenant", tenant=True, dependency=IReadSessionRepository | None),
         RouteDependency("GET /planted/tenant", tenant=True, dependency=AuthService | None),
+        RouteDependency("GET /planted/tenant", tenant=True, dependency=HubConfig),
         RouteDependency("GET /planted/tenant", tenant=True, dependency=MachineCredentials),
     ]
 

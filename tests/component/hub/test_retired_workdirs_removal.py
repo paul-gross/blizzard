@@ -8,11 +8,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from blizzard.hub.config import HubConfig
-from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.config_inputs import build_hosted_hub_app, hosted_engine, init_hub
 
 
 def _build(config: HubConfig) -> None:
-    build_hosted_hub_app(config).state.engine.dispose()
+    hosted_engine(build_hosted_hub_app(config)).dispose()
 
 
 def _workdirs(config: HubConfig) -> Path:

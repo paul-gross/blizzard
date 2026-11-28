@@ -46,8 +46,7 @@ def test_gate_calls_the_installed_principal_capability_with_the_shared_scope() -
         def resolves(self, scope: Scope) -> bool:
             return self._resolves(scope)
 
-    gate = Gate()
-    gate.state.platform_tracing = DisabledPlatformTracing()
+    gate = Gate(platform_tracing=DisabledPlatformTracing())
     seen: list[Request] = []
     gate.principal_check = lambda request: seen.append(request) is None
     scope: Scope = {"type": "http", "headers": [], "app": gate}
@@ -57,7 +56,7 @@ def test_gate_calls_the_installed_principal_capability_with_the_shared_scope() -
 
 class _Gate(TraceGatedFastAPI):
     def __init__(self, resolves: bool) -> None:
-        super().__init__()
+        super().__init__(platform_tracing=DisabledPlatformTracing())
         self.answer = resolves
         self.asked: list[Scope] = []
         self.seen: list[Scope] = []

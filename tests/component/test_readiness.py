@@ -41,6 +41,13 @@ def test_ready_probe_false_when_store_free(daemon: Daemon) -> None:
     with TestClient(app) as client:
         response = client.get("/api/ready")
     assert response.status_code == 200
-    body = response.json()
-    assert body["ready"] is False
-    assert "not wired" in body["detail"]
+    expected: dict[str, object] = {
+        "ready": False,
+        "store_reachable": False,
+        "store_revision": None,
+        "expected_revision": None,
+        "detail": "readiness service not wired (store-free app)",
+    }
+    if daemon.name == "runner":
+        expected["runners"] = [{"name": "runner-local", "runner_id": "runner-local", "state": "serving"}]
+    assert response.json() == expected

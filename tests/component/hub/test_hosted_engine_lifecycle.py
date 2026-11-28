@@ -24,7 +24,7 @@ from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store.errors import HubStoreConnections
-from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.config_inputs import build_hosted_hub_app, hosted_engine, init_hub
 from tests.support.open_file_guard import inspect
 
 
@@ -43,7 +43,7 @@ def _assert_closed(raw: sqlite3.Connection) -> None:
 def test_lifespan_releases_engine(tmp_path: Path) -> None:
     app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
     with TestClient(app):
-        raw = _pooled_connection(app.state.engine)
+        raw = _pooled_connection(hosted_engine(app))
     _assert_closed(raw)
 
 
@@ -53,11 +53,11 @@ def test_lifespan_releases_sqlite_file_descriptors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fail_startup: bool
 ) -> None:
     app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
-    database = app.state.engine.url.database
+    database = hosted_engine(app).url.database
     assert database is not None
     path = Path(database).resolve()
     paths = {path, Path(f"{path}-wal"), Path(f"{path}-shm")}
-    _pooled_connection(app.state.engine)
+    _pooled_connection(hosted_engine(app))
     assert inspect(None, paths)
 
     if fail_startup:
@@ -76,7 +76,7 @@ def test_lifespan_releases_sqlite_file_descriptors(
 
 def test_failed_startup_releases_engine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
-    raw = _pooled_connection(app.state.engine)
+    raw = _pooled_connection(hosted_engine(app))
 
     def fail(_app: object) -> None:
         raise RuntimeError("startup failed")
@@ -89,7 +89,7 @@ def test_failed_startup_releases_engine(tmp_path: Path, monkeypatch: pytest.Monk
 
 def test_partial_startup_joins_started_sweep_before_disposal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
-    raw = _pooled_connection(app.state.engine)
+    raw = _pooled_connection(hosted_engine(app))
     finished: list[bool] = []
 
     class Sweep:
@@ -124,7 +124,7 @@ def test_failed_shutdown_releases_engine(tmp_path: Path, monkeypatch: pytest.Mon
     app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
     # The hosted hub's own tenant scopes fail to close at its shutdown.
     monkeypatch.setattr(app.state.hub_process.tenants, "close", fail)
-    raw = _pooled_connection(app.state.engine)
+    raw = _pooled_connection(hosted_engine(app))
     with pytest.raises(RuntimeError, match="shutdown failed"), TestClient(app):
         pass
     assert stopped
@@ -133,7 +133,7 @@ def test_failed_shutdown_releases_engine(tmp_path: Path, monkeypatch: pytest.Mon
 
 def test_failed_sweep_joins_other_sweeps_before_disposal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
-    raw = _pooled_connection(app.state.engine)
+    raw = _pooled_connection(hosted_engine(app))
     finished: list[bool] = []
 
     class WaitingSweep:
@@ -275,7 +275,7 @@ def test_cli_failure_before_lifespan_closes_hosted_resources(tmp_path: Path, mon
             platform_tracing=platform_tracing,
             oauth_http_client=oauth_http_client,
         )
-        pooled_connections.append(_pooled_connection(app.state.engine))
+        pooled_connections.append(_pooled_connection(engine))
         app.state.hub_process.resolver.get(ActionLoop).start()
         return app
 

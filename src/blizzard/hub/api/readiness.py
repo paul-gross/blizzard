@@ -7,7 +7,8 @@ service wired, the probe reports ``ready=false`` with a detail rather than prete
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from dishka.integrations.fastapi import FromDishka, inject_sync
+from fastapi import APIRouter
 
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.wire.base import WireModel
@@ -25,9 +26,9 @@ class ReadinessResponse(WireModel):
     detail: str
 
 
-@router.get("/ready")
-def ready(request: Request) -> ReadinessResponse:
-    service: ReadinessService | None = getattr(request.app.state, "readiness", None)
+@router.get("/ready", response_model=ReadinessResponse)
+@inject_sync
+def ready(service: FromDishka[ReadinessService | None]) -> ReadinessResponse:
     if service is None:
         return ReadinessResponse(
             ready=False,

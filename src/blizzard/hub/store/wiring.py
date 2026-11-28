@@ -471,7 +471,8 @@ def register_process(
     registry.factory(invitation_writers, lifetime=Lifetime.PROCESS)
     registry.factory(open_tenant_reads, lifetime=Lifetime.PROCESS)
     registry.factory(store_status_reader, lifetime=Lifetime.PROCESS)
-    registry.factory(readiness_service, lifetime=Lifetime.PROCESS)
+    readiness = registry.factory(readiness_service, lifetime=Lifetime.PROCESS)
+    registry.optional(port(ReadinessService), readiness, lifetime=Lifetime.PROCESS)
     return registry.service(HubEventLogStore, lifetime=Lifetime.PROCESS)
 
 
@@ -480,6 +481,7 @@ def register_process_absent(registry: Registry) -> None:
     for missing in _PROCESS_KEYS:
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
     registry.optional(port(MachineCredentialReads), None, lifetime=Lifetime.PROCESS)
+    registry.optional(port(ReadinessService), None, lifetime=Lifetime.PROCESS)
     # A callable alias keys the opener, so it is named as its key rather than as a class.
     registry.absent(port(cast("type[Any]", InvitationWriters)), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
 

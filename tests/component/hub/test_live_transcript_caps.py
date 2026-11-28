@@ -23,7 +23,8 @@ def test_committed_caps_reach_next_ingest_but_not_in_flight_request(
 ) -> None:
     hub = build_hub(tmp_path, with_settings=True)
     assert hub.app is not None
-    settings = hub.app.state.hub_settings
+    settings = hub.settings
+    assert settings is not None
     chunk = ingest_chunk(hub)
     service = hub.default_adapter(TranscriptIngestService)
     ingest = service.ingest

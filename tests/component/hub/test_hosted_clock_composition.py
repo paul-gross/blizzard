@@ -10,13 +10,14 @@ from structlog.testing import capture_logs
 from blizzard.foundation.clock import ControlledClock, IClock, SystemClock
 from blizzard.hub.app import Sweep
 from blizzard.hub.composition import build_flow_driver
+from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.flow_driver import StepWake
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepModes, SweepName
 from blizzard.hub.domain.sweeps.roster import SweepRoster
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.process_root import open_store_backed
 from blizzard.hub.tenancy import StoreScope
-from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.config_inputs import build_hosted_hub_app, hosted_engine, init_hub
 from tests.support.hub_event_rows import hub_event_rows
 
 
@@ -51,14 +52,14 @@ def test_hosted_clock_modes(
             1 if clock == "controlled" and fence != "1" else 0
         )
         if expected is ControlledClock:
-            rows = hub_event_rows(app.state.engine, "hub-started")
+            rows = hub_event_rows(hosted_engine(app), "hub-started")
             assert len(rows) == 1
             assert rows[0].recorded_at.replace(tzinfo=resolver.get(IClock).now().tzinfo) == resolver.get(IClock).now()
             assert len(list(Sweep.all(app))) == sum(
-                app.state.config.sweeps.of(name).value != "stepped" for name in resolver.get(SweepRoster).names()
+                resolver.get(HubConfig).sweeps.of(name).value != "stepped" for name in resolver.get(SweepRoster).names()
             )
     finally:
-        app.state.engine.dispose()
+        hosted_engine(app).dispose()
 
 
 @pytest.mark.asyncio
@@ -97,7 +98,7 @@ async def test_controlled_graph_boot_announcements_and_forced_wake(
         }
         assert driver_builder.call_count == 1
         for kind in ("hub-started", "trace-config-rejected", "egress-config-rejected"):
-            [row] = hub_event_rows(app.state.engine, kind)
+            [row] = hub_event_rows(hosted_engine(app), kind)
             assert row.recorded_at.replace(tzinfo=clock.now().tzinfo) == clock.now()
         # The retained wake forces a real second pass despite frozen time and an unchanged probe.
         driver = resolver.get(StepWake)._wake.__self__
@@ -107,4 +108,4 @@ async def test_controlled_graph_boot_announcements_and_forced_wake(
         resolver.get(StepWake).wake()
         assert len((await driver.step()).reconciled) == 1
     finally:
-        app.state.engine.dispose()
+        hosted_engine(app).dispose()

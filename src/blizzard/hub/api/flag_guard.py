@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import Depends, Request, status
 from fastapi.responses import JSONResponse
 
@@ -21,8 +22,8 @@ def flag_guard(
 ) -> dict[str, Any]:
     """The route keyword arguments that hold a route behind the hub flag ``name``, after the route's own ones."""
 
-    def hold(request: Request) -> None:
-        held: Flags = request.app.state.flags
+    @inject_sync
+    def hold(held: FromDishka[Flags]) -> None:
         held.require_on(name)
 
     return {

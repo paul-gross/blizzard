@@ -29,7 +29,7 @@ from starlette.routing import Route
 
 from blizzard import __version__
 from blizzard.foundation.clock import IClock, resolve_clock
-from blizzard.foundation.flags import FlagOffError, FlagRegistry, Flags, resolve_flags
+from blizzard.foundation.flags import FlagOffError, FlagRegistry
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.attributes import annotate
 from blizzard.foundation.platform_tracing.handle import (
@@ -180,6 +180,7 @@ from blizzard.hub.process_root import HubProcess, open_store_backed, open_store_
 from blizzard.hub.secrets import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.settings.pass_config import bind_pass_config
+from blizzard.hub.settings.service import HubSettingsAuthoring
 from blizzard.hub.settings.source import HubConfigSource
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreError
 from blizzard.hub.store.forge_check_reads import UnreadableStore, read_forge_addresses
@@ -239,9 +240,9 @@ class Sweep:
             roster = resolver.get(SweepRoster)
         except ServiceAbsent:
             return
-        config: HubConfig = app.state.config
+        config = resolver.get(HubConfig)
         tracer = app.state.platform_tracing.tracer
-        settings: HubSettingsGraph | None = getattr(app.state, "hub_settings", None)
+        settings = resolver.get(HubSettingsAuthoring | None)
         # A hub holding a settings graph reads each pass's config, and each live interval, from its live config source.
         source: HubConfigSource | None = resolver.get(HubConfigSource) if settings is not None else None
         for name in roster.names():
@@ -262,7 +263,7 @@ class Sweep:
                 live_interval=(
                     partial(_live_sweep_interval, name, source) if source is not None and interval_key else None
                 ),
-                subscribe=settings.authoring.subscribe if settings is not None and interval_key else None,
+                subscribe=settings.subscribe if settings is not None and interval_key else None,
                 interval_key=interval_key,
                 pass_config=(source.resolved if source is not None else None),
             )
@@ -654,7 +655,7 @@ def trace_principal_check(process: HubProcess, config: HubConfig) -> PrincipalCh
     auth = resolver.get(AuthService | None)
     return principal_check(
         lambda request: RunnerAuth(request, machine).principal is not None,
-        lambda request: resolve_identity(request, sessions, auth) is not None,
+        lambda request: resolve_identity(request, sessions, auth, config) is not None,
         none_mode=config.auth.mode == AUTH_MODE_NONE,
     )
 
@@ -662,14 +663,12 @@ def trace_principal_check(process: HubProcess, config: HubConfig) -> PrincipalCh
 def create_app(
     config: HubConfig,
     *,
-    readiness: ReadinessService | None = None,
     process: HubProcess | None = None,
     platform_tracing: IPlatformTracing | None = None,
-    flags: Flags,
     test_flow_router: APIRouter | None = None,
     controlled_clock_router: APIRouter | None = None,
 ) -> FastAPI:
-    """Build a fully wired hub app from resolved config and the hub's resolved ``flags``.
+    """Build a fully wired hub app from resolved config.
 
     Without a ``process`` the app opens the store-free one, which ``lifespan`` closes. ``platform_tracing`` is off
     unless the composition root passes one."""
@@ -682,12 +681,10 @@ def create_app(
         version=__version__,
         lifespan=lifespan,
         telemetry=platform_tracing.fastapi_telemetry(),
+        platform_tracing=platform_tracing,
         dependencies=[Depends(process_request), Depends(_annotate_chunk), Depends(_bind_request_config)],
     )
     app.state.platform_tracing = platform_tracing
-    app.state.config = config
-    app.state.flags = flags
-    app.state.readiness = readiness
     # The store-backed process the composition root opened, else the store-free one, which lifespan closes.
     app.state.hub_process = (
         process
@@ -859,7 +856,6 @@ def build_hosted_app(
         resolver.get(ActionLoop)
         readiness = resolver.get(ReadinessService)
         expected = readiness.expected_revision
-        flags = resolver.get(Flags)
         # Minted here on first start when no key source exists yet.
         secret_keys = process.resolver.get(IRotatableKeyProvider)
         remove_retired_workdirs(config.data_dir)
@@ -938,10 +934,8 @@ def build_hosted_app(
         clock_controls = resolver.get(ClockControls | None)
         app = create_app(
             config,
-            readiness=readiness,
             process=process,
             platform_tracing=platform_tracing,
-            flags=flags,
             test_flow_router=(
                 flow_control_router(flow_driver, resolved_clock, control_lock)
                 if control_lock is not None and flow_driver is not None
@@ -950,8 +944,6 @@ def build_hosted_app(
             controlled_clock_router=clock_controls.router if clock_controls is not None else None,
         )
         # Lifespan and the CLI fallback share the hosted resources' one-shot cleanup.
-        app.state.engine = engine
-        app.state.hub_settings = settings
         # Only a store at the expected head is reconciled; `lifespan` runs the driver it finds here.
         app.state.flow_driver = None if control_lock is not None else flow_driver
         app.state.hosted_cleanup = cleanup.pop_all()
@@ -1017,6 +1009,4 @@ def create_app_for_export(flag_registry: FlagRegistry) -> FastAPI:
     defaults."""
     from pathlib import Path
 
-    return create_app(
-        HubConfig(root=Path("."), db_url="sqlite://"), flags=resolve_flags(flag_registry, "hub", {}).flags
-    )
+    return create_app(HubConfig(root=Path("."), db_url="sqlite://", flag_registry=flag_registry))

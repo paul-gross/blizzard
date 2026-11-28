@@ -29,7 +29,8 @@ def _hub(tmp_path: Path, auth_mode: str = "none") -> HubHarness:
 def test_change_notifications_only_follow_commits(tmp_path: Path) -> None:
     hub = _hub(tmp_path)
     notifications: list[frozenset[str]] = []
-    unsubscribe = hub.wired_app.state.hub_settings.authoring.subscribe(notifications.append)
+    assert hub.settings is not None
+    unsubscribe = hub.settings.authoring.subscribe(notifications.append)
     client = hub.client
     path = "/api/admin/settings"
     assert client.post(path + "/apply?dry_run=true", json={"annotation_interval_seconds": 7}).status_code == 200
@@ -341,7 +342,8 @@ def test_all_routes_require_hub_administrator(tmp_path: Path) -> None:
 
 def test_the_settings_ports_are_the_members_of_the_one_borrowed_graph(tmp_path: Path) -> None:
     hub = _hub(tmp_path)
-    graph = hub.wired_app.state.hub_settings
+    graph = hub.settings
+    assert graph is not None
     resolver = hub.process.resolver
     assert resolver.get(IReadHubSettingsAdmin) is graph.store
     assert resolver.get(HubSettingsReader) is graph.reader

@@ -15,6 +15,7 @@ from blizzard.hub.api.request_config import config_for_request
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.open_tenants import OpenTenants
+from blizzard.hub.settings.service import HubSettingsAuthoring
 from blizzard.hub.settings.source import HubConfigSource
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
@@ -129,7 +130,10 @@ def test_runner_registration_and_reads_problem_variants(
                 tenant: AdmittedTenant = Depends(resolve_tenant),
             ) -> FleetRequest:
                 fleet = FleetRequest.of(
-                    request, principal, tenant, config_for_request(request, hub.resolve_hub(HubConfigSource))
+                    principal,
+                    tenant,
+                    config_for_request(request, hub.resolve_hub(HubConfigSource)),
+                    hub.process.resolver.get(HubSettingsAuthoring | None) is not None,
                 )
 
                 def missing_runner(_runner_id: str) -> None:

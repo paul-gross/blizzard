@@ -4,7 +4,8 @@ A read-only edge (``bzh:controller-read-only``): it publishes the :class:`Flags`
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from dishka.integrations.fastapi import FromDishka, inject_sync
+from fastapi import APIRouter
 
 from blizzard.foundation.flags import Flags
 from blizzard.wire.flags import FlagsResponse
@@ -12,7 +13,7 @@ from blizzard.wire.flags import FlagsResponse
 router = APIRouter(prefix="/api", tags=["meta"])
 
 
-@router.get("/flags")
-def flags(request: Request) -> FlagsResponse:
-    held: Flags = request.app.state.flags
+@router.get("/flags", response_model=FlagsResponse)
+@inject_sync
+def flags(held: FromDishka[Flags]) -> FlagsResponse:
     return FlagsResponse(flags=held.answer(), overridden=list(held.overridden))

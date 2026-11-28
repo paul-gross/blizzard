@@ -34,7 +34,7 @@ from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.tenancy import TenantId
 from blizzard.hub.work_sources.registry import BuiltWorkSource
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
-from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.config_inputs import build_hosted_hub_app, hosted_engine, init_hub
 from tests.support.registry_statements import registry_statements, stored_registry
 from tests.support.scaffolding import (
     FakeAnnotator,
@@ -303,8 +303,8 @@ def hosted(
     app = build_hosted_hub_app(config)
     # Never entered as a context manager: no lifespan, so no background sweep races the test's own passes.
     client = TestClient(app)
-    yield client, app, ForgeAnnotationStore(hub_store_connections(app.state.engine)), double, forge_url
-    app.state.engine.dispose()
+    yield client, app, ForgeAnnotationStore(hub_store_connections(hosted_engine(app))), double, forge_url
+    hosted_engine(app).dispose()
 
 
 def test_a_retired_source_has_its_labels_cleared_once(

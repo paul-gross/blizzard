@@ -5,7 +5,8 @@ A dependency-free readiness signal: it answers whenever the hub is serving.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from dishka.integrations.fastapi import FromDishka, inject_sync
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from blizzard import __version__
@@ -23,7 +24,7 @@ class HealthResponse(BaseModel):
     overridden: list[str]
 
 
-@router.get("/health")
-def health(request: Request) -> HealthResponse:
-    flags: Flags = request.app.state.flags
+@router.get("/health", response_model=HealthResponse)
+@inject_sync
+def health(flags: FromDishka[Flags]) -> HealthResponse:
     return HealthResponse(status="ok", service="blizzard-hub", version=__version__, overridden=list(flags.overridden))

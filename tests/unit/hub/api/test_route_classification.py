@@ -94,6 +94,7 @@ def test_permission_introspection_reads_injected_hub_gate() -> None:
 
 def _closed_over(call: object, name: str) -> object | None:
     """The value ``call`` closes over as ``name``, or ``None`` when it closes over none by that name."""
+    call = getattr(call, "__dishka_orig_func__", call)
     freevars = getattr(getattr(call, "__code__", None), "co_freevars", ())
     closure = getattr(call, "__closure__", None) or ()
     return next((cell.cell_contents for var, cell in zip(freevars, closure, strict=True) if var == name), None)

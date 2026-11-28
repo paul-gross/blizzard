@@ -135,8 +135,10 @@ class ProviderLogin:
 
 @router.get("/providers", response_model=list[ProviderSummary])
 @inject_sync
-def list_providers(request: Request, providers: FromDishka[IOAuthProviderRegistry | None]) -> list[ProviderSummary]:
-    if request.app.state.config.auth.mode == AUTH_MODE_NONE:
+def list_providers(
+    config: FromDishka[HubConfig], providers: FromDishka[IOAuthProviderRegistry | None]
+) -> list[ProviderSummary]:
+    if config.auth.mode == AUTH_MODE_NONE:
         return []
     if providers is None:
         raise ServiceAbsent("OAuth provider registry")
@@ -256,8 +258,9 @@ def logout(
     sessions: FromDishka[IReadSessionRepository | None],
     auth: FromDishka[AuthService | None],
     brokers: FromDishka[TenantBrokers],
+    config: FromDishka[HubConfig],
 ) -> Response:
-    mode = request.app.state.config.auth.mode
+    mode = config.auth.mode
     if mode != AUTH_MODE_NONE:
         id_hash = PresentedSession(request).id_hash
         if id_hash is not None:

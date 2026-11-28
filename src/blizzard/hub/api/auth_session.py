@@ -58,7 +58,7 @@ from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import HUB_PERMISSIONS, permissions_for
 from blizzard.hub.auth.service import AuthService
 from blizzard.hub.auth.sessions import IReadSessionRepository
-from blizzard.hub.config import AUTH_MODE_NONE
+from blizzard.hub.config import AUTH_MODE_NONE, HubConfig
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.wire.tenant import NO_SUCH_TENANT
@@ -131,14 +131,14 @@ class PresentedSession:
 
 
 def resolve_identity(
-    request: Request, sessions: IReadSessionRepository | None, auth: AuthService | None
+    request: Request, sessions: IReadSessionRepository | None, auth: AuthService | None, config: HubConfig
 ) -> ResolvedIdentity | None:
     """Resolve the presented session to the person it belongs to — hub-level, holding no tenant's
     role — or ``None`` when no session is presented, it does not resolve, or it has expired.
 
     Under ``auth.mode = "none"`` this never touches the container and always answers
     :func:`implicit_operator`."""
-    mode = request.app.state.config.auth.mode
+    mode = config.auth.mode
     if mode == AUTH_MODE_NONE:
         return implicit_operator(None)
     if _IDENTITY_SCOPE_KEY not in request.scope:
@@ -191,6 +191,7 @@ def resolve_tenant(
     memberships: FromDishka[IReadMembershipRepository],
     sessions: FromDishka[IReadSessionRepository | None],
     auth: FromDishka[AuthService | None],
+    config: FromDishka[HubConfig],
     machine: Annotated[MachineCredentials, Depends(machine_credentials)],
 ) -> AdmittedTenant:
     """The tenant ``request`` acts in, by the first rule that applies — a machine credential, the
@@ -201,7 +202,7 @@ def resolve_tenant(
     ``404``. Under oauth a request with neither a credential nor a session answers ``401``.
 
     Synchronous, so a first open of the tenant's scope, which reads the store, runs off the event loop."""
-    return tenant_for_request(request, open_tenants, memberships, sessions, auth, machine)
+    return tenant_for_request(request, open_tenants, memberships, sessions, auth, machine, config)
 
 
 def tenant_for_request(
@@ -211,6 +212,7 @@ def tenant_for_request(
     sessions: IReadSessionRepository | None,
     auth: AuthService | None,
     machine: MachineCredentials,
+    config: HubConfig,
 ) -> AdmittedTenant:
     """Resolve tenant admission with explicitly supplied process collaborators."""
     named = _named_tenant(request)
@@ -219,12 +221,12 @@ def tenant_for_request(
         if named is not None and named != credential.tenant_id:
             raise ProblemHTTPException(problems.tenant_credential_mismatch_problem)
         return _served(request, open_tenants, credential.tenant_id, credential)
-    if request.app.state.config.auth.mode == AUTH_MODE_NONE:
+    if config.auth.mode == AUTH_MODE_NONE:
         tenant = named if named is not None else open_tenants.only()
         if tenant is None:
             raise _tenant_required()
         return _served(request, open_tenants, tenant, implicit_operator(tenant))
-    identity = resolve_identity(request, sessions, auth)
+    identity = resolve_identity(request, sessions, auth, config)
     if identity is None:
         raise ProblemHTTPException(partial(problems.authentication_required_problem, detail="authentication required"))
     if named is not None:
@@ -366,19 +368,19 @@ def _tenant_required() -> HTTPException:
     return ProblemHTTPException(problems.tenant_required_problem)
 
 
-def _caller_of(request: Request) -> Caller:
-    if request.app.state.config.auth.mode == AUTH_MODE_NONE:
+def _caller_of(request: Request, config: HubConfig) -> Caller:
+    if config.auth.mode == AUTH_MODE_NONE:
         return "operator"
     return PresentedSession(request).caller()
 
 
-def granted(request: Request, tenant: AdmittedTenant, permission: Permission) -> ResolvedIdentity:
+def granted(request: Request, tenant: AdmittedTenant, permission: Permission, config: HubConfig) -> ResolvedIdentity:
     """The person ``tenant`` was resolved for, holding ``permission`` there — else ``403``, for a
     person without it and for a machine credential, which no permission gate admits."""
     identity = tenant.identity
     if not isinstance(identity, ResolvedIdentity):
         raise ProblemHTTPException(problems.machine_credential_forbidden_problem)
-    annotate_caller(_caller_of(request))
+    annotate_caller(_caller_of(request, config))
     if permission not in identity.permissions:
         raise ProblemHTTPException(partial(problems.permission_required_problem, permission))
     return identity
@@ -389,8 +391,11 @@ def require(permission: Permission) -> Callable[..., ResolvedIdentity]:
     (:func:`resolve_tenant`) and the person acting in it, then raises ``403`` when that person's
     membership there lacks ``permission``."""
 
-    def _dependency(request: Request, tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)]) -> ResolvedIdentity:
-        return granted(request, tenant, permission)
+    @inject_sync
+    def _dependency(
+        request: Request, tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)], config: FromDishka[HubConfig]
+    ) -> ResolvedIdentity:
+        return granted(request, tenant, permission, config)
 
     return _dependency
 
@@ -400,10 +405,13 @@ def require_either(permission: Permission, alternative: Permission) -> Callable[
     :class:`TenantBoundAdmitting` router, whose admitted person holds the hub-level ``alternative``
     and no tenant permission."""
 
-    def _dependency(request: Request, tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)]) -> ResolvedIdentity:
+    @inject_sync
+    def _dependency(
+        request: Request, tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)], config: FromDishka[HubConfig]
+    ) -> ResolvedIdentity:
         if isinstance(tenant.identity, ResolvedIdentity) and alternative in tenant.identity.permissions:
-            return granted(request, tenant, alternative)
-        return granted(request, tenant, permission)
+            return granted(request, tenant, alternative, config)
+        return granted(request, tenant, permission, config)
 
     return _dependency
 
@@ -418,11 +426,12 @@ def require_hub(permission: Permission) -> Callable[..., ResolvedIdentity]:
         request: Request,
         sessions: FromDishka[IReadSessionRepository | None],
         auth: FromDishka[AuthService | None],
+        config: FromDishka[HubConfig],
     ) -> ResolvedIdentity:
-        if request.app.state.config.auth.mode == AUTH_MODE_NONE:
+        if config.auth.mode == AUTH_MODE_NONE:
             annotate_caller("operator")
             return implicit_operator(None)
-        identity = resolve_identity(request, sessions, auth)
+        identity = resolve_identity(request, sessions, auth, config)
         if identity is None:
             raise ProblemHTTPException(
                 partial(problems.authentication_required_problem, detail="authentication required")

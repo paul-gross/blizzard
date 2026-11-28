@@ -12,9 +12,9 @@ from fastapi.testclient import TestClient
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import ControlledClock
 from blizzard.hub.api.test_flow_control import flow_control_router
-from blizzard.hub.config import AUTH_MODE_OAUTH
+from blizzard.hub.config import AUTH_MODE_OAUTH, HubConfig
 from blizzard.hub.delivery.flow_driver import FlowDriver, TickResult
-from tests.support.config_inputs import build_hosted_hub_app, create_hub_app, init_hub
+from tests.support.config_inputs import build_hosted_hub_app, create_hub_app, hosted_engine, init_hub
 from tests.support.scaffolding import build_hub, runner_token, seed_hub_admin, seed_runner, seed_session, seed_user
 
 
@@ -33,14 +33,14 @@ def test_step_route_requires_the_clock_fence(
         with TestClient(app) as client:
             assert client.post("/api/admin/test-flow/step").status_code in (404, 405)
     finally:
-        app.state.engine.dispose()
+        hosted_engine(app).dispose()
 
 
 def test_step_route_requires_hub_admin_and_rejects_runners(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode=AUTH_MODE_OAUTH)
     clock = ControlledClock(datetime(2025, 1, 1, tzinfo=UTC))
     app = create_hub_app(
-        hub.wired_app.state.config,
+        hub.process.resolver.get(HubConfig),
         process=hub.process,
         test_flow_router=flow_control_router(hub.flow_driver, clock, asyncio.Lock()),
     )

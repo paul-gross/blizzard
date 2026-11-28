@@ -11,6 +11,7 @@ from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 from starlette.types import Receive, Scope, Send
 
+from blizzard.foundation.platform_tracing.handle import IPlatformTracing
 from blizzard.foundation.registry.interface import ServiceAbsent
 from blizzard.hub.api.auth_session import TENANT_HEADER_COMPONENT, TENANT_HEADER_PARAMETER
 
@@ -42,6 +43,10 @@ class TraceGatedFastAPI(FastAPI):
     #: Installed at composition and replaced alongside the process in the process-replacement test seam.
     principal_check: PrincipalCheck
 
+    def __init__(self, *args: Any, platform_tracing: IPlatformTracing, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.platform_tracing = platform_tracing
+
     def openapi(self) -> dict[str, Any]:
         """The spec, documenting the tenant header once, under ``components.parameters``."""
         if self.openapi_schema is None:
@@ -59,7 +64,7 @@ class TraceGatedFastAPI(FastAPI):
         await super().__call__(scope, receive, send)
 
     def _resolves(self, scope: Scope) -> bool:
-        with self.state.platform_tracing.suppressed():
+        with self.platform_tracing.suppressed():
             return self.principal_check(Request(scope))
 
 

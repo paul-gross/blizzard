@@ -8,6 +8,7 @@ every other frame passes. The replay tail is filtered as the live frames are. Th
 from __future__ import annotations
 
 import ast
+import asyncio
 import json
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
@@ -74,7 +75,7 @@ async def _open(
 ) -> AsyncIterator[bytes]:
     """The stream's frames, the reserved comment already read — the subscription is live from here."""
     reads = StreamReads(broker, registry)  # pyright: ignore[reportArgumentType]  # the registry stand-in answers only the served-runner read
-    response = await events_stream(_ConnectedRequest(last_event_id), reads, project)
+    response = await events_stream(_ConnectedRequest(last_event_id), reads, asyncio.Event(), project)
     frames = _frames(response)
     first = await anext(frames)
     assert first.startswith(b": blizzard hub event stream")
@@ -232,7 +233,7 @@ async def test_from_latest_sends_only_the_projects_frames_published_after_it_joi
     broker.publish_chunk_changed("ch_old", "ready", project_id=_MINE)
     request = _ConnectedRequest(query={"from": "latest"})
     reads = StreamReads(broker, _Registry())  # pyright: ignore[reportArgumentType]  # the registry stand-in answers only the served-runner read
-    response = await events_stream(request, reads, _MINE)
+    response = await events_stream(request, reads, asyncio.Event(), _MINE)
     frames = _frames(response)
     assert (await anext(frames)).startswith(b": blizzard hub event stream")
     broker.publish_chunk_changed("ch_mine", "ready", project_id=_MINE)
@@ -245,7 +246,7 @@ async def test_from_latest_sends_only_the_projects_frames_published_after_it_joi
 async def _route(query: dict[str, str], header: str | None = None, *, broker: EventBroker) -> AsyncIterator[bytes]:
     request = _ConnectedRequest(None if header is None else int(header), query)
     reads = StreamReads(broker, _Registry())  # pyright: ignore[reportArgumentType]  # the registry stand-in answers only the served-runner read
-    response = await events_stream(request, reads, None)
+    response = await events_stream(request, reads, asyncio.Event(), None)
     return _frames(response)
 
 

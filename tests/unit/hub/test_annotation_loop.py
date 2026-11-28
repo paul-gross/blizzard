@@ -322,6 +322,7 @@ class _FakeProcess:
         annotation: _CountingReconciler | None = None,
     ) -> None:
         self.work_sources = work_sources
+        self.config: HubConfig
         self.close_drain = close_drain or _CountingReconciler()
         self.event_derivation = event_derivation or _CountingReconciler()
         self.tenant_teardown_sweep = _CountingReconciler()
@@ -332,8 +333,14 @@ class _FakeProcess:
             tenants=SimpleNamespace(close=lambda: None), resolver=SimpleNamespace(get=self._resolve)
         )
 
-    def _resolve(self, key: object) -> ActionLoop | SweepRoster:
-        return self.sweeps if key is SweepRoster else self.action_loop
+    def _resolve(self, key: object) -> object:
+        if key is SweepRoster:
+            return self.sweeps
+        if key is HubConfig:
+            return self.config
+        if key is ActionLoop:
+            return self.action_loop
+        return None
 
     @property
     def sweeps(self) -> SweepRoster:
@@ -349,13 +356,13 @@ class _FakeProcess:
 
 class _FakeApp(FastAPI):
     """A real ``FastAPI`` carrying only the
-    ``app.state.{hub_process,config,shutdown,platform_tracing,flow_driver}`` ``lifespan`` reads, over a fake
+    ``app.state.{hub_process,shutdown,platform_tracing,flow_driver}`` ``lifespan`` reads, over a fake
     process."""
 
     def __init__(self, services: _FakeProcess, config: HubConfig) -> None:
         super().__init__()
         self.state.hub_process = services.process
-        self.state.config = config
+        services.config = config
         self.state.shutdown = asyncio.Event()
         self.state.platform_tracing = DisabledPlatformTracing()
         self.state.flow_driver = None
@@ -413,7 +420,7 @@ async def test_the_sweep_set_carries_the_injected_annotator_when_one_is_present(
     [sweep] = [sweep for sweep in sweeps if sweep.logger_name == "blizzard.hub.forge_status"]
     sweep.reconciler()
     assert annotator.calls == 1
-    assert sweep.interval_seconds == app.state.config.annotation_interval_seconds
+    assert sweep.interval_seconds == services.config.annotation_interval_seconds
     assert sweep.shutdown is app.state.shutdown
     assert sweep.jitter_seconds is not None
     assert 0 <= sweep.jitter_seconds < sweep.interval_seconds

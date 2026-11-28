@@ -29,6 +29,7 @@ from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import PresentedSession, RequestTenant, require, tenant_bound
 from blizzard.hub.api.project_params import QueryProject
+from blizzard.hub.api.resolution import shutdown_event
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.chunk.model import ActivityEntry, ActivityFeed, EventFeed, OperationalEvent
 from blizzard.hub.domain.chunk.ports.escalations import IReadChunkEscalationsRepository
@@ -67,6 +68,7 @@ def _streaming(
 async def events_stream(
     request: Request,
     streaming: Annotated[StreamReads, Depends(_streaming)],
+    shutdown: Annotated[asyncio.Event, Depends(shutdown_event)],
     project: QueryProject = None,
     viewer: Annotated[ResolvedIdentity | None, Depends(require(Permission.FLEET_VIEW))] = None,
 ) -> StreamingResponse:
@@ -77,7 +79,6 @@ async def events_stream(
     replay ring and sends only events published after the subscription registered; an unknown ``from`` value,
     or ``from=latest`` with ``?last_event_id=``, is a ``422``."""
     cursor = _cursor(request)
-    shutdown: asyncio.Event | None = getattr(request.app.state, "shutdown", None)
     admits = None if project is None else (await _stream_lens(streaming.registry, project)).admits
     owner = viewer.user_id if viewer is not None else None
     session = PresentedSession(request).id_hash if viewer is not None else None

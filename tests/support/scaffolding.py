@@ -160,6 +160,7 @@ from blizzard.hub.domain.runners.registration import (
 )
 from blizzard.hub.domain.runners.served import resolve_served
 from blizzard.hub.domain.runners.version_window import VersionWindow
+from blizzard.hub.domain.sweeps.names import SweepModes
 from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
 from blizzard.hub.domain.urgency.model import NO_MARK, Urgency, UrgencyId
 from blizzard.hub.domain.urgency.order import FIRST_POSITION
@@ -1604,6 +1605,7 @@ class HubHarness:
     app: FastAPI | None = None
     #: The boot config the hub was built over — what a test root opening its own process supplies.
     config: HubConfig | None = None
+    settings: HubSettingsGraph | None = None
     _driver: FlowDriver | None = field(default=None, repr=False)
 
     @property
@@ -2013,6 +2015,7 @@ def build_hub(
     forges: ForgeRegistryBuild | None = None,
     credential_probes: Mapping[str, ICredentialProbe] | None = None,
     with_settings: bool = False,
+    sweeps: SweepModes | None = None,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams; ``hub.client`` is a
     :class:`RunnerFleetClient`. ``work_sources=None`` seeds one fake source and ``{}`` none; ``link=False`` leaves
@@ -2032,6 +2035,7 @@ def build_hub(
         action_pass_seconds=action_pass_seconds,
         public_url=public_url,
         transcripts=_caps_config(transcript_caps),
+        sweeps=sweeps if sweeps is not None else SweepModes(),
     )
     # A second build over the same ``tmp_path`` reopens the store the first one wrote;
     # copying over it would discard that state, so only a fresh directory takes the copy.
@@ -2117,8 +2121,7 @@ def build_hub(
     work_source_registry = WorkSourceRegistry(built_sources, closers=closers, editors=editors)
 
     process.resolver.get(OpenTenants).refresh()
-    app = create_hub_app(config, process=process, flags=flags)
-    app.state.hub_settings = settings
+    app = create_hub_app(config, process=process)
     client = RunnerFleetClient(app, process=process, tenant=default.tenant, register_claimants=auto_register_claimants)
     # Warm FastAPI's per-router route-resolution cache: it lazily caches routes on first
     # use, which is thread-unsafe under the component tier's OS-thread races.
@@ -2133,6 +2136,7 @@ def build_hub(
         events=process.tenants.resolve(default, EventBroker),
         app=app,
         config=config,
+        settings=settings,
     )
 
 

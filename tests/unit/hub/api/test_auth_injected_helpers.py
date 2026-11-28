@@ -1,5 +1,6 @@
 """Explicit collaborators retain the request-local authentication and configuration caches."""
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -8,6 +9,7 @@ from fastapi import Request
 from blizzard.hub.api.auth_session import resolve_identity
 from blizzard.hub.api.request_config import config_for_request
 from blizzard.hub.auth.hashing import SessionId
+from blizzard.hub.config import AuthConfig, HubConfig
 
 
 def _request(headers: list[tuple[bytes, bytes]]) -> Request:
@@ -21,8 +23,9 @@ def test_session_cookie_wins_and_identity_is_cached() -> None:
     auth = Mock()
     identity = auth.touch_session.return_value
 
-    assert resolve_identity(request, sessions, auth) is identity
-    assert resolve_identity(request, sessions, auth) is identity
+    config = HubConfig(root=Path("."), db_url="sqlite://", auth=AuthConfig(mode="oauth"))
+    assert resolve_identity(request, sessions, auth, config) is identity
+    assert resolve_identity(request, sessions, auth, config) is identity
     sessions.get_by_hash.assert_called_once_with(SessionId("cookie").hash)
     auth.touch_session.assert_called_once_with(sessions.get_by_hash.return_value, tenant=None)
 
