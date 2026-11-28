@@ -32,7 +32,7 @@ from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.listeners import Uds
 from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome
-from tests.support.composed_host import build_host_process
+from tests.support.composed_host import open_host
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import load_runner_config
 from tests.support.runner_cli_home import (
@@ -544,8 +544,9 @@ def _serve_host_of_halted_runners(root: Path) -> Generator[Path]:
     projections = config.projections()
     halted = [p for p in projections if isinstance(p, HaltedRunner)]
     built = [p for p in projections if isinstance(p, BuiltRunner)]
-    host = build_host_process(config, built, halted=halted)
-    hosted = build_hosted_app(config.host_view(), host)
+    opened = open_host(config, built, halted=halted)
+    host = opened.host
+    hosted = build_hosted_app(config.host_view(), opened)
     sockets = host.listeners.bound()
     server = uvicorn.Server(uvicorn.Config(hosted.app, log_level="warning"))
     thread = threading.Thread(target=lambda: server.run(sockets=sockets), daemon=True)
@@ -558,7 +559,7 @@ def _serve_host_of_halted_runners(root: Path) -> Generator[Path]:
         thread.join(timeout=10.0)
         Uds(config.layout.socket_path).unlink()
         hosted.close()
-        host.close()
+        opened.close()
 
 
 def test_status_of_a_host_that_built_no_runner_prints_why_each_one_was_left_unbuilt(tmp_path: Path) -> None:

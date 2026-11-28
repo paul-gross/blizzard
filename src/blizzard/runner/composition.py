@@ -474,8 +474,9 @@ class RunnerProcess:
     flags: FlagsHolder = field(default_factory=lambda: FlagsHolder(resolve_flags(FlagRegistry(), "runner", {}).flags))
     #: The hub's version and window, as this runner's latest registration reply answered them.
     hub_version: HubVersionHolder = field(default_factory=HubVersionHolder)
-    #: Whether closing this runner closes the host it was built over — the host-of-one a standalone build makes.
-    closes_host: bool = False
+    #: What closing this runner closes after its own graph — the child, host root and host a standalone opening
+    #: holds; ``None`` for a runner a host's runner set closes.
+    closes: Callable[[], None] | None = None
     settings_reader: RunnerSettingsReader | None = None
     #: The seed of this runner's settings record, built beside ``settings_reader`` over the same entry.
     settings_seed: ISeedRunnerSettings | None = None
@@ -574,8 +575,8 @@ class RunnerProcess:
         try:
             self.close_runner()
         finally:
-            if self.closes_host:
-                self.host.close()
+            if self.closes is not None:
+                self.closes()
 
 
 @dataclass(frozen=True)
@@ -944,13 +945,15 @@ class RunnerCompose:
     ``publish`` names the runners whose harness bundle the composition publishes — the boot's — so a runner a later
     reconcile starts publishes none. ``bundles`` are the harness-config snapshots and ``selections`` the bindings each
     runner chose, by runner id. ``environ`` decides whether tracing is enabled; ``trace_exporter`` replaces the OTLP
-    binding an enabled sweep would otherwise build."""
+    binding an enabled sweep would otherwise build. ``settings`` is whether each runner is composed with its
+    settings reader; a standalone runner is not, its one settings-reading verb attaching its own."""
 
     publish: frozenset[str] = frozenset()
     bundles: Mapping[str, BundleSnapshot | None] = field(default_factory=dict[str, BundleSnapshot | None])
     selections: Mapping[str, BindingSelection] = field(default_factory=dict[str, BindingSelection])
     environ: Mapping[str, str] | None = None
     trace_exporter: ITraceExporter | None = None
+    settings: bool = True
 
     def runner(self, host_config: HostConfig, host: HostProcess, built: BuiltRunner) -> RunnerProcess:
         """``built`` composed over ``host`` under these options."""
@@ -963,6 +966,7 @@ class RunnerCompose:
             publish_bundle=built.id in self.publish,
             environ=self.environ,
             trace_exporter=self.trace_exporter,
+            settings=self.settings,
         )
 
 
@@ -1036,58 +1040,31 @@ def build_host_process(
         raise
 
 
-def build_runner_process(
+def build_host_of_one(
     config: RunnerConfig,
     *,
+    clock: IClock,
     events: EventBroker | None = None,
-    bundle: BundleSnapshot | None = None,
-    selection: BindingSelection | None = None,
-    publish_bundle: bool = False,
     environ: Mapping[str, str] | None = None,
-    trace_exporter: ITraceExporter | None = None,
     platform_tracing: IPlatformTracing | None = None,
     received_telemetry: IReceivedTelemetryExport | None = None,
-    identity: RunnerIdentityHolder | None = None,
-    runner_id: str | None = None,
-    token: StoredToken | None = None,
     host_token: str = "",
     monotonic_clock: IMonotonicClock | None = None,
-) -> RunnerProcess:
-    """A host of one and its runner, for the standalone commands and tests that drive one runner: closing the
-    returned runner closes the host too. The runner is bound to ``runner_id``, else to the id ``config`` carries;
-    ``token`` is its stored-token outcome, and ``host_token`` the host's own credential, so a runner of a
-    registered host leaves its roster to the host. The other arguments are :func:`build_host_process`'s."""
-    graph = _build_host_graph(
+) -> HostProcess:
+    """The host a standalone command builds for one runner, from that runner's ``config``, with no runner on it yet;
+    ``host_token`` is the host's own credential. The other arguments are :func:`build_host_process`'s."""
+    return _build_host_graph(
         config,
         subscriptions=config.subscriptions,
         events=events,
         environ=environ,
-        clock=SystemClock(),
+        clock=clock,
         monotonic_clock=monotonic_clock or SystemMonotonicClock(),
         platform_tracing=platform_tracing,
         received_telemetry=received_telemetry,
         trace_platform=False,
         host_token=host_token,
     )
-    try:
-        runner = _build_runner(
-            config,
-            graph,
-            bundle=bundle,
-            selection=selection,
-            publish_bundle=publish_bundle,
-            environ=environ,
-            trace_exporter=trace_exporter,
-            identity=identity,
-            runner_id=runner_id or config.runner_id,
-            token=token,
-            closes_host=True,
-        )
-    except BaseException:
-        graph.close()
-        raise
-    graph.runners = (runner,)
-    return runner
 
 
 def compose_runner(
@@ -1100,9 +1077,10 @@ def compose_runner(
     publish_bundle: bool = False,
     environ: Mapping[str, str] | None = None,
     trace_exporter: ITraceExporter | None = None,
+    settings: bool = True,
 ) -> RunnerProcess:
-    """One runner composed over ``host`` and bound to ``built``'s id — its graph, its harness set, and its settings
-    reader over the entry it projected from — not yet placed among the host's runners."""
+    """One runner composed over ``host`` and bound to ``built``'s id — its graph, its harness set, and, with
+    ``settings``, its settings reader over the entry it projected from — not yet placed among the host's runners."""
     runner = _build_runner(
         built.config,
         host,
@@ -1111,11 +1089,11 @@ def compose_runner(
         publish_bundle=publish_bundle,
         environ=environ,
         trace_exporter=trace_exporter,
-        identity=None,
         runner_id=built.id,
         token=built.token,
-        closes_host=False,
     )
+    if not settings:
+        return runner
     entry = built.entry or next((entry for entry in host_config.runners if entry.id == built.id), None)
     if entry is None:
         return runner
@@ -1844,18 +1822,14 @@ def _build_runner(
     publish_bundle: bool,
     environ: Mapping[str, str] | None,
     trace_exporter: ITraceExporter | None,
-    identity: RunnerIdentityHolder | None,
-    runner_id: str | None,
+    runner_id: str,
     token: StoredToken | None,
-    closes_host: bool,
 ) -> RunnerProcess:
     """Compose one runner and its harness-set builder over ``host``'s engine.
 
     Stores bind to ``runner_id`` before use. A supplied ``selection`` overrides selection in the builder;
     ``bzh:pluggable-seams`` owns binding lifetime."""
-    if runner_id is None:
-        raise ConfigError(f"runner {config.name} has no id: bind it to the hub-minted id of its [[runner]] entry")
-    identity = identity or RunnerIdentityHolder()
+    identity = RunnerIdentityHolder()
     platform_tracing = host.platform_tracing
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
     identity_client: httpx2.Client | None = None
@@ -2105,7 +2079,6 @@ def _build_runner(
             identity_client=identity_client,
             events=RunnerEventPublisher.over(host.events, runner_id),
             flags=FlagsHolder(resolve_flags(host.flag_registry, "runner", config.flags).flags),
-            closes_host=closes_host,
             harness_key=key_for,
         )
     except BaseException:

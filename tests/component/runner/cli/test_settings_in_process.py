@@ -23,7 +23,7 @@ from blizzard.runner.settings.authoring import RunnerSettingsAuthoring
 from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
-from tests.support.composed_host import build_host_process
+from tests.support.composed_host import build_host_process, open_host
 from tests.support.config_inputs import create_runner_app, load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.runner_client import runner_seams
@@ -127,8 +127,9 @@ def test_cli_host_settings_round_trip_through_the_real_host_routes(
     host = seed_host(host, {}, clock=SystemClock())
     ready, halted = seed_runners(host, clock=SystemClock())
     assert not halted
-    graph = build_host_process(host, ready)
-    hosted = build_hosted_app(graph.runners[0].config, graph)
+    opened = open_host(host, ready)
+    graph = opened.host
+    hosted = build_hosted_app(graph.runners[0].config, opened)
     paths: list[str] = []
 
     class RecordingClient(TestClient):
@@ -188,4 +189,4 @@ def test_cli_host_settings_round_trip_through_the_real_host_routes(
         assert "mutually exclusive" in both.output
     finally:
         hosted.close()
-        graph.close()
+        opened.close()

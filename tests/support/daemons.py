@@ -23,6 +23,7 @@ from tests.support.config_inputs import (
     migrate_host,
     migrate_hub,
 )
+from tests.support.standalone import hosted_app
 
 
 @dataclass(frozen=True)
@@ -47,7 +48,7 @@ class Daemon:
             # The runner's store is bound from its configured id: a host init scaffolds one that has not joined a hub.
             runner = config.runner_config()
             config = dataclasses.replace(runner, runner_id=runner.runner_id or "rn_fixture")
-        built = self.app.build_hosted_app(config) if self.name == "runner" else build_hosted_hub_app(config)
+        built = hosted_app(config) if self.name == "runner" else build_hosted_hub_app(config)
         if isinstance(built, runner_app.HostedApp):
             return built.app
         return built

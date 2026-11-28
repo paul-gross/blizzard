@@ -7,6 +7,7 @@ from __future__ import annotations
 import dataclasses
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -27,8 +28,9 @@ from blizzard.runner.cli.runtime import (
 )
 from blizzard.runner.composition import HostProcess, RunnerProcess
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.host_config import BuiltRunner
+from blizzard.runner.host_config import BuiltRunner, HostConfig
 from blizzard.runner.host_layout import WORKER_SCRATCH_DIRNAME, HostLayout
+from blizzard.runner.host_root import OpenedHost
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop_wiring import LoopWiring
@@ -42,7 +44,7 @@ from blizzard.runner.tracing.platform import (
 )
 from blizzard.runner.tracing.received_export import build_received_telemetry_export
 from tests.support import claude_code_telemetry
-from tests.support.composed_host import build_host_process
+from tests.support.composed_host import build_host_process, open_host
 from tests.support.host_files import host_config_of
 from tests.support.runner_fakes import REGISTERED_AT, FakeHub, migrated_store_at
 from tests.support.runner_mint import new_mint
@@ -87,6 +89,16 @@ class _Exports:
 
 
 def _host(tmp_path: Path, exports: _Exports) -> HostProcess:
+    host, runners, options = _parts(tmp_path, exports)
+    return build_host_process(host, runners, **options)
+
+
+def _opened(tmp_path: Path, exports: _Exports) -> OpenedHost:
+    host, runners, options = _parts(tmp_path, exports)
+    return open_host(host, runners, **options)
+
+
+def _parts(tmp_path: Path, exports: _Exports) -> tuple[HostConfig, list[BuiltRunner], dict[str, Any]]:
     config = RunnerConfig(
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
@@ -96,26 +108,29 @@ def _host(tmp_path: Path, exports: _Exports) -> HostProcess:
     config.data_dir.mkdir(parents=True, exist_ok=True)
     migrated_store_at(config.db_url)
     resource = {"service.name": "blizzard-runner"}
-    return build_host_process(
+    runners = [BuiltRunner(rid, dataclasses.replace(config, runner_id=rid)) for rid in _RUNNERS]
+    return (
         host_config_of(config),
-        [BuiltRunner(rid, dataclasses.replace(config, runner_id=rid)) for rid in _RUNNERS],
-        platform_tracing=build_platform_tracing(
-            config.tracing,
-            _ENDPOINT,
-            resource=resource,
-            scope=PLATFORM_INSTRUMENTATION_SCOPE,
-            scope_version=PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
-            stamp=host_stamp(),
-            exporter=exports.spans,
-        ),
-        received_telemetry=build_received_telemetry_export(
-            config.tracing,
-            _ENDPOINT,
-            resource=resource,
-            monotonic_clock=SystemMonotonicClock(),
-            metric_exporter=exports.metrics,
-            log_exporter=exports.logs,
-        ),
+        runners,
+        {
+            "platform_tracing": build_platform_tracing(
+                config.tracing,
+                _ENDPOINT,
+                resource=resource,
+                scope=PLATFORM_INSTRUMENTATION_SCOPE,
+                scope_version=PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
+                stamp=host_stamp(),
+                exporter=exports.spans,
+            ),
+            "received_telemetry": build_received_telemetry_export(
+                config.tracing,
+                _ENDPOINT,
+                resource=resource,
+                monotonic_clock=SystemMonotonicClock(),
+                metric_exporter=exports.metrics,
+                log_exporter=exports.logs,
+            ),
+        },
     )
 
 
@@ -157,8 +172,9 @@ def _stamp(span: ReadableSpan) -> object:
 
 
 def test_every_runners_graph_reads_the_hosts_one_host_stores(tmp_path: Path) -> None:
-    host = _host(tmp_path, _Exports())
-    hosted = build_hosted_app(host.runners[0].config, host)
+    opened = _opened(tmp_path, _Exports())
+    host = opened.host
+    hosted = build_hosted_app(host.runners[0].config, opened)
     try:
         for runner in host.runners:
             assert not hasattr(runner, "host_stores")
@@ -169,13 +185,14 @@ def test_every_runners_graph_reads_the_hosts_one_host_stores(tmp_path: Path) -> 
             assert served.seams.runner_status._daemon_liveness is host.host_stores.daemon_liveness
     finally:
         hosted.close()
-        host.close()
+        opened.close()
 
 
 def test_each_runners_worker_exports_and_platform_spans_carry_that_runners_identity(tmp_path: Path) -> None:
     exports = _Exports()
-    host = _host(tmp_path, exports)
-    hosted = build_hosted_app(host.runners[0].config, host)
+    opened = _opened(tmp_path, exports)
+    host = opened.host
+    hosted = build_hosted_app(host.runners[0].config, opened)
     try:
         for runner in host.runners:
             _register_with_a_lease(runner)
@@ -222,7 +239,7 @@ def test_each_runners_worker_exports_and_platform_spans_carry_that_runners_ident
         assert [_stamp(span) for span in spans if span.name == "host-tick"] == [None]
     finally:
         hosted.close()
-        host.close()
+        opened.close()
 
 
 def test_one_runners_start_sweep_leaves_the_other_runners_live_scratch(tmp_path: Path) -> None:

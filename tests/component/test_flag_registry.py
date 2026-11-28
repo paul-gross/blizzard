@@ -15,7 +15,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.settings.wiring import build_hub_flags
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.host_config import BuiltRunner
-from tests.support.composed_host import build_host_process
+from tests.support.composed_host import open_host
 from tests.support.config_inputs import load_host_config
 from tests.support.flag_registry import (
     _TOKEN,  # pyright: ignore[reportPrivateUsage]
@@ -62,15 +62,15 @@ def test_a_host_over_the_packaged_registry_answers_an_empty_map_and_keeps_its_he
     config = load_host_config(tmp_path, port=0)
     migrated_store_at(config.db_url)
     built = [p for p in config.projections(_TOKEN) if isinstance(p, BuiltRunner)]
-    host = build_host_process(config, built)
-    hosted = build_hosted_app(config.host_view(), host)
+    opened = open_host(config, built)
+    hosted = build_hosted_app(config.host_view(), opened)
     try:
         with TestClient(hosted.app) as client:
             assert client.get("/api/flags").json() == {"flags": {}, "overridden": []}
             assert set(client.get("/api/health").json()) == {"status", "service", "version", "host_id"}
     finally:
         hosted.close()
-        host.close()
+        opened.close()
 
 
 def test_a_host_answers_its_runner_flags_and_warns_once_per_ignored_key(
@@ -81,8 +81,9 @@ def test_a_host_answers_its_runner_flags_and_warns_once_per_ignored_key(
     config = load_host_config(tmp_path, port=0, flag_registry=_fixture())
     migrated_store_at(config.db_url)
     built = [p for p in config.projections(_TOKEN) if isinstance(p, BuiltRunner)]
-    host = build_host_process(config, built)
-    hosted = build_hosted_app(config.host_view(), host)
+    opened = open_host(config, built)
+    host = opened.host
+    hosted = build_hosted_app(config.host_view(), opened)
     try:
         with TestClient(hosted.app) as client:
             assert client.get("/api/flags").json() == {"flags": {"runner-thing": False}, "overridden": ["runner-thing"]}
@@ -90,7 +91,7 @@ def test_a_host_answers_its_runner_flags_and_warns_once_per_ignored_key(
             assert runner.flags.current().on("runner-thing") is False
     finally:
         hosted.close()
-        host.close()
+        opened.close()
     ignored = [e for e in warnings if e.get("event") == "flag override ignored"]
     assert sorted(str(e["flag"]) for e in ignored) == ["fleet-thing", "hub-thing", "mistyped", "old-thing"]
     assert all(e["log_level"] == "warning" for e in ignored)

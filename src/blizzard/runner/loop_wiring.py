@@ -20,7 +20,7 @@ from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.foundation.roles import collaborator
-from blizzard.runner.composition import HostProcess, RunnerProcess, build_runner_process
+from blizzard.runner.composition import HostProcess, RunnerProcess
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.git import SubprocessEnvGit
 from blizzard.runner.environments.internal.subprocess_worktree_git import WORKTREE_GIT_TIMEOUT, SubprocessWorktreeGit
@@ -35,12 +35,14 @@ from blizzard.runner.harness.harness_set import (
     WorkerInvocation,
 )
 from blizzard.runner.harness.registry import IHarnessRegistry
+from blizzard.runner.host_config import BuiltRunner, HostConfig
 from blizzard.runner.host_layout import (
     ELICITATION_OUTPUT_DIRNAME,
     LEGACY_WORKER_SCRATCH_DIRNAME,
     WORKER_SCRATCH_DIRNAME,
     WORKER_STDOUT_DIRNAME,
 )
+from blizzard.runner.host_root import build_runner_process
 from blizzard.runner.hub.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.hub.client import BindingDeclaration, IHubClient, ITokenIdentityReader
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHubClient
@@ -78,6 +80,10 @@ _log = get_logger("blizzard.runner.loop")
 _HTTP_TIMEOUT = 30.0
 
 _T = TypeVar("_T")
+
+
+#: A host file and one of its runners, which a standalone verb opens its own graph over.
+type Standalone = tuple[HostConfig, BuiltRunner]
 
 
 @collaborator
@@ -255,53 +261,61 @@ class LoopWiring:
             tracer=tracer or NoopPlatformTracer(),
         )
 
-    def with_context(self, use: Callable[[LoopContext], _T], *, process: RunnerProcess | None = None) -> _T:
-        """Build the process graph, the hub client and one context over them, run ``use``,
-        and close all three — the standalone verbs' one shared lifecycle.
+    def with_context(self, use: Callable[[LoopContext], _T], over: RunnerProcess | Standalone) -> _T:
+        """Run ``use`` on one context over ``over``'s graph and a hub client — the standalone verbs' one shared
+        lifecycle.
 
-        A caller-supplied ``process`` is used as it is, with its platform tracing on the client and the
-        tick, and is left open for the caller to close."""
-        config = self.config
-        graph = process or build_runner_process(config, events=self.events, bundle=self.bundle)
+        A caller's process graph is used as it is, with its platform tracing on the client and the tick, and is left
+        open for the caller to close; a standalone host file and runner open their own graph, closed with the
+        client."""
+        graph = self._graph(over)
         try:
             with httpx2.Client(
-                base_url=config.hub_url, timeout=_HTTP_TIMEOUT, auth=HeldTokenAuth(graph.hub_token)
+                base_url=self.config.hub_url, timeout=_HTTP_TIMEOUT, auth=HeldTokenAuth(graph.hub_token)
             ) as client:
                 graph.platform_tracing.instrument_client(client)
                 ctx = self.context(HttpHubClient(client), graph, tracer=graph.tracer)
                 return use(ctx)
         finally:
-            if process is None:
+            if graph is not over:
                 graph.close()
 
-    def tick_once(self, *, process: RunnerProcess | None = None) -> None:
-        """Run one synchronous reconciliation tick.
-
-        ``process`` runs the tick over a caller-owned graph, which this call neither builds nor closes;
-        without one, the tick builds and closes its own."""
-        graph = process or build_runner_process(self.config, events=self.events, bundle=self.bundle)
+    def tick_once(self, over: RunnerProcess | Standalone) -> None:
+        """Run one synchronous reconciliation tick over ``over``'s graph: a caller's process graph, which this call
+        neither builds nor closes, or a standalone host file and runner, whose graph the tick opens and closes."""
+        graph = self._graph(over)
         stepper = RunnerStepper(self.config, process_graph=graph)
         try:
             stepper.tick_once()
         finally:
             stepper.close()
-            if process is None:
+            if graph is not over:
                 graph.close()
 
-    def backfill_transcripts(self, *, dry_run: bool, limit: int | None = None) -> TranscriptBackfillReport:
+    def _graph(self, over: RunnerProcess | Standalone) -> RunnerProcess:
+        """``over`` itself, or the standalone runner it names opened under this wiring's broker and bundle."""
+        if isinstance(over, RunnerProcess):
+            return over
+        host_config, built = over
+        return build_runner_process(host_config, built, events=self.events, bundle=self.bundle)
+
+    def backfill_transcripts(
+        self, over: Standalone, *, dry_run: bool, limit: int | None = None
+    ) -> TranscriptBackfillReport:
         """Run one transcript-backfill pass — the operator verb's own entry,
         wired here rather than at the CLI so the composition root stays the one place a
         context is built."""
         return self.with_context(
             lambda ctx: TranscriptBackfill(_identity_checked(ctx), TranscriptPump(ctx)).run(
                 dry_run=dry_run, limit=limit
-            )
+            ),
+            over,
         )
 
-    def reship_transcript(self, segment_id: str) -> TranscriptReshipReport:
+    def reship_transcript(self, over: Standalone, segment_id: str) -> TranscriptReshipReport:
         """Re-ship one already-imported segment — wired here for the reason above."""
         return self.with_context(
-            lambda ctx: TranscriptBackfill(_identity_checked(ctx), TranscriptPump(ctx)).reship(segment_id)
+            lambda ctx: TranscriptBackfill(_identity_checked(ctx), TranscriptPump(ctx)).reship(segment_id), over
         )
 
 

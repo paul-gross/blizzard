@@ -26,7 +26,6 @@ from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import ManualMonotonicClock, SystemClock, SystemMonotonicClock
 from blizzard.foundation.usage_kind import UsageKind
-from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
@@ -57,6 +56,7 @@ from tests.support.runner_client import runner_client
 from tests.support.runner_fakes import NO_TRACING
 from tests.support.runner_init_fakes import init_runner
 from tests.support.selftest_probes import FixedPidAdapter, RecordingProcessProbe
+from tests.support.standalone import hosted_app
 from tests.support.worker_http import bind_local_only, bind_transport
 
 # A fake harness binary mimicking `mock-claude-code`'s CLI surface, extended to actually
@@ -587,7 +587,7 @@ def _serve_local_api(root: Path) -> Generator[Path]:
     The CLI verb is a pure client of this API, driven against a real server over a
     real socket rather than a stubbed transport. The runner is bound to the id its host file configures."""
     config = load_runner_config(root, port=0)
-    app = build_hosted_app(config).app
+    app = hosted_app(config).app
     sockets = Listeners.of(config).bound()
     server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
     thread = threading.Thread(target=lambda: server.run(sockets=sockets), daemon=True)

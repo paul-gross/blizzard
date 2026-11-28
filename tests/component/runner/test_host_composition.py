@@ -716,25 +716,6 @@ def test_a_hosts_close_shuts_every_runners_executor_down_waiting_before_it_dispo
     assert order == ["rn_b:wait", "rn_a:wait", "engine"] or order == ["rn_a:wait", "rn_b:wait", "engine"]
 
 
-def test_a_runner_closes_its_host_only_when_it_was_built_over_a_host_of_one(tmp_path: Path) -> None:
-    host = _host(_config(tmp_path), "rn_a")
-    disposed: list[bool] = []
-    dispose = host.engine.dispose
-
-    def tracked_dispose(close: bool = True) -> None:
-        disposed.append(True)
-        dispose(close)
-
-    host.engine.dispose = tracked_dispose
-    [runner] = host.runners
-
-    dataclasses.replace(runner, closes_host=False).close()
-    assert disposed == []
-
-    dataclasses.replace(runner, closes_host=True).close()
-    assert disposed == [True]
-
-
 def test_the_host_graphs_tool_env_follows_the_host_tool_profile_not_the_first_runners_worker(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

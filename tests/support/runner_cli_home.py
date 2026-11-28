@@ -25,6 +25,7 @@ from tests.support.host_files import declare_test_workspace, load_runner_config
 from tests.support.runner_client import runner_seams
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.support.runner_init_fakes import init_runner
+from tests.support.standalone import open_standalone_of
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
@@ -73,7 +74,7 @@ def serve_local_api(
     version_refused: str | None = None,
 ) -> Generator[tuple[Path, str]]:
     config = load_runner_config(root, port=0)
-    app = build_hosted_app(config, host_config=load_host_config(root)).app
+    app = build_hosted_app(config, open_standalone_of(config), host_config=load_host_config(root)).app
     if refusing is not None:  # (store runner, token runner): the verdict the loop's check would hold
         runner_seams(app).identity_verdict.record(
             IdentityState.MISMATCHED,

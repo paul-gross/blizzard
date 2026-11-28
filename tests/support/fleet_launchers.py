@@ -24,8 +24,6 @@ import uvicorn
 
 from blizzard.foundation.cli_spans import ENV_TRACE_SEND_CAP_MS
 from blizzard.hub.domain.observability.egress.config import EgressConfig
-from blizzard.runner.app import build_hosted_app
-from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop_wiring import LoopWiring
@@ -48,6 +46,7 @@ from tests.support.scaffolding import (
     spawn_daemon,
     write_mock_harness_credentials,
 )
+from tests.support.standalone import hosted_app, standalone_of
 
 # The fixture project repo the loop drives, under the repository record's owner.
 OWNER = "blizzard"
@@ -282,23 +281,21 @@ def drive_until_done(
     fenced_env: dict[str, str],
     *,
     timeout: float = 120.0,
-    process: RunnerProcess | None = None,
 ) -> str:
     """Tick the reconciliation loop until the chunk is terminal; return its last status.
 
     Each tick is one synchronous REAP->PULL->FILL->ADVANCE pass, interleaved with short
     waits so the asynchronously spawned mock worker can commit before ADVANCE judges it.
-    ``process`` is one traced graph the ticks and the local API share; the local API serves on
-    ``api_socket``, the held socket ``config`` took its port from.
+    The local API serves on ``api_socket``, the held socket ``config`` took its port from.
     """
     prior = dict(os.environ)
     os.environ.update(fenced_env)  # the runner spawns the fenced mock harness in-process
     try:
-        with runner_api(config, api_socket, process=process):
+        with runner_api(config, api_socket):
             deadline = time.monotonic() + timeout
             status = "ready"
             while time.monotonic() < deadline:
-                LoopWiring.of(config).tick_once(process=process)
+                LoopWiring.of(config).tick_once(standalone_of(config))
                 detail = hub.get(f"/api/chunks/{chunk_id}")
                 assert detail.status_code == 200, detail.text
                 status = detail.json()["status"]
@@ -317,14 +314,12 @@ def runner_api(
     api_socket: socket.socket,
     *,
     events: EventBroker | None = None,
-    process: RunnerProcess | None = None,
 ) -> Generator[None]:
     """Serve the runner's local API in a thread on ``api_socket`` — the daemon the worker's verbs POST/GET to.
 
     Touches no store, so it runs alongside the tick without contention. ``events``
-    threads a broker in, for a scenario proving the stream route too; ``process`` serves the app over a traced
-    graph the scenario's ticks share."""
-    app = build_hosted_app(config, events=events, process_graph=process).app
+    threads a broker in, for a scenario proving the stream route too."""
+    app = hosted_app(config, events=events).app
     server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
     thread = threading.Thread(target=server.run, kwargs={"sockets": [api_socket]}, name="runner-local-api", daemon=True)
     thread.start()

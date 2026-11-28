@@ -13,13 +13,14 @@ from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import ControlledClock, SystemClock
 from blizzard.runner.app import build_hosted_app
-from blizzard.runner.composition import HostProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import BuiltRunner
 from blizzard.runner.host_layout import HostLayout
-from tests.support.composed_host import build_host_process
+from blizzard.runner.host_root import OpenedHost
+from tests.support.composed_host import open_host
 from tests.support.host_files import host_config_of
 from tests.support.runner_fakes import migrated_store_at
+from tests.support.standalone import standalone_runner
 
 _RUNNERS = ("rn_a", "rn_b")
 _FENCED = {"BLIZZARD_CLOCK": "controlled", "BLIZZARD_CLOCK_FENCE": "1"}
@@ -32,9 +33,9 @@ def _config(tmp_path: Path) -> RunnerConfig:
     return config
 
 
-def _host(tmp_path: Path, environ: Mapping[str, str]) -> HostProcess:
+def _host(tmp_path: Path, environ: Mapping[str, str]) -> OpenedHost:
     config = _config(tmp_path)
-    return build_host_process(
+    return open_host(
         host_config_of(config),
         [BuiltRunner(rid, dataclasses.replace(config, runner_id=rid)) for rid in _RUNNERS],
         environ=environ,
@@ -53,8 +54,9 @@ def _host(tmp_path: Path, environ: Mapping[str, str]) -> HostProcess:
 def test_an_unfenced_host_runs_on_the_system_clock_and_has_no_clock_route(
     tmp_path: Path, environ: Mapping[str, str]
 ) -> None:
-    host = _host(tmp_path, environ)
-    hosted = build_hosted_app(host.runners[0].config, host)
+    opened = _host(tmp_path, environ)
+    host = opened.host
+    hosted = build_hosted_app(host.runners[0].config, opened)
     try:
         assert isinstance(host.clock, SystemClock)
         with TestClient(hosted.app) as client:
@@ -64,12 +66,14 @@ def test_an_unfenced_host_runs_on_the_system_clock_and_has_no_clock_route(
             unknown = client.post("/api/host/no-such-route", json={})
             assert client.post("/api/host/clock", json={"advance_seconds": 1}).status_code == unknown.status_code
     finally:
-        host.close()
+        hosted.close()
+        opened.close()
 
 
 def test_a_fenced_host_shares_one_controlled_clock_across_its_runners_and_its_routes(tmp_path: Path) -> None:
-    host = _host(tmp_path, _FENCED)
-    hosted = build_hosted_app(host.runners[0].config, host)
+    opened = _host(tmp_path, _FENCED)
+    host = opened.host
+    hosted = build_hosted_app(host.runners[0].config, opened)
     try:
         assert isinstance(host.clock, ControlledClock)
         assert all(runner.clock is host.clock for runner in host.runners)
@@ -87,12 +91,14 @@ def test_a_fenced_host_shares_one_controlled_clock_across_its_runners_and_its_ro
             for rid in _RUNNERS:
                 assert client.post(f"/runners/{rid}/api/ticks").json()["started_at"] == moved.json()["now"]
     finally:
-        host.close()
+        hosted.close()
+        opened.close()
 
 
 def test_the_clock_routes_set_forward_and_refuse_the_rest(tmp_path: Path) -> None:
-    host = _host(tmp_path, _FENCED)
-    hosted = build_hosted_app(host.runners[0].config, host)
+    opened = _host(tmp_path, _FENCED)
+    host = opened.host
+    hosted = build_hosted_app(host.runners[0].config, opened)
     try:
         with TestClient(hosted.app) as client:
             now = datetime.fromisoformat(client.get("/api/host/clock").json()["now"])
@@ -120,13 +126,14 @@ def test_the_clock_routes_set_forward_and_refuse_the_rest(tmp_path: Path) -> Non
                 assert response.status_code == 422
                 assert client.get("/api/host/clock").json()["now"] == ok.json()["now"]
     finally:
-        host.close()
+        hosted.close()
+        opened.close()
 
 
 def test_a_runner_process_ignores_the_fence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     for key, value in _FENCED.items():
         monkeypatch.setenv(key, value)
-    runner = build_runner_process(_config(tmp_path), runner_id="rn_a")
+    runner = standalone_runner(_config(tmp_path), runner_id="rn_a")
     try:
         assert isinstance(runner.clock, SystemClock)
     finally:

@@ -34,7 +34,7 @@ from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.sealed_tokens import StoredToken
 from blizzard.runner.lifecycle.identity_check import IdentityCheck
 from blizzard.runner.loop_wiring import RunnerStepper
-from tests.support.composed_host import build_host_process
+from tests.support.composed_host import open_host
 from tests.support.config_inputs import load_host_config
 from tests.support.hub_tokens import host_hub_tokens
 from tests.support.runner_fakes import migrated_store_at
@@ -80,15 +80,16 @@ def _host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HostConfig:
 def _served(config: HostConfig) -> Generator[tuple[TestClient, RunnerProcess]]:
     ready, halted = seed_runners(config, clock=SystemClock())
     assert [item.id for item in halted] == [_HALTED]
-    graph = build_host_process(config, ready, halted=halted)
-    hosted = build_hosted_app(ready[0].config, host=graph)
+    opened = open_host(config, ready, halted=halted)
+    graph = opened.host
+    hosted = build_hosted_app(ready[0].config, host=opened)
     hosted.app.state.hub_auth_mode = SimpleNamespace(enabled=lambda: False)
     try:
         with TestClient(hosted.app) as client:
             yield client, graph.runners[0]
     finally:
         hosted.close()
-        graph.close()
+        opened.close()
 
 
 def _check(runner: RunnerProcess, refusal: RunnerTokenRefusalReason = RunnerTokenRefusalReason.UNKNOWN) -> None:

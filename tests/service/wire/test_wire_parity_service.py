@@ -36,6 +36,7 @@ from tests.support.mock_fleet import (
 from tests.support.runner_fakes import daemon_store
 from tests.support.runner_join import fleet_headers
 from tests.support.scaffolding import url_of
+from tests.support.standalone import standalone_of
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -182,7 +183,7 @@ def _drive(config: RunnerConfig, fenced: dict[str, str], *, ticks: int, pause: f
     os.environ.update(fenced)
     try:
         for _ in range(ticks):
-            LoopWiring.of(config).tick_once()
+            LoopWiring.of(config).tick_once(standalone_of(config))
             time.sleep(pause)
     finally:
         os.environ.clear()

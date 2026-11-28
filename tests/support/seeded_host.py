@@ -16,7 +16,7 @@ from blizzard.runner.cli.runtime import seed_host, seed_runners
 from blizzard.runner.composition import HostProcess
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
-from tests.support.composed_host import build_host_process
+from tests.support.composed_host import open_host
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.runner_fakes import make_store
@@ -45,10 +45,11 @@ def seeded_host(
     config = seed_host(config, {}, clock=SystemClock())
     ready, halted = seed_runners(config, clock=SystemClock())
     assert not halted
-    process = build_host_process(config, ready)
-    app = build_hosted_app(process.runners[0].config, process)
+    opened = open_host(config, ready)
+    process = opened.host
+    app = build_hosted_app(process.runners[0].config, opened)
     try:
         yield process, app
     finally:
         app.close()
-        process.close()
+        opened.close()

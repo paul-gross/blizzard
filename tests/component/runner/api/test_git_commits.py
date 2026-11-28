@@ -16,7 +16,6 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import build_hosted_app
-from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
@@ -45,6 +44,7 @@ from tests.support.runner_fakes import (
     single_workspace,
 )
 from tests.support.runner_mint import new_mint
+from tests.support.standalone import open_standalone_of
 from tests.support.takeover_unit import record_takeover_in_unit
 from tests.support.winter_provider_fakes import FakeGit, FakeWinter
 
@@ -360,8 +360,9 @@ def test_hosted_winter_reacquire_updates_worker_declarations_on_the_shared_provi
         winter.worktrees = [{"kind": "worktree", "env": "e1", "repo": repo, "path": str(tmp_path / "e1" / repo)}]
 
     membership("old")
-    graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
-    hosted = build_hosted_app(config, process_graph=graph)
+    opened = open_standalone_of(config, runner_id=FIXTURE_RUNNER_ID)
+    (graph,) = opened.runners
+    hosted = build_hosted_app(config, opened)
     try:
         loop = LoopWiring(config, "").context(FakeHub(), graph)
         assert hosted.app.state.workspace_registry is loop.workspaces
@@ -389,7 +390,6 @@ def test_hosted_winter_reacquire_updates_worker_declarations_on_the_shared_provi
         assert ("e1", "old") not in store.git_commit_declarations_for_lease("lease_2")
     finally:
         hosted.close()
-        graph.close()
 
 
 def test_409_once_the_leases_outcome_is_buffered(tmp_path: Path) -> None:

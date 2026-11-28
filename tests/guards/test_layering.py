@@ -1385,7 +1385,7 @@ def test_composition_is_the_only_module_naming_a_concrete_runner_store_adapter()
     assert not violations, f"I — only runner/composition.py may name a concrete runner-store adapter: {violations}"
 
 
-#: The runner's process-graph collaborators, built once by ``build_runner_process``.
+#: The runner's process-graph collaborators, built once for each runner its composition composes.
 _RUNNER_GRAPH_CONSTRUCTORS = frozenset({"build_stores", "build_production_harnesses", "HarnessHealthCache"})
 
 

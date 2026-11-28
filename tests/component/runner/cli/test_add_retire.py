@@ -50,7 +50,7 @@ from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import LoopWiring, RunnerStepper
 from blizzard.runner.store.schema import hosted_runner_facts, hosted_runners, lease_spawns
 from tests.support.child_launch import wait_for_exit
-from tests.support.composed_host import build_host_process
+from tests.support.composed_host import build_host_process, open_host
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import UnresolvableSettings
 from tests.support.hub_tokens import host_hub_tokens
@@ -110,8 +110,7 @@ def test_tick_on_a_registered_host_drives_its_runner_as_one_the_host_reports(
     root = _registered(tmp_path, fake_init_hub)
     seen: list[bool] = []
 
-    def tick_once(_wiring: LoopWiring, *, process: RunnerProcess | None = None) -> None:
-        assert process is not None
+    def tick_once(_wiring: LoopWiring, process: RunnerProcess) -> None:
         seen.append(process.host.registered())
 
     monkeypatch.setattr(LoopWiring, "tick_once", tick_once)
@@ -535,8 +534,7 @@ def test_add_refuses_the_name_a_retired_file_runner_still_holds(tmp_path: Path, 
 def _drive_tick(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     seen: list[str] = []
 
-    def tick_once(_wiring: LoopWiring, *, process: RunnerProcess | None = None) -> None:
-        assert process is not None
+    def tick_once(_wiring: LoopWiring, process: RunnerProcess) -> None:
         seen.append(process.runner_id)
 
     monkeypatch.setattr(LoopWiring, "tick_once", tick_once)
@@ -750,8 +748,7 @@ def test_tick_on_a_stopped_host_drives_a_runner_only_the_store_hosts(
     assert _run(fake_init_hub, "add", "r2", "--project", "default", "--dir", str(root)).exit_code == 0
     seen: list[tuple[str, str]] = []
 
-    def tick_once(_wiring: LoopWiring, *, process: RunnerProcess | None = None) -> None:
-        assert process is not None
+    def tick_once(_wiring: LoopWiring, process: RunnerProcess) -> None:
         seen.append((process.runner_id, process.config.name))
 
     monkeypatch.setattr(LoopWiring, "tick_once", tick_once)
@@ -768,9 +765,10 @@ def _serving(root: Path, hub: FakeInitHub) -> Generator[HostConfig]:
     config = load_host_config(root)
     ready, halted = seed_runners(config, clock=SystemClock())
     assert not halted
-    graph = build_host_process(config, ready)
+    opened = open_host(config, ready)
+    graph = opened.host
     served = replace(ready[0].config, port=0)
-    hosted = build_hosted_app(served, host=graph, host_config=config, source=StoreHostedRunners.over(config, graph))
+    hosted = build_hosted_app(served, opened, host_config=config, source=StoreHostedRunners.over(config, graph))
     with hub.host_clients(config.hub_url) as host_clients:
         hosted.app.state.hosted_runners = build_running_host_runner_service(
             config, graph, host_clients(config.host_token.value)
@@ -787,7 +785,7 @@ def _serving(root: Path, hub: FakeInitHub) -> Generator[HostConfig]:
             thread.join(timeout=10.0)
             Uds(served.socket_path).unlink()
             hosted.close()
-            graph.close()
+            opened.close()
 
 
 def test_add_on_a_running_host_goes_through_its_route_and_lists_the_runner_starting(

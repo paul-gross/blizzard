@@ -23,7 +23,7 @@ from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.throttle.gate import ThrottleGate
 from blizzard.runner.throttle.pause import USAGE_LIMIT_PARK_CAUSE, PausePark
 from blizzard.runner.throttle.release import releases_between_steps, releases_usage_limited
-from tests.support.composed_host import build_host_process
+from tests.support.composed_host import build_host_process, open_host
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.runner_fakes import make_store, record_usage
@@ -40,8 +40,9 @@ def test_live_budget_agrees_with_host_and_runner_status(tmp_path: Path, monkeypa
     )
     ready, halted = seed_runners(config, clock=SystemClock())
     assert not halted
-    host = build_host_process(config, ready)
-    hosted = build_hosted_app(config.host_view(), host)
+    opened = open_host(config, ready)
+    host = opened.host
+    hosted = build_hosted_app(config.host_view(), opened)
     runner = host.runners[0]
     reader = runner.settings_reader
     assert reader is not None
@@ -83,7 +84,7 @@ def test_live_budget_agrees_with_host_and_runner_status(tmp_path: Path, monkeypa
         assert answers == [False, True]
     finally:
         hosted.close()
-        host.close()
+        opened.close()
 
 
 def test_status_retains_pass_gate_through_pending_and_failed_rebuild(
@@ -99,8 +100,9 @@ def test_status_retains_pass_gate_through_pending_and_failed_rebuild(
     )
     ready, halted = seed_runners(config, clock=SystemClock())
     assert not halted
-    host = build_host_process(config, ready)
-    hosted = build_hosted_app(config.host_view(), host)
+    opened = open_host(config, ready)
+    host = opened.host
+    hosted = build_hosted_app(config.host_view(), opened)
     runner = host.runners[0]
     reader = runner.settings_reader
     assert reader is not None
@@ -156,7 +158,7 @@ def test_status_retains_pass_gate_through_pending_and_failed_rebuild(
         assert observations == ["admitting"]
     finally:
         hosted.close()
-        host.close()
+        opened.close()
 
 
 def test_live_spend_windows_reach_ceiling_and_budget_consumers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
