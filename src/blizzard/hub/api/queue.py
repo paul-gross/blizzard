@@ -302,11 +302,10 @@ def _next_claim_passed(
 @dto
 @dataclass(frozen=True)
 class NextClaim:
-    """One runner's next claim, explained (:func:`explain_next_claim`) over every served ready chunk — the candidates a
-    pass-over peek reads, and a superset of a hold peek's — so one read feeds every walk. ``explanation`` assumes the
-    runner prepares at the repository targets a peek names; ``without_targets`` is the same walk for a runner that
-    prepares at none, skipping the chunks it is never offered, over the same reads and one read of the served chunks'
-    targets. No claim bar is applied."""
+    """One runner's next claim, explained (:func:`explain_next_claim`) over every served ready chunk, a superset of a
+    hold peek's candidates, so one read feeds every walk. ``explanation`` assumes the runner prepares at the repository
+    targets a peek names; ``without_targets`` is the same walk for a runner that prepares at none, skipping the chunks
+    it is never offered. No claim bar is applied."""
 
     explanation: ClaimExplanation
     without_targets: ClaimExplanation

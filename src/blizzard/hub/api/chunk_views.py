@@ -147,7 +147,7 @@ _LIVE_HOLDERS_NOT_INJECTED: Final = _LiveHoldersNotInjected.TOKEN
 def blocked_view(unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedView | None:
     """A derived marking's wire wrapping — the one home every caller of
     :func:`~blizzard.hub.domain.chunk.dependencies.derive_blocked_prerequisites` reaches through,
-    listing routes and ``ChunkView`` alike. Takes the dependent's whole unmet set, in
+    queue rows and chunk views alike. Takes the dependent's whole unmet set, in
     declared order, and maps :meth:`BlockedMarking.of`'s marking onto the wire."""
     marking = BlockedMarking.of(unmet_prerequisite_chunk_ids)
     if marking is None:
@@ -255,9 +255,8 @@ class ChunkViewAssembler:
         narrowed, batched reads. ``facts`` holds the page's already-loaded facts and ``names`` is primed here."""
         page_ids = [c.chunk_id for c in chunks]
         routes = self._route.routes_for(page_ids)
-        # The dependency edges join the facts at this call site, not inside a store
-        # (``bzh:dependency-inversion``): the page dependents' standing edges, with their
-        # prerequisites' statuses read by id when the prerequisite is off the page.
+        # The dependency edges join the facts here, not inside a store (``bzh:dependency-inversion``);
+        # an off-page prerequisite's status is read by id.
         edges = self._dependencies.standing_edges_for_dependents(page_ids)
         statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
         off_page = sorted({e.prerequisite_chunk_id for e in edges if e.prerequisite_chunk_id not in statuses})
@@ -284,8 +283,7 @@ class ChunkViewAssembler:
                 *(m.to_graph_id for m in chunk_facts.migrations),
             ]
         )
-        # Unlike the fleet-wide status/holder reads above, delivery belongs only to
-        # rendered rows: one narrowed, batched read over this page's ids.
+        # Delivery belongs only to rendered rows: one narrowed, batched read over this page's ids.
         delivery_sources = self._artifacts.delivery_sources_for([chunk.chunk_id for chunk in chunks])
         declarations = delivery_declarations_for(
             chunks,
@@ -419,12 +417,10 @@ class ChunkViewAssembler:
     def branch_links(
         self, chunk: Chunk, rows: list[StoredArtifact]
     ) -> Callable[[StoredArtifact, GitCommitArtifact], str | None]:
-        """Each git-commit artifact's branch link: the forge ``tree`` address on the repository
-        record its repository resolves to by delivery's rules — among the records the chunk's
-        project links, standing at the chunk's mint time, on its forge's web origin. ``None`` for a repository
-        resolving to no one record (unknown, ambiguous, or not linked); a chunk with no project links
-        none. One read of the links, one of the records and one of the linked records' forges serve every commit of
-        the view, and none at all when the view carries no commit."""
+        """Each git-commit artifact's branch link: the forge ``tree`` address on the record its repository resolves to
+        by delivery's rules, among those the chunk's project links, standing at its mint time. ``None`` when it resolves
+        to no one record (unknown, ambiguous, or not linked). One read each of the links, records and linked forges
+        serves every commit of the view, and none is made when it carries no commit."""
         if not any(isinstance(row.artifact, GitCommitArtifact) for row in rows):
             return lambda _row, _commit: None
         project_id = chunk.project_id
@@ -452,12 +448,8 @@ class ChunkViewAssembler:
 
 @dataclass(frozen=True)
 class ChunkView:
-    """One chunk read — the row, the facts every derived value comes from
-    (``bzh:facts-not-status``), and the graph resolver the read shares. Built by
-    :class:`ChunkViewAssembler`, whose methods make every read it does not carry.
-
-    A whole-fleet read hands :meth:`ChunkViewAssembler.page` one :class:`GraphNames` for every chunk, so the
-    graphs a fleet shares are resolved once across the list rather than once per row."""
+    """One chunk read — the row, the facts every derived value comes from (``bzh:facts-not-status``), and the graph
+    resolver the read shares. Built by :class:`ChunkViewAssembler`, whose methods make every read it does not carry."""
 
     assembler: ChunkViewAssembler
     chunk: Chunk
@@ -466,8 +458,7 @@ class ChunkView:
     route: Route | None | _RouteNotInjected = _ROUTE_NOT_INJECTED
     #: Every pointer's live holder — the caller's own already-resolved map.
     live_holders: dict[WorkRef, str] | _LiveHoldersNotInjected = _LIVE_HOLDERS_NOT_INJECTED
-    #: The chunk's blocked marking — derived by :meth:`ChunkViewAssembler.page` or the caller; ``None``
-    #: when neither derived it.
+    #: The chunk's derived blocked marking; ``None`` when the view's builder derived none.
     blocked: BlockedView | None = None
     #: The chunk's standing-edge neighborhood — the caller's own
     #: already-derived value, the same shape ``blocked`` takes.
