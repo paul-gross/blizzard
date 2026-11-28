@@ -187,7 +187,7 @@ _DOMAIN_WIRING_REACH = ("blizzard.hub.domain.", "blizzard.foundation.", "blizzar
 def wiring_boundary_violations(source_root: Path, *, roots: frozenset[Path] = PROCESS_ROOTS) -> list[str]:
     """Wiring modules (those importing the registry interface) that reach another area's wiring or an adapter; domain
     wiring reaching beyond the domain, the foundation and the tenancy vocabulary; and runner area wiring reaching
-    beyond the registry interface and its own package. An adapter package's own wiring may import its ``internal/``;
+    beyond the registry interface and its own package, except the process command wiring's clock role. An adapter package's own wiring may import its ``internal/``;
     the process ``roots`` are exempt."""
     problems: list[str] = []
     for path in sorted(source_root.rglob("*.py")):
@@ -222,6 +222,7 @@ def wiring_boundary_violations(source_root: Path, *, roots: frozenset[Path] = PR
                 relative.parts[0] == "runner"
                 and _is_wiring(_module(relative))
                 and name != _INTERFACE
+                and not (relative == Path("runner/process/wiring.py") and name == "blizzard.foundation.clock")
                 and name != own_area
                 and not name.startswith(f"{own_area}.")
                 and name.rpartition(".")[0] not in imports

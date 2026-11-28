@@ -6,8 +6,8 @@ import click
 
 from blizzard.runner.cli.artifact import artifact_create
 from blizzard.runner.cli.container_command import ContainerWorkerCommand
-from blizzard.runner.cli.wiring import WorkerHook, WorkerOperation
 from blizzard.runner.cli.worker_call import WorkerCall, WorkerPolicy, WorkerSession
+from blizzard.runner.cli.worker_dependencies import WorkerHook, WorkerOperation
 
 
 def send_heartbeat(session: WorkerSession) -> None:

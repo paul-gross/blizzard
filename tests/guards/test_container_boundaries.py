@@ -166,6 +166,22 @@ def test_the_wiring_gate_catches_a_runner_area_wiring_reaching_outside_its_packa
     ]
 
 
+def test_process_command_wiring_may_use_the_foundation_clock_role(tmp_path: Path) -> None:
+    root = _plant(
+        tmp_path,
+        {
+            "runner/process/wiring.py": (
+                "from blizzard.foundation.registry.interface import Registry\n"
+                "from blizzard.foundation.clock import IMonotonicClock\n"
+                "from blizzard.runner.leases.takeover import TakeoverService\n"
+            )
+        },
+    )
+    assert wiring_boundary_violations(root) == [
+        "runner/process/wiring.py: imports blizzard.runner.leases.takeover from outside its own package"
+    ]
+
+
 def test_the_wiring_gate_admits_an_adapter_wiring_its_own_internal_and_a_process_root(tmp_path: Path) -> None:
     root = _plant(
         tmp_path,

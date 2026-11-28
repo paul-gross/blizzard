@@ -16,8 +16,8 @@ from blizzard.foundation.roles import dto
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.cli.answer import decode_answer
 from blizzard.runner.cli.container_command import ContainerWorkerCommand
-from blizzard.runner.cli.wiring import WorkerOperation
 from blizzard.runner.cli.worker_call import WorkerCall, WorkerPolicy
+from blizzard.runner.cli.worker_dependencies import WorkerOperation
 from blizzard.runner.lifecycle.artifacts import carries_content, read_only_reason
 from blizzard.wire.attachments import AttachmentResponse, StagedAttachment
 from blizzard.wire.envelope import WorkerArtifact
