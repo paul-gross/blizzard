@@ -1397,9 +1397,9 @@ def _concrete_runner_store_namers(src_root: Path) -> list[str]:
 
 def test_the_host_composition_is_the_only_code_naming_a_concrete_runner_store_adapter() -> None:
     """AC4: every concrete ``store/internal/`` adapter is named by the host's composition modules
-    (``src/blizzard/runner/composition.py``, ``src/blizzard/runner/host_root.py``) or the adapter package's own
-    ``src/blizzard/runner/store/wiring.py``, and nowhere else under ``src/`` — every other collaborator takes a Protocol seam or
-    the ``RunnerStores`` bundle the composition builds."""
+    (``src/blizzard/runner/composition.py``, ``src/blizzard/runner/host_root.py``) or the adapter package's own wiring
+    module, and nowhere else under ``src/`` — every other collaborator takes a Protocol seam or the ``RunnerStores``
+    bundle the composition builds."""
     violations = _concrete_runner_store_namers(_SRC_DIR)
     assert not violations, f"I — only the host's composition may name a concrete runner-store adapter: {violations}"
 
