@@ -1357,32 +1357,51 @@ def test_sqlalchemy_is_imported_only_from_the_store_seam() -> None:
     assert not violations, f"H — sqlalchemy must stay inside the store seam: {violations}"
 
 
-def _runner_store_adapter_names() -> set[str]:
-    names: set[str] = set()
-    for path in sorted(_RUNNER_STORE_INTERNAL_DIR.glob("*.py")):
+#: The runner host's composition modules: the composition that composes each runner, and the host root over it.
+_RUNNER_HOST_COMPOSITION = frozenset({_RUNNER_COMPOSITION_FILE, _RUNNER_DIR / "host_root.py"})
+_REGISTRY_INTERFACE_MODULE = "blizzard.foundation.registry.interface"
+
+
+def _is_runner_area_wiring(path: Path, runner_dir: Path) -> bool:
+    """A runner area's wiring module: a module named ``wiring`` under ``runner_dir`` that declares through the
+    registry interface."""
+    if path.name != "wiring.py" or not path.is_relative_to(runner_dir):
+        return False
+    tree = ast.parse(path.read_text(), filename=str(path))
+    return any(
+        isinstance(node, ast.ImportFrom) and node.module == _REGISTRY_INTERFACE_MODULE for node in ast.walk(tree)
+    )
+
+
+def _concrete_runner_store_namers(src_root: Path) -> list[str]:
+    runner_dir = src_root / "runner"
+    store_dir = runner_dir / "store"
+    internal = store_dir / "internal"
+    admitted = {src_root / each.relative_to(_SRC_DIR) for each in _RUNNER_HOST_COMPOSITION}
+    adapters: set[str] = set()
+    for path in sorted(internal.glob("*.py")):
         tree = ast.parse(path.read_text(), filename=str(path))
-        for node in tree.body:
-            if isinstance(node, ast.ClassDef) and node.name.endswith("Store"):
-                names.add(node.name)
-    return names
-
-
-def test_composition_is_the_only_module_naming_a_concrete_runner_store_adapter() -> None:
-    """AC4: every concrete ``store/internal/`` adapter is named by
-    ``src/blizzard/runner/composition.py`` and nowhere else under ``src/`` — every other collaborator
-    takes a Protocol seam or the ``RunnerStores`` bundle it builds."""
-    adapters = _runner_store_adapter_names()
+        adapters |= {node.name for node in tree.body if isinstance(node, ast.ClassDef) and node.name.endswith("Store")}
     violations: list[str] = []
-    for path in _production_files(_SRC_DIR):
-        if path.is_relative_to(_RUNNER_STORE_INTERNAL_DIR) or path == _RUNNER_COMPOSITION_FILE:
+    for path in _production_files(src_root):
+        if path.is_relative_to(internal) or path in admitted or path == store_dir / "wiring.py":
             continue
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
                 hit = adapters & {alias.name for alias in node.names}
                 if hit:
-                    violations.append(f"{path.relative_to(_REPO_ROOT)} imports {sorted(hit)}")
-    assert not violations, f"I — only runner/composition.py may name a concrete runner-store adapter: {violations}"
+                    violations.append(f"{path.relative_to(src_root)} imports {sorted(hit)}")
+    return violations
+
+
+def test_the_host_composition_is_the_only_code_naming_a_concrete_runner_store_adapter() -> None:
+    """AC4: every concrete ``store/internal/`` adapter is named by the host's composition modules
+    (``src/blizzard/runner/composition.py``, ``src/blizzard/runner/host_root.py``) or the adapter package's own
+    ``src/blizzard/runner/store/wiring.py``, and nowhere else under ``src/`` — every other collaborator takes a Protocol seam or
+    the ``RunnerStores`` bundle the composition builds."""
+    violations = _concrete_runner_store_namers(_SRC_DIR)
+    assert not violations, f"I — only the host's composition may name a concrete runner-store adapter: {violations}"
 
 
 #: The runner's process-graph collaborators, built once for each runner its composition composes.
@@ -1400,18 +1419,75 @@ def _called_names(tree: ast.AST) -> list[tuple[str, int]]:
     return calls
 
 
-def test_composition_is_the_only_module_constructing_the_runner_process_graph_collaborators() -> None:
-    """I: the process-graph constructors are called from ``src/blizzard/runner/composition.py`` and nowhere
-    else under ``src/`` — every other root takes the one ``RunnerProcess`` graph."""
+def _runner_graph_constructions(src_root: Path) -> list[str]:
+    runner_dir = src_root / "runner"
+    admitted = {src_root / each.relative_to(_SRC_DIR) for each in _RUNNER_HOST_COMPOSITION}
     violations: list[str] = []
-    for path in _production_files(_SRC_DIR):
-        if path == _RUNNER_COMPOSITION_FILE:
+    for path in _production_files(src_root):
+        if path in admitted or _is_runner_area_wiring(path, runner_dir):
             continue
         tree = ast.parse(path.read_text(), filename=str(path))
         for name, lineno in _called_names(tree):
             if name in _RUNNER_GRAPH_CONSTRUCTORS:
-                violations.append(f"{path.relative_to(_REPO_ROOT)}:{lineno} calls {name}")
-    assert not violations, f"I — only runner/composition.py may construct the runner process graph: {violations}"
+                violations.append(f"{path.relative_to(src_root)}:{lineno} calls {name}")
+    return violations
+
+
+def test_the_host_composition_is_the_only_code_constructing_the_runner_process_graph_collaborators() -> None:
+    """I: the process-graph constructors are called from the host's composition modules or a runner area's
+    wiring module, and nowhere else under ``src/`` — every other root takes the one ``RunnerProcess`` graph."""
+    violations = _runner_graph_constructions(_SRC_DIR)
+    assert not violations, f"I — only the host's composition may construct the runner process graph: {violations}"
+
+
+def _plant_runner_tree(tmp_path: Path, files: Mapping[str, str]) -> Path:
+    """A planted ``blizzard`` source tree holding a runner-store adapter and each of ``files``, keyed by path under
+    ``blizzard/``."""
+    root = tmp_path / "blizzard"
+    planted = {"runner/store/internal/pause_store.py": "class PauseStore:\n    pass\n", **files}
+    for relative, text in planted.items():
+        (root / relative).parent.mkdir(parents=True, exist_ok=True)
+        (root / relative).write_text(text)
+    return root
+
+
+_NAMES_AN_ADAPTER = "from blizzard.runner.store.internal.pause_store import PauseStore\n"
+_BUILDS_STORES = "from blizzard.runner.stores import build_stores\nstores = build_stores()\n"
+_DECLARES = "from blizzard.foundation.registry.interface import Registry\n"
+
+
+@pytest.mark.parametrize(
+    ("relative", "text", "fails"),
+    [
+        ("runner/loop/steps.py", _NAMES_AN_ADAPTER, True),
+        ("runner/throttle/wiring.py", _DECLARES + _NAMES_AN_ADAPTER, True),
+        ("runner/composition.py", _NAMES_AN_ADAPTER, False),
+        ("runner/host_root.py", _NAMES_AN_ADAPTER, False),
+        ("runner/store/wiring.py", _DECLARES + _NAMES_AN_ADAPTER, False),
+    ],
+)
+def test_the_adapter_naming_guard_judges_each_planted_module(
+    tmp_path: Path, relative: str, text: str, fails: bool
+) -> None:
+    root = _plant_runner_tree(tmp_path, {relative: text})
+    assert bool(_concrete_runner_store_namers(root)) is fails
+
+
+@pytest.mark.parametrize(
+    ("relative", "text", "fails"),
+    [
+        ("runner/loop/steps.py", _BUILDS_STORES, True),
+        ("runner/harness/wiring.py", _BUILDS_STORES, True),
+        ("runner/composition.py", _BUILDS_STORES, False),
+        ("runner/host_root.py", _BUILDS_STORES, False),
+        ("runner/store/wiring.py", _DECLARES + _BUILDS_STORES, False),
+    ],
+)
+def test_the_graph_construction_guard_judges_each_planted_module(
+    tmp_path: Path, relative: str, text: str, fails: bool
+) -> None:
+    root = _plant_runner_tree(tmp_path, {relative: text})
+    assert bool(_runner_graph_constructions(root)) is fails
 
 
 # The one roster of composition roots: modules that wire adapters, and so may import any
@@ -1486,6 +1562,18 @@ def test_only_the_composition_roots_import_the_runner_composition_module() -> No
     assert not violations, (
         f"D5 — blizzard.runner.composition must only be imported at its composition roots: {violations}"
     )
+
+
+def test_the_composition_import_guard_fails_a_planted_import_outside_the_roots(tmp_path: Path) -> None:
+    root = tmp_path / "src" / "blizzard"
+    importer = "from blizzard.runner.composition import HostProcess\n"
+    for relative in ("runner/loop/steps.py", "runner/host_root.py"):
+        (root / relative).parent.mkdir(parents=True, exist_ok=True)
+        (root / relative).write_text(importer)
+    exempt = frozenset({root / "runner" / "host_root.py"})
+    assert _runner_composition_imports(root, exempt=exempt, src_root=root) == [
+        "src/blizzard/runner/loop/steps.py:1 imports blizzard.runner.composition"
+    ]
 
 
 def _write_session_store_accesses(root: Path, *, exempt: frozenset[Path]) -> list[str]:

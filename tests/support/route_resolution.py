@@ -3,7 +3,8 @@
 A route reaches the container through each ``inject_sync`` callable in its dependency tree — the endpoint or a
 dependency — whose ``FromDishka`` parameters name the types it resolves. A route whose tree admits a tenant
 (:func:`~blizzard.hub.api.auth_session.tenant_request`) resolves them through a request scope beneath that tenant's
-scope; every other route resolves them through the process scope. Each helper returns the problems it finds."""
+scope; every other route resolves them through the process scope. A process whose routes admit no tenant resolves every dependency from its process scope. Each helper returns the
+problems it finds."""
 
 from __future__ import annotations
 
@@ -68,6 +69,18 @@ def route_dependencies(app: FastAPI) -> list[RouteDependency]:
                     seen.add(dependency)
                     found.append(RouteDependency(name, tenant, dependency))
     return found
+
+
+def unresolved_process_dependencies(dependencies: list[RouteDependency], process: OwnedChild) -> list[str]:
+    """Each route dependency that does not resolve from ``process``, for a process whose routes admit no tenant —
+    the runner host's."""
+    problems: list[str] = []
+    for each in dependencies:
+        try:
+            process.resolver.get(each.dependency)
+        except Exception as error:  # every refusal is a finding this gate reports
+            problems.append(f"{each.route}: {each.dependency.__qualname__} in the process: {type(error).__name__}")
+    return problems
 
 
 def unresolved_route_dependencies(dependencies: list[RouteDependency], process: OwnedChild) -> list[str]:
