@@ -15,7 +15,9 @@ from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.foundation.roles import dto
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.cli.answer import decode_answer
-from blizzard.runner.cli.worker_call import WorkerCall
+from blizzard.runner.cli.container_command import ContainerWorkerCommand
+from blizzard.runner.cli.worker_call import WorkerCall, WorkerPolicy
+from blizzard.runner.cli.worker_dependencies import WorkerOperation
 from blizzard.runner.lifecycle.artifacts import carries_content, read_only_reason
 from blizzard.wire.attachments import AttachmentResponse, StagedAttachment
 from blizzard.wire.envelope import WorkerArtifact
@@ -73,7 +75,12 @@ def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[dict[str, o
     return cast("list[dict[str, object]]", raw)
 
 
-@artifact_group.command("list")
+@artifact_group.command(
+    "list",
+    cls=ContainerWorkerCommand,
+    collaborators={"operation": WorkerOperation},
+    policy=WorkerPolicy("artifact list"),
+)
 @click.option(
     "--content",
     "content",
@@ -99,13 +106,13 @@ def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[dict[str, o
     "`epoch`. Graph and system scope keep no earlier entries, so pairing this with `--scope graph`/`--scope "
     "system` is refused.",
 )
-def artifact_list(content: bool, scope: str | None, all_epochs: bool) -> None:
+def artifact_list(content: bool, scope: str | None, all_epochs: bool, operation: WorkerOperation) -> None:
     """Worker: list artifacts as kind-discriminated JSON — the newest entry of each node-scope series,
     the graph mint's declarations, and blizzard's system artifacts. ``--scope`` narrows to one scope,
     ``--all-epochs`` adds earlier entries, and ``--content`` includes the otherwise elided content.
     Also includes this node-step's own staged submissions, marked ``"staged": true``; published
     entries carry ``"staged": false``."""
-    worker = WorkerCall.of("artifact list")
+    worker = operation.call()
     params: dict[str, str] = {}
     if scope:
         params["scope"] = scope
@@ -148,7 +155,9 @@ def _is_not_found(exc: click.ClickException) -> bool:
     return getattr(cause.response, "status_code", None) == HTTPStatus.NOT_FOUND
 
 
-@artifact_group.command("get")
+@artifact_group.command(
+    "get", cls=ContainerWorkerCommand, collaborators={"operation": WorkerOperation}, policy=WorkerPolicy("artifact get")
+)
 @click.argument("name_arg", metavar="[NAME]", required=False, default=None)
 @click.option(
     "--name",
@@ -192,6 +201,7 @@ def _is_not_found(exc: click.ClickException) -> bool:
     help="Print the raw asset text to stdout instead of JSON (errors on a git-commit artifact).",
 )
 def artifact_get(
+    operation: WorkerOperation,
     name_arg: str | None,
     name_opt: str | None,
     node: str | None,
@@ -208,7 +218,7 @@ def artifact_get(
         raise click.ClickException("artifact get: NAME given both positionally and via --name — pick one")
     if not name:
         raise click.ClickException("artifact get: NAME is required, positionally or via --name")
-    worker = WorkerCall.of("artifact get")
+    worker = operation.call()
     params: dict[str, str] = {}
     if node:
         params["node"] = node
@@ -250,7 +260,12 @@ def artifact_get(
     click.echo(artifact.content or "", nl=False)
 
 
-@artifact_group.command("create")
+@artifact_group.command(
+    "create",
+    cls=ContainerWorkerCommand,
+    collaborators={"operation": WorkerOperation},
+    policy=WorkerPolicy("artifact create"),
+)
 @click.option("--name", required=True, help="The `produces:` name this content is submitted for.")
 @click.option(
     "--scope",
@@ -259,7 +274,7 @@ def artifact_get(
     default=None,
     help="Always `node` — `graph` and `system` are read-only and refused.",
 )
-def artifact_create(name: str, scope: str | None) -> None:
+def artifact_create(name: str, scope: str | None, operation: WorkerOperation) -> None:
     """Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node
     scope only. A submission *stages* the content, published into the envelope only on completion
     — read it back with ``artifact staged``. Empty stdin is refused locally. Content the hub's
@@ -269,7 +284,7 @@ def artifact_create(name: str, scope: str | None) -> None:
     delivery still judges it. Any refusal exits non-zero rather than silently losing the
     submission."""
     _refuse_read_only_scope("create", scope)
-    worker = WorkerCall.of("artifact create")
+    worker = operation.call()
     content = click.get_text_stream("stdin").read()
     if not content:
         raise click.ClickException(
@@ -286,7 +301,12 @@ def artifact_create(name: str, scope: str | None) -> None:
     click.echo(f"recorded {body.name!r} ({body.bytes} bytes)")
 
 
-@artifact_group.command("staged")
+@artifact_group.command(
+    "staged",
+    cls=ContainerWorkerCommand,
+    collaborators={"operation": WorkerOperation},
+    policy=WorkerPolicy("artifact staged"),
+)
 @click.option(
     "--content",
     "content",
@@ -301,11 +321,11 @@ def artifact_create(name: str, scope: str | None) -> None:
     default=None,
     help="Always `node` — `graph` and `system` hold no staged submission and are refused.",
 )
-def artifact_staged(content: bool, scope: str | None) -> None:
+def artifact_staged(content: bool, scope: str | None, operation: WorkerOperation) -> None:
     """Worker: list this node-step's own staged (not-yet-published) submissions, node scope only.
     A fresh ``artifact create`` shows up here immediately; ``--content`` gives the full text."""
     _refuse_read_only_scope("staged", scope)
-    worker = WorkerCall.of("artifact staged")
+    worker = operation.call()
     resp = worker.get(worker.leased("attachments"), failure="could not read the staged artifacts")
     _, staged = decode_answer(
         resp, TypeAdapter(list[StagedAttachment]), verb="artifact staged", where=worker.runner_url
@@ -316,7 +336,12 @@ def artifact_staged(content: bool, scope: str | None) -> None:
     click.echo(json.dumps([{"name": a.name, "bytes": len(a.content.encode("utf-8"))} for a in staged]))
 
 
-@artifact_group.command("commit")
+@artifact_group.command(
+    "commit",
+    cls=ContainerWorkerCommand,
+    collaborators={"operation": WorkerOperation},
+    policy=WorkerPolicy("artifact commit"),
+)
 @click.option(
     "--env",
     "environment_id",
@@ -344,12 +369,14 @@ def artifact_staged(content: bool, scope: str | None) -> None:
     default=None,
     help="Always `node` — `graph` and `system` are read-only and refused.",
 )
-def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_sha: str, scope: str | None) -> None:
+def artifact_commit(
+    environment_id: str | None, repo: str, branch: str, commit_sha: str, scope: str | None, operation: WorkerOperation
+) -> None:
     """Worker: durably declare a git-commit artifact for REPO. Carries the ``git_commit``
     kind only — an asset is declared through ``artifact create``. Node scope only. Echoes a
     confirmation naming REPO, BRANCH, and the sha on success."""
     _refuse_read_only_scope("commit", scope)
-    worker = WorkerCall.of("artifact commit")
+    worker = operation.call()
     body: dict[str, str] = {"repo": repo, "branch": branch, "commit": commit_sha}
     if environment_id is not None:
         body["environment_id"] = environment_id

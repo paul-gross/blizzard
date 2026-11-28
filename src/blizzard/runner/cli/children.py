@@ -10,11 +10,10 @@ import click
 from blizzard.cli.collaborators import CliCollaborators
 from blizzard.runner.harness.binding_selection import IVersionProbe
 from blizzard.runner.harness.internal.version_probe import VersionProbe
-from blizzard.runner.harness.opencode.compatibility.loopback import ILoopbackTransport, UrllibLoopbackTransport
-from blizzard.runner.harness.opencode_v2.transport import IServiceTransport, UrllibServiceTransport
+from blizzard.runner.harness.opencode.compatibility.loopback import ILoopbackTransport
+from blizzard.runner.harness.opencode_v2.transport import IServiceTransport
 from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.process.child_processes import IChildProcesses
-from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 
 _PIN = "blizzard.runner.cli.children"
 
@@ -40,15 +39,24 @@ class RunnerCliCollaborators(CliCollaborators):
         return pinned
 
     @classmethod
+    def provided(cls, ctx: click.Context) -> RunnerCliCollaborators | None:
+        """The supplied or already pinned carrier, without constructing production defaults."""
+        return ctx.meta.get(_PIN) or ctx.find_object(cls)
+
+    @classmethod
     def extending(cls, shared: CliCollaborators) -> RunnerCliCollaborators:
+        from blizzard.runner.harness.opencode.compatibility.wiring import loopback_transport
+        from blizzard.runner.harness.opencode_v2.transport_wiring import service_transport
+        from blizzard.runner.process.wiring import child_processes
+
         return cls(
             client_factory=shared.client_factory,
             clock=shared.clock,
             wall_clock=shared.wall_clock,
             monotonic_clock=shared.monotonic_clock,
-            children=SubprocessChildProcesses(shared.monotonic_clock),
-            loopback=UrllibLoopbackTransport(),
-            service=UrllibServiceTransport(),
+            children=child_processes(shared.monotonic_clock),
+            loopback=loopback_transport(),
+            service=service_transport(),
         )
 
 

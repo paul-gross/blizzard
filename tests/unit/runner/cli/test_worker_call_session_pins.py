@@ -14,7 +14,7 @@ from blizzard.foundation import cli_spans
 from blizzard.foundation.clock import SystemClock, SystemMonotonicClock
 from blizzard.foundation.otlp_destination import TRACES_PATH
 from blizzard.foundation.span_clock import Clock
-from blizzard.runner.cli.worker_call import LEASE_TOKEN_HEADER, WorkerCall, WorkerSession
+from blizzard.runner.cli.worker_call import LEASE_TOKEN_HEADER, WorkerCall, WorkerPolicy, WorkerSession
 from tests.support.loaded_modules import loaded_after_running
 from tests.support.worker_http import StubClient
 
@@ -214,8 +214,8 @@ def test_a_hook_missing_either_half_of_its_identity_skips_and_says_so(
     for key, value in present.items():
         monkeypatch.setenv(key, value)
 
-    with _runner_context():
-        assert WorkerCall.hook("heartbeat") is None
+    with _runner_context() as ctx:
+        assert WorkerCall.select(WorkerSession.from_context(ctx), WorkerPolicy("heartbeat", soft=True)) is None
     assert "heartbeat: no BLIZZARD_LEASE_ID/BLIZZARD_RUNNER_URL in the environment; skipping" in capsys.readouterr().err
 
 
@@ -223,8 +223,8 @@ def test_a_hook_with_both_halves_is_the_bound_identity(monkeypatch: pytest.Monke
     monkeypatch.setenv("BLIZZARD_LEASE_ID", "lease_9")
     monkeypatch.setenv("BLIZZARD_RUNNER_URL", "http://runner.local:8431")
 
-    with _runner_context():
-        call = WorkerCall.hook("heartbeat", traced=False)
+    with _runner_context() as ctx:
+        call = WorkerCall.select(WorkerSession.from_context(ctx), WorkerPolicy("heartbeat", soft=True, traced=False))
 
     assert call is not None
     assert (call.verb, call.runner_url, call.lease_id) == ("heartbeat", "http://runner.local:8431", "lease_9")
@@ -248,11 +248,8 @@ def test_a_worker_call_verb_under_a_sampled_traceparent_loads_no_opentelemetry()
 
 
 def test_a_worker_call_outside_a_runner_invocation_fails_rather_than_building_a_session() -> None:
-    with pytest.raises(RuntimeError, match="no worker session"):
-        WorkerSession.current()
-
-    with click.Context(click.Command("probe")), pytest.raises(RuntimeError, match="no worker session"):
-        WorkerSession.current()
+    with click.Context(click.Command("probe")) as ctx, pytest.raises(RuntimeError, match="no worker session"):
+        WorkerSession.from_context(ctx)
 
 
 def test_the_identity_comes_from_the_sessions_environ_not_the_process_environment(
@@ -266,10 +263,12 @@ def test_the_identity_comes_from_the_sessions_environ_not_the_process_environmen
         "BLIZZARD_LEASE_TOKEN": "tok_9",
     }
 
-    with _runner_context(environ):
-        built = WorkerCall.of("artifact list")
-        hooked = WorkerCall.hook("heartbeat", traced=False)
+    with _runner_context(environ) as ctx:
+        session = WorkerSession.from_context(ctx)
+        built = WorkerCall.select(session, WorkerPolicy("artifact list"))
+        hooked = WorkerCall.select(session, WorkerPolicy("heartbeat", soft=True, traced=False))
 
+    assert built is not None
     assert hooked is not None
     for call in (built, hooked):
         assert (call.runner_url, call.lease_id, call.lease_token) == ("http://runner.local:8431", "lease_9", "tok_9")

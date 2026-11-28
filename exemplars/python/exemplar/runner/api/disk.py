@@ -10,7 +10,7 @@ from __future__ import annotations
 from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, HTTPException, status
 
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.wire.base import WireModel
 from exemplar.runner.disk.probe import DiskUnreadable
 from exemplar.runner.disk.reading import HostDiskReader

@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
-import signal
-import sys
 import tempfile
-import threading
 from functools import partial
 from pathlib import Path
 
@@ -15,7 +12,6 @@ import click
 
 from blizzard.foundation.clock import IMonotonicClock
 from blizzard.runner.cli.children import RunnerCliCollaborators
-from blizzard.runner.cli.worker import send_heartbeat
 from blizzard.runner.harness.admission import version_admitted
 from blizzard.runner.harness.compatibility import CompatibilityContractError
 from blizzard.runner.harness.opencode.compatibility.attach import LoopbackAttachProxyFactory
@@ -51,22 +47,18 @@ from blizzard.runner.harness.opencode_v2.compatibility.proof import OpenCodeTwoP
 from blizzard.runner.harness.opencode_v2.compatibility.rows import classify_row
 from blizzard.runner.harness.opencode_v2.compatibility.store_migration import StoreMigrationProbe
 from blizzard.runner.harness.opencode_v2.compatibility.subprocess_host import SubprocessProofHost
-from blizzard.runner.harness.opencode_v2.drive import TurnDriver
 from blizzard.runner.harness.opencode_v2.driver import (
     BIND_FAULTS,
     DriverCore,
     ServiceIdentityError,
     ServiceNotRegisteredError,
 )
-from blizzard.runner.harness.opencode_v2.errors import ErrorKind, TurnError
 from blizzard.runner.harness.opencode_v2.registration import (
     RegistrationError,
     ServiceRegistration,
     read_registration,
     registration_path,
 )
-from blizzard.runner.harness.opencode_v2.request import DriveRequestError, take_request
-from blizzard.runner.harness.opencode_v2.result import Outcome, ResultWriter
 from blizzard.runner.harness.opencode_v2.transport import IServiceTransport
 from blizzard.runner.harness.opencode_v2.version import (
     ADMITTED_OPENCODE_V2_RANGE,
@@ -290,57 +282,6 @@ def _registration(path: Path | None, passwords: set[str]) -> ServiceRegistration
     return registration
 
 
-@opencode_group.command("drive")
-@click.option(
-    "--request",
-    "request_path",
-    required=True,
-    type=click.Path(dir_okay=False, path_type=Path),
-    help="The turn's request file, written by the runner; read once, then removed.",
-)
-@click.pass_context
-def opencode_drive(ctx: click.Context, request_path: Path) -> None:
-    """Worker: drive one OpenCode 2 turn on the operator's managed service and print its result.
-
-    The worker entrypoint the OpenCode 2 binding launches for each spawn, resume, judgement, and nudge, not meant to
-    be run by hand; its exit ends the turn. SIGINT interrupts the session tree and ends the turn interrupted."""
-    try:
-        request = take_request(request_path)
-    except DriveRequestError as exc:
-        raise click.ClickException(str(exc)) from exc
-    carrier = RunnerCliCollaborators.of(ctx)
-    environment = dict(os.environ)
-    path = registration_path(environment)
-    try:
-        core = DriverCore(
-            lambda: read_registration(path) if path is not None else None,
-            carrier.service,
-            monotonic_clock=carrier.monotonic_clock,
-        )
-    except BIND_FAULTS as exc:
-        error = TurnError(ErrorKind.SERVICE, f"no OpenCode service to drive the turn on: {exc}")
-        ResultWriter(sys.stdout, request.session_id).finish(Outcome.FAILED, "", (), error)
-        return
-    stop = threading.Event()
-    driver = TurnDriver(
-        core,
-        request,
-        environment,
-        sys.stdout,
-        heartbeat=send_heartbeat,
-        stop=stop,
-        monotonic_clock=carrier.monotonic_clock,
-    )
-
-    def interrupt(signum: int, frame: object) -> None:
-        del signum, frame
-        stop.set()
-        driver.wake.set()
-
-    signal.signal(signal.SIGINT, interrupt)
-    driver.run()
-
-
 def _model_reference(ctx: click.Context, param: click.Parameter, value: str | None) -> ModelReference | None:
     del ctx, param
     if value is None:
@@ -396,4 +337,4 @@ def opencode_attend(ctx: click.Context, session_id: str, model: ModelReference |
         raise click.ClickException(f"cannot run `{binary}`: {exc}") from exc
 
 
-__all__ = ["opencode_attend", "opencode_compatibility", "opencode_drive", "opencode_group"]
+__all__ = ["opencode_attend", "opencode_compatibility", "opencode_group"]

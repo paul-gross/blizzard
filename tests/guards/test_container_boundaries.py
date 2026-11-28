@@ -166,6 +166,22 @@ def test_the_wiring_gate_catches_a_runner_area_wiring_reaching_outside_its_packa
     ]
 
 
+def test_process_command_wiring_may_use_the_foundation_clock_role(tmp_path: Path) -> None:
+    root = _plant(
+        tmp_path,
+        {
+            "runner/process/wiring.py": (
+                "from blizzard.foundation.registry.interface import Registry\n"
+                "from blizzard.foundation.clock import IMonotonicClock\n"
+                "from blizzard.runner.leases.takeover import TakeoverService\n"
+            )
+        },
+    )
+    assert wiring_boundary_violations(root) == [
+        "runner/process/wiring.py: imports blizzard.runner.leases.takeover from outside its own package"
+    ]
+
+
 def test_the_wiring_gate_admits_an_adapter_wiring_its_own_internal_and_a_process_root(tmp_path: Path) -> None:
     root = _plant(
         tmp_path,
@@ -344,10 +360,12 @@ def test_the_area_root_gate_fails_a_registration_planted_in_each_cli_root(tmp_pa
     planted = {
         Path("cli/command_root.py"): "def build(registry):\n    registry.context(port(IRole), lifetime=1)\n",
         Path("hub/cli/command.py"): "def build(registry):\n    registry.factory(build, lifetime=1)\n",
+        Path("runner/cli/container_command.py"): "def build(registry):\n    registry.service(Store, lifetime=1)\n",
     }
     assert set(planted) == set(CLI_ROOTS)
     root = _plant(tmp_path, {str(relative): text for relative, text in planted.items()})
     assert root_registration_violations(root, CLI_ROOTS) == [
         "cli/command_root.py:2: calls .context(...)",
         "hub/cli/command.py:2: calls .factory(...)",
+        "runner/cli/container_command.py:2: calls .service(...)",
     ]

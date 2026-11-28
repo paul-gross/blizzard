@@ -9,9 +9,10 @@ from typing import TYPE_CHECKING
 
 import click
 
-from blizzard.cli.collaborators import CliCollaborators, Client, HTTPError, HTTPStatusError, Response
-from blizzard.cli.operator_trace import exit_code_of
+from blizzard.cli.collaborators import CliCollaborators, Client, ClientFactory, HTTPError, HTTPStatusError, Response
+from blizzard.cli.operator_trace import ITraceHeaders, exit_code_of
 from blizzard.cli.refusal import refusal_of
+from blizzard.foundation.roles import dto
 from blizzard.foundation.trace_ids import DerivedContext, parse_traceparent
 
 if TYPE_CHECKING:
@@ -37,6 +38,18 @@ READ_TIMEOUT = 30.0
 WRITE_TIMEOUT = 5.0
 
 
+@dto
+@dataclass(frozen=True)
+class WorkerPolicy:
+    """Identity and tracing requirements for one worker operation."""
+
+    verb: str
+    lease: bool = True
+    soft: bool = False
+    traced: bool = True
+    skip_elicitation: bool = False
+
+
 class WorkerSession:
     """One worker command's state: the one HTTP client every request and the span post share,
     and the command's span when a trace context was handed down."""
@@ -52,14 +65,15 @@ class WorkerSession:
         self._parent = self._traced_parent()
 
     @classmethod
-    def current(cls) -> WorkerSession:
-        """The session of the command being run. A call made outside a ``runner``-group invocation
-        has none — a programming error, so it fails rather than building one."""
-        ctx = click.get_current_context(silent=True)
-        session = ctx.find_root().meta.get(_SESSION_META_KEY) if ctx is not None else None
+    def from_context(cls, ctx: click.Context) -> WorkerSession:
+        session = ctx.find_root().meta.get(_SESSION_META_KEY)
         if session is None:
-            raise RuntimeError("no worker session: a worker call must run inside a `blizzard runner` invocation")
+            return cls._missing()
         return session
+
+    @staticmethod
+    def _missing() -> WorkerSession:
+        raise RuntimeError("no worker session: a worker call must run inside a `blizzard runner` invocation")
 
     @classmethod
     def begin(
@@ -85,10 +99,13 @@ class WorkerSession:
             return None
         return parent
 
-    def client(self) -> Client:
+    def client(self, factory: ClientFactory | None = None) -> Client:
         if self._client is None:
-            self._client = self._collaborators.client_factory()
+            self._client = (factory or self._collaborators.client_factory)()
         return self._client
+
+    def headers(self) -> dict[str, str]:
+        return {TRACEPARENT_HEADER: self._span.traceparent} if self._span is not None else {}
 
     @property
     def span(self) -> CliSpan | None:
@@ -163,43 +180,45 @@ class WorkerCall:
 
     verb: str
     runner_url: str
-    lease_id: str = ""
-    lease_token: str | None = None
-    session: WorkerSession | None = None
-    traceparent: str | None = None
+    lease_id: str
+    lease_token: str | None
+    session: WorkerSession
+    traceparent: str | None
+    client_factory: ClientFactory | None = None
+    trace_headers: ITraceHeaders | None = None
 
     @classmethod
-    def of(cls, verb: str, *, lease: bool = True) -> WorkerCall:
-        """This worker's identity — a hard error rather than the soft skip :meth:`hook` takes,
-        so a lost read or write reaches the worker rather than passing silently."""
-        environ = WorkerSession.current().environ
-        runner_url = environ.get(ENV_RUNNER_URL)
-        lease_id = environ.get(ENV_LEASE_ID)
-        if not runner_url or (lease and not lease_id):
-            wanted = f"{ENV_LEASE_ID}/{ENV_RUNNER_URL}" if lease else ENV_RUNNER_URL
-            raise click.ClickException(f"{verb}: no {wanted} in the environment")
-        return cls._bound(verb, runner_url, lease_id or "", traced=True)
-
-    @classmethod
-    def hook(cls, verb: str, *, traced: bool = True) -> WorkerCall | None:
-        """The same identity for a worker *hook*, or ``None`` after saying so on stderr — a
-        hook must never break the worker's tool call, so an absent identity skips.
-
-        A hook that fires constantly opts out of tracing with ``traced=False``: it opens no span
-        and injects no context."""
-        environ = WorkerSession.current().environ
-        runner_url = environ.get(ENV_RUNNER_URL)
-        lease_id = environ.get(ENV_LEASE_ID)
-        if not lease_id or not runner_url:
-            click.echo(f"{verb}: no {ENV_LEASE_ID}/{ENV_RUNNER_URL} in the environment; skipping", err=True)
+    def select(
+        cls,
+        session: WorkerSession,
+        policy: WorkerPolicy,
+        *,
+        client_factory: ClientFactory | None = None,
+        trace_headers: ITraceHeaders | None = None,
+    ) -> WorkerCall | None:
+        """Bind an operation's policy to the group-owned session."""
+        environ = session.environ
+        if policy.skip_elicitation and environ.get(ENV_ELICITATION):
             return None
-        return cls._bound(verb, runner_url, lease_id, traced=traced)
-
-    @classmethod
-    def _bound(cls, verb: str, runner_url: str, lease_id: str, *, traced: bool) -> WorkerCall:
-        session = WorkerSession.current()
-        traceparent = session.open_span() if traced else None
-        return cls(verb, runner_url, lease_id, session.environ.get(ENV_LEASE_TOKEN), session, traceparent)
+        runner_url = environ.get(ENV_RUNNER_URL)
+        lease_id = environ.get(ENV_LEASE_ID)
+        if not runner_url or (policy.lease and not lease_id):
+            wanted = f"{ENV_LEASE_ID}/{ENV_RUNNER_URL}" if policy.lease else ENV_RUNNER_URL
+            message = f"{policy.verb}: no {wanted} in the environment"
+            if policy.soft:
+                click.echo(f"{message}; skipping", err=True)
+                return None
+            raise click.ClickException(message)
+        return cls(
+            policy.verb,
+            runner_url,
+            lease_id or "",
+            environ.get(ENV_LEASE_TOKEN),
+            session,
+            session.open_span() if policy.traced else None,
+            client_factory,
+            trace_headers,
+        )
 
     def leased(self, suffix: str) -> str:
         return f"/api/leases/{self.lease_id}/{suffix}"
@@ -240,7 +259,7 @@ class WorkerCall:
         if json_body is not None:
             kwargs["json"] = json_body
         try:
-            client = (self.session or WorkerSession.current()).client()
+            client = self.session.client(self.client_factory)
             resp = getattr(client, method)(f"{self.runner_url.rstrip('/')}{path}", **kwargs)
             resp.raise_for_status()
             return resp
@@ -253,5 +272,7 @@ class WorkerCall:
     def _headers(self) -> dict[str, str]:
         headers = {LEASE_TOKEN_HEADER: self.lease_token} if self.lease_token else {}
         if self.traceparent:
-            headers[TRACEPARENT_HEADER] = self.traceparent
+            headers.update(
+                self.trace_headers.headers() if self.trace_headers else {TRACEPARENT_HEADER: self.traceparent}
+            )
         return headers

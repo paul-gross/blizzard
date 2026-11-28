@@ -9,7 +9,8 @@ from datetime import datetime
 import click
 
 from blizzard.cli.window import since_option, until_option, utc_query_value
-from blizzard.runner.cli.worker_call import WorkerCall
+from blizzard.runner.cli.container_command import ContainerWorkerCommand
+from blizzard.runner.cli.worker_call import WorkerCall, WorkerPolicy
 
 
 @click.group("analytics")
@@ -49,9 +50,13 @@ _by_name_option = click.option(
 
 
 def _read(
-    verb: str, path: str, since: datetime, until: datetime | None, by_name: bool = False, limit: int | None = None
+    worker: WorkerCall,
+    path: str,
+    since: datetime,
+    until: datetime | None,
+    by_name: bool = False,
+    limit: int | None = None,
 ) -> None:
-    worker = WorkerCall.of(verb)
     params = _window_params(since, until, by_name)
     if limit is not None:
         params["limit"] = str(limit)
@@ -59,53 +64,83 @@ def _read(
     click.echo(resp.text)
 
 
-@counts_group.command("files")
+@counts_group.command(
+    "files",
+    cls=ContainerWorkerCommand,
+    collaborators={"worker": WorkerCall},
+    policy=WorkerPolicy("analytics counts files"),
+)
 @since_option(required=True)
 @until_option()
 @click.option("--limit", type=click.IntRange(min=1), help="Return only the N paths with the highest counts.")
-def counts_files(since: datetime, until: datetime | None, limit: int | None) -> None:
+def counts_files(worker: WorkerCall, since: datetime, until: datetime | None, limit: int | None) -> None:
     """Worker: file-read occurrence counts over the window, as JSON."""
-    _read("analytics counts files", "counts/files", since, until, limit=limit)
+    _read(worker, "counts/files", since, until, limit=limit)
 
 
-@counts_group.command("skills")
+@counts_group.command(
+    "skills",
+    cls=ContainerWorkerCommand,
+    collaborators={"worker": WorkerCall},
+    policy=WorkerPolicy("analytics counts skills"),
+)
 @since_option(required=True)
 @until_option()
-def counts_skills(since: datetime, until: datetime | None) -> None:
+def counts_skills(worker: WorkerCall, since: datetime, until: datetime | None) -> None:
     """Worker: skill-invocation occurrence counts over the window, as JSON."""
-    _read("analytics counts skills", "counts/skills", since, until)
+    _read(worker, "counts/skills", since, until)
 
 
-@counts_group.command("agent-types")
+@counts_group.command(
+    "agent-types",
+    cls=ContainerWorkerCommand,
+    collaborators={"worker": WorkerCall},
+    policy=WorkerPolicy("analytics counts agent-types"),
+)
 @since_option(required=True)
 @until_option()
-def counts_agent_types(since: datetime, until: datetime | None) -> None:
+def counts_agent_types(worker: WorkerCall, since: datetime, until: datetime | None) -> None:
     """Worker: occurrence counts by agent type over the window, as JSON."""
-    _read("analytics counts agent-types", "counts/agent-types", since, until)
+    _read(worker, "counts/agent-types", since, until)
 
 
-@counts_group.command("nodes")
+@counts_group.command(
+    "nodes",
+    cls=ContainerWorkerCommand,
+    collaborators={"worker": WorkerCall},
+    policy=WorkerPolicy("analytics counts nodes"),
+)
 @since_option(required=True)
 @until_option()
 @_by_name_option
-def counts_nodes(since: datetime, until: datetime | None, by_name: bool) -> None:
+def counts_nodes(worker: WorkerCall, since: datetime, until: datetime | None, by_name: bool) -> None:
     """Worker: occurrence counts by node over the window, as JSON."""
-    _read("analytics counts nodes", "counts/nodes", since, until, by_name)
+    _read(worker, "counts/nodes", since, until, by_name)
 
 
-@spend_group.command("nodes")
+@spend_group.command(
+    "nodes",
+    cls=ContainerWorkerCommand,
+    collaborators={"worker": WorkerCall},
+    policy=WorkerPolicy("analytics spend nodes"),
+)
 @since_option(required=True)
 @until_option()
 @_by_name_option
-def spend_nodes(since: datetime, until: datetime | None, by_name: bool) -> None:
+def spend_nodes(worker: WorkerCall, since: datetime, until: datetime | None, by_name: bool) -> None:
     """Worker: usage/cost rollups by node over the window, as JSON."""
-    _read("analytics spend nodes", "spend/nodes", since, until, by_name)
+    _read(worker, "spend/nodes", since, until, by_name)
 
 
-@spend_group.command("graphs")
+@spend_group.command(
+    "graphs",
+    cls=ContainerWorkerCommand,
+    collaborators={"worker": WorkerCall},
+    policy=WorkerPolicy("analytics spend graphs"),
+)
 @since_option(required=True)
 @until_option()
 @_by_name_option
-def spend_graphs(since: datetime, until: datetime | None, by_name: bool) -> None:
+def spend_graphs(worker: WorkerCall, since: datetime, until: datetime | None, by_name: bool) -> None:
     """Worker: usage/cost rollups by graph over the window, as JSON."""
-    _read("analytics spend graphs", "spend/graphs", since, until, by_name)
+    _read(worker, "spend/graphs", since, until, by_name)
