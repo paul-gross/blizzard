@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import functools
+import inspect
 import json
 import re
 import shutil
@@ -1793,6 +1794,20 @@ def resolve_default_tenant_with(
         return _OverriddenChild(child, _OverridingResolver(child.resolver, overrides))
 
     monkeypatch.setattr(tenants, "request", request)
+
+
+def rebuilt_default_service[T](hub: HubHarness, service: type[T], **replacements: object) -> T:
+    """The default tenant's ``service`` built afresh from its container resolutions, with the named constructor
+    arguments replaced — how a test puts a double beneath a service whose ports are private to it."""
+    parameters = inspect.signature(service, eval_str=True).parameters
+    unknown = replacements.keys() - parameters.keys()
+    assert not unknown, f"{service.__name__} takes no {sorted(unknown)}"
+    return service(
+        **{
+            name: replacements[name] if name in replacements else hub.default_adapter(parameter.annotation)
+            for name, parameter in parameters.items()
+        }
+    )
 
 
 _hub_prototype_lock = threading.Lock()

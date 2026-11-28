@@ -1,8 +1,8 @@
 """The API edge's registrations: each tenant's one chunk-frame loader, over the frame reads and the tenant's broker, the
-reads a flow line and a chunk read render from, and the hub's version window, the process value a root serving runners
-supplies, and the hidden clock controls a controlled process clock is served with.
+reads a flow line and a runner view render from, the chunk and queue view assemblers, the hub's version window, the
+process value a root serving runners supplies, and the hidden clock controls a controlled process clock is served with.
 
-The store-free graph declares the tenant records absent, a root that supplies no window declares the window absent, and
+The store-free graph declares the tenant services absent, a root that supplies no window declares the window absent, and
 a process whose clock is not controlled holds no clock controls."""
 
 from __future__ import annotations
@@ -13,11 +13,12 @@ from blizzard.foundation.clock import ControlledClock
 from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
 from blizzard.hub.api.chunk_events import AnnouncedTurns, announce_minted
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
-from blizzard.hub.api.chunk_views import ChunkViewReads
+from blizzard.hub.api.chunk_views import ChunkViewAssembler
 from blizzard.hub.api.clock import ClockControlLock, ClockControls, clock_control_lock, clock_controls
 from blizzard.hub.api.flow_places import FlowLineReads
 from blizzard.hub.api.garden_formats import GardenFormats
-from blizzard.hub.api.queue import QueueReads
+from blizzard.hub.api.queue import QueueViewAssembler
+from blizzard.hub.api.runners import RunnerReads
 from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.domain.cadence.sweep import MintAnnouncement
@@ -26,11 +27,17 @@ from blizzard.hub.domain.graph.authoring import DefaultGraphService
 from blizzard.hub.graphs import PackagedDefaultGraph, packaged_default_graph
 from blizzard.hub.tenancy import STORE_UNAVAILABLE
 
-#: The tenant records the edge registers by class.
-_TENANT_RECORDS: tuple[type[Any], ...] = (ChunkFrameLoader, FlowLineReads, ChunkViewReads, QueueReads)
+#: The tenant services the edge registers by class.
+_TENANT_SERVICES: tuple[type[Any], ...] = (
+    ChunkFrameLoader,
+    FlowLineReads,
+    ChunkViewAssembler,
+    QueueViewAssembler,
+    RunnerReads,
+)
 
 #: Every tenant key the edge declares, for the store-free graph to declare absent.
-_TENANT_KEYS: tuple[type[Any], ...] = (*_TENANT_RECORDS, AnnouncedTurns)
+_TENANT_KEYS: tuple[type[Any], ...] = (*_TENANT_SERVICES, AnnouncedTurns)
 
 
 def default_graph_ensurer(default_graph: DefaultGraphService, packaged: PackagedDefaultGraph) -> DefaultGraphEnsurer:
@@ -49,12 +56,12 @@ def announced_turns(frames: ChunkFrameLoader, turns: TurnRunner) -> AnnouncedTur
 
 
 def register(registry: Registry) -> Ref[GardenFormats]:
-    """Declare the tenant's chunk-frame loader, the edge's read records and announced turns, once per tenant, the
+    """Declare the tenant's chunk-frame loader, the edge's view services and announced turns, once per tenant, the
     default graph a garden closure mints against, the announcement a cadence mint publishes, and the packaged default
     graph and the garden artifact formats once per process, handing back the formats' ``Ref``, which the garden area's
     port aliases."""
-    for record in _TENANT_RECORDS:
-        registry.service(record, lifetime=Lifetime.TENANT)
+    for service in _TENANT_SERVICES:
+        registry.service(service, lifetime=Lifetime.TENANT)
     registry.factory(announced_turns, lifetime=Lifetime.TENANT)
     registry.factory(default_graph_ensurer, lifetime=Lifetime.TENANT)
     registry.factory(mint_announcement, lifetime=Lifetime.TENANT)
@@ -63,7 +70,7 @@ def register(registry: Registry) -> Ref[GardenFormats]:
 
 
 def register_absent(registry: Registry) -> None:
-    """Declare the tenant records absent, for the store-free graph."""
+    """Declare the tenant services absent, for the store-free graph."""
     for missing in _TENANT_KEYS:
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
     registry.absent(port(cast("type[Any]", MintAnnouncement)), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)

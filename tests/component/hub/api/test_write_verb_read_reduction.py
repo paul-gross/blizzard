@@ -15,7 +15,7 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
-from blizzard.hub.api.chunk_views import ChunkViewReads
+from blizzard.hub.api.chunk_views import ChunkViewAssembler
 from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.kernel.transactions import Transaction
@@ -29,6 +29,7 @@ from tests.support.scaffolding import (
     build_hub,
     hub_store_connections,
     ingest,
+    rebuilt_default_service,
     resolve_default_tenant_with,
     seed_session,
     seed_user,
@@ -54,7 +55,7 @@ def _wire_counting_facts(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> _C
         hub,
         monkeypatch,
         {
-            ChunkViewReads: replace(hub.default_adapter(ChunkViewReads), facts=counting),
+            ChunkViewAssembler: rebuilt_default_service(hub, ChunkViewAssembler, facts=counting),
             ChunkFrameLoader: replace(hub.default_adapter(ChunkFrameLoader), facts=counting),
         },
     )
@@ -97,7 +98,7 @@ def _wire_counting_sessions(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) ->
 
 def test_pause_calls_load_facts_exactly_twice(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Before: 4 (``ChunkChanged.before``, ``PauseService``'s own reload, ``publish``,
-    ``ChunkView.of``'s reload). After: 2 — pre-write and post-write only."""
+    ``ChunkViewAssembler.view``'s reload). After: 2 — pre-write and post-write only."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     counting = _wire_counting_facts(hub, monkeypatch)
@@ -110,7 +111,7 @@ def test_pause_calls_load_facts_exactly_twice(tmp_path: Path, monkeypatch: pytes
 
 def test_stop_calls_load_facts_exactly_twice(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Before: 4 (``ChunkChanged.before``, ``StopService``'s own reload, ``publish``,
-    ``ChunkView.of``'s reload). After: 2 — pre-write and post-write only."""
+    ``ChunkViewAssembler.view``'s reload). After: 2 — pre-write and post-write only."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     counting = _wire_counting_facts(hub, monkeypatch)

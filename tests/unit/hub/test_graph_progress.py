@@ -240,12 +240,12 @@ class _Names:
 
 def _chunk_progress(graph_id: str, facts: ChunkFacts, current: str | None = None) -> list[tuple[str, str]]:
     view = ChunkView(
-        reads=cast(Any, None),
+        assembler=cast(Any, None),
         chunk=cast(Any, SimpleNamespace(graph_id=graph_id)),
         facts=facts,
         names=cast(Any, _Names(_DEV)),
     )
-    progress = view._graph_progress(current)  # pyright: ignore[reportPrivateUsage]  # public summary() needs reads this unit view leaves unset
+    progress = view._graph_progress(current)  # pyright: ignore[reportPrivateUsage]  # public summary() needs the assembler this unit view leaves unset
     return [(node.name, str(node.state)) for node in progress]
 
 

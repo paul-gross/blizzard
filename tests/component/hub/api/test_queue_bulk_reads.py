@@ -7,16 +7,17 @@ reaches per-chunk ``load_facts`` at all."""
 
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
-from blizzard.hub.api.queue import QueueReads
+from blizzard.hub.api.queue import QueueViewAssembler
 from blizzard.hub.domain.chunk.model import ChunkFacts
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.operations.queue import QueueService
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
@@ -32,6 +33,7 @@ from tests.support.scaffolding import (
     count_rows_read,
     hub_store_connections,
     ingest,
+    rebuilt_default_service,
     resolve_default_tenant_with,
 )
 
@@ -139,7 +141,6 @@ def _wire_counting_facts(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> _C
     record = ChunkRecordStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
     # The peek reads through the queue service's own store handle, not only the route's facts seam.
-    reads = hub.default_adapter(QueueReads)
     order = QueueService(
         queue=hub.default_adapter(IWriteChunkQueueRepository),
         record=record,
@@ -148,8 +149,16 @@ def _wire_counting_facts(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> _C
         clock=hub.clock,
         urgency_order=UrgencyOrderStore(hub_store_connections(hub.engine)),
     )
+    queues = rebuilt_default_service(hub, QueueViewAssembler, facts=counting, order=order)
     resolve_default_tenant_with(
-        hub, monkeypatch, {QueueReads: replace(reads, facts=counting, records=record, order=order)}
+        hub,
+        monkeypatch,
+        {
+            QueueViewAssembler: queues,
+            IReadChunkFactsRepository: counting,
+            IReadChunkRecordRepository: record,
+            QueueService: order,
+        },
     )
     return counting
 

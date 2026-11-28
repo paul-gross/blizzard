@@ -8,16 +8,16 @@ chunk may do, only what it says about why it cannot yet be claimed."""
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.api.chunk_views import ChunkViewReads
+from blizzard.hub.api.chunk_views import ChunkViewAssembler
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.scoped import ScopedConnections
@@ -27,6 +27,7 @@ from tests.support.scaffolding import (
     count_queries,
     hub_store_connections,
     ingest,
+    rebuilt_default_service,
     resolve_default_tenant_with,
 )
 
@@ -246,8 +247,8 @@ def test_detail_routes_blocked_derivation_never_reaches_load_all_facts(
 
     counting = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
-    views = hub.default_adapter(ChunkViewReads)
-    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewReads: replace(views, facts=counting)})
+    views = rebuilt_default_service(hub, ChunkViewAssembler, facts=counting)
+    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewAssembler: views, IReadChunkFactsRepository: counting})
 
     resp = hub.client.get(f"/api/chunks/{dependent_id}")
 
@@ -275,8 +276,8 @@ def test_detail_reads_resolve_neighbor_statuses_through_the_narrowed_plural(
 
     counting = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
-    views = hub.default_adapter(ChunkViewReads)
-    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewReads: replace(views, facts=counting)})
+    views = rebuilt_default_service(hub, ChunkViewAssembler, facts=counting)
+    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewAssembler: views, IReadChunkFactsRepository: counting})
 
     resp = hub.client.get(f"{prefix}/{subject_id}")
 

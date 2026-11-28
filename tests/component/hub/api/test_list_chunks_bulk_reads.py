@@ -7,7 +7,6 @@ reaches a whole-tenant read or `load_facts`/`route_of`."""
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -15,15 +14,16 @@ from typing import Any
 import pytest
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.api.chunk_views import ChunkViewReads
+from blizzard.hub.api.chunk_views import ChunkViewAssembler
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef
 from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.revisions import ConfigRevisions
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.delivery.flows import FlowResource
-from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from blizzard.hub.domain.kernel.pagination import MAX_LIMIT
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.runners.route import Route
@@ -48,6 +48,7 @@ from tests.support.scaffolding import (
     hub_store_connections,
     ingest,
     make_ready,
+    rebuilt_default_service,
     report_lease,
     resolve_default_tenant_with,
     seed_chunk,
@@ -146,8 +147,8 @@ def test_list_resolves_store_backed_sources_in_one_read_and_only_on_the_page(
         build=lambda record: BuiltWorkSource(record, FakeWorkSource(name=record.name), lambda: None),
         built_in=built_in,
     )
-    views = hub.default_adapter(ChunkViewReads)
-    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewReads: replace(views, work_sources=registry)})
+    views = rebuilt_default_service(hub, ChunkViewAssembler, work_sources=registry)
+    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewAssembler: views})
 
     def page() -> None:
         resp = hub.client.get("/api/chunks", params={"limit": 2})
@@ -207,8 +208,8 @@ def test_on_page_fallback_pointers_do_not_repeat_record_reads(tmp_path: Path, mo
         build=lambda record: BuiltWorkSource(record, FallbackSource(name=record.slug), lambda: None),
         built_in=built_in,
     )
-    views = hub.default_adapter(ChunkViewReads)
-    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewReads: replace(views, work_sources=registry)})
+    views = rebuilt_default_service(hub, ChunkViewAssembler, work_sources=registry)
+    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewAssembler: views})
 
     def page(limit: int) -> None:
         response = hub.client.get("/api/chunks", params={"limit": limit})
@@ -288,9 +289,9 @@ def test_list_chunks_reads_its_page_in_batches_and_never_the_whole_tenant(
     counting_facts = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     counting_route = _CountingRouteStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
-    views = hub.default_adapter(ChunkViewReads)
+    views = rebuilt_default_service(hub, ChunkViewAssembler, facts=counting_facts, route=counting_route)
     resolve_default_tenant_with(
-        hub, monkeypatch, {ChunkViewReads: replace(views, facts=counting_facts, route=counting_route)}
+        hub, monkeypatch, {ChunkViewAssembler: views, IReadChunkFactsRepository: counting_facts}
     )
 
     resp = hub.client.get("/api/chunks")
@@ -337,9 +338,9 @@ def test_list_chunks_renders_work_refs_with_one_batched_live_holders_call(
     counting_facts = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     counting_work_refs = _CountingWorkRefsStore(hub_store_connections(hub.engine), hub.clock, facts=counting_facts)
     assert hub.app is not None
-    views = hub.default_adapter(ChunkViewReads)
+    views = rebuilt_default_service(hub, ChunkViewAssembler, facts=counting_facts, work_refs=counting_work_refs)
     resolve_default_tenant_with(
-        hub, monkeypatch, {ChunkViewReads: replace(views, facts=counting_facts, work_refs=counting_work_refs)}
+        hub, monkeypatch, {ChunkViewAssembler: views, IReadChunkFactsRepository: counting_facts}
     )
 
     resp = hub.client.get("/api/chunks")
@@ -373,8 +374,8 @@ def test_list_chunks_never_calls_graphs_get(tmp_path: Path, monkeypatch: pytest.
 
     counting_graphs = _CountingGraphStore(hub_store_connections(hub.engine))
     assert hub.app is not None
-    views = hub.default_adapter(ChunkViewReads)
-    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewReads: replace(views, graphs=counting_graphs)})
+    views = rebuilt_default_service(hub, ChunkViewAssembler, graphs=counting_graphs)
+    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewAssembler: views, IReadGraphRepository: counting_graphs})
 
     resp = hub.client.get("/api/chunks")
 
@@ -626,9 +627,8 @@ def test_list_chunks_never_reads_standing_edges_or_records_tenant_wide(
     edges.__dict__.update(hub.default_adapter(IReadChunkDependenciesRepository).__dict__)
     record = _NoList.__new__(_NoList)
     record.__dict__.update(hub.default_adapter(IReadChunkRecordRepository).__dict__)
-    resolve_default_tenant_with(
-        hub, monkeypatch, {IReadChunkDependenciesRepository: edges, IReadChunkRecordRepository: record}
-    )
+    views = rebuilt_default_service(hub, ChunkViewAssembler, dependencies=edges)
+    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewAssembler: views, IReadChunkRecordRepository: record})
 
     # Newest first: the dependent is alone on page one; its prerequisite is off the page.
     resp = hub.client.get("/api/chunks", params={"limit": 1})
