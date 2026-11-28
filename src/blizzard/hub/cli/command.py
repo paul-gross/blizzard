@@ -21,11 +21,10 @@ from blizzard.hub.cli.context import DEFAULT_HUB_URL, ENV_HUB_TENANT, ENV_HUB_UR
 
 
 class HubCommand(click.Command):
-    """An operator verb: it declares the connection options, and its callback takes ``collaborators`` by name.
+    """An operator verb: it declares the connection options; its callback takes ``collaborators``, by default ``cli``.
 
-    ``collaborators`` names each by type and defaults to the ``cli`` context alone; ``area`` registers what the verb's
-    own area adds. A collaborator named like one of the verb's parameters is refused, since it would replace what the
-    operator typed."""
+    ``area`` registers what the verb's own area adds. A collaborator named like one of the verb's parameters is
+    refused, since it would replace what the operator typed."""
 
     def __init__(
         self,

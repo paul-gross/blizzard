@@ -23,7 +23,7 @@ class ConnectionOptions:
     tenant: str | None
 
 
-#: The carrier's session service, which ``login`` and ``logout`` write through.
+#: The carrier's session service.
 SESSION_SERVICE = port(SessionService)
 #: The read half of that service.
 SESSIONS = port(IReadSessionStore)

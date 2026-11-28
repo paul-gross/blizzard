@@ -28,7 +28,7 @@ _VERBS = {
     "garden-proposal": "garden-proposal list",
     "graph": "graph list",
     "invite": "invite list",
-    "item": "item delete source:1",
+    "item": "item delete source:1 --yes",
     "member": "member list",
     "project": "project list",
     "question": "question list",
@@ -49,11 +49,10 @@ _VERBS = {
     "urgency": "urgency list",
 }
 
-#: Shrink-only. ``graph`` inlines a local graph file into the domain's graph model, and ``credential``'s help names the
-#: domain's binding names; neither is a daemon or store class.
+#: Shrink-only. Domain vocabulary a group reads, none of it a daemon or store class.
 _ALLOWED_STACKS = {
-    "credential": ("blizzard.hub.domain",),
-    "graph": ("blizzard.hub.domain",),
+    "credential": ("blizzard.hub.domain",),  # its help names the domain's credential binding names.
+    "graph": ("blizzard.hub.domain",),  # it inlines a local graph file into the domain's graph model.
 }
 
 #: Shrink-only. A group that renders another group's rows through that group's own view.
@@ -75,6 +74,7 @@ _NOT_SAMPLED = {"init", "migrate", "host", "login", "logout"}
 
 def test_every_lazy_client_group_is_sampled() -> None:
     assert set(_VERBS) == set(_COMMANDS) - _NOT_SAMPLED
+    assert set(_ALLOWED_STACKS) | set(_ALLOWED_SIBLINGS) <= set(_VERBS)
 
 
 @pytest.mark.parametrize("group", sorted(_VERBS))
@@ -85,6 +85,7 @@ def test_a_client_verb_loads_no_daemon_stack_and_no_sibling_group(group: str) ->
     siblings = {target.partition(":")[0] for target in _COMMANDS.values()} - {own}
     allowed = _ALLOWED_STACKS.get(group, ())
     assert own in loaded
+    assert [stack for stack in allowed if not within(loaded, (stack,))] == []  # a stale exception fails
     assert within(loaded, tuple(stack for stack in DAEMON_STACKS if stack not in allowed)) == []
     assert siblings & loaded == _ALLOWED_SIBLINGS.get(group, set())
     assert sorted(m for m in loaded if m.startswith("blizzard.") and m.endswith(".wiring")) == [

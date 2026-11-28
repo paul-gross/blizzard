@@ -11,7 +11,7 @@ from blizzard.foundation.registry.interface import Lifetime, Registry, port
 CLIENT_FACTORY = port(ClientFactory)
 #: The trace headers of the operator span the command's group opened.
 TRACE_HEADERS = port(ITraceHeaders)
-#: The clock a verb judges a time the operator typed against, distinct from the one that stamps spans.
+#: The carrier's wall clock.
 WALL_CLOCK = port(IClock)
 
 

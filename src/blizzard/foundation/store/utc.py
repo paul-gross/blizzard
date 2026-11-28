@@ -1,7 +1,6 @@
 """UTC-explicit instants at the store boundary (``bzh:utc-instants``).
 
-The :class:`UtcDateTime` column type and the sqlite adapters. The comparison coercion and the wire
-serializer need no store, and live in :mod:`blizzard.foundation.instants`."""
+The :class:`UtcDateTime` column type and the sqlite adapters."""
 
 from __future__ import annotations
 
