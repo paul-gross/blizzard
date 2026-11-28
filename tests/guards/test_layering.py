@@ -1436,6 +1436,7 @@ _COMPOSITION_ROOTS = frozenset(
         _RUNNER_COMPOSITION_FILE,
         _RUNNER_DIR / "cli" / "opencode.py",
         _RUNNER_DIR / "cli" / "children.py",
+        _SRC_DIR / "cli" / "command_root.py",
         _SRC_DIR / "cli" / "dev.py",
         _SRC_DIR / "tools" / "invariants.py",
         _SRC_DIR / "tools" / "compat" / "cli.py",

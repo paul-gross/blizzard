@@ -9,7 +9,7 @@ import click
 from pydantic import TypeAdapter
 
 from blizzard.foundation.roles import dto
-from blizzard.hub.cli.command import FleetCommand
+from blizzard.hub.cli.container_command import ContainerFleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.project_option import project_query
 from blizzard.hub.cli.views import ChunkLine, Cost, QuestionLine, RunnerLine
@@ -48,7 +48,7 @@ class FleetStatus:
         yield f"\nfleet spend (all time): {Cost.of(self.spend).rendered}"
 
 
-@click.command(cls=FleetCommand)
+@click.command(cls=ContainerFleetCommand, collaborators={"cli": CliContext})
 @click.option(
     "--project",
     "project",

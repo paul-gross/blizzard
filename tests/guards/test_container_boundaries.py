@@ -11,6 +11,7 @@ from blizzard.foundation.registry.internal.recording import RecordingRegistry
 from blizzard.foundation.registry.internal.translation import HOST_LIFETIMES, HUB_LIFETIMES
 from blizzard.foundation.registry.scopes import ScopeValues
 from tests.support.container_guards import (
+    CLI_ROOTS,
     HUB_ROOTS,
     alias_identity_violations,
     bag_violations,
@@ -314,4 +315,21 @@ def test_the_area_root_gate_fails_a_registration_planted_in_each_root(tmp_path: 
         "hub/app.py:2: calls .alias(...)",
         "hub/composition.py:2: calls .leaf(...)",
         "hub/process_root.py:2: calls .service(...)",
+    ]
+
+
+def test_no_cli_root_registers_anything_itself() -> None:
+    assert root_registration_violations(_SRC, CLI_ROOTS) == []
+
+
+def test_the_area_root_gate_fails_a_registration_planted_in_each_cli_root(tmp_path: Path) -> None:
+    planted = {
+        Path("cli/command_root.py"): "def build(registry):\n    registry.context(port(IRole), lifetime=1)\n",
+        Path("hub/cli/container_command.py"): "def build(registry):\n    registry.factory(build, lifetime=1)\n",
+    }
+    assert set(planted) == set(CLI_ROOTS)
+    root = _plant(tmp_path, {str(relative): text for relative, text in planted.items()})
+    assert root_registration_violations(root, CLI_ROOTS) == [
+        "cli/command_root.py:2: calls .context(...)",
+        "hub/cli/container_command.py:2: calls .factory(...)",
     ]
