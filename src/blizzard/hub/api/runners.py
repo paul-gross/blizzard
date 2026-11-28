@@ -30,6 +30,7 @@ from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.models import ResolvedIdentity
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.execution.fleet import (
     FleetService,
@@ -145,6 +146,7 @@ class RunnerBrake:
     the subclass's, and is the only thing that differs between the two verbs."""
 
     reads: RunnerReads
+    fleet: FleetService
     events: EventBroker
     runner_id: str
     by: str
@@ -155,7 +157,7 @@ class RunnerBrake:
     def set(self) -> RunnerRegistryView:
         """Write the fact, publish the frame, and read the runner back; 404 on an unknown one."""
         registration = self.reads.registration(self.runner_id)
-        fact_id = self.reads.fleet.set_paused(registration, paused=self.paused, by=self.by)
+        fact_id = self.fleet.set_paused(registration, paused=self.paused, by=self.by)
         self.events.publish_runner_changed(
             self.runner_id,
             kind=self.kind,
@@ -165,9 +167,7 @@ class RunnerBrake:
         )
         # Re-resolved after the write (not the pre-write `registration`) so the response
         # reports the brake this call just set, not its pre-write value.
-        refreshed = self.reads.registry.get_runner(self.runner_id)
-        assert refreshed is not None  # just set_paused succeeded, so the runner exists
-        return self.reads.detail(refreshed)
+        return self.reads.reread(self.runner_id)
 
 
 class Paused(RunnerBrake):
@@ -508,16 +508,11 @@ def list_runners(
 @inject_sync
 def get_runner(
     runner_id: str,
-    registry: Runners,
-    fleet: Fleet,
-    clock: Clock,
-    projects: Projects,
-    hosts: Hosts,
-    executors: Executors,
+    reads: FromDishka[RunnerReads],
 ) -> RunnerRegistryView:
     """One runner's connection condition and paused state — the operator's detail read,
     symmetric with the list. 404 on unknown."""
-    return RunnerReads(registry, fleet, clock, projects, hosts, executors).reread(runner_id)
+    return reads.reread(runner_id)
 
 
 @router.get(
@@ -527,16 +522,19 @@ def get_runner(
 )
 @inject_sync
 def get_runner_next_claim(
-    runner_id: str, registry: Runners, hosts: Hosts, reads: FromDishka[queue_api.QueueReads]
+    runner_id: str,
+    registry: Runners,
+    hosts: Hosts,
+    queues: FromDishka[queue_api.QueueViewAssembler],
+    facts: FromDishka[IReadChunkFactsRepository],
 ) -> NextClaimResponse:
     """The hub's best account of the chunk one runner reaches for next and every chunk it passes on the way — walked
     from the runner's served projects and bindings and its latest capability snapshot. A retired or paused runner is
     answered like any other; 404 on unknown."""
     registration = _registration(registry, runner_id)
     host = hosts.get_host(registration.host_id) if registration.host_id is not None else None
-    return queue_api.NextClaim.of(
-        reads,
-        reads.facts.load_live_statuses(),
+    return queues.next_claim(
+        facts.load_live_statuses(),
         served=offered_projects(registration, host),
         capabilities=registration.capabilities,
     ).view
@@ -550,18 +548,13 @@ def get_runner_next_claim(
 def pause_runner(
     runner_id: str,
     request: RunnerPauseRequest,
-    registry: Runners,
+    reads: FromDishka[RunnerReads],
     fleet: Fleet,
-    clock: Clock,
-    projects: Projects,
-    hosts: Hosts,
-    executors: Executors,
     events: Events,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.RUNNER_PAUSE))],
 ) -> RunnerRegistryView:
     """Set a runner's pause brake — no new claims; in-flight chunks run on."""
-    reads = RunnerReads(registry, fleet, clock, projects, hosts, executors)
-    return Paused(reads, events, runner_id, identity.username).set()
+    return Paused(reads, fleet, events, runner_id, identity.username).set()
 
 
 @router.post(
@@ -572,18 +565,13 @@ def pause_runner(
 def resume_runner(
     runner_id: str,
     request: RunnerPauseRequest,
-    registry: Runners,
+    reads: FromDishka[RunnerReads],
     fleet: Fleet,
-    clock: Clock,
-    projects: Projects,
-    hosts: Hosts,
-    executors: Executors,
     events: Events,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.RUNNER_PAUSE))],
 ) -> RunnerRegistryView:
     """Clear a runner's pause brake — it resumes claiming on its next pull."""
-    reads = RunnerReads(registry, fleet, clock, projects, hosts, executors)
-    return Resumed(reads, events, runner_id, identity.username).set()
+    return Resumed(reads, fleet, events, runner_id, identity.username).set()
 
 
 @router.post(
@@ -594,12 +582,8 @@ def resume_runner(
 def retire_runner(
     runner_id: str,
     request: RunnerRetireRequest,
-    registry: Runners,
+    reads: FromDishka[RunnerReads],
     fleet: Fleet,
-    clock: Clock,
-    projects: Projects,
-    hosts: Hosts,
-    executors: Executors,
     routes: Routes,
     events: Events,
     frames: Frames,
@@ -611,7 +595,6 @@ def retire_runner(
     was retired or reinstated after it was read is refused 409, revoking no token and
     releasing no route the runner holds since; what it committed first is still published.
     Run it again."""
-    reads = RunnerReads(registry, fleet, clock, projects, hosts, executors)
     registration = reads.registration(runner_id)
     held = routes.live_routes_of_runner(runner_id)
     changes = chunk_events.ChunkChanged.before_many(frames, [r.chunk_id for r in held])
@@ -676,12 +659,8 @@ def _publish_releases(
 def reinstate_runner(
     runner_id: str,
     request: RunnerLifecycleRequest,
-    registry: Runners,
+    reads: FromDishka[RunnerReads],
     fleet: Fleet,
-    clock: Clock,
-    projects: Projects,
-    hosts: Hosts,
-    executors: Executors,
     routes: Routes,
     events: Events,
     frames: Frames,
@@ -691,7 +670,6 @@ def reinstate_runner(
     until enrolled afresh; 409 when not retired, when it stands under a retired host, and when its lifecycle moved
     while the reinstate was decided. A route its retirement left held is released first, as the retire's own release
     pass would, and its ``detached`` frame published."""
-    reads = RunnerReads(registry, fleet, clock, projects, hosts, executors)
     registration = reads.registration(runner_id)
     held = routes.live_routes_of_runner(runner_id)
     changes = chunk_events.ChunkChanged.before_many(frames, [r.chunk_id for r in held])
@@ -729,18 +707,13 @@ def reinstate_runner(
 def revoke_runner_token(
     runner_id: str,
     request: RunnerLifecycleRequest,
-    registry: Runners,
+    reads: FromDishka[RunnerReads],
     fleet: Fleet,
-    clock: Clock,
-    projects: Projects,
-    hosts: Hosts,
-    executors: Executors,
     events: Events,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.RUNNER_RETIRE))],
 ) -> RunnerTokenRevocationResponse:
     """Revoke a runner's token — it stays added and must be re-enrolled; 409 when unenrolled, and when it was retired
     or reinstated while the revocation was decided."""
-    reads = RunnerReads(registry, fleet, clock, projects, hosts, executors)
     registration = reads.registration(runner_id)
     try:
         revocation_id = fleet.revoke_token(registration, by=identity.username)

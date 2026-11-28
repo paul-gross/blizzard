@@ -73,7 +73,7 @@ REVIEWED[("POST", "/api/fleet/host/runners")].add(
 REVIEWED[("POST", "/api/fleet/host/runners/{runner_id}/retire")].add(
     (
         "blizzard.hub.api.fleet_host.retire_host_runner",
-        "RunnerRetireResponse(runner=RunnerReads(registry, fleet, clock, projects, hosts, executors).detail(refreshed), released_chunk_ids=[r.chunk_id for r in outcome.released])",
+        "RunnerRetireResponse(runner=reads.detail(refreshed), released_chunk_ids=[r.chunk_id for r in outcome.released])",
     )
 )
 

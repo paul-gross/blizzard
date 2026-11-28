@@ -42,7 +42,7 @@ from blizzard.hub.api.analytics import (
 from blizzard.hub.api.auth import RunnerPrincipal, require_runner_principal, require_runner_principal_even_if_retired
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant, tenant_bound
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
-from blizzard.hub.api.chunk_views import ChunkViewReads
+from blizzard.hub.api.chunk_views import ChunkViewAssembler
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.findings import finding_view
 from blizzard.hub.api.garden_proposals import garden_proposal_view
@@ -304,20 +304,25 @@ def _migration_targets(
 
 @router.get("/queue/peek", response_model=QueuePeekResponse)
 @inject_sync
-def peek_queue(reads: FromDishka[queue_api.QueueReads], project: QueryProject) -> QueuePeekResponse:
+def peek_queue(
+    queues: FromDishka[queue_api.QueueViewAssembler],
+    facts: FromDishka[IReadChunkFactsRepository],
+    project: QueryProject,
+) -> QueuePeekResponse:
     """The runner's FILL read — the whole ready queue in claim order (urgency before rank): a filling runner needs every
     ready chunk in one read. Kept as-is for a previous-minor caller;
     ``POST /queue/peek`` below is the matched counterpart. ``?project=`` narrows it to that
     project's chunks at their whole-queue positions, never reranked."""
-    statuses = reads.facts.load_live_statuses()
-    return queue_api.ReadyQueue.of(reads, statuses, project=project).view
+    statuses = facts.load_live_statuses()
+    return queues.ready(statuses, project=project).view
 
 
 @router.post("/queue/peek", response_model=QueuePeekResponse)
 @inject_sync
 def peek_matched_queue(
     request: QueuePeekRequest,
-    reads: FromDishka[queue_api.QueueReads],
+    queues: FromDishka[queue_api.QueueViewAssembler],
+    facts: FromDishka[IReadChunkFactsRepository],
     registry: FromDishka[IReadRunnerRegistry],
     hosts: FromDishka[IReadHostRegistry],
     principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
@@ -335,8 +340,8 @@ def peek_matched_queue(
     served: frozenset[str] = (
         frozenset() if registration is None else offered_projects(registration, host, projects=request.projects)
     )
-    statuses = reads.facts.load_live_statuses()
-    return queue_api.MatchedPeek.of(reads, statuses, request, served=served).view
+    statuses = facts.load_live_statuses()
+    return queues.matched_peek(statuses, request, served=served).view
 
 
 @router.get("/system-artifacts", response_model=list[SystemArtifactView])
@@ -369,10 +374,12 @@ def get_chunk(
     chunk_id: str,
     records: FromDishka[IReadChunkRecordRepository],
     dependencies: FromDishka[IReadChunkDependenciesRepository],
-    views: FromDishka[ChunkViewReads],
+    views: FromDishka[ChunkViewAssembler],
+    facts: FromDishka[IReadChunkFactsRepository],
+    graphs: FromDishka[IReadGraphRepository],
 ) -> ChunkDetail:
     """The runner's chunk-status poll — the same aggregate as ``GET /api/chunks/{chunk_id}``."""
-    return chunks_api.chunk_detail(chunk_id, records, dependencies, views)
+    return chunks_api.chunk_detail(chunk_id, records, dependencies, views, facts, graphs)
 
 
 @router.get("/chunk-statuses", response_model=list[ChunkStatusView])
@@ -431,7 +438,7 @@ def pause_chunk(
     pauses: FromDishka[PauseService],
     frames: FromDishka[ChunkFrameLoader],
     events: FromDishka[EventBroker],
-    views: FromDishka[ChunkViewReads],
+    views: FromDishka[ChunkViewAssembler],
 ) -> ChunkSummary:
     """Pause the chunk with a runner's own bearer token — the same transition as the
     operator route, recorded as ``operator``."""
@@ -446,7 +453,7 @@ def resume_chunk(
     pauses: FromDishka[PauseService],
     frames: FromDishka[ChunkFrameLoader],
     events: FromDishka[EventBroker],
-    views: FromDishka[ChunkViewReads],
+    views: FromDishka[ChunkViewAssembler],
 ) -> ChunkSummary:
     """Resume the chunk with a runner's own bearer token. Takes no body, so the
     resume is always recorded as ``operator``."""

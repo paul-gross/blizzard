@@ -6,16 +6,21 @@ conditional reify `_pending` still needs for a node's poll policy."""
 
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from blizzard.hub.api.chunk_views import ChunkViewReads
-from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.api.chunk_views import ChunkViewAssembler
+from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support.scaffolding import build_hub, hub_store_connections, ingest, resolve_default_tenant_with
+from tests.support.scaffolding import (
+    build_hub,
+    hub_store_connections,
+    ingest,
+    rebuilt_default_service,
+    resolve_default_tenant_with,
+)
 
 
 class _CountingGraphStore(GraphStore):
@@ -39,8 +44,8 @@ def test_chunk_detail_never_calls_graphs_get_with_no_pending_poll(
 
     counting_graphs = _CountingGraphStore(hub_store_connections(hub.engine))
     assert hub.app is not None
-    views = hub.default_adapter(ChunkViewReads)
-    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewReads: replace(views, graphs=counting_graphs)})
+    views = rebuilt_default_service(hub, ChunkViewAssembler, graphs=counting_graphs)
+    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewAssembler: views, IReadGraphRepository: counting_graphs})
 
     resp = hub.client.get(f"/api/chunks/{chunk_id}")
 

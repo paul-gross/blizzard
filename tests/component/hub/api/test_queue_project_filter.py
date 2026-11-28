@@ -8,15 +8,15 @@ tenant's order, at their whole-order positions and never reranked. Every queue e
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from blizzard.hub.api.queue import QueueReads
+from blizzard.hub.api.queue import QueueViewAssembler
 from blizzard.hub.domain.chunk.model import ChunkFacts
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from tests.support.scaffolding import (
@@ -29,6 +29,7 @@ from tests.support.scaffolding import (
     hub_store_connections,
     ingest,
     link_project,
+    rebuilt_default_service,
     resolve_default_tenant_with,
     seed_project,
     seed_runner,
@@ -199,8 +200,8 @@ def test_matched_peek_reconstitutes_only_served_candidates(
             return super().movement_facts_for(chunk_ids)
 
     facts = CandidateFacts()
-    reads = hub.default_adapter(QueueReads)
-    resolve_default_tenant_with(hub, monkeypatch, {QueueReads: replace(reads, facts=facts)})
+    queues = rebuilt_default_service(hub, QueueViewAssembler, facts=facts)
+    resolve_default_tenant_with(hub, monkeypatch, {QueueViewAssembler: queues, IReadChunkFactsRepository: facts})
 
     def measured() -> tuple[list[tuple[str, int]], int]:
         with capture_statements(hub.engine) as statements:

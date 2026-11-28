@@ -23,12 +23,15 @@ from blizzard.hub.api.questions import question_view
 from blizzard.hub.api.urgency_refs import urgency_ref
 from blizzard.hub.domain.artifact.model import GitCommitArtifact, StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
-from blizzard.hub.domain.chunk.dependencies import BlockedMarking
+from blizzard.hub.domain.chunk.dependencies import BlockedMarking, derive_blocked_prerequisites
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
     ChunkVerb,
+    GateDecision,
+    GateResolution,
+    NodeQuestion,
     PauseFact,
     UsageTotal,
     WorkRef,
@@ -38,6 +41,7 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
+from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
@@ -45,9 +49,15 @@ from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsReposito
 from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import CommitOrigin, IReadRepositoryRecordRepository, resolve_origin_record
 from blizzard.hub.domain.delivery.declarations import delivery_declarations_for
-from blizzard.hub.domain.delivery.flows import PollPolicy, SubmissionRecord, bounce_is_rework, bounce_withdrew
+from blizzard.hub.domain.delivery.flows import (
+    FlowFact,
+    PollPolicy,
+    SubmissionRecord,
+    bounce_is_rework,
+    bounce_withdrew,
+)
 from blizzard.hub.domain.delivery.ports.flows import IReadFlows, IReadFlowViews
-from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, IReadGraphRepository
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph, IReadGraphRepository
 from blizzard.hub.domain.graph.progress import NodeVisit, node_progress
 from blizzard.hub.domain.operations.complete import is_completion_replay
 from blizzard.hub.domain.operations.edit import is_graph_editable
@@ -98,7 +108,7 @@ class _RouteNotInjected(Enum):
     TOKEN = 0
 
 
-#: :meth:`ChunkView.of`'s default, distinct from an *injected* ``None``.
+#: :class:`ChunkView`'s default route, distinct from an *injected* ``None``.
 _ROUTE_NOT_INJECTED: Final = _RouteNotInjected.TOKEN
 
 
@@ -130,14 +140,14 @@ class _LiveHoldersNotInjected(Enum):
     TOKEN = 0
 
 
-#: :meth:`ChunkView.of`'s default: no live-holder map was given, so it resolves lazily.
+#: :class:`ChunkView`'s default: no live-holder map was given, so it resolves lazily.
 _LIVE_HOLDERS_NOT_INJECTED: Final = _LiveHoldersNotInjected.TOKEN
 
 
 def blocked_view(unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedView | None:
     """A derived marking's wire wrapping — the one home every caller of
     :func:`~blizzard.hub.domain.chunk.dependencies.derive_blocked_prerequisites` reaches through,
-    listing routes and ``ChunkView`` alike. Takes the dependent's whole unmet set, in
+    queue rows and chunk views alike. Takes the dependent's whole unmet set, in
     declared order, and maps :meth:`BlockedMarking.of`'s marking onto the wire."""
     marking = BlockedMarking.of(unmet_prerequisite_chunk_ids)
     if marking is None:
@@ -169,49 +179,286 @@ class DeliveryWireFields(TypedDict):
     landed: bool
 
 
-@dataclass(frozen=True)
-class ChunkViewReads:
-    """What one chunk read renders from — the chunk's own reads, its graphs, urgencies, project and delivery
-    records, its runner's names, its work sources, and the flow reads its places and bounces come from."""
+class ChunkViewAssembler:
+    """Builds each :class:`ChunkView`, owning every port a chunk read renders from — the chunk's reads and edges,
+    graphs, urgencies, project and delivery records, runner names, work sources, and the flow reads its places and
+    bounces come from. A view reads lazily through these methods; no caller reaches a port."""
 
-    facts: IReadChunkFactsRepository
-    route: IReadChunkRouteRepository
-    work_refs: IReadChunkWorkRefsRepository
-    artifacts: IReadChunkArtifactsRepository
-    decisions: IReadChunkDecisionsRepository
-    questions: IReadChunkQuestionsRepository
-    graphs: IReadGraphRepository
-    urgency_reading: UrgencyReading
-    projects: IReadProjectRepository
-    project_links: IReadProjectLinks
-    repository_records: IReadRepositoryRecordRepository
-    forge_records: IReadForgeRepository
-    chunk_targets: ChunkTargets
-    commit_links: IReadLandedCommitLinks
-    registry: IReadRunnerRegistry
-    work_sources: IWorkSourceRegistry
-    flows: IReadFlows
-    flow_views: IReadFlowViews
-    lines: FlowLineReads
+    def __init__(
+        self,
+        facts: IReadChunkFactsRepository,
+        route: IReadChunkRouteRepository,
+        work_refs: IReadChunkWorkRefsRepository,
+        artifacts: IReadChunkArtifactsRepository,
+        decisions: IReadChunkDecisionsRepository,
+        questions: IReadChunkQuestionsRepository,
+        dependencies: IReadChunkDependenciesRepository,
+        graphs: IReadGraphRepository,
+        urgency_reading: UrgencyReading,
+        projects: IReadProjectRepository,
+        project_links: IReadProjectLinks,
+        repository_records: IReadRepositoryRecordRepository,
+        forge_records: IReadForgeRepository,
+        chunk_targets: ChunkTargets,
+        commit_links: IReadLandedCommitLinks,
+        registry: IReadRunnerRegistry,
+        work_sources: IWorkSourceRegistry,
+        flows: IReadFlows,
+        flow_views: IReadFlowViews,
+        lines: FlowLineReads,
+    ) -> None:
+        self._facts = facts
+        self._route = route
+        self._work_refs = work_refs
+        self._artifacts = artifacts
+        self._decisions = decisions
+        self._questions = questions
+        self._dependencies = dependencies
+        self._graphs = graphs
+        self._urgency_reading = urgency_reading
+        self._projects = projects
+        self._project_links = project_links
+        self._repository_records = repository_records
+        self._forge_records = forge_records
+        self._chunk_targets = chunk_targets
+        self._commit_links = commit_links
+        self._registry = registry
+        self._work_sources = work_sources
+        self._flows = flows
+        self._flow_views = flow_views
+        self._lines = lines
+
+    def view(
+        self,
+        chunk: Chunk,
+        *,
+        names: GraphNames | None = None,
+        blocked: BlockedView | None = None,
+        facts: ChunkFacts | None = None,
+        neighborhood: ChunkNeighborhoodView | None = None,
+        delete_refusal: ChunkDeleteRefusal | None = None,
+    ) -> ChunkView:
+        """One chunk's view. ``facts`` hands in the chunk's own facts a caller already loaded; omitted, this
+        loads them."""
+        return ChunkView(
+            assembler=self,
+            chunk=chunk,
+            facts=facts if facts is not None else (self._facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)),
+            names=names or GraphNames(self._graphs),
+            blocked=blocked,
+            neighborhood=neighborhood,
+            delete_refusal=delete_refusal,
+        )
+
+    def page(self, chunks: Sequence[Chunk], facts: Mapping[str, ChunkFacts], names: GraphNames) -> list[ChunkView]:
+        """The bulk counterpart to :meth:`view`: one page's views, every read each would make resolved once through
+        narrowed, batched reads. ``facts`` holds the page's already-loaded facts and ``names`` is primed here."""
+        page_ids = [c.chunk_id for c in chunks]
+        routes = self._route.routes_for(page_ids)
+        # The dependency edges join the facts here, not inside a store (``bzh:dependency-inversion``);
+        # an off-page prerequisite's status is read by id.
+        edges = self._dependencies.standing_edges_for_dependents(page_ids)
+        statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
+        off_page = sorted({e.prerequisite_chunk_id for e in edges if e.prerequisite_chunk_id not in statuses})
+        if off_page:
+            statuses.update(
+                (chunk_id, chunk_facts.status())
+                for chunk_id, chunk_facts in self._facts.status_facts_for(off_page).items()
+            )
+        markings = derive_blocked_prerequisites(edges, statuses)
+        # One priming call resolves the page's own pinned graphs' name/entry-node/node-names
+        # up front — narrowed to the page, since nothing outside it is rendered.
+        names.prime(chunk.graph_id for chunk in chunks)
+        # The graph progress each live row carries reads its pinned graph whole, and names its visits in the graphs
+        # they happened in: one reifying read and one more priming call, both narrowed to the page's live chunks.
+        live = [c for c in chunks if ChunkFacts.or_default(facts.get(c.chunk_id)).status() not in TERMINAL_STATUSES]
+        names.prime_graphs(chunk.graph_id for chunk in live)
+        names.prime(
+            graph_id
+            for chunk in live
+            for chunk_facts in [ChunkFacts.or_default(facts.get(chunk.chunk_id))]
+            for graph_id in [
+                *(t.graph_id for t in chunk_facts.transitions),
+                *(m.from_graph_id for m in chunk_facts.migrations),
+                *(m.to_graph_id for m in chunk_facts.migrations),
+            ]
+        )
+        # Delivery belongs only to rendered rows: one narrowed, batched read over this page's ids.
+        delivery_sources = self._artifacts.delivery_sources_for([chunk.chunk_id for chunk in chunks])
+        declarations = delivery_declarations_for(
+            chunks,
+            delivery_sources,
+            project_links=self._project_links,
+            repository_records=self._repository_records,
+            forge_records=self._forge_records,
+            targets=self._chunk_targets,
+        )
+        commit_links = self._commit_links.for_chunks(chunks)
+        # A pointer the page renders can be held live by a chunk outside it; the store narrows to live candidates.
+        live_holders = self._work_refs.live_holders(p for chunk in chunks for p in chunk.work_refs)
+        # The page's routed runners' registered names — one batched read, narrowed to the page.
+        runner_names = self._registry.names_for(
+            route.runner_id for chunk in chunks if (route := routes.get(chunk.chunk_id)) is not None
+        )
+        # The tenant's urgencies — one read of the set, joined to every row.
+        urgencies = self._urgency_reading.by_id()
+        # The page's projects — one batched read, narrowed to the page.
+        projects = self._projects.get_many(sorted({c.project_id for c in chunks if c.project_id is not None}))
+        # The page's sources, their config revisions read once on each request and never cached across requests.
+        sources = self._work_sources.bindings(pointer.source for chunk in chunks for pointer in chunk.work_refs)
+        # A page chunk's flow place depends on the submissions ahead of it, whose chunks need not be on the page: the
+        # read covers the whole line of every flow the page's chunks hold — bounded by the line, not the fleet.
+        flow_places = self.flow_places(page_ids)
+        # A bounce's withdrawal reads its visit's submission: one batched read over the page's bounced chunks.
+        submissions = self._flows.submissions_of_chunks(
+            [chunk.chunk_id for chunk in chunks if (f := facts.get(chunk.chunk_id)) is not None and f.bounces]
+        )
+        return [
+            ChunkView(
+                assembler=self,
+                chunk=chunk,
+                facts=facts.get(chunk.chunk_id) or ChunkFacts(minted=True),
+                route=routes.get(chunk.chunk_id),
+                names=names,
+                live_holders=live_holders,
+                blocked=blocked_view(markings.get(chunk.chunk_id)),
+                delivery=DeliveryRead.of(
+                    facts.get(chunk.chunk_id) or ChunkFacts(minted=True),
+                    delivery_sources.get(chunk.chunk_id, DeliverySources()),
+                    declarations.get(chunk.chunk_id, []),
+                    commit_links[chunk.chunk_id],
+                ),
+                runner_names=runner_names,
+                projects=projects,
+                sources=sources,
+                flow_places=flow_places,
+                submissions=submissions,
+                urgencies=urgencies,
+            )
+            for chunk in chunks
+        ]
+
+    def flow_places(self, chunk_ids: Sequence[str]) -> dict[str, list[ChunkFlowPlaceView]]:
+        return chunk_flow_places(self._lines, chunk_ids)
+
+    def urgencies(self) -> Mapping[UrgencyId, Urgency]:
+        return self._urgency_reading.by_id()
+
+    def project(self, project_id: ProjectId) -> Project | None:
+        return self._projects.get(project_id)
+
+    def delivery(self, chunk: Chunk, facts: ChunkFacts) -> DeliveryRead:
+        """One chunk's delivery read, from its own declarations and commit links."""
+        sources = self._artifacts.delivery_sources_for([chunk.chunk_id])
+        declarations = delivery_declarations_for(
+            [chunk],
+            sources,
+            project_links=self._project_links,
+            repository_records=self._repository_records,
+            forge_records=self._forge_records,
+            targets=self._chunk_targets,
+        )
+        commit_links = self._commit_links.for_chunks([chunk])
+        return DeliveryRead.of(
+            facts,
+            sources.get(chunk.chunk_id, DeliverySources()),
+            declarations.get(chunk.chunk_id, []),
+            commit_links[chunk.chunk_id],
+        )
+
+    def route_of(self, chunk_id: str) -> Route | None:
+        return self._route.route_of(chunk_id)
+
+    def runner_names(self, runner_ids: Iterable[str]) -> Mapping[str, str]:
+        return self._registry.names_for(runner_ids)
+
+    def live_holders(self, work_refs: Sequence[WorkRef]) -> dict[WorkRef, str]:
+        return self._work_refs.live_holders(work_refs)
+
+    def source_bindings(self, source_keys: Iterable[str]) -> IWorkSourceBindings:
+        return self._work_sources.bindings(source_keys)
+
+    def artifacts(self, chunk_id: str) -> list[StoredArtifact]:
+        return self._artifacts.load_artifacts(chunk_id)
+
+    def decision(self, chunk_id: str) -> GateDecision | None:
+        return self._decisions.decision_for_chunk(chunk_id)
+
+    def resolutions(self, chunk_id: str) -> list[GateResolution]:
+        return self._decisions.resolutions_for_chunk(chunk_id)
+
+    def questions(self, chunk_id: str) -> list[NodeQuestion]:
+        return self._questions.load_questions(chunk_id)
+
+    def submissions(self, chunk_id: str) -> list[SubmissionRecord]:
+        return self._flows.submissions_of(chunk_id)
+
+    def flow_record(self, chunk_id: str) -> Sequence[FlowFact]:
+        return self._flow_views.chunk_records([chunk_id]).get(chunk_id, [])
+
+    def graph(self, graph_id: str) -> Graph | None:
+        return self._graphs.get(graph_id)
+
+    def repository_targets(self, chunk: Chunk) -> list[ChunkRepositoryTargetView]:
+        """The chunk's effective targets (:func:`with_records`): each captured one, else its live preview."""
+        targets = self._chunk_targets.effective(TargetChunk(chunk.chunk_id, chunk.project_id))
+        records = self._repository_records.get_many(sorted(targets)) if targets else {}
+        return [
+            ChunkRepositoryTargetView(
+                repository_id=target.repository_id,
+                repository_slug=record.slug,
+                base_branch=target.base_branch,
+                inherited=target.inherited,
+                captured_at=iso_utc(target.captured_at) if target.captured_at is not None else None,
+            )
+            for target, record in with_records(targets, records)
+        ]
+
+    def branch_links(
+        self, chunk: Chunk, rows: list[StoredArtifact]
+    ) -> Callable[[StoredArtifact, GitCommitArtifact], str | None]:
+        """Each git-commit artifact's branch link: the forge ``tree`` address on the record its repository resolves to
+        by delivery's rules, among those the chunk's project links, standing at its mint time. ``None`` when it resolves
+        to no one record (unknown, ambiguous, or not linked). One read each of the links, records and linked forges
+        serves every commit of the view, and none is made when it carries no commit."""
+        if not any(isinstance(row.artifact, GitCommitArtifact) for row in rows):
+            return lambda _row, _commit: None
+        project_id = chunk.project_id
+        linked = (
+            frozenset(link.repository_id for link in self._project_links.repositories_of(project_id))
+            if project_id is not None
+            else frozenset[str]()
+        )
+        records = self._repository_records.list_all(include_retired=True) if linked else []
+        forges = self._forge_records.get_many(
+            list({record.fields.forge_id for record in records if record.repository_id in linked})
+        )
+        minted_at = chunk.minted_at
+
+        def link(row: StoredArtifact, commit: GitCommitArtifact) -> str | None:
+            origin = CommitOrigin.of(commit.forge or None, commit.repo or row.name)
+            record = resolve_origin_record(origin, records, forges.values(), minted_at=minted_at, linked=linked)
+            if record is None:
+                return None
+            links = web_links(forges[record.fields.forge_id])
+            return links.branch_url(record.fields, commit.branch_name) if links is not None else None
+
+        return link
 
 
 @dataclass(frozen=True)
 class ChunkView:
-    """One chunk read — the row, the facts every derived value comes from
-    (``bzh:facts-not-status``), and the graph resolver the read shares.
+    """One chunk read — the row, the facts every derived value comes from (``bzh:facts-not-status``), and the graph
+    resolver the read shares. Built by :class:`ChunkViewAssembler`, whose methods make every read it does not carry."""
 
-    A whole-fleet read hands :meth:`of` one :class:`GraphNames` for every chunk, so the
-    graphs a fleet shares are resolved once across the list rather than once per row."""
-
-    reads: ChunkViewReads
+    assembler: ChunkViewAssembler
     chunk: Chunk
     facts: ChunkFacts
     names: GraphNames
     route: Route | None | _RouteNotInjected = _ROUTE_NOT_INJECTED
     #: Every pointer's live holder — the caller's own already-resolved map.
     live_holders: dict[WorkRef, str] | _LiveHoldersNotInjected = _LIVE_HOLDERS_NOT_INJECTED
-    #: The chunk's blocked marking — the caller's own already-derived value; neither
-    #: constructor derives it, and ``None`` when the caller did not derive it.
+    #: The chunk's derived blocked marking; ``None`` when the view's builder derived none.
     blocked: BlockedView | None = None
     #: The chunk's standing-edge neighborhood — the caller's own
     #: already-derived value, the same shape ``blocked`` takes.
@@ -234,80 +481,14 @@ class ChunkView:
     #: The tenant's urgencies by id, retired included, read once per response; ``None`` makes each render read them.
     urgencies: Mapping[UrgencyId, Urgency] | None = None
 
-    @classmethod
-    def of(
-        cls,
-        reads: ChunkViewReads,
-        chunk: Chunk,
-        names: GraphNames | None = None,
-        blocked: BlockedView | None = None,
-        facts: ChunkFacts | None = None,
-        neighborhood: ChunkNeighborhoodView | None = None,
-        delete_refusal: ChunkDeleteRefusal | None = None,
-    ) -> ChunkView:
-        """``facts`` hands in the chunk's own facts a caller already loaded; omitted, this
-        loads them."""
-        return cls(
-            reads=reads,
-            chunk=chunk,
-            facts=facts if facts is not None else (reads.facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)),
-            names=names or GraphNames(reads.graphs),
-            blocked=blocked,
-            neighborhood=neighborhood,
-            delete_refusal=delete_refusal,
-        )
-
-    @classmethod
-    def injected(
-        cls,
-        reads: ChunkViewReads,
-        chunk: Chunk,
-        facts: ChunkFacts,
-        route: Route | None,
-        names: GraphNames,
-        live_holders: dict[WorkRef, str],
-        blocked: BlockedView | None = None,
-        delivery: DeliveryRead | None = None,
-        runner_names: Mapping[str, str] | None = None,
-        projects: Mapping[ProjectId, Project] | None = None,
-        sources: IWorkSourceBindings | None = None,
-        flow_places: Mapping[str, list[ChunkFlowPlaceView]] | None = None,
-        submissions: Mapping[str, list[SubmissionRecord]] | None = None,
-        urgencies: Mapping[UrgencyId, Urgency] | None = None,
-    ) -> ChunkView:
-        """The bulk-read counterpart to :meth:`of`: a fan-out list read injects
-        already-fetched facts, route, pointer live-holders, runner names and projects, skipping
-        a per-chunk ``load_facts``/``route_of``/``live_holders``/``names_for``/project read.
-        ``route=None`` means "no live route"; :meth:`of` leaves both uninjected."""
-        return cls(
-            reads=reads,
-            chunk=chunk,
-            facts=facts,
-            names=names,
-            route=route,
-            live_holders=live_holders,
-            blocked=blocked,
-            delivery=delivery,
-            runner_names=runner_names,
-            projects=projects,
-            sources=sources,
-            flow_places=flow_places,
-            submissions=submissions,
-            urgencies=urgencies,
-        )
-
     def _flow_places(self) -> list[ChunkFlowPlaceView]:
         """The chunk's flow places: from the injected page read, else one read of the chunk's own line."""
-        places = (
-            self.flow_places
-            if self.flow_places is not None
-            else chunk_flow_places(self.reads.lines, [self.chunk.chunk_id])
-        )
+        places = self.flow_places if self.flow_places is not None else self.assembler.flow_places([self.chunk.chunk_id])
         return places.get(self.chunk.chunk_id, [])
 
     def urgency(self) -> UrgencyRef | None:
         """The chunk's urgency reference: joined to the injected set, else to one read of the set."""
-        urgencies = self.urgencies if self.urgencies is not None else self.reads.urgency_reading.by_id()
+        urgencies = self.urgencies if self.urgencies is not None else self.assembler.urgencies()
         return urgency_ref(self.chunk.urgency_id, urgencies)
 
     def _project_fields(self) -> ProjectLabelFields:
@@ -317,27 +498,10 @@ class ChunkView:
             return project_label_fields(None, None)
         if self.projects is not None:
             return project_label_fields(project_id, self.projects.get(project_id))
-        return project_label_fields(project_id, self.reads.projects.get(project_id))
+        return project_label_fields(project_id, self.assembler.project(project_id))
 
     def _delivery(self) -> DeliveryRead:
-        if self.delivery is not None:
-            return self.delivery
-        sources = self.reads.artifacts.delivery_sources_for([self.chunk.chunk_id])
-        declarations = delivery_declarations_for(
-            [self.chunk],
-            sources,
-            project_links=self.reads.project_links,
-            repository_records=self.reads.repository_records,
-            forge_records=self.reads.forge_records,
-            targets=self.reads.chunk_targets,
-        )
-        commit_links = self.reads.commit_links.for_chunks([self.chunk])
-        return DeliveryRead.of(
-            self.facts,
-            sources.get(self.chunk.chunk_id, DeliverySources()),
-            declarations.get(self.chunk.chunk_id, []),
-            commit_links[self.chunk.chunk_id],
-        )
+        return self.delivery if self.delivery is not None else self.assembler.delivery(self.chunk, self.facts)
 
     @staticmethod
     def _delivery_fields(delivery: DeliveryRead) -> DeliveryWireFields:
@@ -353,22 +517,22 @@ class ChunkView:
 
     def _resolved_route(self) -> Route | None:
         """The chunk's route: the injected value if one was given, otherwise fetched lazily
-        via :meth:`~blizzard.hub.domain.chunk.ports.route.IReadChunkRouteRepository.route_of`."""
+        via :meth:`ChunkViewAssembler.route_of`."""
         if self.route is not _ROUTE_NOT_INJECTED:
             return self.route
-        return self.reads.route.route_of(self.chunk.chunk_id)
+        return self.assembler.route_of(self.chunk.chunk_id)
 
     def _runner_names(self, runner_ids: Iterable[str | None]) -> Mapping[str, str]:
         """The registered names of the runners this render shows: the injected map, else one
         ``names_for`` read over just ``runner_ids`` (none at all when every id is ``None``)."""
         if self.runner_names is not None:
             return self.runner_names
-        return self.reads.registry.names_for(runner_id for runner_id in runner_ids if runner_id is not None)
+        return self.assembler.runner_names(runner_id for runner_id in runner_ids if runner_id is not None)
 
     def _resolved_live_holders(self) -> dict[WorkRef, str]:
         if self.live_holders is not _LIVE_HOLDERS_NOT_INJECTED:
             return self.live_holders
-        return self.reads.work_refs.live_holders(self.chunk.work_refs)
+        return self.assembler.live_holders(self.chunk.work_refs)
 
     def summary(self) -> ChunkSummary:
         """The derived fleet-list row — rendered both by the list read and by
@@ -382,7 +546,7 @@ class ChunkView:
         elif self.route is not _ROUTE_NOT_INJECTED:
             route = self.route
         else:
-            route = self.reads.route.route_of(self.chunk.chunk_id)
+            route = self.assembler.route_of(self.chunk.chunk_id)
         runner_id = route.runner_id if route is not None else None
         completed_at = self.facts.completed_at()
         return ChunkSummary(
@@ -453,7 +617,7 @@ class ChunkView:
         resolves to its own binding by key, so a chunk's pointers need not all share one source. Liveness resolves
         via :meth:`_resolved_live_holders`'s one bulk call."""
         holders = self._resolved_live_holders()
-        sources = self.sources or self.reads.work_sources.bindings(p.source for p in self.chunk.work_refs)
+        sources = self.sources or self.assembler.source_bindings(p.source for p in self.chunk.work_refs)
         views: list[WorkRefView] = []
         for p in self.chunk.work_refs:
             source = sources.get(p.source)
@@ -473,12 +637,12 @@ class ChunkView:
     def detail(self) -> ChunkDetail:
         node_id, node_name = self.current_node()
         graph_created_at = self.names.created_at(self.chunk.graph_id)
-        artifacts = self.reads.artifacts.load_artifacts(self.chunk.chunk_id)
+        artifacts = self.assembler.artifacts(self.chunk.chunk_id)
         history = ChunkHistoryView(self.facts, self.names)
         status = self.facts.status()
         route = self._resolved_route()
-        decision = self.reads.decisions.decision_for_chunk(self.chunk.chunk_id)
-        questions = self.reads.questions.load_questions(self.chunk.chunk_id)
+        decision = self.assembler.decision(self.chunk.chunk_id)
+        questions = self.assembler.questions(self.chunk.chunk_id)
         # One read names every runner the detail shows: the route's, the gate's, each asker's.
         runner_names = self._runner_names(
             [
@@ -533,7 +697,7 @@ class ChunkView:
                 for question in questions
             ],
             **self._delivery_fields(self._delivery()),
-            repository_targets=self._repository_targets(),
+            repository_targets=self.assembler.repository_targets(self.chunk),
             cost=self.usage_total(),
             usage=self._usage_history(),
             pending=self._pending(),
@@ -543,27 +707,9 @@ class ChunkView:
             # ranges, landing attempts, the elapsed span and each repository's outcome from the complete sequence.
             # The read grows with this chunk's history, repeated waits included — even one submission can wait many
             # times — so it sits outside the page-bounded rule; no detail-load slowdown has been shown.
-            flow_record=[
-                fact_view(fact)
-                for fact in self.reads.flow_views.chunk_records([self.chunk.chunk_id]).get(self.chunk.chunk_id, [])
-            ],
+            flow_record=[fact_view(fact) for fact in self.assembler.flow_record(self.chunk.chunk_id)],
             **project,
         )
-
-    def _repository_targets(self) -> list[ChunkRepositoryTargetView]:
-        """The chunk's effective targets (:func:`with_records`): each captured one, else its live preview."""
-        targets = self.reads.chunk_targets.effective(TargetChunk(self.chunk.chunk_id, self.chunk.project_id))
-        records = self.reads.repository_records.get_many(sorted(targets)) if targets else {}
-        return [
-            ChunkRepositoryTargetView(
-                repository_id=target.repository_id,
-                repository_slug=record.slug,
-                base_branch=target.base_branch,
-                inherited=target.inherited,
-                captured_at=iso_utc(target.captured_at) if target.captured_at is not None else None,
-            )
-            for target, record in with_records(targets, records)
-        ]
 
     @staticmethod
     def _route(route: Route | None, runner_names: Mapping[str, str]) -> RouteView | None:
@@ -590,7 +736,7 @@ class ChunkView:
                 overrode_red_checks=d.overrode_red_checks,
                 note=d.note,
             )
-            for d in self.reads.decisions.resolutions_for_chunk(self.chunk.chunk_id)
+            for d in self.assembler.resolutions(self.chunk.chunk_id)
         ]
 
     def _escalation(self) -> ChunkEscalationView | None:
@@ -615,7 +761,7 @@ class ChunkView:
         pending = self.facts.hub_node_pending()
         if pending is None or self.facts.open_escalation() is not None:
             return None
-        graph = self.reads.graphs.get(self.chunk.graph_id)
+        graph = self.assembler.graph(self.chunk.graph_id)
         node = graph.node_by_id(pending.node_id) if graph is not None else None
         if node is None:
             return None
@@ -672,7 +818,7 @@ class ChunkView:
         elif self.submissions is not None:
             submissions = self.submissions.get(self.chunk.chunk_id, [])
         else:
-            submissions = self.reads.flows.submissions_of(self.chunk.chunk_id)
+            submissions = self.assembler.submissions(self.chunk.chunk_id)
         return [
             BounceView(
                 cause=b.cause,
@@ -684,42 +830,11 @@ class ChunkView:
             for b in bounces
         ]
 
-    def _branch_links(self, rows: list[StoredArtifact]) -> Callable[[StoredArtifact, GitCommitArtifact], str | None]:
-        """Each git-commit artifact's branch link: the forge ``tree`` address on the repository
-        record its repository resolves to by delivery's rules — among the records the chunk's
-        project links, standing at the chunk's mint time, on its forge's web origin. ``None`` for a repository
-        resolving to no one record (unknown, ambiguous, or not linked); a chunk with no project links
-        none. One read of the links, one of the records and one of the linked records' forges serve every commit of
-        the view, and none at all when the view carries no commit."""
-        if not any(isinstance(row.artifact, GitCommitArtifact) for row in rows):
-            return lambda _row, _commit: None
-        project_id = self.chunk.project_id
-        linked = (
-            frozenset(link.repository_id for link in self.reads.project_links.repositories_of(project_id))
-            if project_id is not None
-            else frozenset[str]()
-        )
-        records = self.reads.repository_records.list_all(include_retired=True) if linked else []
-        forges = self.reads.forge_records.get_many(
-            list({record.fields.forge_id for record in records if record.repository_id in linked})
-        )
-        minted_at = self.chunk.minted_at
-
-        def link(row: StoredArtifact, commit: GitCommitArtifact) -> str | None:
-            origin = CommitOrigin.of(commit.forge or None, commit.repo or row.name)
-            record = resolve_origin_record(origin, records, forges.values(), minted_at=minted_at, linked=linked)
-            if record is None:
-                return None
-            links = web_links(forges[record.fields.forge_id])
-            return links.branch_url(record.fields, commit.branch_name) if links is not None else None
-
-        return link
-
     def _artifacts(self, rows: list[StoredArtifact]) -> list[ArtifactView]:
         """The chunk's inline artifact store — every entry, with an asset's content and a
         git-commit's pinned reference surfaced; ordered by ``{node}.{name}.{epoch}``
         so a re-run's later-epoch entry follows its predecessors (append-only history)."""
-        branch_link = self._branch_links(rows)
+        branch_link = self.assembler.branch_links(self.chunk, rows)
         views: list[ArtifactView] = []
         for row in sorted(rows, key=lambda r: (r.node_name, r.name, r.epoch)):
             artifact = row.artifact

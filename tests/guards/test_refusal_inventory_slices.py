@@ -614,7 +614,7 @@ def _planted_calls_delegate() -> None:
 
 
 def _planted_known_helper(chunk_id: str, reads: Any) -> Any:
-    return chunks_api.chunk_detail(chunk_id, reads, reads, reads)
+    return chunks_api.chunk_detail(chunk_id, reads, reads, reads, reads, reads)
 
 
 def test_unlisted_direct_producer_cannot_borrow_another_operation() -> None:

@@ -21,14 +21,11 @@ from blizzard.hub.api.auth_session import tenant_bound
 from blizzard.hub.api.ingest_broadcast import pushed_facts
 from blizzard.hub.api.problem_rendering import problem_response
 from blizzard.hub.api.runners import (
-    Clock,
     Events,
-    Executors,
     Fleet,
     Frames,
     HostEnrollment,
     Hosts,
-    Projects,
     Routes,
     RunnerReads,
     Runners,
@@ -175,10 +172,7 @@ def retire_host_runner(
     request: RunnerRetireRequest,
     registry: Runners,
     fleet: Fleet,
-    clock: Clock,
-    projects: Projects,
-    hosts: Hosts,
-    executors: Executors,
+    reads: FromDishka[RunnerReads],
     routes: Routes,
     events: Events,
     frames: Frames,
@@ -208,7 +202,7 @@ def retire_host_runner(
     assert refreshed is not None  # just retired, so the runner exists
 
     return RunnerRetireResponse(
-        runner=RunnerReads(registry, fleet, clock, projects, hosts, executors).detail(refreshed),
+        runner=reads.detail(refreshed),
         released_chunk_ids=[r.chunk_id for r in outcome.released],
     )
 

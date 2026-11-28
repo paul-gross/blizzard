@@ -27,8 +27,7 @@ from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.api.chunk_edit import ChunkPatchBody
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
-from blizzard.hub.api.chunk_views import ChunkView, ChunkViewReads, blocked_view, ingest_conflict_refusal
-from blizzard.hub.api.flow_places import chunk_flow_places
+from blizzard.hub.api.chunk_views import ChunkViewAssembler, blocked_view, ingest_conflict_refusal
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problem_rendering import declared_problem_response
@@ -38,7 +37,6 @@ from blizzard.hub.api.urgencies import stated_urgency, urgency_refusal
 from blizzard.hub.api.work_item_reads import read_chunk_work_items
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.delivery.flow_changes import publish_flow_facts
-from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.dependencies import (
     ChunkNeighbor,
     derive_blocked_prerequisites,
@@ -62,7 +60,6 @@ from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesR
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
-from blizzard.hub.domain.delivery.declarations import delivery_declarations_for
 from blizzard.hub.domain.execution.decisions import NotEscalated, RequeueService
 from blizzard.hub.domain.execution.detach import DetachService, NotRouted
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired, DefaultGraphService
@@ -139,7 +136,7 @@ router = APIRouter(
 Records = FromDishka[IReadChunkRecordRepository]
 Frames = FromDishka[ChunkFrameLoader]
 Events = FromDishka[EventBroker]
-Views = FromDishka[ChunkViewReads]
+Views = FromDishka[ChunkViewAssembler]
 
 
 @dataclass(frozen=True)
@@ -277,7 +274,8 @@ def ingest_chunk(
 def list_chunks(
     views: Views,
     records: Records,
-    dependencies: FromDishka[IReadChunkDependenciesRepository],
+    fact_reads: FromDishka[IReadChunkFactsRepository],
+    graphs: FromDishka[IReadGraphRepository],
     clock: FromDishka[IClock],
     project: QueryProject,
     cursor: Annotated[str | None, Query()] = None,
@@ -296,14 +294,14 @@ def list_chunks(
     # the scope's done chunks by a derived instant no index orders — a fleet-sized walk by design.
     done_since = clock.now() - BOARD_DONE_WINDOW if board_window else None
     done_floor = records.newest_done(limit=BOARD_DONE_FLOOR, project=project) if board_window else []
-    names = GraphNames(views.graphs)
+    names = GraphNames(graphs)
     try:
         page = records.list_page(
             cursor=cursor, limit=limit, done_since=done_since, done_kept=done_floor, project=project
         )
     except MalformedCursor as exc:
         raise ProblemHTTPException(partial(problems.malformed_cursor_problem, exc)) from exc
-    facts = views.facts.load_facts_for([c.chunk_id for c in page.chunks])
+    facts = fact_reads.load_facts_for([c.chunk_id for c in page.chunks])
     if done_since is not None:
         # The store's exclusion leaves a same-instant movement tie in; the derivation settles it. A floor
         # member is exempt: it stays however old.
@@ -315,92 +313,8 @@ def list_chunks(
         ]
     else:
         page_chunks = page.chunks
-    page_ids = [c.chunk_id for c in page_chunks]
-    routes = views.route.routes_for(page_ids)
-    # The dependency edges join the facts at this call site, not inside a store
-    # (``bzh:dependency-inversion``): the page dependents' standing edges, with their
-    # prerequisites' statuses read by id when the prerequisite is off the page.
-    edges = dependencies.standing_edges_for_dependents(page_ids)
-    statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
-    off_page = sorted({e.prerequisite_chunk_id for e in edges if e.prerequisite_chunk_id not in statuses})
-    if off_page:
-        statuses.update(
-            (chunk_id, chunk_facts.status()) for chunk_id, chunk_facts in views.facts.status_facts_for(off_page).items()
-        )
-    markings = derive_blocked_prerequisites(edges, statuses)
-    # One priming call resolves the page's own pinned graphs' name/entry-node/node-names
-    # up front — narrowed to the page, since nothing outside it is rendered.
-    names.prime(chunk.graph_id for chunk in page_chunks)
-    # The graph progress each live row carries reads its pinned graph whole, and names its visits in the graphs they
-    # happened in: one reifying read and one more priming call, both narrowed to the page's live chunks.
-    live = [c for c in page_chunks if ChunkFacts.or_default(facts.get(c.chunk_id)).status() not in TERMINAL_STATUSES]
-    names.prime_graphs(chunk.graph_id for chunk in live)
-    names.prime(
-        graph_id
-        for chunk in live
-        for chunk_facts in [ChunkFacts.or_default(facts.get(chunk.chunk_id))]
-        for graph_id in [
-            *(t.graph_id for t in chunk_facts.transitions),
-            *(m.from_graph_id for m in chunk_facts.migrations),
-            *(m.to_graph_id for m in chunk_facts.migrations),
-        ]
-    )
-    # Unlike the fleet-wide status/holder reads above, delivery belongs only to
-    # rendered rows: one narrowed, batched read over this page's ids.
-    delivery_sources = views.artifacts.delivery_sources_for([chunk.chunk_id for chunk in page_chunks])
-    declarations = delivery_declarations_for(
-        page_chunks,
-        delivery_sources,
-        project_links=views.project_links,
-        repository_records=views.repository_records,
-        forge_records=views.forge_records,
-        targets=views.chunk_targets,
-    )
-    commit_links = views.commit_links.for_chunks(page_chunks)
-    # A pointer the page renders can be held live by a chunk outside it; the store narrows to live candidates.
-    live_holders = views.work_refs.live_holders(p for chunk in page_chunks for p in chunk.work_refs)
-    # The page's routed runners' registered names — one batched read, narrowed to the page.
-    runner_names = views.registry.names_for(
-        route.runner_id for chunk in page_chunks if (route := routes.get(chunk.chunk_id)) is not None
-    )
-    # The tenant's urgencies — one read of the set, joined to every row.
-    urgencies = views.urgency_reading.by_id()
-    # The page's projects — one batched read, narrowed to the page.
-    projects = views.projects.get_many(sorted({c.project_id for c in page_chunks if c.project_id is not None}))
-    # The page's sources, their config revisions read once on each request and never cached across requests.
-    sources = views.work_sources.bindings(pointer.source for chunk in page_chunks for pointer in chunk.work_refs)
-    # A page chunk's flow place depends on the submissions ahead of it, whose chunks need not be on the page: the
-    # read covers the whole line of every flow the page's chunks hold — bounded by the line, not the fleet.
-    flow_places = chunk_flow_places(views.lines, page_ids)
-    # A bounce's withdrawal reads its visit's submission: one batched read over the page's bounced chunks.
-    submissions = views.flows.submissions_of_chunks(
-        [chunk.chunk_id for chunk in page_chunks if (f := facts.get(chunk.chunk_id)) is not None and f.bounces]
-    )
     return ChunksPageView(
-        chunks=[
-            ChunkView.injected(
-                views,
-                chunk,
-                facts.get(chunk.chunk_id) or ChunkFacts(minted=True),
-                routes.get(chunk.chunk_id),
-                names,
-                live_holders,
-                blocked=blocked_view(markings.get(chunk.chunk_id)),
-                delivery=DeliveryRead.of(
-                    facts.get(chunk.chunk_id) or ChunkFacts(minted=True),
-                    delivery_sources.get(chunk.chunk_id, DeliverySources()),
-                    declarations.get(chunk.chunk_id, []),
-                    commit_links[chunk.chunk_id],
-                ),
-                runner_names=runner_names,
-                projects=projects,
-                sources=sources,
-                flow_places=flow_places,
-                submissions=submissions,
-                urgencies=urgencies,
-            ).summary()
-            for chunk in page_chunks
-        ],
+        chunks=[view.summary() for view in views.page(page_chunks, facts, names)],
         next_cursor=page.next_cursor,
         board_done_policy=(
             BoardDonePolicyView(
@@ -606,29 +520,36 @@ def landing_facts(
 @router.get("/chunks/{chunk_id}", response_model=ChunkDetail, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 @inject_sync
 def get_chunk(
-    chunk_id: str, records: Records, dependencies: FromDishka[IReadChunkDependenciesRepository], views: Views
+    chunk_id: str,
+    records: Records,
+    dependencies: FromDishka[IReadChunkDependenciesRepository],
+    views: Views,
+    facts: FromDishka[IReadChunkFactsRepository],
+    graphs: FromDishka[IReadGraphRepository],
 ) -> ChunkDetail:
     """One chunk aggregate in full — derived status, current node, route."""
-    return chunk_detail(chunk_id, records, dependencies, views)
+    return chunk_detail(chunk_id, records, dependencies, views, facts, graphs)
 
 
 def chunk_detail(
     chunk_id: str,
     records: IReadChunkRecordRepository,
     dependencies: IReadChunkDependenciesRepository,
-    views: ChunkViewReads,
+    views: ChunkViewAssembler,
+    fact_reads: IReadChunkFactsRepository,
+    graphs: IReadGraphRepository,
 ) -> ChunkDetail:
     """One chunk aggregate in full, as the operator and the fleet read it; 404 for an unknown chunk."""
     chunk = records.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
-    facts = views.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
-    blocked, neighborhood, refusal = _dependency_views_for_chunk(dependencies, views.facts, chunk_id, facts=facts)
+    facts = fact_reads.load_facts(chunk_id) or ChunkFacts(minted=True)
+    blocked, neighborhood, refusal = _dependency_views_for_chunk(dependencies, fact_reads, chunk_id, facts=facts)
     # Primed with every graph id this chunk's history ever names.
-    names = GraphNames(views.graphs)
+    names = GraphNames(graphs)
     names.prime(_detail_graph_ids(chunk, facts))
-    return ChunkView.of(
-        views, chunk, names=names, blocked=blocked, facts=facts, neighborhood=neighborhood, delete_refusal=refusal
+    return views.view(
+        chunk, names=names, blocked=blocked, facts=facts, neighborhood=neighborhood, delete_refusal=refusal
     ).detail()
 
 
@@ -680,7 +601,7 @@ def requeue_chunk(
         raise ProblemHTTPException(partial(problems_chunks.chunk_not_escalated_problem, str(exc))) from exc
     facts = change.publish(cause="requeued", key=f"requeues:{requeue_id}")
     events.publish_queue_changed()  # requeue can re-admit the chunk to the queue
-    return ChunkView.of(views, chunk, facts=facts).summary()
+    return views.view(chunk, facts=facts).summary()
 
 
 @router.post(
@@ -735,7 +656,7 @@ def restart_chunk(
     publish_flow_facts(events, restarted.withdrawn)
     events.publish_queue_changed()  # an unrouted chunk re-enters the queue at the target node
     # Re-read: a cross-graph move re-pinned the chunk, and the row's node name resolves off that pin.
-    return ChunkView.of(views, records.get(chunk_id) or chunk, facts=facts).summary()
+    return views.view(records.get(chunk_id) or chunk, facts=facts).summary()
 
 
 @router.post(
@@ -759,7 +680,7 @@ def detach_chunk(
         raise ProblemHTTPException(partial(problems_chunks.chunk_not_routed_problem, str(exc))) from exc
     facts = change.publish(cause="detached", key=f"route_released:{released_id}")
     events.publish_queue_changed()  # a detached chunk re-enters the ready queue
-    return ChunkView.of(views, chunk, facts=facts).summary()
+    return views.view(chunk, facts=facts).summary()
 
 
 @router.post(
@@ -789,7 +710,7 @@ def paused(
     pauses: PauseService,
     frames: ChunkFrameLoader,
     events: EventBroker,
-    views: ChunkViewReads,
+    views: ChunkViewAssembler,
 ) -> ChunkSummary:
     """Pause ``chunk_id`` as ``by``, as the operator and the fleet pause it; 404 unknown, 409 unpausable."""
     chunk = records.get(chunk_id)
@@ -804,7 +725,7 @@ def paused(
         raise ProblemHTTPException(partial(problems.chunk_not_pausable_problem, exc)) from exc
     facts = change.publish(cause="paused", key=f"chunk_pause_facts:{pause_fact_id}")
     events.publish_queue_changed()  # a pause moves the chunk out of the ready queue
-    return ChunkView.of(views, chunk, facts=facts).summary()
+    return views.view(chunk, facts=facts).summary()
 
 
 @router.post(
@@ -834,7 +755,7 @@ def resumed(
     pauses: PauseService,
     frames: ChunkFrameLoader,
     events: EventBroker,
-    views: ChunkViewReads,
+    views: ChunkViewAssembler,
 ) -> ChunkSummary:
     """Resume ``chunk_id`` as ``by``, as the operator and the fleet resume it; 404 unknown."""
     chunk = records.get(chunk_id)
@@ -844,7 +765,7 @@ def resumed(
     pause_fact_id = pauses.resume(chunk, by=by)
     facts = change.publish(cause="resumed", key=f"chunk_pause_facts:{pause_fact_id}")
     events.publish_queue_changed()  # a resume can re-admit the chunk to the queue
-    return ChunkView.of(views, chunk, facts=facts).summary()
+    return views.view(chunk, facts=facts).summary()
 
 
 @router.post(
@@ -881,7 +802,7 @@ def stop_chunk(
     facts = change.publish(cause="stopped", key=f"chunk_stopped:{stopped.fact_id}")
     publish_flow_facts(events, stopped.withdrawn)
     events.publish_queue_changed()  # a stopped chunk is never offered for claim again
-    return ChunkView.of(views, chunk, facts=facts).summary()
+    return views.view(chunk, facts=facts).summary()
 
 
 @router.post(
@@ -918,7 +839,7 @@ def complete_chunk(
     if completed is not None:
         publish_flow_facts(events, completed.withdrawn)
     events.publish_queue_changed()  # a completed chunk is never offered for claim again
-    return ChunkView.of(views, chunk, facts=facts).summary()
+    return views.view(chunk, facts=facts).summary()
 
 
 def _placement_of(request: ChunkPlacementRequest | None) -> Placement:
@@ -971,7 +892,7 @@ def promote_chunk(
     key = f"chunk_promoted:{promoted_id}" if promoted_id is not None else None
     facts = change.publish(cause="promoted", key=key)
     events.publish_queue_changed()  # a promoted chunk enters the ready queue
-    return ChunkView.of(views, chunk, facts=facts).summary()
+    return views.view(chunk, facts=facts).summary()
 
 
 @router.post(
@@ -1014,7 +935,7 @@ def demote_chunk(
     key = f"chunk_demoted:{demoted_id}" if demoted_id is not None else None
     facts = change.publish(cause="demoted", key=key)
     events.publish_queue_changed()  # a demoted chunk leaves the ready queue
-    return ChunkView.of(views, chunk, facts=facts).summary()
+    return views.view(chunk, facts=facts).summary()
 
 
 @router.patch(
@@ -1063,7 +984,7 @@ def patch_chunk(
     facts = change.publish(cause="edited")
     if plan.urgency_id is not None:
         events.publish_queue_changed()  # the queue views carry urgency
-    view = ChunkView.of(views, updated, facts=facts)
+    view = views.view(updated, facts=facts)
     return ChunkPatchResponse(
         chunk_id=chunk_id,
         graph_id=updated.graph_id,

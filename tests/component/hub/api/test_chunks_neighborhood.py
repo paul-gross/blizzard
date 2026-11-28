@@ -6,20 +6,20 @@ two empty lists."""
 
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.api.chunk_views import ChunkViewReads
+from blizzard.hub.api.chunk_views import ChunkViewAssembler
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.chunk.ports.dependencies import (
     DEPENDENCIES_LOCK,
     IReadChunkDependenciesRepository,
     IWriteChunkDependenciesRepository,
 )
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.scoped import ScopedConnections
@@ -30,6 +30,7 @@ from tests.support.scaffolding import (
     count_queries,
     hub_store_connections,
     ingest,
+    rebuilt_default_service,
     resolve_default_tenant_with,
 )
 
@@ -159,8 +160,8 @@ def test_a_chunk_with_no_standing_edges_costs_no_additional_facts_reads(
 
     counting = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
-    views = hub.default_adapter(ChunkViewReads)
-    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewReads: replace(views, facts=counting)})
+    views = rebuilt_default_service(hub, ChunkViewAssembler, facts=counting)
+    resolve_default_tenant_with(hub, monkeypatch, {ChunkViewAssembler: views, IReadChunkFactsRepository: counting})
 
     resp = hub.client.get(f"/api/chunks/{bare_id}")
 
