@@ -1,6 +1,7 @@
 import json
 import shlex
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -58,8 +59,9 @@ def test_strict_types_rule_applies_to_real_scans(tmp_path: Path, path: str, expe
     command = tomllib.loads((ROOT / "mise.toml").read_text())["tasks"]["structural-gate"]["run"].split(" && ")[0]
     args = shlex.split(command)
     assert args[:3] == ["uv", "run", "ast-grep"]
+    ast_grep = str(Path(sys.executable).parent / "ast-grep")  # ships no `-m` entry point
     result = subprocess.run(
-        [*args[2:-1], "--json", args[-1]],
+        [ast_grep, *args[3:-1], "--json", args[-1]],
         cwd=tmp_path,
         capture_output=True,
         text=True,
@@ -72,7 +74,7 @@ def test_strict_types_rule_applies_to_real_scans(tmp_path: Path, path: str, expe
         assert matches[0]["ruleId"] == "bzh:strict-types"
     if path == "nested/build/example.py":
         vcs = args.index("vcs")
-        control = [*args[2 : vcs - 1], *args[vcs + 1 : -1], "--json", args[-1]]
+        control = [ast_grep, *args[3 : vcs - 1], *args[vcs + 1 : -1], "--json", args[-1]]
         skipped = subprocess.run(control, cwd=tmp_path, capture_output=True, text=True, check=False)
         assert skipped.returncode == 0, skipped.stderr
         assert json.loads(skipped.stdout) == []
@@ -87,7 +89,11 @@ def test_pyright_discovers_the_same_owned_paths(tmp_path: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text('value: int = "wrong"\n')
     result = subprocess.run(
-        ["pyright", "--outputjson", "--project", str(tmp_path)], cwd=ROOT, capture_output=True, text=True, check=False
+        [sys.executable, "-m", "pyright", "--outputjson", "--project", str(tmp_path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     assert result.returncode == 1, result.stderr
     assert result.stdout, f"pyright produced no JSON output; stderr: {result.stderr}"
