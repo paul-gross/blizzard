@@ -14,7 +14,7 @@ from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.secrets import ENV_SECRET_KEY
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
-from tests.support.config_inputs import build_hosted_hub_app, init_hub, load_hub_config
+from tests.support.config_inputs import build_hosted_hub_app, hosted_engine, init_hub, load_hub_config
 from tests.support.scaffolding import tenant_adapter_of
 
 _TOKEN_ENV = "BZ_WORK_SOURCE_TOKEN"
@@ -37,7 +37,7 @@ def hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HubConfig:
 
 def _start(config: HubConfig) -> None:
     app = build_hosted_hub_app(load_hub_config(config.root))
-    app.state.engine.dispose()
+    hosted_engine(app).dispose()
 
 
 def _add_legacy_keys(config: HubConfig, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -92,7 +92,7 @@ def test_an_imported_hub_with_its_legacy_keys_removed_starts(hub: HubConfig, mon
             [RESERVED_HUB_SOURCE_NAME, "blizzard"]
         )
     finally:
-        app.state.engine.dispose()
+        hosted_engine(app).dispose()
 
 
 def test_a_fresh_hub_without_legacy_keys_starts_with_an_empty_store(hub: HubConfig) -> None:
@@ -102,4 +102,4 @@ def test_a_fresh_hub_without_legacy_keys_starts_with_an_empty_store(hub: HubConf
         assert tenant_adapter_of(app, IReadWorkSourceRepository).list_all(include_retired=True) == []
         assert tenant_adapter_of(app, IReadRepositoryRecordRepository).list_all(include_retired=True) == []
     finally:
-        app.state.engine.dispose()
+        hosted_engine(app).dispose()

@@ -37,7 +37,7 @@ from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsSt
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
 from blizzard.hub.work_sources.source import IWorkSourceRegistry, WorkSourceAuthRefused, WorkSourceError
-from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.config_inputs import build_hosted_hub_app, hosted_engine, init_hub
 from tests.support.forge_auth import sent_header
 from tests.support.registry_statements import registry_over
 from tests.support.scaffolding import (
@@ -73,7 +73,7 @@ def hub(tmp_path: Path) -> Iterator[tuple[TestClient, FastAPI]]:
     # Never entered as a context manager: no lifespan, so no background sweep races the test's own passes.
     client = TestClient(app)
     yield client, app
-    app.state.engine.dispose()
+    hosted_engine(app).dispose()
 
 
 def _sources(app: FastAPI) -> IWorkSourceRegistry:
@@ -360,7 +360,9 @@ def test_an_active_source_that_cannot_be_built_raises_on_closer(
 
     registry = StoreWorkSourceRegistry(
         records=tenant_adapter_of(app, IReadWorkSourceRepository),
-        objects=ConfigObjectCache(ConfigRevisionsStore(hub_store_connections(cast(FastAPI, client.app).state.engine))),
+        objects=ConfigObjectCache(
+            ConfigRevisionsStore(hub_store_connections(hosted_engine(cast(FastAPI, client.app))))
+        ),
         build=unbuildable,
         built_in=_sources(app).get("hub"),  # pyright: ignore[reportArgumentType]  # the registry port types its "hub" entry as IWorkSource; it is the built-in source
     )
@@ -394,7 +396,9 @@ def test_a_source_whose_credential_the_forge_refuses_at_build_raises_the_annotat
 
     registry = StoreWorkSourceRegistry(
         records=tenant_adapter_of(app, IReadWorkSourceRepository),
-        objects=ConfigObjectCache(ConfigRevisionsStore(hub_store_connections(cast(FastAPI, client.app).state.engine))),
+        objects=ConfigObjectCache(
+            ConfigRevisionsStore(hub_store_connections(hosted_engine(cast(FastAPI, client.app))))
+        ),
         build=refused,
         built_in=_sources(app).get("hub"),  # pyright: ignore[reportArgumentType]  # the registry port types its "hub" entry as IWorkSource; it is the built-in source
     )
@@ -419,7 +423,7 @@ def _stored_registry(
     """A registry of its own over ``app``'s records and revisions, building through ``build``."""
     return registry_over(
         tenant_adapter_of(app, IReadWorkSourceRepository),
-        ConfigRevisionsStore(hub_store_connections(app.state.engine)),
+        ConfigRevisionsStore(hub_store_connections(hosted_engine(app))),
         _sources(app).get("hub"),
         build,
         close_forge_writes_enabled=close_forge_writes_enabled,
@@ -638,7 +642,7 @@ def test_an_edit_landing_between_a_binding_s_two_reads_is_not_cached_as_current(
 
     registry = registry_over(
         cast(IReadWorkSourceRepository, EditingRecords()),
-        EditingRevisions(hub_store_connections(app.state.engine)),
+        EditingRevisions(hub_store_connections(hosted_engine(app))),
         _sources(app).get("hub"),
         _slugged,
     )

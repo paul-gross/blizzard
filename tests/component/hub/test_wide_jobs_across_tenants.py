@@ -43,7 +43,7 @@ from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.config_inputs import build_hosted_hub_app, hosted_engine, init_hub
 from tests.support.scaffolding import (
     OP,
     add_tenant,
@@ -114,7 +114,7 @@ def hub(tmp_path: Path) -> Iterator[_Hub]:
 
 
 def _build(config: HubConfig) -> None:
-    build_hosted_hub_app(config).state.engine.dispose()
+    hosted_engine(build_hosted_hub_app(config)).dispose()
 
 
 def _orphan_a_turn(hub: _Hub, tenant: TenantId, suffix: str) -> None:

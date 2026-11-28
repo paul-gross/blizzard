@@ -11,7 +11,8 @@ def test_cap_edit_reaches_every_open_tenant(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, with_settings=True)
     second = hub.add_tenant("bravo")
     tenants = (default_tenant(hub.engine), second.tenant)
-    settings = hub.wired_app.state.hub_settings
+    settings = hub.settings
+    assert settings is not None
     chunks: list[str] = []
     for tenant in tenants:
         response = hub.client.post("/api/chunks", json={"tokens": ["hub:1"]}, headers={TENANT_HEADER: tenant})

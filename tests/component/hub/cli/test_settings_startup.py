@@ -218,6 +218,7 @@ def test_settings_audit_uses_hosted_clock(tmp_path: Path, monkeypatch: pytest.Mo
     from datetime import timedelta
 
     import sqlalchemy as sa
+    from sqlalchemy.engine import Engine
 
     from blizzard.foundation.clock import ControlledClock
     from blizzard.foundation.settings_record.vocabulary import Change
@@ -256,7 +257,9 @@ def test_settings_audit_uses_hosted_clock(tmp_path: Path, monkeypatch: pytest.Mo
                 door="api",
                 actor="test",
             )
-            with app.state.engine.connect() as conn:
+            engine = resources[0]
+            assert isinstance(engine, Engine)
+            with engine.connect() as conn:
                 recorded = conn.execute(
                     sa.select(hub_setting_changes.c.recorded_at).where(hub_setting_changes.c.actor == "test")
                 ).scalar_one()

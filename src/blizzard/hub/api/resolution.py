@@ -7,6 +7,7 @@ completes or is cancelled — never closing the tenant. A registration the store
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, NoReturn
@@ -30,6 +31,11 @@ _RESOLVER_STATE = "dishka_container"
 def hub_process(request: Request) -> HubProcess:
     """The hub process the app was built over."""
     return request.app.state.hub_process
+
+
+def shutdown_event(request: Request) -> asyncio.Event:
+    """The event set when the app begins shutting down."""
+    return request.app.state.shutdown
 
 
 async def process_request(request: Request) -> None:

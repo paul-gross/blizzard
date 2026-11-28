@@ -314,14 +314,12 @@ def test_delegated_pause_race_maps_real_error_without_changing_detail() -> None:
 def test_real_idp_refusals_render_their_declared_problems() -> None:
     request = MagicMock()
     request.url.path = "/api/auth/jwks.json"
-    request.app.state.config.auth.mode = "none"
     request.state.dishka_container.get.return_value = None
     # Dishka removes injected arguments from the runtime wrapper's call signature.
     jwks = cast(Callable[..., Any], idp.jwks)
     authorize = cast(Callable[..., Any], idp.authorize)
     disabled = jwks(request=request)
     request.url.path = "/api/auth/authorize"
-    request.app.state.config.auth.mode = "oauth"
     response_mode = authorize(
         request=request, machine=MagicMock(), client="r", redirect_uri="/callback", state="s", response_mode="invalid"
     )

@@ -385,8 +385,10 @@ def _declared_open_map(document: dict[str, Any]) -> dict[str, Any]:
 def test_the_hub_openapi_declares_an_open_map_that_no_flag_in_play_changes() -> None:
     document = export_hub_app().openapi()
     assert _declared_open_map(document)["additionalProperties"] == {"type": "boolean"}
-    flags = resolve_flags(_fixture(), "hub", {"hub-thing": True, "fleet-thing": True}).flags
-    app = create_hub_app(HubConfig(root=Path("."), db_url="sqlite://"), flags=flags)
+    config = HubConfig(
+        root=Path("."), db_url="sqlite://", flag_registry=_fixture(), flags={"hub-thing": True, "fleet-thing": True}
+    )
+    app = create_hub_app(config)
     assert app.openapi() == document
 
 

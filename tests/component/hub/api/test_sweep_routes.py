@@ -51,12 +51,10 @@ class _Hub:
 
 
 def _two_tenants(tmp_path: Path, mode: SweepMode = SweepMode.TIMED) -> _Hub:
-    hub = build_hub(tmp_path)
+    hub = build_hub(tmp_path, sweeps=SweepModes(dict.fromkeys(SweepName, mode)))
     carried = default_tenant(hub.engine)
     other = hub.add_tenant("other").tenant
     stores = {carried: landed_hub_ref(hub, carried, "ch_carried"), other: landed_hub_ref(hub, other, "ch_other")}
-    app = hub.wired_app
-    app.state.config = dataclasses.replace(app.state.config, sweeps=SweepModes(dict.fromkeys(SweepName, mode)))
     return _Hub(hub, carried, other, stores)
 
 

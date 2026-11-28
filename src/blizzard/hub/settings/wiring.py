@@ -105,8 +105,10 @@ def register_boot(registry: Registry) -> None:
 
 def register(registry: Registry) -> None:
     """Declare the settings ports and the live config source over the borrowed graph."""
-    for build in (settings_admin, settings_reader, settings_authoring, settings_footing):
+    for build in (settings_admin, settings_reader, settings_footing):
         registry.factory(build, lifetime=Lifetime.PROCESS)
+    authoring = registry.factory(settings_authoring, lifetime=Lifetime.PROCESS)
+    registry.optional(port(HubSettingsAuthoring), authoring, lifetime=Lifetime.PROCESS)
     registry.factory(settings_config_source, lifetime=Lifetime.PROCESS)
 
 
@@ -119,3 +121,4 @@ def register_absent(registry: Registry) -> None:
     """Declare the settings ports absent, for a graph with no settings."""
     for missing in (IReadHubSettingsAdmin, HubSettingsReader, HubSettingsAuthoring, HubSettingsFooting):
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+    registry.optional(port(HubSettingsAuthoring), None, lifetime=Lifetime.PROCESS)

@@ -14,12 +14,12 @@ from blizzard.foundation.clock import ControlledClock
 from blizzard.foundation.web import Frontend
 from blizzard.hub.api.clock import clock_router
 from blizzard.hub.api.test_flow_control import flow_control_router
-from blizzard.hub.config import AUTH_MODE_OAUTH
+from blizzard.hub.config import AUTH_MODE_OAUTH, HubConfig
 from blizzard.hub.delivery.flow_driver import FlowDriver, TickResult
 from blizzard.hub.domain.delivery.flows import RECONCILE_FLOOR
 from blizzard.hub.runtime import migration_runner
 from blizzard.wire.clock import ClockMoveRequest
-from tests.support.config_inputs import build_hosted_hub_app, create_hub_app, init_hub
+from tests.support.config_inputs import build_hosted_hub_app, create_hub_app, hosted_engine, init_hub
 from tests.support.scaffolding import build_hub, runner_token, seed_hub_admin, seed_runner, seed_session, seed_user
 
 
@@ -61,7 +61,7 @@ def test_clock_routes_on_store_behind_head(tmp_path: Path, monkeypatch: pytest.M
             assert client.post("/api/admin/clock", json={"advance_seconds": 1}).status_code == 200
             assert not any(isinstance(r, APIRoute) and r.path == "/api/admin/test-flow/step" for r in app.routes)
     finally:
-        app.state.engine.dispose()
+        hosted_engine(app).dispose()
 
 
 def test_clock_and_step(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -114,7 +114,7 @@ def test_clock_and_step(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
             assert forward.json() == {"previous": step["now"], "now": target.isoformat()}
             assert "/api/admin/clock" not in client.get("/openapi.json").json()["paths"]
     finally:
-        app.state.engine.dispose()
+        hosted_engine(app).dispose()
 
 
 def test_built_board_does_not_mask_unmounted_controls(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -133,7 +133,7 @@ def test_built_board_does_not_mask_unmounted_controls(tmp_path: Path, monkeypatc
             assert client.get("/some/board/route").text == "<html>board shell</html>"
             assert client.get("/api/unrelated-missing").text == "<html>board shell</html>"
     finally:
-        app.state.engine.dispose()
+        hosted_engine(app).dispose()
 
 
 @pytest.mark.parametrize(
@@ -159,7 +159,7 @@ def test_unpermitted_clock_routes(
             assert not any(isinstance(route, APIRoute) and route.path == "/api/admin/clock" for route in app.routes)
             assert client.post("/api/admin/clock", json={"advance_seconds": 0}).status_code in (404, 405)
     finally:
-        app.state.engine.dispose()
+        hosted_engine(app).dispose()
 
 
 def test_authorization(tmp_path: Path) -> None:
@@ -167,7 +167,7 @@ def test_authorization(tmp_path: Path) -> None:
     clock = ControlledClock(datetime(2025, 1, 1, tzinfo=UTC))
     lock = asyncio.Lock()
     app = create_hub_app(
-        hub.wired_app.state.config,
+        hub.process.resolver.get(HubConfig),
         process=hub.process,
         test_flow_router=flow_control_router(hub.flow_driver, clock, lock),
         controlled_clock_router=clock_router(clock, lock),

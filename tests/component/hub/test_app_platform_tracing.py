@@ -41,7 +41,7 @@ from blizzard.hub.domain.observability.tracing.attributes import (
 from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads, TenantRunner
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.tenancy import TenantId
-from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.config_inputs import build_hosted_hub_app, hosted_engine, init_hub
 from tests.support.scaffolding import (
     RunnerFleetClient,
     hub_scoped,
@@ -233,7 +233,7 @@ class _UserSeedRig:
 
 
 def _seed_operator(app: FastAPI) -> User:
-    rig = _UserSeedRig(engine=app.state.engine, clock=FixedClock(datetime(2026, 7, 13, tzinfo=UTC)))
+    rig = _UserSeedRig(engine=hosted_engine(app), clock=FixedClock(datetime(2026, 7, 13, tzinfo=UTC)))
     return seed_user(rig, username="op", role=Role.CONTRIBUTOR, email="op@example.com")  # pyright: ignore[reportArgumentType]  # seed_user reads only engine and clock; a hosted app has no full HubHarness
 
 
@@ -319,9 +319,8 @@ def test_store_free_none_mode_serves_identity_and_hub_operator_with_trace_header
     from blizzard.auth_core import Permission
     from blizzard.hub.api.auth_session import require_hub
     from blizzard.hub.app import create_app
-    from tests.support.flag_guard import flags_for
 
-    app = create_app(_config(tmp_path), flags=flags_for("hub"))
+    app = create_app(_config(tmp_path))
 
     @app.get("/test-operator", dependencies=[Depends(require_hub(Permission.TENANT_ADMIN))])
     def operator() -> dict[str, bool]:
@@ -466,12 +465,12 @@ def test_a_hub_action_pass_parents_on_its_turns_hub_exec_span_which_the_trace_co
         )
         deadline = time.monotonic() + 10
         while True:
-            with app.state.engine.connect() as conn:
+            with hosted_engine(app).connect() as conn:
                 ended = conn.execute(turn_query).all()
             if ended or time.monotonic() > deadline:
                 break
             time.sleep(0.05)
-        with hub_scoped_engine(app.state.engine).connect() as conn:
+        with hub_scoped_engine(hosted_engine(app)).connect() as conn:
             _, facts, _ = step_facts_for(conn, [chunk_id])[chunk_id]
         assert facts.pin_graph_id is not None
         pinned = tenant_adapter_of(app, IReadGraphRepository).get(facts.pin_graph_id)

@@ -20,7 +20,7 @@ from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.secrets import ENV_SECRET_KEY
 from blizzard.hub.store import schema as s
 from blizzard.hub.tenancy import TenantId
-from tests.support.config_inputs import build_hosted_hub_app, init_hub, load_hub_config
+from tests.support.config_inputs import build_hosted_hub_app, hosted_engine, init_hub, load_hub_config
 from tests.support.scaffolding import (
     HubHarness,
     add_tenant,
@@ -236,4 +236,4 @@ def test_a_hub_whose_toml_still_sets_runner_auth_mode_boots_and_refuses_a_tokenl
         assert client.post("/api/fleet/runners", json={"workspace_id": "w1"}).status_code == 401
         assert client.get("/api/fleet/identity").json() == _refusal("missing")[1]
     finally:
-        app.state.engine.dispose()
+        hosted_engine(app).dispose()

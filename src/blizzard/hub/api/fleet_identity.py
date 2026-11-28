@@ -13,6 +13,7 @@ from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
+from blizzard.foundation.flags import Flags
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.hub.api.auth import MachineCredentials, RunnerAuth, RunnerPrincipal, machine_credentials
 from blizzard.hub.api.problem_rendering import problem_response
@@ -32,6 +33,7 @@ router = APIRouter(prefix="/api/fleet", tags=["fleet"])
 def get_runner_identity(
     request: Request,
     open_tenants: FromDishka[OpenTenants],
+    flags: FromDishka[Flags],
     machine: Annotated[MachineCredentials, Depends(machine_credentials)],
 ) -> RunnerIdentityView | JSONResponse:
     """The id and name of the runner the presented bearer token names, and the tenant it was added
@@ -47,7 +49,7 @@ def get_runner_identity(
         runner_name=identified.runner_name,
         tenant_id=identified.tenant_id,
         tenant_name=open_tenants.name(identified.tenant_id),
-        fleet_flags=request.app.state.flags.fleet_answer(),
+        fleet_flags=flags.fleet_answer(),
     )
 
 

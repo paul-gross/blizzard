@@ -22,7 +22,7 @@ from blizzard.hub.auth.memberships import IReadMembershipRepository, Membership
 from blizzard.hub.auth.permissions import permissions_for
 from blizzard.hub.auth.service import ASSIGNABLE_ROLES, AuthService
 from blizzard.hub.auth.sessions import IReadSessionRepository
-from blizzard.hub.config import AUTH_MODE_NONE
+from blizzard.hub.config import AUTH_MODE_NONE, HubConfig
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.tenancy import TenantId
 from blizzard.wire.me import MeResponse, MeTenant
@@ -38,15 +38,16 @@ def me(
     open_tenants: FromDishka[OpenTenants | None],
     sessions: FromDishka[IReadSessionRepository | None],
     auth: FromDishka[AuthService | None],
+    config: FromDishka[HubConfig],
 ) -> MeResponse | JSONResponse:
     """Under ``auth.mode = "none"`` the implicit operator, a member of every open tenant; under
     ``oauth`` with a resolving session, the session's person; under ``oauth`` with none, 401.
     A header naming a tenant the caller cannot enter resolves no tenant — never a 404 here."""
-    mode = request.app.state.config.auth.mode
+    mode = config.auth.mode
     # An unwired store answers before anything is asked of the caller's session.
     if mode != AUTH_MODE_NONE and memberships_reader is None:
         raise ServiceAbsent("membership repository")
-    identity = resolve_identity(request, sessions, auth)
+    identity = resolve_identity(request, sessions, auth, config)
     if identity is None:
         return problem_response(
             authentication_required_problem(instance=request.url.path, detail="not authenticated"),

@@ -10,13 +10,14 @@ import pytest
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from blizzard.foundation.flags import Flags, FlagSide
+from blizzard.foundation.flags import FlagRegistry, Flags, FlagSide
 from blizzard.hub.api.flag_guard import flag_guard as hub_flag_guard
 from blizzard.hub.config import HubConfig
 from blizzard.runner.api.flag_guard import flag_guard as runner_flag_guard
 from blizzard.runner.config import RunnerConfig
 from blizzard.wire.flags import FlagOff
 from tests.support.config_inputs import create_hub_app, create_runner_app
+from tests.support.flag_guard import REGISTRY
 from tests.support.flag_guard import flags_for as _flags
 
 
@@ -40,7 +41,13 @@ def _mount(app: FastAPI, router: APIRouter) -> FastAPI:
 
 
 def _hub(flags: Flags) -> FastAPI:
-    app = create_hub_app(HubConfig(root=Path("."), db_url="sqlite://"), flags=flags)
+    config = HubConfig(
+        root=Path("."),
+        db_url="sqlite://",
+        flags=flags.values,
+        flag_registry=FlagRegistry.parse(REGISTRY, "fixture"),
+    )
+    app = create_hub_app(config)
     return _mount(app, _router(hub_flag_guard, "hub-thing"))
 
 

@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from blizzard.foundation.flags import Flags, resolve_flags
+from blizzard.foundation.flags import Flags
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.foundation.registry.interface import ServiceAbsent
 from blizzard.foundation.store.readiness import ReadinessService
@@ -49,8 +49,8 @@ def test_the_hosted_app_boots_over_the_containers_lifecycle_owners(tmp_path: Pat
     resolver = process.resolver
     loop = resolver.get(ActionLoop)
 
-    assert app.state.readiness is resolver.get(ReadinessService)
-    assert app.state.flags is resolver.get(Flags)
+    assert isinstance(resolver.get(ReadinessService), ReadinessService)
+    assert isinstance(resolver.get(Flags), Flags)
     assert resolver.get(IHubStepWake) is resolver.get(StepWake)
     assert resolver.get(ActionPassDriver)._loop is loop
     with TestClient(app) as client:
@@ -125,7 +125,7 @@ def test_a_failed_boot_still_stops_the_loop_it_resolved(tmp_path: Path, monkeypa
 
 
 def test_the_store_free_app_declares_every_lifecycle_owner_absent(tmp_path: Path) -> None:
-    app = create_app(HubConfig(root=tmp_path, db_url="sqlite://"), flags=resolve_flags(FLAG_REGISTRY, "hub", {}).flags)
+    app = create_app(HubConfig(root=tmp_path, db_url="sqlite://", flag_registry=FLAG_REGISTRY))
     resolver = app.state.hub_process.resolver
     for missing in (ActionLoop, ActionPassDriver, StepWake, IHubStepWake, OpenTenants, ReadinessService):
         with pytest.raises(ServiceAbsent):

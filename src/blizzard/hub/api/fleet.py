@@ -123,6 +123,7 @@ from blizzard.hub.domain.runners.registration import (
 )
 from blizzard.hub.domain.runners.version import RunnerVersionRefused
 from blizzard.hub.events.broker import EventBroker
+from blizzard.hub.settings.service import HubSettingsAuthoring
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import StoreScope
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
@@ -178,6 +179,11 @@ claim_router = APIRouter(
 )
 
 
+@inject_sync
+def _live_settings(authoring: FromDishka[HubSettingsAuthoring | None]) -> bool:
+    return authoring is not None
+
+
 @collaborator
 @dataclass(frozen=True)
 class FleetRequest:
@@ -193,33 +199,33 @@ class FleetRequest:
     @classmethod
     def of(
         cls,
-        request: Request,
         principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
         tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)],
         config: Annotated[HubConfig, Depends(request_config)],
+        live_settings: Annotated[bool, Depends(_live_settings)],
     ) -> FleetRequest:
         return cls(
             principal,
             config,
             tenant.scope,
             tenant.name,
-            getattr(request.app.state, "hub_settings", None) is not None,
+            live_settings,
         )
 
     @classmethod
     def of_even_if_retired(
         cls,
-        request: Request,
         principal: Annotated[RunnerPrincipal, Depends(require_runner_principal_even_if_retired)],
         tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)],
         config: Annotated[HubConfig, Depends(request_config)],
+        live_settings: Annotated[bool, Depends(_live_settings)],
     ) -> FleetRequest:
         return cls(
             principal,
             config,
             tenant.scope,
             tenant.name,
-            getattr(request.app.state, "hub_settings", None) is not None,
+            live_settings,
         )
 
     @property
