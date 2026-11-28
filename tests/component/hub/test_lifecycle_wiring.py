@@ -33,7 +33,6 @@ from blizzard.hub.domain.tenancy.teardown import TenantTeardown
 from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentDrainer
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.process_root import HubProcess
-from blizzard.hub.scopes.tenants import TenantContainers
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.wire.tenant import TENANT_NOT_FOUND
 from tests.support.config_inputs import FLAG_REGISTRY, build_hosted_hub_app, init_hub
@@ -66,29 +65,31 @@ def test_the_hosted_cleanup_closes_the_tenant_scopes_before_the_loop_and_leaves_
     config = init_hub(tmp_path / "hub")
     engine, connections = open_hub_store(config.db_url, DisabledPlatformTracing())
     events: list[str] = []
-    original_close = TenantContainers.close
-    original_stop = ActionLoop.stop
-
-    def close_tenants(tenants: TenantContainers) -> None:
-        events.append("tenants")
-        original_close(tenants)
-
-    def stop(loop: ActionLoop) -> None:
-        events.append("loop" if loop._loop is not None else "loop-idle")
-        original_stop(loop)
-
     dispose = engine.dispose
 
     def record_dispose(close: bool = True) -> None:
         events.append("dispose")
         dispose(close)
 
-    monkeypatch.setattr(TenantContainers, "close", close_tenants)
-    monkeypatch.setattr(ActionLoop, "stop", stop)
     monkeypatch.setattr(engine, "dispose", record_dispose)
     try:
         app = build_hosted_hub_app(config, engine=engine, connections=connections)
-        app.state.hub_process.resolver.get(ActionLoop).start()
+        process: HubProcess = app.state.hub_process
+        loop = process.resolver.get(ActionLoop)
+        close_tenants, stop = process.tenants.close, loop.stop
+
+        def record_close_tenants() -> None:
+            events.append("tenants")
+            close_tenants()
+
+        def record_stop() -> None:
+            events.append("loop" if loop._loop is not None else "loop-idle")
+            stop()
+
+        # This app's own instances: an earlier test's unclosed app stops its loop whenever it is collected.
+        monkeypatch.setattr(process.tenants, "close", record_close_tenants)
+        monkeypatch.setattr(loop, "stop", record_stop)
+        loop.start()
         app.state.hosted_cleanup.close()
 
         assert events == ["tenants", "loop"]
