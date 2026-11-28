@@ -12,8 +12,8 @@ from pathlib import Path
 
 from sqlalchemy import insert as sa_insert
 
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.store import schema
 from tests.support.scaffolding import (
     HubHarness,

@@ -16,9 +16,9 @@ from sqlalchemy import Connection, Select, and_, or_
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.instants import as_utc, iso_utc
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.batching import id_batches
-from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration, WorkRef
 from blizzard.hub.domain.chunk.ports.queue import QueueList
 from blizzard.hub.domain.chunk.ports.record import ChunkPage, IWriteChunkRecordRepository, QueueKey

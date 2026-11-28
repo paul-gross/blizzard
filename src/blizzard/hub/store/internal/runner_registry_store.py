@@ -15,9 +15,9 @@ from typing import Any
 
 from sqlalchemy import Connection, Row, Table
 
+from blizzard.foundation.instants import as_utc, iso_utc
 from blizzard.foundation.runner_version import VersionRefusalReason
 from blizzard.foundation.store.batching import id_batches
-from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import (

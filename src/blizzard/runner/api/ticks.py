@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Request, status
 from fastapi.responses import JSONResponse
 
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.loop.step_passes import PassResult, TickInProgress
 from blizzard.wire.tick_passes import TickPassResponse

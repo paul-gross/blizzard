@@ -13,8 +13,8 @@ from datetime import UTC, datetime
 from enum import StrEnum
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import as_utc
 
 # Crockford base32 alphabet (no I, L, O, U) — the canonical ULID encoding.
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"

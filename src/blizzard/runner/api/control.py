@@ -11,7 +11,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from blizzard.foundation.declared_lever import DeclaredLever
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.hub.identity import IdentityVerdict
 from blizzard.runner.status.view import RunnerStatusService, ThrottleStatus

@@ -18,9 +18,9 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
 
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_connection import RunnerConnection
-from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import (

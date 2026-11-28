@@ -10,7 +10,7 @@ from typing import Literal, cast
 
 import pytest
 
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.hub import app as hub_app
 from blizzard.hub.cli.egress import StatusView
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION

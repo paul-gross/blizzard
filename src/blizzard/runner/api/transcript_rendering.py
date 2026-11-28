@@ -4,7 +4,7 @@ shared by every runner-plane route rendering a local transcript onto the wire, l
 
 from __future__ import annotations
 
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.runner.transcripts.repository import Sidechain, ToolCall, Turn
 from blizzard.wire.transcript_segment import SidechainSegmentView, ToolCallSegmentView, TurnSegmentView
 

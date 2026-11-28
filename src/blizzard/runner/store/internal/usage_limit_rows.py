@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy import Row, Table, and_
 
-from blizzard.foundation.store.utc import as_utc
+from blizzard.foundation.instants import as_utc
 from blizzard.runner.throttle.usage_limits import FloorClear, UsageLimitMark
 
 # Retention contract: IWriteSubscriptionUsageLimitRepository.prune_usage_limits.

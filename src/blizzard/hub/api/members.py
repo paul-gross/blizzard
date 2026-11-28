@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import Permission, Role
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.hub.api import problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import TenantBoundAdmitting, require, require_either, tenant_bound

@@ -13,9 +13,9 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.domain.chunk.model import AnswerOutcome, ChunkFacts, NodeQuestion
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal

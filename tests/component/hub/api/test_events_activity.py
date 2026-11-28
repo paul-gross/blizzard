@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from blizzard.foundation.event_log import EventLogSeverity
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row
 from tests.support.hub_request_auth import bearer, seed_enrolled
 from tests.support.scaffolding import (

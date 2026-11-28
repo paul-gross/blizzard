@@ -9,7 +9,7 @@ from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.clock import ClockBackwards, ClockMove
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.wire.clock import ClockMoveRequest, ClockMoveResponse, ClockReading
 

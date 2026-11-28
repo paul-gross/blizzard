@@ -16,7 +16,7 @@ from blizzard.foundation.garden_proposals import (
     GardenProposalOrigin,
 )
 from blizzard.foundation.ids import Id, IdPrefix
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, Door, RecordKind
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.projects.model import IReadProjectRepository

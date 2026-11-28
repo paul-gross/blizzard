@@ -13,9 +13,9 @@ import sqlalchemy as sa
 from sqlalchemy import Connection, and_, case, func
 
 from blizzard.foundation.fact_kinds import USAGE_RECORDED
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
-from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import SessionCostBasis, UsageSample
 from blizzard.runner.store.internal.base import insert_outbox_row

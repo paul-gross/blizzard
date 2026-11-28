@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.runner.api.lease_scope import resolved_lease
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.wire.runner_status import LeaseUsageResponse, UsageFactView

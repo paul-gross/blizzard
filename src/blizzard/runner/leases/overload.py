@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Literal, Protocol
 
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.leases.elicitation import IReadElicitationRepository
 
 __all__ = [

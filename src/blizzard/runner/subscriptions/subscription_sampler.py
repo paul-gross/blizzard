@@ -12,8 +12,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import as_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 
 __all__ = [

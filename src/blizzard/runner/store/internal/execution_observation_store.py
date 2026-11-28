@@ -7,9 +7,9 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import and_, func, or_
 
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
-from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.harness.observation import ExecutionObservation
 from blizzard.runner.leases.execution_observation import (
     ExecutionObservationState,

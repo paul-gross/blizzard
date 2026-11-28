@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
 from blizzard.runner.leases.activity import Liveness
 from blizzard.runner.leases.asks import IReadAskRepository

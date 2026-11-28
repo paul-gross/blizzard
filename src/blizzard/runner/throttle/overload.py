@@ -11,8 +11,8 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessProviderOverload
 from blizzard.runner.harness.identity import SessionReference

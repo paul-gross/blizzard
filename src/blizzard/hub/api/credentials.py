@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Header, status
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.credential_check import UseKind
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound

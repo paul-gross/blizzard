@@ -58,3 +58,11 @@ class TomlConfigCodec:
 
 
 TOML_CODEC = TomlConfigCodec()
+
+
+def decode_toml_value(text: str) -> object:
+    """``text`` read as one TOML value, left unchecked: the caller judges what it can carry and words that refusal."""
+    try:
+        return tomllib.loads(f"value = {text}")["value"]
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigDecodeError(str(exc)) from exc

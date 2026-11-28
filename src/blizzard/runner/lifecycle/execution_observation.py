@@ -10,9 +10,9 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.fact_kinds import EVENT_RECORDED
+from blizzard.foundation.instants import as_utc, iso_utc
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.observation import (
     ExecutionLiveness,

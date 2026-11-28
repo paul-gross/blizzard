@@ -14,8 +14,8 @@ from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends
 
 from blizzard.auth_core import Permission
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.roles import dto
-from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.api import problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound

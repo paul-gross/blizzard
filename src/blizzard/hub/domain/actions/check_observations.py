@@ -8,8 +8,8 @@ from datetime import datetime, timedelta
 from enum import Enum
 
 from blizzard.foundation.escalation_causes import EscalationCause
+from blizzard.foundation.instants import as_utc, iso_utc
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.domain.actions.effects import ActionEscalation
 from blizzard.hub.domain.artifact.model import StoredArtifact
 

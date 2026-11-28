@@ -9,7 +9,7 @@ from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Query
 
 from blizzard.auth_core import Permission
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.domain.observability.hub_events import IReadHubEventLog

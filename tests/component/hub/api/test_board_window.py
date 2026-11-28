@@ -16,7 +16,7 @@ import pytest
 from sqlalchemy import update
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.hub.api import chunks as chunks_api
 from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.api.chunks import BOARD_DONE_FLOOR

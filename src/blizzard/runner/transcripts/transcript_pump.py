@@ -15,9 +15,9 @@ from datetime import datetime
 from typing import Any, Literal, Protocol
 
 from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.untyped import as_list, as_table
 from blizzard.runner.environments.repository import (
     EnvBinding,

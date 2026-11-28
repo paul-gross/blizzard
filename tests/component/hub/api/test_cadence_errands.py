@@ -12,8 +12,8 @@ from typing import Any
 
 import pytest
 
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.run_mode import RunMode
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.cadence.errands import errands
 from blizzard.hub.domain.cadence.mint import CadenceMint, ErrandPlanning
 from blizzard.hub.domain.cadence.ports import IReadCadenceRepository

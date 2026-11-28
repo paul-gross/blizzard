@@ -15,9 +15,9 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.hub_event_types import FlowChangeKind
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.actions.visit import VisitRefusal, resolve_visit
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten

@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.cadence_anchor import CadenceAnchor
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.hub.api import problems, problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound

@@ -15,9 +15,9 @@ from typing import Any
 from sqlalchemy import ColumnElement, Row, and_, func, select
 
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
-from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.store.internal.base import insert_outbox_row
 from blizzard.runner.store.schema import (
     credential_renewal_claims,

@@ -1,7 +1,7 @@
 """The UTC-instants fitness test (``bzh:utc-instants``).
 
 1. **Structural guard** — AST-walks every module under ``src/blizzard/`` for a call to
-   ``.isoformat()`` (``src/blizzard/foundation/store/utc.py`` excluded, ``iso_utc``'s own impl).
+   ``.isoformat()``, ``_EXCLUDED_FILES`` aside.
 2. **Schema guard** — every ``DateTime``-family column in both stores is
    ``UtcDateTime``-typed."""
 
@@ -19,8 +19,8 @@ from tests.support.repo_files import repo_root
 
 _REPO_ROOT = repo_root()
 _SRC_DIR = _REPO_ROOT / "src" / "blizzard"
-# The one legitimate owner of a raw `.isoformat()` call — iso_utc's own implementation.
-_EXCLUDED_FILES = {_SRC_DIR / "foundation" / "store" / "utc.py"}
+# The legitimate raw `.isoformat()` callers: iso_utc's own implementation, and the sqlite storage adapters.
+_EXCLUDED_FILES = {_SRC_DIR / "foundation" / "instants.py", _SRC_DIR / "foundation" / "store" / "utc.py"}
 # Store-migration tests sit beside their revisions but are test code, like ``tests/``.
 _MIGRATION_TESTS = "migrations/tests"
 
@@ -44,7 +44,7 @@ def test_no_raw_isoformat_at_an_api_edge() -> None:
     assert not violations, (
         "raw `.isoformat()` in src/blizzard — a naive datetime reaches the wire unless "
         "the column is UtcDateTime-typed; use `iso_utc(...)` instead "
-        f"(blizzard.foundation.store.utc.iso_utc): {violations}"
+        f"(blizzard.foundation.instants.iso_utc): {violations}"
     )
 
 

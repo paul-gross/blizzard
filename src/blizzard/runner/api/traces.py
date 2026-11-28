@@ -7,7 +7,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
-from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.foundation.instants import as_utc, iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.harness.telemetry_signals import TelemetrySignal
 from blizzard.runner.tracing.replay import ReplayUnavailable, ReplayWindowRefused

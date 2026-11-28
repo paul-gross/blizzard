@@ -10,7 +10,7 @@ from typing import Final, TypedDict
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkDeleteRefusal
 from blizzard.foundation.ids import Id
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.usage_kind import UsageKind
 from blizzard.foundation.wait_kinds import WaitKind
 from blizzard.hub.api import problems

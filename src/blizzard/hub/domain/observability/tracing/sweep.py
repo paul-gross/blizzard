@@ -11,9 +11,9 @@ from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.lane_retry import OutageLatch
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.cursor import CursorJump, first_pass_jump, lag_cap_jump
 from blizzard.foundation.trace_export.exporter import ITraceExporter

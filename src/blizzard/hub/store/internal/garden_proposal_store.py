@@ -17,8 +17,8 @@ from blizzard.foundation.garden_proposals import (
     GardenProposalItemOutcome,
     GardenProposalOrigin,
 )
+from blizzard.foundation.instants import as_utc, iso_utc
 from blizzard.foundation.store.batching import id_batches
-from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.domain.garden.proposals.model import (
     DeliveredProposal,
     GardenProposal,

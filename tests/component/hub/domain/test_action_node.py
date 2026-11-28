@@ -8,7 +8,7 @@ from typing import cast
 
 import sqlalchemy as sa
 
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.hub.domain.chunk.model import decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository, IWriteChunkMovementRepository

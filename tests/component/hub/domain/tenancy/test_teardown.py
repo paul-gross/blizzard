@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.store.utc import as_utc
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.tenants import TenantDeletionState
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
 from blizzard.hub.config import AUTH_MODE_OAUTH

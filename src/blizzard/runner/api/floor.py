@@ -13,7 +13,7 @@ from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.throttle.floor import RunnerFloorClearRefused
 from blizzard.runner.throttle.floor_clear import SubscriptionFloorClearService

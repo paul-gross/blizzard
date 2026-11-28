@@ -15,7 +15,7 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.foundation.usage_windows import admit_usage_window
 from blizzard.runner.subscriptions.subscription_sampler import (

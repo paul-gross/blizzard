@@ -1,4 +1,4 @@
-"""The hub client area's registrations: what a fleet verb's ``CliContext`` is built from, and that context."""
+"""The hub client area's registrations: what a client verb's ``CliContext`` is built from, and that context."""
 
 from __future__ import annotations
 
@@ -10,32 +10,36 @@ from blizzard.foundation.operator_sessions import IReadSessionStore
 from blizzard.foundation.registry.interface import Lifetime, Registry, port
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.session_service import SessionService
 
 
 @dto
 @dataclass(frozen=True)
-class FleetOptions:
-    """The connection options a fleet verb was invoked with, as typed; ``None`` leaves each to its default."""
+class ConnectionOptions:
+    """The connection options a client verb was invoked with, as typed; ``None`` leaves each to its default."""
 
     hub_url: str | None
     as_json: bool
     tenant: str | None
 
 
-#: The read half of the carrier's session service.
+#: The carrier's session service.
+SESSION_SERVICE = port(SessionService)
+#: The read half of that service.
 SESSIONS = port(IReadSessionStore)
 #: This invocation's connection options.
-FLEET_OPTIONS = port(FleetOptions)
+CONNECTION_OPTIONS = port(ConnectionOptions)
 
 
 def _cli_context(
-    options: FleetOptions, session_reader: IReadSessionStore, trace: ITraceHeaders, client_factory: ClientFactory
+    options: ConnectionOptions, session_reader: IReadSessionStore, trace: ITraceHeaders, client_factory: ClientFactory
 ) -> CliContext:
     return CliContext.of(options.hub_url, session_reader, trace, client_factory, options.as_json, tenant=options.tenant)
 
 
 def register(registry: Registry) -> None:
-    """Declare the borrowed session reader and options, and the command's ``CliContext`` over them."""
-    registry.context(SESSIONS, lifetime=Lifetime.COMMAND)
-    registry.context(FLEET_OPTIONS, lifetime=Lifetime.COMMAND)
+    """Declare the borrowed session service and options, and the command's ``CliContext`` over them."""
+    service = registry.context(SESSION_SERVICE, lifetime=Lifetime.COMMAND)
+    registry.alias(SESSIONS, service)
+    registry.context(CONNECTION_OPTIONS, lifetime=Lifetime.COMMAND)
     registry.factory(_cli_context, lifetime=Lifetime.COMMAND)

@@ -13,8 +13,8 @@ from sqlalchemy import Select, and_, or_
 from sqlalchemy.engine import Connection, Row
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.foundation.instants import as_utc, iso_utc
 from blizzard.foundation.store.batching import id_batches
-from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId

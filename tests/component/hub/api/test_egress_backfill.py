@@ -11,7 +11,7 @@ from typing import TypedDict, Unpack
 import httpx2
 import pytest
 
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.egress.backfill import BackfillResult, EgressBackfill

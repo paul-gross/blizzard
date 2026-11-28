@@ -11,8 +11,8 @@ from dataclasses import dataclass
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.declared_lever import DeclaredLever
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.lifecycle.advance import AdvanceSweep
 from blizzard.runner.lifecycle.claim import InterruptedClaims
 from blizzard.runner.lifecycle.context_sample import ContextSampleSweep

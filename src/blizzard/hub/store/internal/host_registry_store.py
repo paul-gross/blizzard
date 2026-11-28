@@ -15,8 +15,8 @@ from typing import Any
 
 from sqlalchemy import Connection, CursorResult, Row
 
+from blizzard.foundation.instants import as_utc
 from blizzard.foundation.store.batching import id_batches
-from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.runners.host import (
     Host,

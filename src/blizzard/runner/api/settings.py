@@ -10,9 +10,9 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from blizzard.foundation.config_keys import Lifetime
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
 from blizzard.foundation.settings_record.vocabulary import Entry
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.api.federation import require_superuser
 from blizzard.runner.api.problems import RunnerProblem, problem, reject_worker_credential

@@ -12,7 +12,7 @@ from pydantic import Field, TypeAdapter
 
 from blizzard.cli.collaborators import CliCollaborators, HTTPError
 from blizzard.cli.window import refuse_bad_window, replay_windows, resume_since, since_option, until_option
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.wire.runner_traces import (

@@ -703,7 +703,7 @@ class RunnerStepper:
                     client.close()
                 self.failed_revision = revision
                 if revision is not None and (self.settings_failure is None or self.settings_failure[0] != revision):
-                    from blizzard.foundation.store.utc import iso_utc
+                    from blizzard.foundation.instants import iso_utc
 
                     self.settings_failure = (revision, str(exc), iso_utc(self._graph.host.clock.now()))
                 if self._ctx is None or reader is None:
@@ -730,7 +730,7 @@ class RunnerStepper:
             self._wiring = wiring
             self._revision = (host_version, revision)
             if self.settings_in_force_revision != revision or self.settings_in_force_since is None:
-                from blizzard.foundation.store.utc import iso_utc
+                from blizzard.foundation.instants import iso_utc
 
                 self.settings_in_force_revision = revision
                 self.settings_in_force_since = iso_utc(self._graph.host.clock.now())

@@ -13,8 +13,8 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import JSONResponse
 
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.api.federation import require_superuser
 from blizzard.runner.api.problems import problem, reject_worker_credential

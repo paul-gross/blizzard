@@ -14,8 +14,8 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.foundation.usage_windows import admit_usage_window
 from blizzard.runner.events.publisher import IRunnerEventPublisher

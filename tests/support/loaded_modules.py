@@ -7,6 +7,23 @@ import os
 import subprocess
 import sys
 
+#: The modules a client of a daemon never loads: the daemons, their composition and their store stack.
+DAEMON_STACKS = (
+    "blizzard.hub.app",
+    "blizzard.hub.composition",
+    "blizzard.hub.domain",
+    "blizzard.hub.process_root",
+    "blizzard.hub.store",
+    "blizzard.runner",
+    "fastapi",
+    "sqlalchemy",
+)
+
+
+def within(loaded: set[str], packages: tuple[str, ...]) -> list[str]:
+    """The modules of ``loaded`` that are one of ``packages`` or sit inside one."""
+    return sorted(m for m in loaded if any(m == p or m.startswith(f"{p}.") for p in packages))
+
 
 def loaded_after_running(argv: list[str], env: dict[str, str] | None = None) -> set[str]:
     """The modules a ``blizzard`` invocation leaves loaded, in a fresh interpreter."""

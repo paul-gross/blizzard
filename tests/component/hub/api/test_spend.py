@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.instants import iso_utc
 from tests.support.hub_request_auth import seed_enrolled
 from tests.support.scaffolding import HubHarness, build_hub, make_ready, pointer_token, report_lease
 

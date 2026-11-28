@@ -343,11 +343,11 @@ def test_no_cli_root_registers_anything_itself() -> None:
 def test_the_area_root_gate_fails_a_registration_planted_in_each_cli_root(tmp_path: Path) -> None:
     planted = {
         Path("cli/command_root.py"): "def build(registry):\n    registry.context(port(IRole), lifetime=1)\n",
-        Path("hub/cli/container_command.py"): "def build(registry):\n    registry.factory(build, lifetime=1)\n",
+        Path("hub/cli/command.py"): "def build(registry):\n    registry.factory(build, lifetime=1)\n",
     }
     assert set(planted) == set(CLI_ROOTS)
     root = _plant(tmp_path, {str(relative): text for relative, text in planted.items()})
     assert root_registration_violations(root, CLI_ROOTS) == [
         "cli/command_root.py:2: calls .context(...)",
-        "hub/cli/container_command.py:2: calls .factory(...)",
+        "hub/cli/command.py:2: calls .factory(...)",
     ]

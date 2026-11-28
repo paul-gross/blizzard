@@ -12,9 +12,9 @@ from starlette.concurrency import run_in_threadpool
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.config_keys import TABLE, ConfigRegistry, Lifetime
+from blizzard.foundation.instants import iso_utc
 from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
 from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry, FieldChange
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
