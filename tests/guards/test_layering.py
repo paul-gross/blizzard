@@ -271,13 +271,6 @@ _SINGLE_SIDE_KERNEL_ALLOWLIST: dict[str, str] = {
     "blizzard.foundation.secrets.rotation": (
         "only the hub reaches it until the host rotates the key its runners' tokens are sealed under"
     ),
-    "blizzard.foundation.registry.interface": (
-        "the registry interface every area's wiring imports; the hub's wiring reaches it, and no daemon root "
-        "registers through it until a process activates its container"
-    ),
-    "blizzard.foundation.registry.scopes": (
-        "the one door to a child scope; only the hub's tenant cache reaches it until the host opens runner scopes"
-    ),
     "blizzard.foundation.registry.legacy": (
         "the leaf-and-bag vocabulary for legacy-built state; no daemon's wiring declares through it"
     ),
@@ -1430,6 +1423,7 @@ _COMPOSITION_ROOTS = frozenset(
         _HUB_DIR / "process_root.py",
         _HUB_DIR / "cli" / "__init__.py",
         _RUNNER_DIR / "app.py",
+        _RUNNER_DIR / "host_root.py",
         _RUNNER_DIR / "loop_wiring.py",
         _RUNNER_DIR / "cli" / "runtime.py",
         _RUNNER_DIR / "cli" / "external_usage.py",
@@ -3405,6 +3399,7 @@ _RUNNER_EDGE_MODULES = frozenset(
         "host_file",
         "host_keys",
         "host_layout",
+        "host_root",
         "host_settings_reader",
         "listeners",
         "loop_wiring",

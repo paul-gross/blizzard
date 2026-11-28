@@ -722,8 +722,8 @@ _wired_runner_conforms: type[IWiredRunner] = _WiredRunner
 class HostedApp:
     """The served app over one host graph, and the host's live runner set it serves.
 
-    Closing releases wrapper resources and an internally built host. The exposed
-    engine belongs to the host; a supplied host or process graph remains caller-owned.
+    Closing releases wrapper resources, the graphs of the runners the set holds, and an internally built host. The
+    exposed engine belongs to the host; a supplied host or process graph remains caller-owned.
     """
 
     app: FastAPI
