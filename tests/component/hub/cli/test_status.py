@@ -8,11 +8,20 @@ rendering — the per-chunk cost column, the fleet total, and the ``~``-estimate
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from typing import Any, cast
 
+import click
+import httpx2
+import pytest
+
+from blizzard.foundation.registry.interface import Lifetime, Registry
 from blizzard.hub.cli import hub as hub_group
-from blizzard.hub.cli.context import DEFAULT_HUB_URL
-from tests.support.worker_http import Bound, bind_stubs
+from blizzard.hub.cli.collaborators import HubCliCollaborators
+from blizzard.hub.cli.container_command import ContainerFleetCommand
+from blizzard.hub.cli.context import DEFAULT_HUB_URL, CliContext
+from blizzard.hub.cli.status import status
+from tests.support.worker_http import Bound, bind_stubs, bind_transport
 
 
 class _FakeResponse:
@@ -318,3 +327,127 @@ def test_status_prints_the_brake_in_place_of_the_declining_segment() -> None:
 
 def test_status_prints_no_declining_segment_for_an_offline_runner() -> None:
     assert "declining" not in _status_output(_runner(online=False, declining=[_FLOOR]))
+
+
+class _Hub:
+    """An empty fleet at the far end of the invoker's transport, recording each request; ``fail`` answers one path."""
+
+    def __init__(self, fail: str | None = None, answer: httpx2.Response | None = None) -> None:
+        self.requests: list[httpx2.Request] = []
+        self._fail = fail
+        self._answer = answer
+
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
+        self.requests.append(request)
+        path = request.url.path
+        if path == self._fail:
+            if self._answer is None:
+                raise httpx2.ConnectError("nothing listening", request=request)
+            return self._answer
+        bodies: dict[str, object] = {
+            "/api/chunks": {"chunks": [], "next_cursor": None},
+            "/api/runners": {"runners": []},
+            "/api/questions": [],
+            "/api/spend": {"since": "1970-01-01T00:00:00+00:00", **_cost(0.0, partial=False)},
+        }
+        return httpx2.Response(200, json=bodies.get(path, {}))
+
+
+def test_status_requests_through_the_invokers_transport_and_session_reader() -> None:
+    hub = _Hub()
+    bound = bind_transport(hub)
+    bound.sessions.save("http://elsewhere:9", "the-token")
+
+    result = bound.runner.invoke(
+        hub_group, ["status", "--hub-url", "http://elsewhere:9", "--tenant", "tn_1", "--project", "acme"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert {request.url.host for request in hub.requests} == {"elsewhere"}
+    assert {request.headers["authorization"] for request in hub.requests} == {"Bearer the-token"}
+    assert {request.headers["x-blizzard-tenant"] for request in hub.requests} == {"tn_1"}
+    projects = {request.url.path: request.url.params.get("project") for request in hub.requests}
+    assert projects == {"/api/chunks": "acme", "/api/runners": None, "/api/questions": "acme", "/api/spend": "acme"}
+    assert len(bound.built) == 4
+    assert all(client.is_closed for client in bound.built)
+
+
+def test_status_requests_carry_the_span_its_group_opened() -> None:
+    hub = _Hub()
+    bound = bind_transport(hub)
+
+    result = bound.runner.invoke(hub_group, ["status"], env={"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318"})
+
+    assert result.exit_code == 0, result.output
+    fleet = [request for request in hub.requests if request.url.path.startswith("/api/")]
+    assert len(fleet) == 4
+    assert len({request.headers["traceparent"] for request in fleet}) == 1
+    assert [request.url.host for request in hub.requests if request not in fleet] == ["collector"]
+    assert all(client.is_closed for client in bound.built)
+
+
+@pytest.mark.parametrize(
+    ("answer", "error"),
+    [
+        (None, "Error: GET /api/spend failed: nothing listening\n"),
+        (httpx2.Response(403, json={"detail": "no fleet view for you"}), "Error: no fleet view for you\n"),
+    ],
+)
+def test_status_closes_every_client_it_built_when_a_request_fails(answer: httpx2.Response | None, error: str) -> None:
+    bound = bind_transport(_Hub(fail="/api/spend", answer=answer))
+
+    result = bound.runner.invoke(hub_group, ["status"])
+
+    assert result.exit_code == 1
+    assert result.output == error
+    assert len(bound.built) == 4
+    assert all(client.is_closed for client in bound.built)
+
+
+class _Greeting:
+    """A service only this test registers, built over the command's own ``CliContext``."""
+
+    def __init__(self, cli: CliContext) -> None:
+        self.cli = cli
+        self.log: list[str] = []
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_a_service_added_through_its_own_area_is_consumed_the_way_status_resolves(fail: bool) -> None:
+    opened: list[_Greeting] = []
+
+    def open_greeting(cli: CliContext) -> Iterator[_Greeting]:
+        greeting = _Greeting(cli)
+        opened.append(greeting)
+        yield greeting
+        greeting.log.append("closed")
+
+    def register(registry: Registry) -> None:
+        registry.resource(open_greeting, lifetime=Lifetime.COMMAND)
+
+    def run(cli: CliContext, greeting: _Greeting) -> None:
+        click.echo(f"{greeting.cli is cli} {cli.hub_url}")
+        if fail:
+            raise click.ClickException("refused")
+
+    assert isinstance(status, ContainerFleetCommand)
+    probe = type(status)(
+        "probe",
+        callback=run,
+        collaborators={**status.collaborators, "greeting": _Greeting},
+        area=register,
+    )
+
+    @click.group()
+    @click.pass_context
+    def root(ctx: click.Context) -> None:
+        HubCliCollaborators.resolve(ctx, lambda: pytest.fail("the invoker's carrier is the one to use"))
+
+    root.add_command(probe)
+    bound = bind_transport(_Hub())
+
+    result = bound.runner.invoke(root, ["probe"])
+
+    assert result.exit_code == int(fail), result.output
+    assert result.stdout == f"True {DEFAULT_HUB_URL}\n"
+    assert [greeting.log for greeting in opened] == [["closed"]]
