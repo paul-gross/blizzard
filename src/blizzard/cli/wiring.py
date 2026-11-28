@@ -1,4 +1,4 @@
-"""The shared CLI area's registrations: the borrowed values every operator command's requests are made with."""
+"""The shared CLI area's registrations: the borrowed values a migrated command's requests are made with."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from blizzard.cli.collaborators import ClientFactory
 from blizzard.cli.operator_trace import ITraceHeaders
 from blizzard.foundation.registry.interface import Lifetime, Registry, port
 
-#: The carrier's HTTP client factory; each request still opens and closes its own client.
+#: The carrier's HTTP client factory.
 CLIENT_FACTORY = port(ClientFactory)
 #: The trace headers of the operator span the command's group opened.
 TRACE_HEADERS = port(ITraceHeaders)

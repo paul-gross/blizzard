@@ -1,5 +1,7 @@
 """The permit listing a verb reads through: it pages the hub's permits and reports what it read as it closes."""
 
+# exemplar: bzh:dependency-injection, bzh:clients-decode-answers — built from the command's ``CliContext`` alone.
+
 from __future__ import annotations
 
 from collections.abc import Iterator

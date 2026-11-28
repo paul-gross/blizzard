@@ -22,8 +22,8 @@ from blizzard.hub.cli.command import FleetCommand, HubCommand
 class ContainerFleetCommand(FleetCommand):
     """A ``FleetCommand`` naming its ``collaborators`` by type: the callback takes each under the name given.
 
-    ``area`` is the registration of what the verb's own area adds. The connection options are the parameters
-    ``FleetCommand`` declares."""
+    ``area`` registers what the verb's own area adds. A collaborator named like one of the verb's parameters is
+    refused, since it would replace what the operator typed."""
 
     def __init__(
         self,
@@ -33,15 +33,18 @@ class ContainerFleetCommand(FleetCommand):
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
+        taken = sorted({param.name for param in self.params} & set(collaborators))
+        if taken:
+            raise ValueError(f"{self.name}: collaborators named like parameters: {', '.join(taken)}")
         self.collaborators = dict(collaborators)
         self._area = area
 
-    def registry(self) -> command_root.Recorded:
-        """What this verb's container is built from, recorded and not yet built."""
+    def areas(self) -> list[command_root.Area]:
+        """The areas this verb's container is built from, in registration order."""
         areas: list[command_root.Area] = [shared.register, hub_client.register]
         if self._area is not None:
             areas.append(self._area)
-        return command_root.registered(areas)
+        return areas
 
     def invoke(self, ctx: click.Context) -> Any:
         carrier = HubCliCollaborators.of(ctx)
@@ -57,7 +60,7 @@ class ContainerFleetCommand(FleetCommand):
             )
         )
         with command_root.command_scope(
-            self.registry(), owner=ctx.command_path, values=values, collaborators=self.collaborators
+            self.areas(), owner=ctx.command_path, values=values, collaborators=self.collaborators
         ) as resolved:
             ctx.params.update(resolved)
             # Past ``HubCommand.invoke``, which would build a second ``CliContext`` outside the container.

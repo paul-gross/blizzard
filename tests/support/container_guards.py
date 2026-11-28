@@ -28,13 +28,10 @@ _REGISTRY_PACKAGE = ("foundation", "registry")
 _ROUTE_EDGE = ("hub", "api")
 _ROUTE_EDGE_DISHKA = "dishka.integrations.fastapi"
 
-#: The CLI's command roots, relative to the source root: the shared command root and the hub verbs' root over it. Like
-#: the hub's, they compose areas and register nothing themselves.
+#: The CLI's command roots, relative to the source root; they compose areas and register nothing themselves.
 CLI_ROOTS: tuple[Path, ...] = (Path("cli/command_root.py"), Path("hub/cli/container_command.py"))
 
-#: The process roots, relative to the source root: the hub's process root and the hosted app over it, the runner host's
-#: root and the composition whose runner set opens its child scopes, and the CLI's command roots. Each composes adapters
-#: and areas, so the wiring boundary exempts it.
+#: The roots that compose adapters and areas, so the wiring boundary exempts them.
 PROCESS_ROOTS: frozenset[Path] = frozenset(
     {
         Path("hub/process_root.py"),
@@ -243,7 +240,7 @@ def bag_violations(source_root: Path) -> list[str]:
 
 
 def root_registration_violations(source_root: Path, roots: Iterable[Path] = HUB_ROOTS) -> list[str]:
-    """Each call of a registration verb in a hub root: a root composes the areas, whose wiring registers."""
+    """Each call of a registration verb in one of ``roots``: a root composes areas, whose wiring registers."""
     problems: list[str] = []
     for relative in roots:
         for node in ast.walk(ast.parse((source_root / relative).read_text(), filename=str(relative))):

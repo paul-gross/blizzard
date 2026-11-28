@@ -4,10 +4,11 @@ Each gate runs over the real registration the verb builds from and over that reg
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
 import pytest
 
+from blizzard.cli import command_root
 from blizzard.foundation.registry.interface import Lifetime, port
 from blizzard.foundation.registry.internal.recording import OWNING, Kind, RecordingRegistry
 from blizzard.foundation.registry.internal.translation import COMMAND_LIFETIMES
@@ -121,23 +122,35 @@ def _status() -> ContainerFleetCommand:
     return status
 
 
+def _graph() -> RecordingRegistry:
+    return command_root.registered(_status().areas())
+
+
 @pytest.mark.parametrize(("check", "plant"), _CHECKS)
 def test_the_status_graph_passes_each_check_and_fails_its_planted_violation(
     check: Check, plant: Callable[[RecordingRegistry], None]
 ) -> None:
-    assert check(_status().registry()) == []
-    planted = _status().registry()
+    assert check(_graph()) == []
+    planted = _graph()
     plant(planted)
     assert check(planted) != []
 
 
 def test_the_status_graph_declares_no_legacy_registration() -> None:
-    assert legacy_registrations(_status().registry()) == []
+    assert legacy_registrations(_graph()) == []
     planted = LegacyRegistry()
+    for register in _status().areas():
+        register(planted)
     planted.leaf(_legacy_state, lifetime=Lifetime.COMMAND)
-    assert legacy_registrations(planted) != []
+    assert legacy_registrations(planted) == ["_LegacyState is a legacy leaf"]
+
+
+def _unregistered(registry: RecordingRegistry, collaborators: Iterable[type[object]]) -> list[type[object]]:
+    keys = {entry.key for entry in registry.entries if entry.kind in OWNING or entry.kind is Kind.ALIAS}
+    return [wanted for wanted in collaborators if wanted not in keys]
 
 
 def test_every_collaborator_status_declares_is_registered() -> None:
-    owned = {entry.key for entry in _status().registry().entries if entry.kind in OWNING or entry.kind is Kind.ALIAS}
-    assert set(_status().collaborators.values()) <= owned
+    declared = list(_status().collaborators.values())
+    assert _unregistered(_graph(), declared) == []
+    assert _unregistered(_graph(), [*declared, _Missing]) == [_Missing]

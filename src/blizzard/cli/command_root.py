@@ -8,6 +8,8 @@ from __future__ import annotations
 from collections.abc import Callable, Generator, Iterable, Mapping
 from contextlib import contextmanager
 
+import click
+
 from blizzard.foundation.registry.interface import Registry
 from blizzard.foundation.registry.internal.recording import RecordingRegistry
 from blizzard.foundation.registry.internal.translation import COMMAND_LIFETIMES, build_container
@@ -15,11 +17,9 @@ from blizzard.foundation.registry.scopes import ScopeValues
 
 #: One area's registration function.
 type Area = Callable[[Registry], None]
-#: What a command's areas declared: the registry's record, named here so a verb's root imports no ``internal/``.
-type Recorded = RecordingRegistry
 
 
-def registered(areas: Iterable[Area]) -> Recorded:
+def registered(areas: Iterable[Area]) -> RecordingRegistry:
     """What ``areas`` declare, recorded and not yet built."""
     registry = RecordingRegistry()
     for register in areas:
@@ -29,16 +29,20 @@ def registered(areas: Iterable[Area]) -> Recorded:
 
 @contextmanager
 def command_scope(
-    registry: Recorded, *, owner: str, values: ScopeValues, collaborators: Mapping[str, type[object]]
+    areas: Iterable[Area], *, owner: str, values: ScopeValues, collaborators: Mapping[str, type[object]]
 ) -> Generator[dict[str, object]]:
-    """Build one command's container over the borrowed ``values`` and yield its ``collaborators``, each under its name.
+    """Build one command's container from ``areas`` over the borrowed ``values``; yield ``collaborators`` by name.
 
-    The container closes when the block ends, and a failure inside it — resolution's included — is handed to the
-    finalizers. The caller gets the instances only, never the container or a resolver."""
-    container = build_container(registry, COMMAND_LIFETIMES, owner=owner, values=values)
+    It closes when the block ends, handing finalizers any failure, resolution's included. A finalizer failing then is
+    warned about and the command's own failure still raised. The caller never gets the container or a resolver."""
+    container = build_container(registered(areas), COMMAND_LIFETIMES, owner=owner, values=values)
     try:
         yield {name: container.resolver.get(wanted) for name, wanted in collaborators.items()}
     except BaseException as exc:
-        container.close(exc)
+        try:
+            container.close(exc)
+        except ExceptionGroup as failures:
+            for failure in failures.exceptions:
+                click.echo(f"warning: cleanup failed: {type(failure).__name__}: {failure}", err=True)
         raise
     container.close()
