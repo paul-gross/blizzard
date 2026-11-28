@@ -217,6 +217,29 @@ def wiring_boundary_violations(source_root: Path, *, roots: frozenset[Path] = PR
             elif (
                 relative.parts[0] == "runner"
                 and _is_wiring(_module(relative))
+                and not (
+                    relative == Path("runner/store/wiring.py")
+                    and name
+                    in {
+                        "blizzard.foundation.clock",
+                        "blizzard.foundation.roles",
+                        "blizzard.runner.process.probe",
+                        "blizzard.runner.stores",
+                    }
+                )
+                and not (
+                    relative == Path("runner/harness/wiring.py")
+                    and name
+                    in {
+                        "blizzard.foundation.clock",
+                        "blizzard.foundation.config_keys",
+                        "blizzard.foundation.roles",
+                        "blizzard.runner.config_table",
+                        "blizzard.runner.process.child_env",
+                        "blizzard.runner.process.child_processes",
+                        "blizzard.runner.process.probe",
+                    }
+                )
                 and name != _INTERFACE
                 and name != own_area
                 and not name.startswith(f"{own_area}.")

@@ -6,6 +6,10 @@ from __future__ import annotations
 
 from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
 from blizzard.runner.throttle.floor_clear import IRecordSubscriptionFloorClear, SubscriptionFloorClearService
+from blizzard.runner.throttle.usage_limits import (
+    IReadSubscriptionUsageLimitRepository,
+    IWriteSubscriptionUsageLimitRepository,
+)
 
 #: What answers a resolution of the clear on a host with no stores.
 SUBSCRIPTION_FLOOR_CLEAR_ABSENT = "subscription floor-clear service"
@@ -22,3 +26,12 @@ def register_absent(registry: Registry) -> None:
     registry.absent(
         port(SubscriptionFloorClearService), lifetime=Lifetime.PROCESS, label=SUBSCRIPTION_FLOOR_CLEAR_ABSENT
     )
+
+
+def register_host_store_ports(
+    registry: Registry,
+    usage_limits: Ref[IWriteSubscriptionUsageLimitRepository],
+) -> None:
+    """Alias this area's host ports onto the adapters handed by the process root."""
+    registry.alias(port(IReadSubscriptionUsageLimitRepository), usage_limits)
+    registry.alias(port(IWriteSubscriptionUsageLimitRepository), usage_limits)

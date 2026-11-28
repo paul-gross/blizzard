@@ -30,6 +30,22 @@ class IWriteHostRecordRepository(IReadHostRecordRepository, Protocol):
         ...
 
 
+class IReadHostWorkspaceRecords(IReadHostRecordRepository, Protocol):
+    """The host's workspace record reads."""
+
+
+class IWriteHostWorkspaceRecords(IWriteHostRecordRepository, IReadHostWorkspaceRecords, Protocol):
+    """The host's workspace record writes."""
+
+
+class IReadHostSubscriptionRecords(IReadHostRecordRepository, Protocol):
+    """The host's subscription record reads."""
+
+
+class IWriteHostSubscriptionRecords(IWriteHostRecordRepository, IReadHostSubscriptionRecords, Protocol):
+    """The host's subscription record writes."""
+
+
 class IHostRecordValidator(Protocol):
     """A candidate record judged as the host file's table would be at boot, beside the host's other active
     records."""

@@ -28,7 +28,6 @@ from blizzard.runner.cli.runtime import host_answers, read_host_stores, seed_hos
 from blizzard.runner.cli.store_guard import store_write_guard
 from blizzard.runner.composition import (
     build_host_record_services,
-    build_host_stores,
     held_records,
     host_settings_reader,
 )
@@ -38,6 +37,7 @@ from blizzard.runner.host_records.model import HostRecord, RecordExists, RecordK
 from blizzard.runner.host_records.service import HostRecordService
 from blizzard.runner.hosting.model import CLI, OPERATOR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.store.wiring import build_host_stores
 from blizzard.wire.runner_host import (
     HostSubscriptionCreateRequest,
     HostSubscriptionPatchRequest,

@@ -1309,6 +1309,7 @@ _SQLALCHEMY_EXCEPTIONS: dict[Path, tuple[str, ...] | None] = {
     # graph's engine only as the handle it hands its own callers to dispose.
     _RUNNER_COMPOSITION_FILE: ("Engine",),
     _RUNNER_APP_FILE: ("Engine",),
+    _RUNNER_DIR / "store" / "wiring.py": ("Engine",),
     # IntegrityError only, for the replay-check catch: the collision itself IS the
     # business-logic check, so this one name stays local instead of the table-bound form.
     _RUNNER_DIR / "store" / "internal" / "host_jti_cache_store.py": ("IntegrityError",),
@@ -5984,3 +5985,60 @@ def test_the_test_import_check_catches_every_import_form(tmp_path: Path, importe
 )
 def test_the_test_import_check_admits_support_modules(tmp_path: Path, importer: str, statement: str) -> None:
     assert _plant_tests(tmp_path, importer, statement) == []
+
+
+def _offline_runner_checker_breaches(source: str) -> list[str]:
+    """The offline runner checker must use only the store wiring's bounded factories."""
+    tree = ast.parse(source)
+    imported: dict[str, tuple[str, str]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                imported[alias.asname or alias.name] = (node.module or "", alias.name)
+    function = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "runner_invariants"), None)
+    if function is None:
+        return ["missing runner_invariants"]
+    calls = [node for node in ast.walk(function) if isinstance(node, ast.Call)]
+    called = {node.func.id for node in calls if isinstance(node.func, ast.Name)}
+    required = {"build_runner_audit", "runner_invariant_checker"}
+    used = {
+        name
+        for name in called
+        if imported.get(name) in {("blizzard.runner.store.wiring", required_name) for required_name in required}
+    }
+    found = {imported[name][1] for name in used}
+    breaches = sorted(required - found)
+    for name in called:
+        module, original = imported.get(name, ("", name))
+        if original in {"RunnerInvariants", "RunnerAudit", "build_host_stores", "host_stores"} or (
+            module == "blizzard.runner.composition"
+        ):
+            breaches.append(name)
+    return breaches
+
+
+def test_offline_runner_checker_uses_bounded_registered_store_factories() -> None:
+    source = (_SRC_DIR / "tools" / "invariants.py").read_text()
+    assert not _offline_runner_checker_breaches(source)
+    wiring = ast.parse((_SRC_DIR / "runner" / "store" / "wiring.py").read_text())
+    registrations = {
+        node.args[0].id
+        for node in ast.walk(wiring)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "factory"
+        and node.args
+        and isinstance(node.args[0], ast.Name)
+    }
+    assert {"build_runner_audit", "runner_invariant_checker"} <= registrations
+
+
+@pytest.mark.parametrize("replacement", ["RunnerInvariants", "build_host_stores", "RunnerAudit"])
+def test_offline_runner_checker_guard_refuses_bypasses(replacement: str) -> None:
+    source = f"""
+from blizzard.runner.store.wiring import build_runner_audit, runner_invariant_checker
+from elsewhere import {replacement}
+def runner_invariants(engine):
+    return {replacement}(engine)
+"""
+    assert _offline_runner_checker_breaches(source)

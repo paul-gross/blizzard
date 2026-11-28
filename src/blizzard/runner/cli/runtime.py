@@ -74,7 +74,6 @@ from blizzard.runner.composition import (
     build_host_process,
     build_host_read_stores,
     build_host_settings_store,
-    build_host_stores,
     build_read_stores,
     build_running_host_seeding_store,
     build_seeding_store,
@@ -196,6 +195,7 @@ from blizzard.runner.settings.ports import IWriteRunnerSettings
 from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.store.wiring import build_host_stores
 from blizzard.runner.stores import HostReadStores, HostStores, RunnerReadStores
 
 #: Bounds each of ``init``'s hub calls, so an unresponsive hub fails the command instead of hanging it.

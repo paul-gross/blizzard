@@ -17,20 +17,21 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.composition import connections_for_engine, open_hub_store
 from blizzard.hub.store.internal.invariants import HubInvariants
 from blizzard.hub.store.wiring import hub_invariant_checker
-from blizzard.runner.composition import build_host_stores
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.invariants import RunnerInvariants
+from blizzard.runner.store.scoped import RunnerStoreConnections
+from blizzard.runner.store.wiring import build_runner_audit, runner_invariant_checker
 
 
 def runner_invariants(engine: Engine, *, process: IProcessProbe | None = None) -> RunnerInvariants:
     """The runner half over ``engine``, reading through the host stores' runner audit; ``process`` defaults to the
     real ``/proc`` probe."""
-    audit = build_host_stores(
-        engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.tools.invariants")), clock=SystemClock()
-    ).runner_audit
-    return RunnerInvariants(audit, process if process is not None else LinuxProcessProbe())
+    connections = RunnerStoreConnections(engine, RunnerStoreErrorFactory(get_logger("blizzard.tools.invariants")))
+    return runner_invariant_checker(
+        build_runner_audit(connections), process if process is not None else LinuxProcessProbe()
+    )
 
 
 def hub_invariants(engine: Engine, *, clock: IClock | None = None) -> HubInvariants:

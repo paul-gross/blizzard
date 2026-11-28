@@ -14,6 +14,7 @@ from typing import Any
 
 from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.config_keys import ConfigView
+from blizzard.foundation.registry.interface import Ref, Registry, port
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.adapter import EverySpawnRootProbe, IHarnessHealthProbe
@@ -44,6 +45,7 @@ from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.opencode.section import OPENCODE_SECTION
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, IWriteWorkspacePromptRepository
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.probe import IProcessProbe
@@ -384,3 +386,12 @@ __all__ = [
     "select_harness_bindings",
     "shared_inputs",
 ]
+
+
+def register_host_store_ports(
+    registry: Registry,
+    workspace_prompt: Ref[IWriteWorkspacePromptRepository],
+) -> None:
+    """Alias this area's host ports onto the adapters handed by the process root."""
+    registry.alias(port(IReadWorkspacePromptRepository), workspace_prompt)
+    registry.alias(port(IWriteWorkspacePromptRepository), workspace_prompt)

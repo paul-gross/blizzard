@@ -191,23 +191,14 @@ from blizzard.runner.store.internal.environment_store import EnvironmentStore
 from blizzard.runner.store.internal.escalation_store import EscalationStore
 from blizzard.runner.store.internal.execution_observation_store import ExecutionObservationStore
 from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
-from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLivenessStore
 from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
-from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
 from blizzard.runner.store.internal.host_hosted_runner_store import HostHostedRunnerStore
 from blizzard.runner.store.internal.host_hub_token_store import HostHubTokenStore
-from blizzard.runner.store.internal.host_identity_store import HostIdentityStore
-from blizzard.runner.store.internal.host_ingest_store import HostIngestStore
-from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
-from blizzard.runner.store.internal.host_lane_store import HostLaneStore
 from blizzard.runner.store.internal.host_record_store import HostSubscriptionStore, HostWorkspaceStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
 from blizzard.runner.store.internal.host_settings_apply_store import HostSettingsApplyStore
 from blizzard.runner.store.internal.host_settings_store import HostSettingsStore
-from blizzard.runner.store.internal.host_usage_limit_store import SubscriptionUsageLimitStore
-from blizzard.runner.store.internal.host_workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
-from blizzard.runner.store.internal.invariants import RunnerInvariants
 from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
 from blizzard.runner.store.internal.lease_liveness_store import LeaseLivenessStore
 from blizzard.runner.store.internal.lease_lock_store import LeaseLockStore
@@ -231,6 +222,8 @@ from blizzard.runner.store.internal.usage_limit_store import RunnerUsageLimitSto
 from blizzard.runner.store.internal.usage_store import UsageStore
 from blizzard.runner.store.runner_guard import install_runner_guard
 from blizzard.runner.store.scoped import RunnerStoreConnections
+from blizzard.runner.store.wiring import build_host_stores, runner_invariant_checker
+from blizzard.runner.store.wiring import host_stores as _build_host_stores
 from blizzard.runner.stores import HostReadStores, HostStores, IRunnerAudit, RunnerReadStores, RunnerStores
 from blizzard.runner.subscriptions.internal.credential_renewer_factory import select_renewer
 from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess
@@ -1676,7 +1669,7 @@ def _build_host_graph(
             zone=local_zone(os.environ if environ is None else environ),
             process=process,
             children=children,
-            invariants=HostInvariantCheck(RunnerInvariants(host_stores.runner_audit, process)),
+            invariants=HostInvariantCheck(runner_invariant_checker(host_stores.runner_audit, process)),
             hub_tokens=build_hub_tokens(
                 host_stores.hub_tokens, config.root, environ=os.environ if environ is None else environ, clock=clock
             ),
@@ -2451,38 +2444,9 @@ def build_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory, runner
     return RunnerReadStores.of(build_stores(engine, errors=errors, runner_id=runner_id))
 
 
-def build_host_stores(
-    engine: Engine, *, errors: RunnerStoreErrorFactory, clock: IClock, runner_id: str | None = None
-) -> HostStores:
-    """The host-scoped stores over a migrated engine, for a collaborator outside a runner process — the invariant
-    checker's audit. Host statements carry no runner equality; ``runner_id`` binds the connections only for the
-    cross-kind write's runner-scoped outbound report, and is left unbound otherwise."""
-    return _build_host_stores(RunnerStoreConnections(engine, errors, runner_id), clock)
-
-
 def build_host_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> HostReadStores:
     """The read-only host-store bundle a short-lived CLI verb takes."""
-    return HostReadStores.of(_build_host_stores(RunnerStoreConnections(engine, errors), SystemClock()))
-
-
-def _build_host_stores(connections: RunnerStoreConnections, clock: IClock) -> HostStores:
-    return HostStores(
-        workspace_prompt=WorkspacePromptStore(connections),
-        graph_artifacts=GraphArtifactStore(connections),
-        jti_cache=JtiCacheRepository(connections, clock),
-        daemon_liveness=DaemonLivenessStore(connections),
-        external_usage=ExternalUsageStore(connections),
-        host_lane=HostLaneStore(connections),
-        host_identity=HostIdentityStore(connections),
-        host_ingests=HostIngestStore(connections),
-        hub_tokens=HostHubTokenStore(connections),
-        hosted_runners=HostHostedRunnerStore(connections),
-        usage_limits=SubscriptionUsageLimitStore(connections),
-        settings=HostSettingsStore(connections, clock),
-        workspaces=HostWorkspaceStore(connections, clock),
-        subscriptions=HostSubscriptionStore(connections, clock),
-        runner_audit=RunnerAudit(connections),
-    )
+    return HostReadStores.of(build_host_stores(engine, errors=errors, clock=SystemClock()))
 
 
 def build_runner_transfer(

@@ -14,6 +14,7 @@ from typing import TypedDict, Unpack
 
 import pytest
 import sqlalchemy as sa
+from sqlalchemy import event
 
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
@@ -642,9 +643,14 @@ def test_an_active_lease_with_a_genuinely_live_process_is_not_a_violation(tmp_pa
                 process_start_time="start-4242",
             )
         )
+    disposals: list[sa.Engine] = []
+    event.listen(engine, "engine_disposed", disposals.append)
     probe = FakeProbe(alive={(4242, "start-4242")})
     slugs = {v.invariant for v in runner_invariants(engine, process=probe).run(after_recovery=True)}
     assert "runner:active-lease-process-is-live" not in slugs
+    dead = {v.invariant for v in runner_invariants(engine, process=FakeProbe()).run(after_recovery=True)}
+    assert "runner:active-lease-process-is-live" in dead
+    assert disposals == []
 
 
 def test_an_active_lease_whose_generation_already_failed_identity_is_not_a_violation(tmp_path: Path) -> None:
