@@ -18,7 +18,12 @@ TENANT = {
     "blizzard.hub.api.auth_session.tenant_request",
 }
 RUNNER = TENANT | {"blizzard.hub.api.auth.require_runner_principal"}
-FLEET_REQUEST = RUNNER | {"blizzard.hub.api.fleet.FleetRequest.of", "blizzard.hub.api.request_config.request_config"}
+LIVE_SETTINGS = "blizzard.hub.api.fleet._live_settings"
+FLEET_REQUEST = RUNNER | {
+    LIVE_SETTINGS,
+    "blizzard.hub.api.fleet.FleetRequest.of",
+    "blizzard.hub.api.request_config.request_config",
+}
 HOST = TENANT | {"blizzard.hub.api.auth.require_host_principal"}
 
 # Keys are the hub's effective route paths, not client-side parameter names.
@@ -92,6 +97,7 @@ POST /api/fleet/host/runners/{runner_id}/retire
     (
         TENANT
         | {
+            LIVE_SETTINGS,
             "blizzard.hub.api.auth.require_runner_principal_even_if_retired",
             "blizzard.hub.api.fleet.FleetRequest.of_even_if_retired",
             "blizzard.hub.api.request_config.request_config",
