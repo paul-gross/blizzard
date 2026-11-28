@@ -19,14 +19,15 @@ from jwt.algorithms import RSAAlgorithm
 
 import blizzard.runner.app as runner_app
 from blizzard.foundation.host_registration_state import HostRegistrationState
-from blizzard.runner.app import build_hosted_app
+from blizzard.runner.app import build_hosted_app_over_process
 from blizzard.runner.auth.session import CookieNames
-from blizzard.runner.composition import HostProcess, build_host_process
+from blizzard.runner.composition import HostProcess
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.host_config import HaltedRunner, ResolvedToken, TokenSource
+from blizzard.runner.host_config import HaltedRunner, HostConfig, ResolvedToken, TokenSource
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.hub.host_registration import HostRegistrationStatus
+from tests.support.composed_host import build_host_process
 from tests.support.host_files import host_config_of
 from tests.support.runner_fakes import migrated_store_at
 
@@ -35,7 +36,7 @@ _HOST_ID = "hs_01HOSTHOSTHOSTHOSTHOSTHOST"
 _HALTED = (HaltedRunner(name="alpha", id=None, errors=("projects: none served",)),)
 
 
-def _host(tmp_path: Path, *, token: str) -> tuple[HostProcess, RunnerConfig]:
+def _host(tmp_path: Path, *, token: str) -> tuple[HostProcess, RunnerConfig, HostConfig]:
     config = RunnerConfig(
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
@@ -47,7 +48,7 @@ def _host(tmp_path: Path, *, token: str) -> tuple[HostProcess, RunnerConfig]:
     host_config = dataclasses.replace(
         host_config_of(config), host_token=ResolvedToken(value=token, source=TokenSource.ENVIRONMENT)
     )
-    return build_host_process(host_config, [], halted=_HALTED), config
+    return build_host_process(host_config, [], halted=_HALTED), config, host_config
 
 
 Keys = tuple[rsa.RSAPrivateKey, dict[str, str]]
@@ -78,7 +79,11 @@ def _token(private_key: rsa.RSAPrivateKey, *, jti: str, aud: str) -> str:
 
 @contextlib.contextmanager
 def _serve(
-    host: HostProcess, config: RunnerConfig, jwk: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    host: HostProcess,
+    config: RunnerConfig,
+    host_config: HostConfig,
+    jwk: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[TestClient]:
     real: Callable[..., httpx2.Client] = httpx2.Client
 
@@ -90,7 +95,7 @@ def _serve(
         return real(transport=httpx2.MockTransport(handler), base_url="http://hub.example")
 
     monkeypatch.setattr(runner_app.httpx2, "Client", mocked)
-    hosted = build_hosted_app(config, host)
+    hosted = build_hosted_app_over_process(config, host, host_config=host_config)
     try:
         yield TestClient(hosted.app, base_url="https://host.example")
     finally:
@@ -106,9 +111,9 @@ def test_a_registered_runnerless_host_signs_in_as_its_host_id(
     tmp_path: Path, keypair: Keys, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     private_key, jwk = keypair
-    host, config = _host(tmp_path, token="host-token")
+    host, config, host_config = _host(tmp_path, token="host-token")
     _answered(host)
-    with _serve(host, config, jwk, monkeypatch) as client:
+    with _serve(host, config, host_config, jwk, monkeypatch) as client:
         names = CookieNames(_HOST_ID)
 
         login = client.get("/api/auth/login?return_to=/", follow_redirects=False)
@@ -144,10 +149,10 @@ def test_a_runnerless_host_offers_no_sign_in_until_answered_as_itself(
     state: HostRegistrationState,
 ) -> None:
     _key, jwk = keypair
-    host, config = _host(tmp_path, token="host-token")
+    host, config, host_config = _host(tmp_path, token="host-token")
     _answered(host)
     host.host_registration.hold(HostRegistrationStatus(state=state))
-    with _serve(host, config, jwk, monkeypatch) as client:
+    with _serve(host, config, host_config, jwk, monkeypatch) as client:
         assert client.get("/api/auth/login", follow_redirects=False).status_code == 503
 
 
@@ -155,9 +160,9 @@ def test_a_runnerless_host_with_no_recorded_identity_offers_no_sign_in(
     tmp_path: Path, keypair: Keys, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _key, jwk = keypair
-    host, config = _host(tmp_path, token="host-token")
+    host, config, host_config = _host(tmp_path, token="host-token")
     host.host_registration.hold(HostRegistrationStatus(state=HostRegistrationState.REGISTERED))
-    with _serve(host, config, jwk, monkeypatch) as client:
+    with _serve(host, config, host_config, jwk, monkeypatch) as client:
         assert client.get("/api/auth/login", follow_redirects=False).status_code == 503
 
 
@@ -165,6 +170,6 @@ def test_an_unregistered_runnerless_host_offers_no_sign_in(
     tmp_path: Path, keypair: Keys, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _key, jwk = keypair
-    host, config = _host(tmp_path, token="")
-    with _serve(host, config, jwk, monkeypatch) as client:
+    host, config, host_config = _host(tmp_path, token="")
+    with _serve(host, config, host_config, jwk, monkeypatch) as client:
         assert client.get("/api/auth/login", follow_redirects=False).status_code == 503

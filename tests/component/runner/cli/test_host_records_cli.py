@@ -18,12 +18,12 @@ import uvicorn
 from blizzard.foundation.clock import SystemClock
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli.runtime import StoreHostedRunners, read_host_stores, seed_runners
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.host_config import HostConfig
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
+from tests.support.composed_host import open_host
 from tests.support.config_inputs import load_host_config
 from tests.support.runner_add_retire import (
     _registered,  # pyright: ignore[reportPrivateUsage]
@@ -52,9 +52,10 @@ def _serving(root: Path) -> Generator[HostConfig]:
     config = load_host_config(root)
     ready, halted = seed_runners(config, clock=SystemClock())
     assert not halted
-    graph = build_host_process(config, ready)
+    opened = open_host(config, ready)
+    graph = opened.host
     served = replace(ready[0].config, port=0)
-    hosted = build_hosted_app(served, host=graph, host_config=config, source=StoreHostedRunners.over(config, graph))
+    hosted = build_hosted_app(served, host=opened, host_config=config, source=StoreHostedRunners.over(config, graph))
     sockets = Listeners.of(served).bound()
     server = uvicorn.Server(uvicorn.Config(hosted.app, log_level="warning"))
     thread = threading.Thread(target=lambda: server.run(sockets=sockets), daemon=True)
@@ -67,7 +68,7 @@ def _serving(root: Path) -> Generator[HostConfig]:
         thread.join(timeout=10.0)
         Uds(served.socket_path).unlink()
         hosted.close()
-        graph.close()
+        opened.close()
 
 
 def _ok(hub: FakeInitHub, *args: str) -> str:

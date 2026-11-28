@@ -24,19 +24,30 @@ from blizzard.runner.cli.runtime import (
     seed_runners,
     tick_interval,
 )
-from blizzard.runner.composition import HostProcess, build_host_process
+from blizzard.runner.composition import HostProcess
 from blizzard.runner.config_keys import HOST_REGISTRY
+from blizzard.runner.host_config import BuiltRunner, HostConfig
+from blizzard.runner.host_root import OpenedHost
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import RunnerStepper
 from blizzard.runner.settings.authoring import HostSettingsAuthoring
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
+from tests.support.composed_host import build_host_process, open_host
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.runner_fakes import make_store
 
 
 def _host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, top: str = "") -> HostProcess:
+    return build_host_process(*_seeded(tmp_path, monkeypatch, top))
+
+
+def _opened(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, top: str = "") -> OpenedHost:
+    return open_host(*_seeded(tmp_path, monkeypatch, top))
+
+
+def _seeded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, top: str) -> tuple[HostConfig, list[BuiltRunner]]:
     monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
     url = f"sqlite:///{tmp_path / 'runner.db'}"
     write_minimal_host(tmp_path, top=f'db_url = "{url}"\n{top}')
@@ -48,7 +59,7 @@ def _host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, top: str = "") -> Hos
     config = seed_host(config, {}, clock=SystemClock())
     ready, halted = seed_runners(config, clock=SystemClock())
     assert not halted
-    return build_host_process(config, ready)
+    return config, ready
 
 
 def _write(host: HostProcess, **sets: object) -> int:
@@ -68,8 +79,9 @@ def _write(host: HostProcess, **sets: object) -> int:
 def test_a_transcripts_or_worker_stdout_write_reaches_the_next_runner_tick(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    host = _host(tmp_path, monkeypatch, "[worker_stdout]\nretention_days = 3")
-    hosted = build_hosted_app(host.runners[0].config, host)
+    opened = _opened(tmp_path, monkeypatch, "[worker_stdout]\nretention_days = 3")
+    host = opened.host
+    hosted = build_hosted_app(host.runners[0].config, opened)
     seen: list[tuple[int | None, int, int | None]] = []
 
     def observe(ctx: LoopContext) -> None:
@@ -86,7 +98,7 @@ def test_a_transcripts_or_worker_stdout_write_reaches_the_next_runner_tick(
         assert seen == [(1, 3, None), (revision, 9, 4096)]
     finally:
         hosted.close()
-        host.close()
+        opened.close()
 
 
 class _SweepSpy:
@@ -184,8 +196,9 @@ def test_a_tools_write_reaches_the_next_host_tool_child_and_not_a_running_one(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("BZ_TOOL_PROFILE_PROBE", "on")
-    host = _host(tmp_path, monkeypatch)
-    hosted = build_hosted_app(host.runners[0].config, host)
+    opened = _opened(tmp_path, monkeypatch)
+    host = opened.host
+    hosted = build_hosted_app(host.runners[0].config, opened)
     try:
         assert hosted.host_stepper is not None
         running = host.tool_profile.current()
@@ -201,7 +214,7 @@ def test_a_tools_write_reaches_the_next_host_tool_child_and_not_a_running_one(
         assert host.host_settings.since is not None
     finally:
         hosted.close()
-        host.close()
+        opened.close()
 
 
 def test_an_edited_seeded_host_key_in_the_file_changes_nothing_after_a_restart(
@@ -224,8 +237,9 @@ def test_an_edited_seeded_host_key_in_the_file_changes_nothing_after_a_restart(
 def test_a_tick_seconds_write_from_an_hour_to_a_second_takes_hold_without_waiting_the_hour(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    host = _host(tmp_path, monkeypatch, "tick_seconds = 3600")
-    hosted = build_hosted_app(host.runners[0].config, host)
+    opened = _opened(tmp_path, monkeypatch, "tick_seconds = 3600")
+    host = opened.host
+    hosted = build_hosted_app(host.runners[0].config, opened)
     held = host.host_settings
     assert held is not None and hosted.host_stepper is not None
     ticks = threading.Semaphore(0)
@@ -259,7 +273,7 @@ def test_a_tick_seconds_write_from_an_hour_to_a_second_takes_hold_without_waitin
         host_driver.stop()
         threads.stop()
         hosted.close()
-        host.close()
+        opened.close()
 
 
 def test_a_write_not_naming_an_interval_wakes_no_driver(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

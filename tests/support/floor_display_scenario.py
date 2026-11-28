@@ -28,14 +28,15 @@ from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli.runtime import host_tick_driver
-from blizzard.runner.composition import HostProcess, build_host_process
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.host_config import BuiltRunner
+from blizzard.runner.host_root import OpenedHost
 from blizzard.runner.hub.sealed_tokens import StoredToken
 from blizzard.runner.loop_wiring import PeriodicDriver
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from blizzard.runner.throttle.floor import FLOOR_UNCONFIRMED_GRACE
+from tests.support.composed_host import open_host
 from tests.support.config_inputs import init_host
 from tests.support.host_files import host_config_of
 from tests.support.runner_fakes import FakeSubscriptionSampler, usage_limit_mark
@@ -43,7 +44,7 @@ from tests.support.runner_join import add_runner
 
 
 @contextlib.contextmanager
-def serve(config: RunnerConfig, host: HostProcess, sock: socket.socket) -> Generator[None]:
+def serve(config: RunnerConfig, host: OpenedHost, sock: socket.socket) -> Generator[None]:
     """Own the hosted app and server; stop serving before closing its clients and steppers."""
     hosted = build_hosted_app(config, host)
     server = uvicorn.Server(uvicorn.Config(hosted.app, log_level="warning"))
@@ -122,7 +123,7 @@ def main() -> None:
 
     composition.select_sampler = select_fake
     try:
-        host = build_host_process(
+        opened = open_host(
             dataclasses.replace(host_config_of(configs[0]), subscriptions=(subscription,)),
             [
                 BuiltRunner(rid, config, StoredToken.opened(token, 1))
@@ -132,6 +133,7 @@ def main() -> None:
         )
     finally:
         composition.select_sampler = original
+    host = opened.host
     try:
         now = datetime.now(UTC).replace(microsecond=0)
         mark = usage_limit_mark(now, resets_in=timedelta(hours=2))
@@ -150,7 +152,7 @@ def main() -> None:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind(("127.0.0.1", args.port))
             with (
-                serve(configs[0], host, sock),
+                serve(configs[0], opened, sock),
                 httpx2.Client(base_url=f"http://127.0.0.1:{args.port}") as client,
             ):
                 reset = mark.resets_at.isoformat().replace("+00:00", "Z")
@@ -230,7 +232,7 @@ def main() -> None:
                     for driver in reversed(started):
                         driver.stop()
     finally:
-        host.close()
+        opened.close()
 
 
 if __name__ == "__main__":

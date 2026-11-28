@@ -17,9 +17,10 @@ from blizzard.runner.api.settings import SettingsProblem
 from blizzard.runner.app import HostedApp, build_hosted_app
 from blizzard.runner.auth.session import CookieNames, RunnerSession, SessionCookie
 from blizzard.runner.cli.runtime import seed_host, seed_runners
-from blizzard.runner.composition import HostProcess, build_host_process
+from blizzard.runner.composition import HostProcess
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
+from tests.support.composed_host import open_host
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.runner_fakes import make_store
@@ -40,13 +41,14 @@ def hosted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[tuple[H
     config = seed_host(config, {}, clock=SystemClock())
     ready, halted = seed_runners(config, clock=SystemClock())
     assert not halted
-    host = build_host_process(config, ready)
-    app = build_hosted_app(host.runners[0].config, host)
+    opened = open_host(config, ready)
+    host = opened.host
+    app = build_hosted_app(host.runners[0].config, opened)
     try:
         yield host, app
     finally:
         app.close()
-        host.close()
+        opened.close()
 
 
 def _problem(response: httpx2.Response, status: int, code: str) -> SettingsProblem:

@@ -14,6 +14,7 @@ import secrets
 from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import cast
 from urllib.parse import quote
 
 import httpx2
@@ -32,6 +33,8 @@ from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.attributes import annotate
 from blizzard.foundation.platform_tracing.handle import DISABLED_TELEMETRY, IPlatformTracing
+from blizzard.foundation.registry.interface import ServiceAbsent
+from blizzard.foundation.registry.scopes import OwnedChild, Resolver
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -89,6 +92,7 @@ from blizzard.runner.api.otlp_receiver import router as otlp_receiver_router
 from blizzard.runner.api.problems import RunnerProblem
 from blizzard.runner.api.readiness import router as readiness_router
 from blizzard.runner.api.requeues import router as requeues_router
+from blizzard.runner.api.resolution import host_request, refuse_absent_service
 from blizzard.runner.api.scope import router as scope_router
 from blizzard.runner.api.selftests import router as selftests_router
 from blizzard.runner.api.session_end import router as session_end_router
@@ -123,11 +127,12 @@ from blizzard.runner.composition import (
     IWiredRunner,
     LiveRunner,
     NoDrivers,
+    RunnerCompose,
     RunnerProcess,
     StartupNote,
     build_host_record_services,
-    build_runner_process,
     build_running_host_runner_service,
+    close_after,
     host_settings_reader,
 )
 from blizzard.runner.config import HostWorkspace, RunnerConfig, SubscriptionDeclaration
@@ -137,7 +142,8 @@ from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.health import HarnessHealthResult
 from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnessHealth
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
-from blizzard.runner.host_config import HaltedRunner, HostConfig
+from blizzard.runner.host_config import BuiltRunner, HaltedRunner, HostConfig
+from blizzard.runner.host_root import HostRoot, OpenedHost, open_host_free
 from blizzard.runner.host_settings_reader import HostSettingsInForce
 from blizzard.runner.hub.client import BindingDeclaration, ITokenIdentityReader
 from blizzard.runner.hub.held_token import ICurrentHubToken
@@ -176,7 +182,7 @@ from blizzard.runner.settings.authoring import HostSettingsApplication, HostSett
 from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import HostReadStores, HostStores, IRunnerBinding, RunnerReadStores, RunnerStores
-from blizzard.runner.throttle.floor_clear import RunnerFloorClearService, SubscriptionFloorClearService
+from blizzard.runner.throttle.floor_clear import RunnerFloorClearService
 from blizzard.runner.throttle.gate import GateReadConfig, GateReadContext, ThrottleGate
 from blizzard.runner.throttle.pause import PauseService
 from blizzard.runner.tracing.exclusion import is_excluded
@@ -213,6 +219,8 @@ class Lane:
 
 
 _HUMAN_GATE = (Depends(require_human_api),)
+# A host-root lane's requests resolve through the host's process scope; a runner's lane never does.
+_HOST_REQUEST = (Depends(host_request),)
 
 # The host's own routes, at the root. Ungated: liveness and the SSO bounce.
 _HOST_UNGATED = (health_router, flags_router, readiness_router, auth_router)
@@ -281,8 +289,12 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message — sent *after*
     uvicorn's own graceful-drain wait, so this is the only signal a composer without an
     early-shutdown wrapper gets."""
-    yield
-    app.state.shutdown.set()
+    try:
+        yield
+    finally:
+        app.state.shutdown.set()
+        if app.state.host_free is not None:
+            app.state.host_free.close()
 
 
 def runner_seams(
@@ -444,19 +456,13 @@ def create_app(
     host_settings: HostSettingsInForce | None = None,
     host_settings_authoring: HostSettingsAuthoring | None = None,
     host_settings_application: HostSettingsApplication | None = None,
+    host_resolver: Resolver | None = None,
     flags: Flags,
 ) -> FastAPI:
-    """Build the host's app from resolved config: its own routes at the root, and each of ``runners`` under its
-    prefix, keyed by id; ``halted`` are the runners the host holds unbuilt.
-
-    With ``runners`` omitted, the app serves one runner composed from the runner seams passed here by
-    :func:`runner_seams` — a host of one. ``workspaces`` defaults to each of ``config``'s declared workspaces, over
-    ``workspace_registry``'s pool for it, and ``subscriptions`` to ``config``'s. A store-free build is
-    possible; the store-backed routes then answer 503 and ``/api/ready`` reports ``ready=false``. ``events`` defaults
-    absent, leaving the stream silent. ``platform_tracing`` is off unless the composition root passes a handle.
-    ``telemetry_receiver`` is the host's worker telemetry receiver; absent, the OTLP routes answer 503. ``identity`` is
-    the process's holder; absent, the federation routes answer 503. ``host_stores`` are the host-scoped stores;
-    ``jti_cache`` defaults to theirs. ``flags`` is the host's resolved answer."""
+    """The host's app: its own routes at the root, and each of ``runners`` under its id, or a host of one from the
+    seams :func:`runner_seams` passes; ``halted`` are the runners it holds unbuilt. A collaborator left absent
+    answers its routes 503 — a store-free build reports ``ready=false``. Host routes resolve through
+    ``host_resolver``, the host root's process scope, else through a host-free graph closed with the app."""
     log = get_logger("blizzard.runner")
     clock = clock or SystemClock()
     process = process or LinuxProcessProbe()
@@ -571,9 +577,10 @@ def create_app(
     app.state.clock = clock
     # The worker telemetry receiver, built once by the composition root and shared by every runner.
     app.state.telemetry_receiver = telemetry_receiver
-    app.state.subscription_floor_clears = (
-        SubscriptionFloorClearService(host_stores.usage_limits, clock) if host_stores is not None else None
-    )
+    # The host-free graph this app owns, else `None` beside the host root's borrowed resolver.
+    host_free = open_host_free() if host_resolver is None else None
+    app.state.host_free = host_free
+    app.state.host_resolver = host_free.resolver if host_free is not None else host_resolver
     # This default must **not** reach the network — pinned by
     # tests/unit/runner/test_pin_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url
     hub_http_client = hub_http_client or httpx2.Client(
@@ -603,6 +610,7 @@ def create_app(
 
     app.add_exception_handler(FlagOffError, refuse_flag_off)
     app.add_exception_handler(UpstreamRefusal, relay_upstream_refusal)
+    app.add_exception_handler(ServiceAbsent, refuse_absent_service)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, exc: RequestValidationError) -> Response:
@@ -645,11 +653,11 @@ def create_app(
         return await call_next(request)
 
     # API routers first, so the API always wins over the web mount at /.
-    Lane((), _HOST_UNGATED).mount(app)
-    Lane(_HUMAN_GATE, _HOST_HUMAN).mount(app)
+    Lane(_HOST_REQUEST, _HOST_UNGATED).mount(app)
+    Lane((*_HUMAN_GATE, *_HOST_REQUEST), _HOST_HUMAN).mount(app)
     if isinstance(clock, ControlledClock):
         # Mounted only on a fenced host (`bzh:injected-clock`); any other host has no such route and answers 404.
-        Lane(_HUMAN_GATE, (host_clock_router,)).mount(app)
+        Lane((*_HUMAN_GATE, *_HOST_REQUEST), (host_clock_router,)).mount(app)
     Lane((), _RUNNER_UNGATED, per_runner=True).mount(app)
     Lane(_HUMAN_GATE, _RUNNER_HUMAN, per_runner=True).mount(app)
 
@@ -722,9 +730,8 @@ _wired_runner_conforms: type[IWiredRunner] = _WiredRunner
 class HostedApp:
     """The served app over one host graph, and the host's live runner set it serves.
 
-    Closing releases wrapper resources, the graphs of the runners the set holds, and an internally built host. The
-    exposed engine belongs to the host; a supplied host or process graph remains caller-owned.
-    """
+    Closing releases wrapper resources, the host root and an opened host it was handed; a caller's host process stays
+    the caller's, its engine exposed here."""
 
     app: FastAPI
     engine: Engine
@@ -732,14 +739,21 @@ class HostedApp:
     #: registered availability agree; ``None`` when the host built no runner.
     harness_health: HarnessHealthCache | None
     hub_http_client: httpx2.Client
-    #: Every live runner, its wiring and drivers; a runner added or retired while the host runs moves through it.
-    runners: HostRunnerSet[_WiredRunner, ResumeMarking]
+    #: The host's process scope and the runner children beneath it, which closing the app closes.
+    root: HostRoot[_WiredRunner, ResumeMarking]
     #: How a runner is started on this app; the host's serve hands it the drivers and the operator's output.
     start: AppRunnerStart
-    owned_host: HostProcess | None = None
+    #: The opened host the app serves from, which closing the app closes; ``None`` over a caller's host process.
+    opened: OpenedHost | None = None
     host_stepper: HostPassStepper | None = None
     #: The host tick's reconcile of its live runners against its hosted ones; ``None`` when no seed source is wired.
     reconcile: HostRunnerReconcile[_WiredRunner, ResumeMarking] | None = None
+
+    @property
+    def runners(self) -> HostRunnerSet[_WiredRunner, ResumeMarking]:
+        """Every live runner, its wiring and drivers; a runner added or retired while the host runs moves through
+        it."""
+        return self.root.runners
 
     @property
     def resumes(self) -> tuple[ResumeMarking, ...]:
@@ -764,9 +778,9 @@ class HostedApp:
 
     def close(self) -> None:
         with contextlib.ExitStack() as closing:
-            if self.owned_host is not None:
-                closing.callback(self.owned_host.close)
-            closing.callback(self.runners.close_all)
+            if self.opened is not None:
+                closing.callback(self.opened.close)
+            closing.callback(self.root.close)
             closing.callback(self.hub_http_client.close)
 
 
@@ -855,57 +869,86 @@ class _FirstServedIdentity:
 
 def build_hosted_app(
     config: RunnerConfig,
-    host: HostProcess | None = None,
+    host: OpenedHost,
     *,
-    events: EventBroker | None = None,
-    process_graph: RunnerProcess | None = None,
     host_config: HostConfig | None = None,
     source: IHostedRunnerSource | None = None,
 ) -> HostedApp:
-    """Wire the served app over the host graph, the host's own keys in ``config``, and serve every runner ``host``
-    holds.
-
-    ``host`` is the host the caller built and owns; ``process_graph`` names a runner whose host serves instead.
-    With neither, this builds a host of one over ``config``'s runner and the returned app closes it. With
-    ``host_config`` and ``source``, the host tick reconciles its live runners against the store's hosted ones."""
-    owned = host is None and process_graph is None
-    if host is None:
-        if process_graph is None:
-            process_graph = build_runner_process(config, events=events)
-        host = process_graph.host
+    """The served app over an opened ``host``, the host's own keys in ``config``: it serves from the host's root and
+    each runner child opened beneath it, and closing the app closes ``host``. With ``host_config`` and ``source``,
+    the host tick reconciles its live runners against the store's hosted ones."""
     with contextlib.ExitStack() as startup:
-        if owned:
-            startup.callback(host.close)
+        startup.callback(host.close)
         hosted = _wire_hosted_app(
-            config, host, startup, owned_host=host if owned else None, host_config=host_config, source=source
+            config,
+            host.host,
+            cast("HostRoot[_WiredRunner, ResumeMarking]", host.root),
+            startup,
+            opened=tuple(zip(host.runners, host.children, strict=True)),
+            opened_host=host,
+            host_config=host_config,
+            source=source,
+            boot=(),
         )
-        startup.pop_all()  # HostedApp.close releases the registered wrapper resources and any owned host.
+        startup.pop_all()  # HostedApp.close releases the registered wrapper resources and the opened host.
+        return hosted
+
+
+def build_hosted_app_over_process(
+    config: RunnerConfig,
+    host: HostProcess,
+    host_config: HostConfig,
+    *,
+    source: IHostedRunnerSource | None = None,
+    boot: Sequence[BuiltRunner] = (),
+    compose: RunnerCompose | None = None,
+) -> HostedApp:
+    """The served app over a caller's ``host`` and its ``host_config``, the root opened here: each of ``boot`` is
+    composed under ``compose`` as its child opens, a bad entry raising its ``ConfigError`` before anything serves.
+    With ``source``, the host tick reconciles its live runners against the store's hosted ones."""
+    with contextlib.ExitStack() as startup:
+        root = HostRoot[_WiredRunner, ResumeMarking].serving(host, host_config, compose=compose)
+        startup.callback(root.close)
+        hosted = _wire_hosted_app(
+            config,
+            host,
+            root,
+            startup,
+            opened=(),
+            opened_host=None,
+            host_config=host_config,
+            source=source,
+            boot=boot,
+        )
+        startup.pop_all()  # HostedApp.close releases the registered wrapper resources and the root.
         return hosted
 
 
 def _wire_hosted_app(
     config: RunnerConfig,
     host: HostProcess,
+    root: HostRoot[_WiredRunner, ResumeMarking],
     startup: contextlib.ExitStack,
     *,
-    owned_host: HostProcess | None,
+    opened: Sequence[tuple[RunnerProcess, OwnedChild]],
+    opened_host: OpenedHost | None,
     host_config: HostConfig | None,
     source: IHostedRunnerSource | None,
+    boot: Sequence[BuiltRunner],
 ) -> HostedApp:
     """One app over ``host``, whether it serves runners or none: each runner's routes mount under its own id, over its
-    own seams and its own authenticated hub clients; an app over no runner is the runnerless host."""
+    own seams and its own authenticated hub clients; an app over no runner is the runnerless host. Each of ``opened``
+    is a runner whose child already opened beneath ``root``; each of ``boot`` opens its child there."""
     registry = HostRunnerRegistry(RunnerRegistry((), tuple(host.halted)))
-    runners = HostRunnerSet[_WiredRunner, ResumeMarking](host)
+    runners = root.runners
     start = AppRunnerStart(config, host, registry)
-    startup.callback(runners.close_all)
-    for graph in host.runners:
-        wired = start.wire(graph)
-        runners.place(LiveRunner(graph, start.resume(graph), wired=wired))
-        start.serve(graph, wired)
+    for graph, child in opened:
+        _serve_at_boot(runners, start, graph, child)
+    for built in boot:
+        # Composed as the child opens: a bad entry raises, its child closed.
+        _serve_at_boot(runners, start, *runners.open_composed(built))
     reconcile = (
-        HostRunnerReconcile(host_config, host, runners, start, source)
-        if host_config is not None and source is not None
-        else None
+        HostRunnerReconcile(host, runners, start, source) if host_config is not None and source is not None else None
     )
     host_stepper = host_pass_stepper(host, reconcile.run if reconcile is not None else None)
     # The real, network-reaching hub client — only `host` wires one.
@@ -934,6 +977,7 @@ def _wire_hosted_app(
         host_settings=host.host_settings,
         host_settings_authoring=host.host_settings_authoring,
         host_settings_application=host.host_settings_application,
+        host_resolver=root.owner.resolver,
         flags=host.flags,
     )
     app.state.runners = registry
@@ -963,12 +1007,28 @@ def _wire_hosted_app(
         host.engine,
         first.harness_health if first is not None else None,
         hub_http_client,
-        runners,
+        root,
         start,
-        owned_host,
+        opened_host,
         host_stepper,
         reconcile,
     )
+
+
+def _serve_at_boot(
+    runners: HostRunnerSet[_WiredRunner, ResumeMarking],
+    start: AppRunnerStart,
+    graph: RunnerProcess,
+    child: OwnedChild | None,
+) -> None:
+    """Wire, place and serve one runner the host starts with; a failure closes its graph, then its child."""
+    try:
+        wired = start.wire(graph)
+        runners.place(LiveRunner(graph, start.resume(graph), wired=wired, child=child))
+    except BaseException as failure:
+        close_after(functools.partial(runners.close_graph, graph, child), failure)
+        raise
+    start.serve(graph, wired)
 
 
 def _harnesses_for_lease(graph: RunnerProcess, lease_id: str) -> HarnessRegistry:

@@ -9,10 +9,11 @@ from typing import Any, cast
 
 from blizzard.foundation.registry.interface import Lifetime
 from blizzard.foundation.registry.internal.recording import RecordingRegistry
+from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import OwnedChild
 from blizzard.runner.composition import HostProcess, IRunnerDrivers, LiveRunner, RunnerProcess
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.host_config import BuiltRunner, HaltedRunner
+from blizzard.runner.host_config import BuiltRunner, HaltedRunner, HostConfig
 from blizzard.runner.host_root import HostRoot, register_host
 
 
@@ -141,7 +142,7 @@ def host_rig(
 ) -> Rig:
     """The host root over a journalled graph; ``extra`` adds registrations before the build."""
     journal = Journal()
-    registry = RecordingRegistry()
+    registry = LegacyRegistry()
     register_host(registry)
 
     def provide_journal() -> Journal:
@@ -154,5 +155,7 @@ def host_rig(
     if extra is not None:
         extra(registry)
     host = Borrowed(journal)
-    root = HostRoot[FakeWiring, FakeResume].open(registry, cast("HostProcess", host), eager=eager)
+    root = HostRoot[FakeWiring, FakeResume].open(
+        registry, cast("HostProcess", host), cast("HostConfig", object()), eager=eager
+    )
     return Rig(journal, host, root)

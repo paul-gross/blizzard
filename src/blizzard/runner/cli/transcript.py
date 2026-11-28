@@ -25,8 +25,8 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.wiring import load_published_harness_bundle, select_harness_bindings
-from blizzard.runner.host_config import HostConfigError
-from blizzard.runner.loop_wiring import LoopWiring
+from blizzard.runner.host_config import BuiltRunner, HostConfigError
+from blizzard.runner.loop_wiring import LoopWiring, Standalone
 from blizzard.runner.transcripts.backfill import TranscriptReshipError
 from blizzard.wire.transcript_segment import TranscriptSegmentContentView, TranscriptSegmentIndexView
 
@@ -122,9 +122,10 @@ def transcript_get(
 @contextmanager
 def _transcript_config(
     directory: str, *, runner: str | None, verb: str, action: str, door: Door, clock: IClock
-) -> Generator[RunnerConfig, None, None]:
+) -> Generator[Standalone, None, None]:
     """Every store-writing transcript verb's guards, and the host directory held while the verb runs — shared so a
-    second verb cannot ship with fewer of them than the first."""
+    second verb cannot ship with fewer of them than the first. Yields the host file and the runner the verb opens its
+    graph over."""
     host = load_host(directory)
     with click_exception_on(ConfigError):
         entry = resolve_runner(host, runner, clock)
@@ -145,7 +146,7 @@ def _transcript_config(
         clock=clock,
         refuse_foreign=True,
     ):
-        yield config
+        yield Standalone(host, BuiltRunner(config.runner_id, config, entry=entry))
 
 
 def _loop_wiring(ctx: click.Context, config: RunnerConfig) -> LoopWiring:
@@ -188,9 +189,9 @@ def transcript_reship(ctx: click.Context, segment_id: str, directory: str, runne
         action="reship a transcript",
         door=Door.of(ctx),
         clock=CliCollaborators.of(ctx).wall_clock,
-    ) as config:
+    ) as standalone:
         try:
-            report = _loop_wiring(ctx, config).reship_transcript(segment_id)
+            report = _loop_wiring(ctx, standalone.built.config).reship_transcript(standalone, segment_id)
         except TranscriptReshipError as exc:
             raise click.ClickException(str(exc)) from exc
     click.echo(
@@ -247,8 +248,10 @@ def transcript_backfill(
         action="backfill transcripts",
         door=Door.of(ctx),
         clock=CliCollaborators.of(ctx).wall_clock,
-    ) as config:
-        report = _loop_wiring(ctx, config).backfill_transcripts(dry_run=dry_run, limit=limit)
+    ) as standalone:
+        report = _loop_wiring(ctx, standalone.built.config).backfill_transcripts(
+            standalone, dry_run=dry_run, limit=limit
+        )
     prefix = "would import" if dry_run else "imported"
     click.echo(f"{prefix} {report.imported}, already present {report.already_present}, gone {report.gone}")
     if report.deferred:

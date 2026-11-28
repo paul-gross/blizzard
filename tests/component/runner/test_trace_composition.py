@@ -12,9 +12,11 @@ import pytest
 
 import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.fact_kinds import EVENT_RECORDED
-from blizzard.runner.composition import RunnerProcess, build_runner_process
+from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.host_config import BuiltRunner, HostConfig
 from blizzard.runner.host_layout import HostLayout
+from blizzard.runner.host_root import build_runner_process
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.tracing.config import RunnerTracingConfig
@@ -28,6 +30,7 @@ from tests.support.runner_fakes import (
 )
 from tests.support.runner_trace_leases import closed_lease
 from tests.support.scaffolding import InMemoryTraceExporter
+from tests.support.standalone import standalone_of, standalone_runner
 
 _ENDPOINT = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}
 
@@ -58,9 +61,7 @@ def _events(store: SqlAlchemyRunnerStore) -> list[dict[str, object]]:
 
 def test_no_endpoint_builds_no_sweep_and_writes_no_cursor_row(tmp_path: Path) -> None:
     config, store = _config(tmp_path)
-    graph = build_runner_process(
-        config, environ={}, trace_exporter=InMemoryTraceExporter(), runner_id=FIXTURE_RUNNER_ID
-    )
+    graph = standalone_runner(config, environ={}, trace_exporter=InMemoryTraceExporter(), runner_id=FIXTURE_RUNNER_ID)
     try:
         assert graph.trace_settings.state == "disabled"
         assert graph.trace_sweep is None
@@ -74,7 +75,7 @@ def test_no_endpoint_builds_no_sweep_and_writes_no_cursor_row(tmp_path: Path) ->
 def test_grpc_is_rejected_and_announced_once_with_no_sweep(tmp_path: Path) -> None:
     config, store = _config(tmp_path)
     environ = {**_ENDPOINT, "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc"}
-    graph = build_runner_process(
+    graph = standalone_runner(
         config, environ=environ, trace_exporter=InMemoryTraceExporter(), runner_id=FIXTURE_RUNNER_ID
     )
     try:
@@ -92,7 +93,7 @@ def test_grpc_is_rejected_and_announced_once_with_no_sweep(tmp_path: Path) -> No
 def test_an_endpoint_builds_a_sweep_over_the_injected_exporter(tmp_path: Path) -> None:
     config, store = _config(tmp_path)
     exporter = InMemoryTraceExporter()
-    graph = build_runner_process(config, environ=_ENDPOINT, trace_exporter=exporter, runner_id=FIXTURE_RUNNER_ID)
+    graph = standalone_runner(config, environ=_ENDPOINT, trace_exporter=exporter, runner_id=FIXTURE_RUNNER_ID)
     try:
         assert graph.trace_settings.state == "enabled"
         assert isinstance(graph.trace_sweep, LeaseTraceSweep)
@@ -108,7 +109,7 @@ def test_an_endpoint_builds_a_sweep_over_the_injected_exporter(tmp_path: Path) -
 
 def test_an_endpoint_without_an_injected_exporter_binds_otlp(tmp_path: Path) -> None:
     config, _ = _config(tmp_path)
-    graph = build_runner_process(config, environ=_ENDPOINT, runner_id=FIXTURE_RUNNER_ID)
+    graph = standalone_runner(config, environ=_ENDPOINT, runner_id=FIXTURE_RUNNER_ID)
     try:
         assert isinstance(graph.trace_sweep, LeaseTraceSweep)
     finally:
@@ -120,15 +121,13 @@ def test_runner_tick_never_drives_the_sweep(tmp_path: Path, monkeypatch: pytest.
     exporter = InMemoryTraceExporter()
     built: list[RunnerProcess] = []
 
-    def traced(config: RunnerConfig, **kwargs: Any) -> RunnerProcess:
-        graph = build_runner_process(
-            config, environ=_ENDPOINT, trace_exporter=exporter, **kwargs, runner_id=FIXTURE_RUNNER_ID
-        )
+    def traced(host_config: HostConfig, runner: BuiltRunner, **kwargs: Any) -> RunnerProcess:
+        graph = build_runner_process(host_config, runner, environ=_ENDPOINT, trace_exporter=exporter, **kwargs)
         built.append(graph)
         return graph
 
     monkeypatch.setattr(loop_wiring, "build_runner_process", traced)
-    LoopWiring.of(config).tick_once()
+    LoopWiring.of(config).tick_once(standalone_of(config, FIXTURE_RUNNER_ID))
 
     assert built and built[0].trace_sweep is not None
     assert exporter.attempts == 0

@@ -20,13 +20,13 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.runtime import seed_runners
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.host_config import HostConfig
 from blizzard.runner.host_keys import ENV_HOST_SECRET_KEY
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.sealed_tokens import StoredToken
 from blizzard.runner.listeners import Listeners, Uds
+from tests.support.composed_host import open_host
 from tests.support.config_inputs import load_host_config
 from tests.support.hub_tokens import host_hub_tokens
 from tests.support.runner_cli_home import (
@@ -126,9 +126,9 @@ def test_a_stopped_host_refuses_a_store_its_runner_is_foreign_to(
 def _serving(config: HostConfig) -> Generator[None]:
     ready, halted = seed_runners(config, clock=SystemClock())
     assert not halted
-    graph = build_host_process(config, ready)
+    opened = open_host(config, ready)
     served = replace(ready[0].config, port=0)
-    hosted = build_hosted_app(served, host=graph)
+    hosted = build_hosted_app(served, host=opened)
     sockets = Listeners.of(served).bound()
     server = uvicorn.Server(uvicorn.Config(hosted.app, log_level="warning"))
     thread = threading.Thread(target=lambda: server.run(sockets=sockets), daemon=True)
@@ -141,7 +141,7 @@ def _serving(config: HostConfig) -> Generator[None]:
         thread.join(timeout=10.0)
         Uds(served.socket_path).unlink()
         hosted.close()
-        graph.close()
+        opened.close()
 
 
 def test_a_running_host_seals_the_token_over_its_socket(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

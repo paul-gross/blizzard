@@ -12,7 +12,6 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.foundation.sweep_passes import SweepPassOutcome
 from blizzard.runner.cli.runtime import seed_runners
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.hub.client import HubClientError
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.lifecycle.registration import Registration
@@ -20,6 +19,7 @@ from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import RunnerStepper
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.throttle.gate import ThrottleGate
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.runner_fakes import make_store

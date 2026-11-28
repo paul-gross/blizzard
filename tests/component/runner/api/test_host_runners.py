@@ -23,7 +23,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.auth.session import CookieNames, RunnerSession, SessionCookie
 from blizzard.runner.cli.runtime import StoreHostedRunners, seed_runners
-from blizzard.runner.composition import build_host_process, build_host_stores, build_running_host_runner_service
+from blizzard.runner.composition import build_host_stores, build_running_host_runner_service
 from blizzard.runner.host_config import HaltedRunner, HostConfig
 from blizzard.runner.host_keys import ENV_HOST_SECRET_KEY
 from blizzard.runner.host_layout import HostLayout
@@ -38,6 +38,7 @@ from blizzard.runner.hub.client import (
     RunnerAddRefused,
 )
 from blizzard.runner.hub.sealed_tokens import StoredToken
+from tests.support.composed_host import open_host
 from tests.support.config_inputs import load_host_config
 from tests.support.hub_tokens import host_hub_tokens
 from tests.support.runner_fakes import migrated_store_at, runner_store_errors
@@ -84,9 +85,10 @@ def _host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HostConfig:
 @contextmanager
 def _served(config: HostConfig, hub: _Hub, *, registered: bool = True) -> Generator[TestClient]:
     ready, halted = seed_runners(config, clock=SystemClock())
-    graph = build_host_process(config, ready, halted=halted)
+    opened = open_host(config, ready, halted=halted)
+    graph = opened.host
     hosted = build_hosted_app(
-        ready[0].config, host=graph, host_config=config, source=StoreHostedRunners.over(config, graph)
+        ready[0].config, host=opened, host_config=config, source=StoreHostedRunners.over(config, graph)
     )
     hosted.app.state.hub_auth_mode = SimpleNamespace(enabled=lambda: False)
     hosted.app.state.hosted_runners = build_running_host_runner_service(config, graph, hub) if registered else None
@@ -95,7 +97,7 @@ def _served(config: HostConfig, hub: _Hub, *, registered: bool = True) -> Genera
             yield client
     finally:
         hosted.close()
-        graph.close()
+        opened.close()
 
 
 def _add(client: TestClient, name: str = "night-1", **body: object) -> tuple[int, dict[str, object]]:

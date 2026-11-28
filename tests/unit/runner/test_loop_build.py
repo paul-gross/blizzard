@@ -14,6 +14,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock
 
 import httpx2
@@ -26,10 +27,11 @@ import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import FixedClock, ManualMonotonicClock, SystemMonotonicClock
 from blizzard.foundation.credential_renewal import RenewalResult
 from blizzard.foundation.platform_tracing.handle import build_platform_tracing
+from blizzard.foundation.registry.scopes import OwnedChild
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_spans import FinishedSpan
-from blizzard.runner.app import build_hosted_app
-from blizzard.runner.composition import build_runner_process
+from blizzard.runner.app import build_hosted_app, build_hosted_app_over_process
+from blizzard.runner.composition import HostProcess, HostRunnerSet, RunnerCompose, RunnerProcess
 from blizzard.runner.config import (
     ConfigError,
     RunnerConfig,
@@ -51,6 +53,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.wiring import first_bindings, publish_harness_bundle
 from blizzard.runner.host_config import BuiltRunner
 from blizzard.runner.host_layout import HostLayout
+from blizzard.runner.host_root import HostRoot
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
@@ -67,6 +70,7 @@ from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPI
 from blizzard.runner.tracing.bounded_export import BoundedTraceExporter
 from blizzard.runner.tracing.config import RunnerTracingConfig
 from blizzard.runner.transcripts.transcript_pump import TranscriptPump
+from tests.support import composed_host
 from tests.support.config_inputs import create_runner_app
 from tests.support.harness_sections import sections
 from tests.support.host_files import (
@@ -91,6 +95,7 @@ from tests.support.runner_fakes import (
 )
 from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import InMemoryTraceExporter
+from tests.support.standalone import hosted_app, open_standalone_of, standalone_of, standalone_runner
 
 _NO_HARNESSES = HarnessRegistry({})
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
@@ -111,7 +116,7 @@ def test_basic_provider_wired_with_shared_absolute_root_and_capacity(tmp_path: P
             provider="basic", root="scratch", repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),), max_environments=3
         ),
     )
-    build_hosted_app(config)
+    hosted_app(config)
     with loop_context(config) as loop:
         provider = loop.workspaces.provider(TEST_WORKSPACE_ID)
         assert isinstance(provider, BasicWorkspaceProvider)
@@ -377,7 +382,7 @@ def test_process_graph_delivers_the_published_snapshot_to_the_claude_code_adapte
     )
     snapshot = publish_harness_bundle(bundle, tmp_path, selection=first_bindings())
 
-    graph = build_runner_process(config, bundle=snapshot, runner_id=FIXTURE_RUNNER_ID)
+    graph = standalone_runner(config, bundle=snapshot, runner_id=FIXTURE_RUNNER_ID)
     try:
         adapter = graph.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
         assert isinstance(adapter, ClaudeCodeAdapter)
@@ -419,7 +424,7 @@ def test_hosted_app_threads_the_worker_settings_path_and_permission_mode(tmp_pat
         tmp_path, runner=f'worker_settings_path = "{settings}"\nharness_permission_mode = "acceptEdits"\n'
     )
 
-    app = build_hosted_app(load_runner_config(tmp_path)).app
+    app = hosted_app(load_runner_config(tmp_path)).app
 
     harness = runner_seams(app).harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
     assert isinstance(harness, ClaudeCodeAdapter)
@@ -514,7 +519,7 @@ def test_hosted_app_threads_the_broker_into_create_apps_seam_list(tmp_path: Path
     write_minimal_host(tmp_path)
     broker = EventBroker()
 
-    app = build_hosted_app(load_runner_config(tmp_path), events=broker).app
+    app = hosted_app(load_runner_config(tmp_path), events=broker).app
 
     assert app.state.event_broker is broker
 
@@ -523,7 +528,7 @@ def test_hosted_app_reads_health_from_its_initial_cache(tmp_path: Path, monkeypa
     """The served read seam initially delegates to the exposed boot cache."""
     write_minimal_host(tmp_path)
 
-    hosted = build_hosted_app(load_runner_config(tmp_path))
+    hosted = hosted_app(load_runner_config(tmp_path))
 
     try:
         result = Mock()
@@ -564,7 +569,7 @@ def test_tick_once_over_a_supplied_graph_traces_through_it_and_leaves_it_open(
         db_url=HostLayout(tmp_path).default_db_url,
         hub_url="http://hub.test:8421",
     )
-    graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
+    graph = standalone_runner(config, runner_id=FIXTURE_RUNNER_ID)
     ticked: list[object] = []
     instrumented: list[httpx2.Client | httpx2.AsyncClient] = []
 
@@ -574,8 +579,8 @@ def test_tick_once_over_a_supplied_graph_traces_through_it_and_leaves_it_open(
     monkeypatch.setattr(loop_wiring, "tick", recording_tick)
     monkeypatch.setattr(graph.platform_tracing, "instrument_client", instrumented.append)
     try:
-        LoopWiring.of(config).tick_once(process=graph)
-        LoopWiring.of(config).tick_once(process=graph)
+        LoopWiring.of(config).tick_once(graph)
+        LoopWiring.of(config).tick_once(graph)
         assert ticked == [graph.platform_tracing.tracer] * 2
         assert len(instrumented) == 2
         for client in instrumented:
@@ -596,7 +601,7 @@ def test_periodic_driver_instruments_its_own_hub_client_before_ticking(
         db_url=HostLayout(tmp_path).default_db_url,
         hub_url="http://hub.test:8421",
     )
-    graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
+    graph = standalone_runner(config, runner_id=FIXTURE_RUNNER_ID)
     ticked = threading.Event()
     instrumented: list[httpx2.Client | httpx2.AsyncClient] = []
 
@@ -654,9 +659,9 @@ def test_a_transcript_operator_verb_checks_identity_before_its_first_hub_call(
     wiring = LoopWiring.of(config)
 
     if verb == "backfill":
-        answer = wiring.backfill_transcripts(dry_run=False)
+        answer = wiring.backfill_transcripts(standalone_of(config), dry_run=False)
     else:
-        answer = wiring.reship_transcript("chk_backfill")
+        answer = wiring.reship_transcript(standalone_of(config), "chk_backfill")
 
     assert isinstance(answer, dict)
     assert hub.chunk_statuses_calls == [["chk_backfill"]]
@@ -664,8 +669,9 @@ def test_a_transcript_operator_verb_checks_identity_before_its_first_hub_call(
 
 def test_hosted_graph_shares_process_scoped_dependencies_with_loop_and_recovery(tmp_path: Path) -> None:
     config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
-    graph = build_runner_process(config, events=EventBroker(), runner_id=FIXTURE_RUNNER_ID)
-    hosted = build_hosted_app(config, process_graph=graph)
+    opened = open_standalone_of(config, events=EventBroker())
+    (graph,) = opened.runners
+    hosted = build_hosted_app(config, opened)
     try:
         ctx = LoopWiring(config, "", graph.host.events).context(FakeHub(), graph)
         assert hosted.app.state.workspace_registry is ctx.workspaces is graph.workspaces
@@ -681,13 +687,13 @@ def test_hosted_graph_shares_process_scoped_dependencies_with_loop_and_recovery(
         assert ctx.stores is graph.stores
     finally:
         hosted.close()
-        graph.close()
 
 
 def test_hosted_health_reads_the_current_harness_set(tmp_path: Path) -> None:
     config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
-    graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
-    hosted = build_hosted_app(config, process_graph=graph)
+    opened = open_standalone_of(config)
+    (graph,) = opened.runners
+    hosted = build_hosted_app(config, opened)
     try:
         served_health = runner_seams(hosted.app).harness_health
         original = graph.harness_sets.current
@@ -703,7 +709,6 @@ def test_hosted_health_reads_the_current_harness_set(tmp_path: Path) -> None:
             assert served_health.admitted_range(CLAUDE_CODE_HARNESS_ID) == version
     finally:
         hosted.close()
-        graph.close()
 
 
 def test_a_store_free_create_app_derives_its_publisher_from_the_broker_and_served_id(tmp_path: Path) -> None:
@@ -718,35 +723,54 @@ def test_a_store_free_create_app_derives_its_publisher_from_the_broker_and_serve
     assert runner_seams(without_broker).events is None
 
 
+def test_a_standalone_runner_closes_its_child_then_its_host_root_then_its_host_once_each(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
+    closed: list[str] = []
+    close_graph, close_root = HostRunnerSet[Any, Any].close_graph, HostRoot[Any, Any].close
+    close_host = HostProcess.close
+
+    def graph_closing(runners: HostRunnerSet[Any, Any], runner: RunnerProcess | None, child: OwnedChild | None) -> None:
+        closed.append("child")
+        close_graph(runners, runner, child)
+
+    def root_closing(root: HostRoot[Any, Any]) -> None:
+        closed.append("root")
+        close_root(root)
+
+    def host_closing(host: HostProcess) -> None:
+        closed.append("host")
+        close_host(host)
+
+    monkeypatch.setattr(HostRunnerSet, "close_graph", graph_closing)
+    monkeypatch.setattr(HostRoot, "close", root_closing)
+    monkeypatch.setattr(HostProcess, "close", host_closing)
+    runner = standalone_runner(config)
+
+    runner.close()
+    runner.close()
+
+    assert closed == ["child", "root", "host"]
+    assert runner.identity_client.is_closed
+
+
 def test_hosted_close_delegates_owned_host_cleanup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
-    graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
-    monkeypatch.setattr(runner_app, "build_runner_process", _returning(build_runner_process, graph))
     closed: list[str] = []
-    real_close = graph.host.close
-    usage_client = graph.host.usage_http_client()
+    real_close = HostProcess.close
 
-    def close() -> None:
+    def close_host(host: HostProcess) -> None:
         closed.append("host")
-        real_close()
+        real_close(host)
 
-    def close_host(_self: object) -> None:
-        close()
-
-    monkeypatch.setattr(type(graph.host), "close", close_host)
-    hosted = build_hosted_app(config)
+    monkeypatch.setattr(HostProcess, "close", close_host)
+    opened = open_standalone_of(config)
+    usage_client = opened.host.usage_http_client()
+    hosted = build_hosted_app(config, opened)
     hosted.close()
     assert closed == ["host"]
     assert usage_client.is_closed
-
-
-def _returning[**P, R](_real: Callable[P, R], value: R) -> Callable[P, R]:
-    """A stand-in for ``_real`` that answers every call with ``value``."""
-
-    def returning(*_args: P.args, **_kwargs: P.kwargs) -> R:
-        return value
-
-    return returning
 
 
 def _recording[**P, R](real: Callable[P, R], made: list[R]) -> Callable[P, R]:
@@ -769,12 +793,13 @@ def _failing[**P, R](_real: Callable[P, R], message: str) -> Callable[P, R]:
     return failing
 
 
-@pytest.mark.parametrize("ownership", ["owned", "host", "process_graph"])
+@pytest.mark.parametrize("ownership", ["owned", "host"])
 def test_failed_hosted_app_wiring_closes_partial_clients_and_only_its_own_graph(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ownership: str
 ) -> None:
     config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
-    graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
+    opened = open_standalone_of(config)
+    graph = opened.host
     disposed: list[str] = []
     real_dispose = graph.engine.dispose
 
@@ -783,24 +808,22 @@ def test_failed_hosted_app_wiring_closes_partial_clients_and_only_its_own_graph(
         real_dispose()
 
     monkeypatch.setattr(graph.engine, "dispose", dispose)
-    monkeypatch.setattr(runner_app, "build_runner_process", _returning(build_runner_process, graph))
     clients: list[httpx2.Client] = []
     monkeypatch.setattr(runner_app.httpx2, "Client", _recording(httpx2.Client, clients))
     monkeypatch.setattr(runner_app, "create_app", _failing(runner_app.create_app, "app wiring failed"))
     try:
         with pytest.raises(RuntimeError, match="app wiring failed"):
             if ownership == "owned":
-                build_hosted_app(config)
-            elif ownership == "host":
-                build_hosted_app(config, host=graph.host)
+                build_hosted_app(config, opened)
             else:
-                build_hosted_app(config, process_graph=graph)
-        assert len(clients) == 3
+                build_hosted_app_over_process(config, graph, host_config=standalone_of(config).host_config)
+        # The hub client, and the served runner's own two when the app serves the opened host's runner.
+        assert len(clients) == (3 if ownership == "owned" else 1)
         assert all(instance.is_closed for instance in clients)
         assert disposed == (["engine"] if ownership == "owned" else [])
     finally:
         if ownership != "owned":
-            graph.close()
+            opened.close()
 
 
 def test_hosted_app_defaults_to_no_broker(tmp_path: Path) -> None:
@@ -808,7 +831,7 @@ def test_hosted_app_defaults_to_no_broker(tmp_path: Path) -> None:
     exists yet, but the default must stay absent so a future one degrades safely."""
     write_minimal_host(tmp_path)
 
-    app = build_hosted_app(load_runner_config(tmp_path)).app
+    app = hosted_app(load_runner_config(tmp_path)).app
 
     assert app.state.event_broker is None
 
@@ -981,7 +1004,7 @@ def test_both_roots_boot_with_a_single_enabled_harness(
         ),
     )
 
-    build_hosted_app(config)
+    hosted_app(config)
     with loop_context(config) as loop:
         assert loop.harnesses.known_harnesses == expected
 
@@ -1003,7 +1026,7 @@ def test_loop_wiring_of_delivers_its_bundle_to_the_graph_it_builds(tmp_path: Pat
         assert isinstance(adapter, ClaudeCodeAdapter)
         return adapter.settings_args()
 
-    argv = LoopWiring.of(config, bundle=snapshot).with_context(settings_argv)
+    argv = LoopWiring.of(config, bundle=snapshot).with_context(settings_argv, standalone_of(config))
 
     settings = snapshot.path.resolve() / "claude-code" / "settings.json"
     assert argv[:2] == ["--settings", str(settings)]
@@ -1033,7 +1056,7 @@ def _harness_telemetry_env(
         scope_version="0",
         exporter=InMemorySpanExporter(),
     )
-    graph = build_runner_process(config, environ=environ, platform_tracing=handle, runner_id=FIXTURE_RUNNER_ID)
+    graph = standalone_runner(config, environ=environ, platform_tracing=handle, runner_id=FIXTURE_RUNNER_ID)
     try:
         adapter = graph.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
         assert isinstance(adapter, ClaudeCodeAdapter)
@@ -1103,7 +1126,7 @@ def test_process_graph_builds_the_trace_sweep_over_its_exporter_without_boot_tra
         tracing=RunnerTracingConfig(sweep_seconds=7),
     )
     exporter = InMemoryTraceExporter()
-    graph = build_runner_process(
+    graph = standalone_runner(
         config,
         environ={"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318"},
         trace_exporter=exporter,
@@ -1145,16 +1168,17 @@ def test_host_runners_share_the_injected_exporter_guard(tmp_path: Path, monkeypa
     config = RunnerConfig(root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
     env = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318"}
     transport = HeldExporter()
-    host = composition.build_host_process(
+    host = composed_host.build_host_process(
         host_config_of(config),
         [BuiltRunner(rid, replace(config, runner_id=rid)) for rid in ("rn_a", "rn_b")],
         environ=env,
         trace_exporter=transport,
     )
+    root = composed_host.serving_root(
+        host_config_of(config), host, RunnerCompose(environ=env, trace_exporter=transport)
+    )
     try:
-        composition.add_runner(
-            replace(config, runner_id="rn_c"), host, runner_id="rn_c", environ=env, trace_exporter=transport
-        )
+        composed_host.start_on(root, BuiltRunner("rn_c", replace(config, runner_id="rn_c")))
         assert len(exporters) == 3
         assert exporters[0] is exporters[1] is exporters[2]
         results: list[bool] = []
@@ -1171,6 +1195,7 @@ def test_host_runners_share_the_injected_exporter_guard(tmp_path: Path, monkeypa
         assert not thread.is_alive()
         assert results == [True]
     finally:
+        root.close()
         host.close()
 
 
@@ -1187,7 +1212,7 @@ def test_hosted_app_composes_the_escalation_takeover_command_over_the_runner_roo
     store = make_store(config.db_url)
     # The hosted app's read side binds to the runner the stored identity row names.
     store.record_runner_identity(RunnerIdentity(FIXTURE_RUNNER_ID, "runner-local", _NOW))
-    hosted = build_hosted_app(config)
+    hosted = hosted_app(config)
     try:
         store.record_mint(
             new_mint(

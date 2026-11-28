@@ -5,25 +5,23 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.app import build_hosted_app
-from blizzard.runner.composition import build_runner_process
+from blizzard.runner.app import build_hosted_app_over_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_layout import HostLayout
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, migrated_store_at
+from tests.support.standalone import hosted_app, standalone_of, standalone_runner
 
 
-@pytest.mark.parametrize("ownership", ["owned", "host", "process_graph"])
+@pytest.mark.parametrize("ownership", ["owned", "host"])
 def test_hosted_close_respects_engine_ownership(tmp_path: Path, ownership: str) -> None:
     config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
     config.data_dir.mkdir(parents=True, exist_ok=True)
     migrated_store_at(config.db_url)
-    graph = None if ownership == "owned" else build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
+    graph = None if ownership == "owned" else standalone_runner(config, runner_id=FIXTURE_RUNNER_ID)
     if graph is None:
-        hosted = build_hosted_app(config)
-    elif ownership == "host":
-        hosted = build_hosted_app(config, host=graph.host)
+        hosted = hosted_app(config)
     else:
-        hosted = build_hosted_app(config, process_graph=graph)
+        hosted = build_hosted_app_over_process(config, graph.host, host_config=standalone_of(config).host_config)
     usage_client = graph.host.usage_http_client() if graph is not None else None
 
     try:

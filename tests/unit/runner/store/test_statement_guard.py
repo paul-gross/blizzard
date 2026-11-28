@@ -225,13 +225,13 @@ _RUNNER_PROCESS = textwrap.dedent(
     import sys
     import sqlalchemy as sa
     from blizzard.runner.config import RunnerConfig
-    from blizzard.runner.composition import build_runner_process
+    from tests.support.standalone import standalone_runner
     from blizzard.runner.store import schema
     from blizzard.runner.store.runner_guard import UnscopedRunnerStatement
 
     from pathlib import Path
     root = Path(sys.argv[1])
-    graph = build_runner_process(RunnerConfig(root=root, db_url=f"sqlite:///{root / 'host.db'}"), runner_id="rn_a")
+    graph = standalone_runner(RunnerConfig(root=root, db_url=f"sqlite:///{root / 'host.db'}"), runner_id="rn_a")
     try:
         schema.metadata.create_all(graph.engine, tables=[schema.leases])
         with graph.engine.connect() as conn:

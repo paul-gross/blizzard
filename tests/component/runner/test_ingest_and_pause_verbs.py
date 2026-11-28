@@ -15,7 +15,6 @@ import pytest
 import uvicorn
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.listeners import Listeners, Uds
 from tests.support.host_files import load_runner_config
@@ -23,6 +22,7 @@ from tests.support.ingest_and_pause_verbs import (
     _init_runner,  # pyright: ignore[reportPrivateUsage]
 )
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.support.standalone import hosted_app
 from tests.support.worker_http import Bound, bind_local_only
 
 pytestmark = pytest.mark.usefixtures("short_host_sockets")
@@ -47,7 +47,7 @@ def _serve_local_api(root: Path) -> Generator[tuple[Path, str]]:
     # Pin the SSO auth-mode probe to a none-mode (unreachable) hub so the
     # human-lane gating resolves to the authless path these hub-free tests assume.
     config = dataclasses.replace(config, hub_url="http://127.0.0.1:1")
-    app = build_hosted_app(config).app
+    app = hosted_app(config).app
     sockets = Listeners.of(config).bound()
     tcp_url = f"http://{sockets[1].getsockname()[0]}:{sockets[1].getsockname()[1]}"
     server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))

@@ -19,10 +19,10 @@ from blizzard.hub.config_defaults import DEFAULT_ANNOTATION_INTERVAL_SECONDS
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.layout import CONFIG_FILENAME
 from blizzard.hub.settings.wiring import build_hub_flags
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.config import DEFAULT_HUB_URL
 from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.host_config import BuiltRunner, HostConfig, HostConfigError
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import load_host_config, load_hub_config
 from tests.support.host_files import write_minimal_host
 from tests.support.runner_fakes import migrated_store_at

@@ -9,12 +9,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.throttle.floor import RunnerFloorClearRefused
+from blizzard.runner.throttle.floor_clear import SubscriptionFloorClearService
 from blizzard.runner.throttle.usage_limits import FloorClear
 from blizzard.wire.base import WireModel
 
@@ -45,14 +47,19 @@ _RUNNER_RESPONSES: dict[int | str, dict[str, Any]] = {
 
 
 @host_router.post("/floor/clear", response_model=FloorClearView, responses=_HOST_RESPONSES)
-def clear_subscription_floor(slug: str, request_body: FloorClearRequest, request: Request) -> FloorClearView:
+@inject_sync
+def clear_subscription_floor(
+    slug: str,
+    request_body: FloorClearRequest,
+    request: Request,
+    clears: FromDishka[SubscriptionFloorClearService],
+) -> FloorClearView:
     """Open a subscription's usage-limit floor now, for every runner spending it.
 
     A held start goes ahead on its next ask; a limit reported after the clear holds the floor again."""
-    wiring = RunnerWiring.of(request)
-    if all(declared.slug != slug for declared in wiring.subscriptions()):
+    if all(declared.slug != slug for declared in RunnerWiring.of(request).subscriptions()):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no subscription {slug} on this host")
-    return _view(slug, wiring.subscription_floor_clears().clear(slug, by=request_body.by))
+    return _view(slug, clears.clear(slug, by=request_body.by))
 
 
 @runner_router.post("/floor/clear", response_model=FloorClearView, responses=_RUNNER_RESPONSES)

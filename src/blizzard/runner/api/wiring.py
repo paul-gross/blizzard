@@ -22,6 +22,7 @@ from blizzard.foundation.clock import ControlledClock, IClock, IMonotonicClock
 from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.flags import Flags
 from blizzard.foundation.forwarded import TrustedProxies
+from blizzard.foundation.registry.scopes import Resolver
 from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.runner.auth.hub_auth_mode import IHubAuthMode
@@ -59,7 +60,7 @@ from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import HostReadStores, IRunnerBinding, RunnerReadStores
-from blizzard.runner.throttle.floor_clear import RunnerFloorClearService, SubscriptionFloorClearService
+from blizzard.runner.throttle.floor_clear import RunnerFloorClearService
 from blizzard.runner.throttle.pause import PauseService
 from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
@@ -414,11 +415,6 @@ class RunnerWiring:
         service: RunnerFloorClearService | None = self._seam("runner_floor_clears")
         return service if service is not None else self._refuse("runner floor-clear service")
 
-    def subscription_floor_clears(self) -> SubscriptionFloorClearService:
-        """The host's subscription floor clear."""
-        service: SubscriptionFloorClearService | None = self._seam("subscription_floor_clears")
-        return service if service is not None else self._refuse("subscription floor-clear service")
-
     def lease_liveness(self) -> LeaseLivenessService:
         service: LeaseLivenessService | None = self._seam("lease_liveness")
         return service if service is not None else self._refuse("lease liveness service")
@@ -502,6 +498,11 @@ class RunnerWiring:
         """Each runner whose latest start failed — ``None`` on a host whose tick starts no runner."""
         return getattr(self.state, "start_failures", None)
 
+    def host_resolver(self) -> Resolver:
+        """The host's process scope a host-root route resolves its services through — the host root's, else the
+        host-free graph's."""
+        return self.state.host_resolver
+
     def require_bound(self) -> None:
         """Refuse with a ``503`` when the store is bound to no runner. The host binds each store to its configured
         id before it serves, so this only guards an app wired with a binding that was never bound; an app wired
@@ -515,7 +516,12 @@ class RunnerWiring:
 
     @staticmethod
     def _refuse(what: str) -> NoReturn:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"{what} not wired — start via `blizzard runner host`",
-        )
+        raise not_wired(what)
+
+
+def not_wired(what: str) -> HTTPException:
+    """The ``503`` a request for ``what`` meets on an app built without it."""
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=f"{what} not wired — start via `blizzard runner host`",
+    )

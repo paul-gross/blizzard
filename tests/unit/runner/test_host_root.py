@@ -12,18 +12,27 @@ import pytest
 from blizzard.foundation.registry.interface import Lifetime, ScopeClosed, port
 from blizzard.foundation.registry.internal.recording import RecordingRegistry
 from blizzard.foundation.registry.internal.translation import HOST_LIFETIMES
+from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import OwnedChild, ScopeValues, supply
-from blizzard.runner.composition import HostProcess, HostRunnerSet
+from blizzard.runner.composition import HostProcess, HostRunnerSet, RunnerCompose
+from blizzard.runner.host_config import HostConfig
 from blizzard.runner.host_root import register_host
 from tests.support.container_guards import graph_builds
 from tests.support.host_runner_graph import HostResource, RunnerService, host_rig
 
 
 def test_the_host_root_declares_a_graph_that_builds_under_strict_validation() -> None:
-    registry = RecordingRegistry()
+    registry = LegacyRegistry()
     register_host(registry)
+    values = ScopeValues(
+        (
+            supply(port(HostProcess), object()),
+            supply(port(HostConfig), object()),
+            supply(port(RunnerCompose), RunnerCompose()),
+        )
+    )
 
-    assert graph_builds(registry, HOST_LIFETIMES, ScopeValues((supply(port(HostProcess), object()),))) == []
+    assert graph_builds(registry, HOST_LIFETIMES, values) == []
 
 
 def test_two_runner_children_share_only_host_owned_resources() -> None:

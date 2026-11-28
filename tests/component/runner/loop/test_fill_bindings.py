@@ -22,7 +22,6 @@ from blizzard.foundation.clock import FixedClock, SystemClock
 from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.foundation.sweep_passes import SweepPassOutcome
 from blizzard.runner.cli.runtime import seed_runners
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.environments.provider import AcquiredEnvironment, WorkspaceAcquisitionError, WorktreeTarget
 from blizzard.runner.environments.workspaces import IWorkspaces, WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -39,6 +38,7 @@ from blizzard.runner.loop.steps import Fill
 from blizzard.runner.loop_wiring import RunnerStepper
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.runner_fakes import (

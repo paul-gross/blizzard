@@ -33,7 +33,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.usage_kind import UsageKind
-from blizzard.runner.composition import RunnerProcess, build_runner_process
+from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
@@ -65,6 +65,8 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.session_settings import SessionEnvironment, SessionSettings
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
 from blizzard.runner.harness.usage import UsageLimit, UsageSample
+from blizzard.runner.host_config import BuiltRunner, HostConfig
+from blizzard.runner.host_root import build_runner_process
 from blizzard.runner.hub.chunk_status_cache import IChunkViews, ReadThroughChunkViews
 from blizzard.runner.hub.client import (
     BindingDeclaration,
@@ -2065,7 +2067,8 @@ def loop_graph(
     """The composition root's process graph over ``config``, closed on exit — the one owner
     of a graph for every test that builds a :class:`LoopContext` or a ``PeriodicDriver``. Its runner is bound to
     ``runner_id``, else to the id ``config`` carries, else to the fixture runner."""
-    graph = build_runner_process(config, events=events, runner_id=runner_id or config.runner_id or FIXTURE_RUNNER_ID)
+    built = BuiltRunner(runner_id or config.runner_id or FIXTURE_RUNNER_ID, config)
+    graph = build_runner_process(HostConfig(root=config.root, db_url=config.db_url), built, events=events)
     try:
         yield graph
     finally:

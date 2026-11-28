@@ -13,6 +13,7 @@ from blizzard.runner.cli.runtime import seed_runners
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.loop_wiring import RunnerStepper
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
+from tests.support import composed_host
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.runner_fakes import make_store
@@ -45,7 +46,7 @@ def test_binding_change_rebuilds_health_probes_at_new_workspace_root(
         return build(*args, **kwargs)
 
     monkeypatch.setattr(composition, "build_production_harnesses", capture)
-    host = composition.build_host_process(host_config, ready)
+    host = composed_host.build_host_process(host_config, ready)
     runner = host.runners[0]
     stepper = RunnerStepper(runner.config, process_graph=runner)
     try:

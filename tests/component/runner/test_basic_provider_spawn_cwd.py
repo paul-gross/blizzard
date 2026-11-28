@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from blizzard.runner.app import build_hosted_app
-from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import WorkspaceRepo
 from blizzard.runner.events.broker import EventBroker
@@ -24,6 +23,7 @@ from tests.support.host_files import TEST_WORKSPACE_ID, one_workspace
 from tests.support.runner_client import runner_client, runner_seams
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, FakeHub, make_store, migrated_store_at
 from tests.support.runner_mint import new_mint
+from tests.support.standalone import open_standalone_of
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 
@@ -41,8 +41,9 @@ def test_basic_takeover_escalation_and_transcript_resolve_to_the_environment_wor
     # The process graph binds to the stored identity at build — a registered runner's store.
     store = make_store(config.db_url)
     store.record_runner_identity(RunnerIdentity(FIXTURE_RUNNER_ID, "runner-local", _NOW))
-    graph = build_runner_process(config, events=EventBroker(), runner_id=FIXTURE_RUNNER_ID)
-    hosted = build_hosted_app(config, process_graph=graph)
+    opened = open_standalone_of(config, events=EventBroker(), runner_id=FIXTURE_RUNNER_ID)
+    (graph,) = opened.runners
+    hosted = build_hosted_app(config, opened)
     try:
         ctx = LoopWiring(config, "", graph.host.events).context(FakeHub(), graph)
         for lease_id, chunk_id in (("lease_1", "ch_1"), ("lease_2", "ch_2")):
@@ -95,4 +96,3 @@ def test_basic_takeover_escalation_and_transcript_resolve_to_the_environment_wor
         assert runner_seams(hosted.app).transcripts.spawn_cwd("ch_1") == workdir
     finally:
         hosted.close()
-        graph.close()

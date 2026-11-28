@@ -48,7 +48,7 @@ from blizzard.foundation.store.migrations import (
 )
 from blizzard.foundation.sweep_passes import SweepPassOutcome
 from blizzard.foundation.trace_export.settings import TracingSettings
-from blizzard.runner.app import HostedApp, build_hosted_app
+from blizzard.runner.app import HostedApp, build_hosted_app_over_process
 from blizzard.runner.cli.children import command_children
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, daemon_holding, runner_option
 from blizzard.runner.cli.directory import load_host
@@ -66,6 +66,7 @@ from blizzard.runner.composition import (
     IHostedRunnerSource,
     IRunnerDrivers,
     NoDrivers,
+    RunnerCompose,
     RunnerProcess,
     RunnerStartFailed,
     SeedingStore,
@@ -75,7 +76,6 @@ from blizzard.runner.composition import (
     build_host_settings_store,
     build_host_stores,
     build_read_stores,
-    build_runner_process,
     build_running_host_seeding_store,
     build_seeding_store,
     build_settings_stores,
@@ -118,6 +118,7 @@ from blizzard.runner.host_layout import (
     WORKER_SCRATCH_DIRNAME,
     HostLayout,
 )
+from blizzard.runner.host_root import build_runner_process
 from blizzard.runner.host_settings_reader import HostSettingsReader
 from blizzard.runner.hosting.model import CLI, JOIN, SEED, HostingFact
 from blizzard.runner.hosting.names import stored_name
@@ -259,9 +260,9 @@ def select_runner_bindings(config: RunnerConfig, children: IChildProcesses) -> B
 
 @dataclass(frozen=True)
 class InitCollaborators:
-    """The hub clients, store migrations, host-process builder, and harness-bundle publisher a runtime verb
-    acts through: an invoker hands its own to the root group as ``obj``; with none, the HTTP clients and the
-    real builders are used."""
+    """The hub clients, store migrations, host-process and standalone builders, and harness-bundle publisher a
+    runtime verb acts through: an invoker hands its own to the root group as ``obj``; with none, the HTTP clients
+    and the real builders are used."""
 
     hub_clients: Callable[[str, str, str | None], AbstractContextManager[InitHubClients]]
     host_clients: Callable[[str], AbstractContextManager[HostClients]]
@@ -270,6 +271,8 @@ class InitCollaborators:
     #: The runner store's migrations at a URL.
     store_migrations: Callable[[str], MigrationRunner] = runner_store_migrations
     build_host_process: Callable[..., HostProcess] = build_host_process
+    #: The standalone opener a verb driving one runner off any serving host builds its host root and runner through.
+    build_runner_process: Callable[..., RunnerProcess] = build_runner_process
     publish_harness_bundle: IPublishHarnessBundle = publish_harness_bundle
     #: The bindings a runner's configured binaries choose, probed once as it starts.
     select_bindings: ISelectRunnerBindings = select_runner_bindings
@@ -1374,24 +1377,26 @@ def start(
     broker = EventBroker()
     with click_exception_on(ConfigError):
         process = collaborators.build_host_process(
-            config,
-            runners,
-            halted=halted,
-            events=broker,
-            publish_bundles=True,
-            trace_platform=True,
-            tcp_socket=tcp_socket,
+            config, halted=halted, events=broker, trace_platform=True, tcp_socket=tcp_socket
         )
     try:
-        for runner in process.runners:
-            if snapshot := runner.harness_sets.current.bundle:
-                click.echo(snapshot.summary())
         # The app is built over the host's own keys, never a runner's.
         shared = config.host_view()
         source: IHostedRunnerSource | None = StoreHostedRunners.over(config, process) if store_is_hosts else None
-        # A configured-but-missing prompt file raises while the steppers are built, before any socket binds.
+        # A runner's bad entry, or a configured-but-missing prompt file, raises while the app composes and wires its
+        # runners, before any socket binds. The boot publishes each runner's harness bundle; a later start does not.
         with click_exception_on(ConfigError):
-            hosted = build_hosted_app(shared, process, host_config=config, source=source)
+            hosted = build_hosted_app_over_process(
+                shared,
+                process,
+                host_config=config,
+                source=source,
+                boot=runners,
+                compose=RunnerCompose(publish=frozenset(built.id for built in runners)),
+            )
+        for live in hosted.runners.live():
+            if snapshot := live.runner.harness_sets.current.bundle:
+                click.echo(snapshot.summary())
         # The host's record resolved into ``config`` at its seed: its entry, else the file's, else the default.
         tick_seconds = config.tick_seconds if config.tick_seconds is not None else DEFAULT_TICK_SECONDS
         try:
@@ -1818,29 +1823,25 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None, host_pass: 
         if runner_built is None:
             raise click.ClickException(f"runner {entry.name} ({entry.id}) is retired, so a tick cannot drive it")
         with click_exception_on(ConfigError):
-            graph = build_runner_process(
-                runner_built.config,
-                publish_bundle=True,
-                runner_id=runner_built.id,
-                token=runner_built.token,
-                host_token=config.host_token.value,
+            graph = InitCollaborators.of(ctx).build_runner_process(
+                config, runner_built, publish_bundle=True, host_token=config.host_token.value
             )
-        reader = RunnerSettingsReader(
-            config,
-            entry,
-            graph.stores.settings,
-            host_settings=HostSettingsReader(
-                config, graph.host.host_stores.settings, host_record_reads(graph.host.host_stores)
-            ),
-        )
-        graph = replace(graph, settings_reader=reader, settings_seed=reader.seeder(graph.stores.settings))
         try:
+            reader = RunnerSettingsReader(
+                config,
+                entry,
+                graph.stores.settings,
+                host_settings=HostSettingsReader(
+                    config, graph.host.host_stores.settings, host_record_reads(graph.host.host_stores)
+                ),
+            )
+            graph = replace(graph, settings_reader=reader, settings_seed=reader.seeder(graph.stores.settings))
             if snapshot := graph.harness_sets.current.bundle:
                 click.echo(snapshot.summary())
             _reconcile_host_scratch(
                 runner_built.config, graph.host, [entry.id for entry in config.runners if entry.id is not None]
             )
-            LoopWiring.of(runner_built.config, bundle=graph.harness_sets.current.bundle).tick_once(process=graph)
+            LoopWiring.of(runner_built.config, bundle=graph.harness_sets.current.bundle).tick_once(graph)
         finally:
             graph.close()
     click.echo("tick complete")

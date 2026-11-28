@@ -21,20 +21,23 @@ import blizzard.runner.cli.runtime as cli_runtime
 import blizzard.runner.composition as composition
 import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.registry.interface import ScopeClosed
+from blizzard.foundation.registry.scopes import OwnedChild
 from blizzard.foundation.secrets.sealing import SealedValue
 from blizzard.foundation.secrets.value import SecretValue
 from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.foundation.sweep_passes import SweepPassOutcome
-from blizzard.runner.app import HostedApp, build_hosted_app
+from blizzard.runner.app import HostedApp, build_hosted_app_over_process
 from blizzard.runner.cli.runtime import StoreHostedRunners, build_runner_threads, seed_runners
 from blizzard.runner.composition import (
     HostProcess,
+    HostRunnerSet,
     LiveRunner,
+    RunnerCompose,
     RunnerProcess,
-    build_host_process,
     build_runner_admission,
 )
-from blizzard.runner.host_config import HostConfig
+from blizzard.runner.host_config import BuiltRunner, HostConfig
 from blizzard.runner.hosting.model import CLI, OPERATOR, HostedRunnerOp, HostingFact, RunnerAdmission
 from blizzard.runner.hosting.retirement import HubNoticedRetirement
 from blizzard.runner.hub.identity import HostStanding, RunnerIdentity
@@ -168,9 +171,14 @@ def _boot(root: Path) -> tuple[HostConfig, HostProcess, HostedApp]:
     config = load_host_config(root)
     ready, halted = seed_runners(config, clock=SystemClock())
     assert not halted
-    host = build_host_process(config, ready)
-    hosted = build_hosted_app(
-        config.host_view(), host, host_config=config, source=StoreHostedRunners.over(config, host)
+    host = composition.build_host_process(config)
+    hosted = build_hosted_app_over_process(
+        config.host_view(),
+        host,
+        host_config=config,
+        source=StoreHostedRunners.over(config, host),
+        boot=ready,
+        compose=RunnerCompose(publish=frozenset(built.id for built in ready)),
     )
     return config, host, hosted
 
@@ -397,10 +405,24 @@ def test_a_hub_side_retirement_stops_the_runners_threads_in_the_tick_that_notice
 
 
 def _record_closes(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
-    """Each runner graph and wiring close as it happens, by runner id."""
+    """Each runner graph, child scope, wiring and host close as it happens, by runner id."""
     closed: list[tuple[str, str]] = []
     wired_type = cast(Any, runner_app)._WiredRunner
     close_graph, close_wiring = RunnerProcess.close_runner, wired_type.close
+    close_child = cast(Any, HostRunnerSet).close_graph
+    close_host = HostProcess.close
+
+    def child(runners: Any, runner: RunnerProcess | None, opened: OwnedChild | None) -> None:
+        close_child(runners, runner, opened)
+        if opened is not None:
+            closed.append(("child", opened.owner))
+
+    def host(process: HostProcess) -> None:
+        closed.append(("host", "host"))
+        close_host(process)
+
+    monkeypatch.setattr(HostRunnerSet, "close_graph", child)
+    monkeypatch.setattr(HostProcess, "close", host)
 
     def graph(runner: RunnerProcess) -> None:
         closed.append(("graph", runner.runner_id))
@@ -428,7 +450,7 @@ def test_abandoning_a_start_that_failed_after_placement_closes_the_graph_before_
     world.host_pass()
 
     assert world.served() == {TEST_RUNNER_ID}
-    assert closed == [("graph", _ADDED), ("wiring", _ADDED)]
+    assert closed == [("graph", _ADDED), ("child", _ADDED), ("wiring", _ADDED)]
 
 
 def test_host_stop_closes_each_runners_graph_before_its_wiring(world: _World, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -443,7 +465,8 @@ def test_host_stop_closes_each_runners_graph_before_its_wiring(world: _World, mo
     world.host.close()
 
     for runner_id in (TEST_RUNNER_ID, _ADDED):
-        assert [kind for kind, closed_id in before_host_close if closed_id == runner_id] == ["graph", "wiring"]
+        assert [kind for kind, closed_id in before_host_close if closed_id == runner_id] == ["graph", "child", "wiring"]
+    assert closed[len(before_host_close) :][0] == ("host", "host")
 
 
 def test_a_failing_abandon_keeps_the_start_failure_and_its_sibling_still_starts(
@@ -479,3 +502,107 @@ def test_a_failing_abandon_keeps_the_start_failure_and_its_sibling_still_starts(
     assert [
         entry["runner_id"] for entry in logs if entry["event"] == "closing a runner that failed to start also failed"
     ] == [_ADDED]
+
+
+def _record_children(monkeypatch: pytest.MonkeyPatch) -> list[OwnedChild]:
+    """Every runner child the host's runner set opens, in order."""
+    opened: list[OwnedChild] = []
+    open_child = composition.open_child
+
+    def recording(parent: OwnedChild, **kwargs: Any) -> OwnedChild:
+        child = open_child(parent, **kwargs)
+        opened.append(child)
+        return child
+
+    monkeypatch.setattr(composition, "open_child", recording)
+    return opened
+
+
+def _closed(child: OwnedChild) -> bool:
+    try:
+        child.resolver.get(BuiltRunner)
+    except ScopeClosed:
+        return True
+    return False
+
+
+def test_a_drained_runners_sibling_keeps_serving_from_its_own_child(world: _World) -> None:
+    world.add()
+    world.host_pass()
+    neighbour = world.live(TEST_RUNNER_ID)
+    drained = world.live(_ADDED).child
+    assert neighbour.child is not None and drained is not None
+
+    world.retire(_ADDED)
+    world.host_pass()
+
+    assert _closed(drained)
+    assert world.resolves(TEST_RUNNER_ID) == 200
+    assert world.live(TEST_RUNNER_ID) is neighbour
+    assert neighbour.child.resolver.get(RunnerProcess) is neighbour.runner
+    assert neighbour.child.resolver.get(BuiltRunner).id == TEST_RUNNER_ID
+
+
+@pytest.mark.parametrize("step", ["compose", "serve"])
+def test_a_failed_start_leaves_no_open_child_and_the_next_reconcile_opens_a_new_one(
+    world: _World, monkeypatch: pytest.MonkeyPatch, step: str
+) -> None:
+    failing = threading.Event()
+    failing.set()
+    if step == "compose":
+        compose = composition.compose_runner
+
+        def refusing_compose(*args: Any, **kwargs: Any) -> RunnerProcess:
+            if failing.is_set():
+                raise RuntimeError("bad entry")
+            return compose(*args, **kwargs)
+
+        monkeypatch.setattr(composition, "compose_runner", refusing_compose)
+    else:
+
+        def drivers(runner: RunnerProcess, stepper: RunnerStepper) -> composition.IRunnerDrivers:
+            if failing.is_set():
+                raise RuntimeError("no drivers")
+            return composition.NoDrivers()
+
+        world.hosted.start.serving(drivers=drivers, scratch=lambda _runner: None, said=lambda _note: None)
+    opened = _record_children(monkeypatch)
+    world.add()
+
+    world.host_pass()
+
+    reconcile = world.hosted.reconcile
+    assert reconcile is not None
+    failure = reconcile.failures.of(_ADDED)
+    assert failure is not None and failure.step == step
+    assert len(opened) == 1 and _closed(opened[0])
+
+    failing.clear()
+    world.host_pass()
+
+    assert world.served() == {TEST_RUNNER_ID, _ADDED}
+    assert len(opened) == 2 and opened[1] is not opened[0] and not _closed(opened[1])
+    assert world.live(_ADDED).child is opened[1]
+
+
+def test_the_boot_publishes_each_runners_bundle_and_a_reconcile_start_publishes_none(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    published: dict[str, bool] = {}
+    compose = composition.compose_runner
+
+    def recording(*args: Any, publish_bundle: bool = False, **kwargs: Any) -> RunnerProcess:
+        runner = compose(*args, publish_bundle=publish_bundle, **kwargs)
+        published[runner.runner_id] = publish_bundle
+        return runner
+
+    monkeypatch.setattr(composition, "compose_runner", recording)
+    world.add()
+    world.host_pass()
+    assert published == {_ADDED: False}
+    world.hosted.close()
+    world.host.close()
+
+    world.config, world.host, world.hosted = _boot(world.root)
+
+    assert published == {_ADDED: True, TEST_RUNNER_ID: True}

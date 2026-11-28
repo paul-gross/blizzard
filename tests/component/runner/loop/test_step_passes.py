@@ -18,7 +18,6 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.sweep_passes import SweepPassOutcome
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runtime
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import BuiltRunner
 from blizzard.runner.host_layout import HostLayout
@@ -27,6 +26,7 @@ from blizzard.runner.loop.host_tick import HostTick
 from blizzard.runner.loop.mode import LoopMode
 from blizzard.runner.loop.step_passes import HostPassStepper, PassResult, TickInProgress
 from blizzard.runner.loop_wiring import RunnerStepper
+from tests.support.composed_host import open_host
 from tests.support.config_inputs import create_runner_app
 from tests.support.host_files import host_config_of, one_workspace
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, loop_graph, migrated_store_at
@@ -378,10 +378,12 @@ def test_a_stepped_host_starts_no_timer_yet_reconciles_reports_once_and_marks_at
     monkeypatch.setattr(signal, "signal", install_no_handler)
     config = _config(tmp_path)
     built = [BuiltRunner(FIXTURE_RUNNER_ID, config)]
-    host = build_host_process(host_config_of(config), built)
+    opened = open_host(host_config_of(config), built)
+    host = opened.host
     # This synthetic BuiltRunner bypasses the normal file seed; keep its supplied
     # config rather than resolving an unseeded settings record.
     host.runners = (dataclasses.replace(host.runners[0], settings_reader=None),)
+    opened = dataclasses.replace(opened, runners=host.runners)
     registration = _Registration()
     host.host_tick = HostTick(registration=cast(Any, registration))
 
@@ -403,14 +405,14 @@ def test_a_stepped_host_starts_no_timer_yet_reconciles_reports_once_and_marks_at
         return _ServingNothing(serving)
 
     monkeypatch.setattr(runtime, "build_early_shutdown_server", build_server)
-    hosted = build_hosted_app(config, host)
+    hosted = build_hosted_app(config, opened)
     (live,) = hosted.runners.live()
     live.resume = cast(Any, resume)
     try:
         cast(Any, runtime)._serve_host(config, host, hosted, loop=loop, tick_seconds=3600.0)
     finally:
         hosted.close()
-        host.close()
+        opened.close()
 
     assert (seen["startups"], seen["reconciles"], seen["shutdowns"]) == (1, 1, 0)
     assert resume.shutdowns == 1
