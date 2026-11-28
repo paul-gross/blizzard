@@ -26,12 +26,11 @@ from blizzard.foundation.registry.scopes import OwnedChild, Resolver, ScopeValue
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
-from blizzard.hub.api.auth import TenantHostRegistries, TenantRunnerRegistries
+from blizzard.hub.api.auth import MachineCredentials
 from blizzard.hub.api.auth_session import tenant_bound
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.app import create_app_for_export
-from blizzard.hub.auth.credential_reads import MachineCredentialReads
 from blizzard.hub.auth.hub_admins import HubAdministrators
 from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.auth.invitations import InvitationService
@@ -437,9 +436,7 @@ def test_the_every_route_walk_finds_a_container_dependency_on_a_planted_route() 
         RouteDependency("GET /planted/tenant", tenant=True, dependency=IReadMembershipRepository),
         RouteDependency("GET /planted/tenant", tenant=True, dependency=IReadSessionRepository | None),
         RouteDependency("GET /planted/tenant", tenant=True, dependency=AuthService | None),
-        RouteDependency("GET /planted/tenant", tenant=True, dependency=MachineCredentialReads | None),
-        RouteDependency("GET /planted/tenant", tenant=True, dependency=TenantRunnerRegistries),
-        RouteDependency("GET /planted/tenant", tenant=True, dependency=TenantHostRegistries),
+        RouteDependency("GET /planted/tenant", tenant=True, dependency=MachineCredentials),
     ]
 
 

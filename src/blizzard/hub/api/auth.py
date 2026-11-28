@@ -142,11 +142,9 @@ class MachineCredentials:
 
 @inject_sync
 def machine_credentials(
-    reads: FromDishka[MachineCredentialReads | None],
-    runners: FromDishka[TenantRunnerRegistries],
-    hosts: FromDishka[TenantHostRegistries],
+    machine: FromDishka[MachineCredentials],
 ) -> MachineCredentials:
-    return MachineCredentials(reads, runners, hosts)
+    return machine
 
 
 @dataclass(frozen=True)
@@ -202,8 +200,9 @@ class RunnerAuth:
             if registration is not None and not allow_retired:
                 registration.refuse_if_retired(action="fleet call")
             return principal
+        credentials = self.machine.credentials
         token = presented_bearer(self.request)
-        if token is not None and self.machine.credentials.revoked_token_runner(TokenHash(token).hex) is not None:
+        if token is not None and credentials.revoked_token_runner(TokenHash(token).hex) is not None:
             _log.warning("revoked runner token presented", path=self.request.url.path)
             raise ProblemHTTPException(problems.authentication_revoked_problem)
         problem: ProblemFactory
@@ -302,8 +301,9 @@ class HostAuth:
             if host is not None:
                 host.refuse_if_retired(action="host call")
             return principal
+        credentials = self.machine.credentials
         token = presented_bearer(self.request)
-        if token is not None and self.machine.credentials.revoked_token_host(TokenHash(token).hex) is not None:
+        if token is not None and credentials.revoked_token_host(TokenHash(token).hex) is not None:
             _log.warning("revoked host token presented", path=self.request.url.path)
             raise ProblemHTTPException(problems.authentication_revoked_problem)
         problem: ProblemFactory
