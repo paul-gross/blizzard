@@ -27,14 +27,14 @@ from pydantic import BaseModel
 
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.origin import Origin
+from blizzard.foundation.registry.interface import ServiceAbsent
 from blizzard.foundation.return_to import ReturnTo
 from blizzard.foundation.sign_in_refusal import SignInRefusal
 from blizzard.hub.api import problems
 from blizzard.hub.api.auth_session import SESSION_COOKIE_NAME, PresentedSession
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problem_rendering import problem_response
-from blizzard.hub.api.request_config import request_config
-from blizzard.hub.api.resolution import request_resolver
+from blizzard.hub.api.request_config import config_for_request
 from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.invitations import InvitationToken
 from blizzard.hub.auth.oauth.provider import IOAuthProvider, OAuthExchangeError
@@ -45,6 +45,7 @@ from blizzard.hub.auth.sign_in import SignIn
 from blizzard.hub.auth.throttle import LiveIpThrottle
 from blizzard.hub.config import AUTH_MODE_NONE, HubConfig
 from blizzard.hub.events.brokers import TenantBrokers
+from blizzard.hub.settings.source import HubConfigSource
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -101,12 +102,15 @@ class ProviderLogin:
         request: Request,
         name: str,
         *,
+        config_source: HubConfigSource,
         trusted_proxies: TrustedProxies,
         providers: IOAuthProviderRegistry,
         facts: AuthFactsService,
         throttle: LiveIpThrottle,
     ) -> ProviderLogin:
-        return cls(request, name, request_config(request), trusted_proxies, providers, facts, throttle)
+        return cls(
+            request, name, config_for_request(request, config_source), trusted_proxies, providers, facts, throttle
+        )
 
     @property
     def origin(self) -> Origin:
@@ -130,10 +134,12 @@ class ProviderLogin:
 
 
 @router.get("/providers", response_model=list[ProviderSummary])
-def list_providers(request: Request) -> list[ProviderSummary]:
+@inject_sync
+def list_providers(request: Request, providers: FromDishka[IOAuthProviderRegistry | None]) -> list[ProviderSummary]:
     if request.app.state.config.auth.mode == AUTH_MODE_NONE:
         return []
-    providers = request_resolver(request).get(IOAuthProviderRegistry)
+    if providers is None:
+        raise ServiceAbsent("OAuth provider registry")
     return [ProviderSummary(name=p.name, display_name=p.display_name, type=p.type) for p in providers.list()]
 
 
@@ -147,11 +153,18 @@ def authorize(
     providers: FromDishka[IOAuthProviderRegistry],
     facts: FromDishka[AuthFactsService],
     throttle: FromDishka[LiveIpThrottle],
+    config_source: FromDishka[HubConfigSource],
     return_to: str | None = None,
     invite: str | None = None,
 ) -> RedirectResponse:
     login = ProviderLogin.of(
-        request, name, trusted_proxies=trusted_proxies, providers=providers, facts=facts, throttle=throttle
+        request,
+        name,
+        config_source=config_source,
+        trusted_proxies=trusted_proxies,
+        providers=providers,
+        facts=facts,
+        throttle=throttle,
     )
     if login.config.auth.mode == AUTH_MODE_NONE:
         raise ProblemHTTPException(problems.login_disabled_problem)
@@ -179,11 +192,18 @@ def callback(
     providers: FromDishka[IOAuthProviderRegistry],
     facts: FromDishka[AuthFactsService],
     throttle: FromDishka[LiveIpThrottle],
+    config_source: FromDishka[HubConfigSource],
     code: str | None = None,
     state: str | None = None,
 ) -> Response:
     login = ProviderLogin.of(
-        request, name, trusted_proxies=trusted_proxies, providers=providers, facts=facts, throttle=throttle
+        request,
+        name,
+        config_source=config_source,
+        trusted_proxies=trusted_proxies,
+        providers=providers,
+        facts=facts,
+        throttle=throttle,
     )
     if login.config.auth.mode == AUTH_MODE_NONE:
         raise ProblemHTTPException(problems.login_disabled_problem)
@@ -228,19 +248,27 @@ def callback(
     return response
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(request: Request, response: Response) -> Response:
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@inject_sync
+def logout(
+    request: Request,
+    response: Response,
+    sessions: FromDishka[IReadSessionRepository | None],
+    auth: FromDishka[AuthService | None],
+    brokers: FromDishka[TenantBrokers],
+) -> Response:
     mode = request.app.state.config.auth.mode
     if mode != AUTH_MODE_NONE:
-        resolver = request_resolver(request)
         id_hash = PresentedSession(request).id_hash
         if id_hash is not None:
-            session = resolver.get(IReadSessionRepository).get_by_hash(id_hash)
+            if sessions is None or auth is None:
+                raise ServiceAbsent("session services")
+            session = sessions.get_by_hash(id_hash)
             if session is not None:
-                resolver.get(AuthService).revoke(session)
+                auth.revoke(session)
                 # The delete has committed: the session's open event streams end in every tenant, and every
                 # other session of its user keeps streaming.
-                resolver.get(TenantBrokers).end_session(id_hash)
+                brokers.end_session(id_hash)
     response.delete_cookie(SESSION_COOKIE_NAME)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response

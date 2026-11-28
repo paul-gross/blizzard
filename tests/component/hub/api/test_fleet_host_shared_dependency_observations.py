@@ -36,6 +36,7 @@ from blizzard.wire.runner import (
     UnknownServedProjectProblem,
 )
 from blizzard.wire.tenant import TenantCredentialMismatchProblem, TenantNotFoundProblem
+from tests.support.direct_auth import admission_for, machine_for
 from tests.support.hub_request_auth import bearer
 from tests.support.refusal_observation import (
     RefusalObservation,
@@ -188,10 +189,10 @@ def test_shared_refusals_match_each_host_operation(
     )
 
     def close_before_resolution(request: Request) -> AdmittedTenant:
-        principal = HostAuth.of(request).demand()
+        principal = HostAuth.of(request, machine_for(hub.process)).demand()
         close_tenant(hub.engine, principal.tenant_id)
         hub.resolve_hub(OpenTenants).refresh()
-        return resolve_tenant(request)
+        return admission_for(request, hub.process)
 
     hub.app.dependency_overrides[resolve_tenant] = close_before_resolution
     response = client.request(method, url, headers=bearer(live_host.json()["token"]), json={})

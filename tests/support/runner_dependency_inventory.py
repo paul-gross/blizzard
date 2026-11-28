@@ -8,14 +8,17 @@ closure values; changes to those still require separate inspection.
 ANNOTATE = "blizzard.hub.app._annotate_chunk"
 REQUEST_CONFIG = "blizzard.hub.app._bind_request_config"
 PROCESS = "blizzard.hub.api.resolution.process_request"
+MACHINE = "blizzard.hub.api.auth.machine_credentials"
+CONFIG_SERVICES = "blizzard.hub.api.request_config.request_config_services"
 TENANT = {
     ANNOTATE,
+    MACHINE,
     "blizzard.hub.api.auth_session.resolve_tenant",
     "blizzard.hub.api.auth_session.tenant_bound",
     "blizzard.hub.api.auth_session.tenant_request",
 }
 RUNNER = TENANT | {"blizzard.hub.api.auth.require_runner_principal"}
-FLEET_REQUEST = RUNNER | {"blizzard.hub.api.fleet.FleetRequest.of"}
+FLEET_REQUEST = RUNNER | {"blizzard.hub.api.fleet.FleetRequest.of", "blizzard.hub.api.request_config.request_config"}
 HOST = TENANT | {"blizzard.hub.api.auth.require_host_principal"}
 
 # Keys are the hub's effective route paths, not client-side parameter names.
@@ -70,14 +73,12 @@ POST /api/fleet/runners
 """,
     ),
     (
-        {ANNOTATE},
-        """
-GET /api/auth/authorize
-GET /api/auth/jwks.json
-GET /api/me
-""",
+        {ANNOTATE, MACHINE, "blizzard.hub.api.idp.idp_enabled"},
+        "GET /api/auth/authorize",
     ),
-    ({ANNOTATE}, "GET /api/fleet/identity"),
+    ({ANNOTATE, "blizzard.hub.api.idp.idp_enabled"}, "GET /api/auth/jwks.json"),
+    ({ANNOTATE}, "GET /api/me"),
+    ({ANNOTATE, MACHINE}, "GET /api/fleet/identity"),
     (
         HOST,
         """
@@ -93,6 +94,7 @@ POST /api/fleet/host/runners/{runner_id}/retire
         | {
             "blizzard.hub.api.auth.require_runner_principal_even_if_retired",
             "blizzard.hub.api.fleet.FleetRequest.of_even_if_retired",
+            "blizzard.hub.api.request_config.request_config",
         },
         "POST /api/fleet/routes",
     ),
@@ -114,5 +116,5 @@ def inventory() -> dict[tuple[str, str], set[str]]:
             method, path = line.split()
             key = (method, path)
             assert key not in result, f"duplicate dependency inventory {key}"
-            result[key] = set(dependencies) | {REQUEST_CONFIG, PROCESS}
+            result[key] = set(dependencies) | {REQUEST_CONFIG, PROCESS, CONFIG_SERVICES}
     return result

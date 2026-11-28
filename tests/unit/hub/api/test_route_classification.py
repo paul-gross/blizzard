@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, FastAPI
 from fastapi.routing import APIRoute
 
 from blizzard.auth_core import Permission
-from blizzard.hub.api.auth_session import TenantBoundAdmitting, require_either
+from blizzard.hub.api.auth_session import TenantBoundAdmitting, require_either, require_hub
 from tests.support.route_classes import FLEET, FLEET_CLAIM, HUB_LEVEL, HUMAN, api_routes, dependency_names, live_routes
 from tests.support.scaffolding import build_hub
 
@@ -76,6 +76,7 @@ def _permission_of(call: object) -> Permission | None:
     over, or ``None`` if ``call`` is not one — introspects the closure cell rather
     than trusting a second hand-maintained map, so this cannot silently drift from
     what the route actually enforces."""
+    call = getattr(call, "__dishka_orig_func__", call)
     if isinstance(call, FunctionType) and call.__name__ in ("_dependency", "_hub_dependency"):
         freevars = call.__code__.co_freevars
         closure = call.__closure__ or ()
@@ -84,6 +85,11 @@ def _permission_of(call: object) -> Permission | None:
                 return cell.cell_contents
         return None
     return None
+
+
+def test_permission_introspection_reads_injected_hub_gate() -> None:
+    assert _permission_of(require_hub(Permission.MEMBERSHIP_GRANT_ANY)) == Permission.MEMBERSHIP_GRANT_ANY
+    assert _permission_of(lambda: None) is None
 
 
 def _closed_over(call: object, name: str) -> object | None:

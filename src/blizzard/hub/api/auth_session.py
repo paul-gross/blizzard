@@ -24,20 +24,24 @@ from functools import partial
 from typing import Annotated
 
 import structlog
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
 from blizzard.auth_core import Permission, Role
 from blizzard.foundation.platform_tracing.attributes import Caller, annotate_caller, annotate_tenant
+from blizzard.foundation.registry.interface import ServiceAbsent
 from blizzard.foundation.roles import collaborator, dto
 from blizzard.hub.api import problems
 from blizzard.hub.api.auth import (
     UNRESOLVED_RUNNER_TOKEN,
     HostAuth,
     HostPrincipal,
+    MachineCredentials,
     RunnerAuth,
     RunnerPrincipal,
+    machine_credentials,
     resolved_runner,
 )
 from blizzard.hub.api.bearer import presented_bearer
@@ -47,7 +51,7 @@ from blizzard.hub.api.problems import (
     authentication_unresolved_problem,
     tenant_not_found_problem,
 )
-from blizzard.hub.api.resolution import hub_process, request_resolver, request_scope
+from blizzard.hub.api.resolution import hub_process, request_scope
 from blizzard.hub.auth.hashing import SessionId
 from blizzard.hub.auth.memberships import IReadMembershipRepository
 from blizzard.hub.auth.models import ResolvedIdentity
@@ -126,7 +130,9 @@ class PresentedSession:
         return "board" if self.request.cookies.get(SESSION_COOKIE_NAME) else "operator"
 
 
-def resolve_identity(request: Request) -> ResolvedIdentity | None:
+def resolve_identity(
+    request: Request, sessions: IReadSessionRepository | None, auth: AuthService | None
+) -> ResolvedIdentity | None:
     """Resolve the presented session to the person it belongs to — hub-level, holding no tenant's
     role — or ``None`` when no session is presented, it does not resolve, or it has expired.
 
@@ -136,19 +142,22 @@ def resolve_identity(request: Request) -> ResolvedIdentity | None:
     if mode == AUTH_MODE_NONE:
         return implicit_operator(None)
     if _IDENTITY_SCOPE_KEY not in request.scope:
-        request.scope[_IDENTITY_SCOPE_KEY] = _resolve_session(request)
+        request.scope[_IDENTITY_SCOPE_KEY] = _resolve_session(request, sessions, auth)
     return request.scope[_IDENTITY_SCOPE_KEY]
 
 
-def _resolve_session(request: Request) -> ResolvedIdentity | None:
+def _resolve_session(
+    request: Request, sessions: IReadSessionRepository | None, auth: AuthService | None
+) -> ResolvedIdentity | None:
     id_hash = PresentedSession(request).id_hash
     if id_hash is None:
         return None
-    resolver = hub_process(request).resolver
-    session = resolver.get(IReadSessionRepository).get_by_hash(id_hash)
+    if sessions is None or auth is None:
+        raise ServiceAbsent("session services")
+    session = sessions.get_by_hash(id_hash)
     if session is None:
         return None
-    return resolver.get(AuthService).touch_session(session, tenant=None)
+    return auth.touch_session(session, tenant=None)
 
 
 def in_tenant(identity: ResolvedIdentity, tenant: TenantId, role: Role | None) -> ResolvedIdentity:
@@ -175,7 +184,15 @@ class AdmittedTenant:
     name: str
 
 
-def resolve_tenant(request: Request) -> AdmittedTenant:
+@inject_sync
+def resolve_tenant(
+    request: Request,
+    open_tenants: FromDishka[OpenTenants],
+    memberships: FromDishka[IReadMembershipRepository],
+    sessions: FromDishka[IReadSessionRepository | None],
+    auth: FromDishka[AuthService | None],
+    machine: Annotated[MachineCredentials, Depends(machine_credentials)],
+) -> AdmittedTenant:
     """The tenant ``request`` acts in, by the first rule that applies — a machine credential, the
     ``X-Blizzard-Tenant`` header, the caller's one membership — else ``409 tenant_required``.
 
@@ -184,11 +201,20 @@ def resolve_tenant(request: Request) -> AdmittedTenant:
     ``404``. Under oauth a request with neither a credential nor a session answers ``401``.
 
     Synchronous, so a first open of the tenant's scope, which reads the store, runs off the event loop."""
-    resolver = request_resolver(request)
-    open_tenants = resolver.get(OpenTenants)
-    memberships = resolver.get(IReadMembershipRepository)
+    return tenant_for_request(request, open_tenants, memberships, sessions, auth, machine)
+
+
+def tenant_for_request(
+    request: Request,
+    open_tenants: OpenTenants,
+    memberships: IReadMembershipRepository,
+    sessions: IReadSessionRepository | None,
+    auth: AuthService | None,
+    machine: MachineCredentials,
+) -> AdmittedTenant:
+    """Resolve tenant admission with explicitly supplied process collaborators."""
     named = _named_tenant(request)
-    credential = _machine_credential(request)
+    credential = _machine_credential(request, machine)
     if credential is not None:
         if named is not None and named != credential.tenant_id:
             raise ProblemHTTPException(problems.tenant_credential_mismatch_problem)
@@ -198,7 +224,7 @@ def resolve_tenant(request: Request) -> AdmittedTenant:
         if tenant is None:
             raise _tenant_required()
         return _served(request, open_tenants, tenant, implicit_operator(tenant))
-    identity = resolve_identity(request)
+    identity = resolve_identity(request, sessions, auth)
     if identity is None:
         raise ProblemHTTPException(partial(problems.authentication_required_problem, detail="authentication required"))
     if named is not None:
@@ -296,12 +322,12 @@ def _named_tenant(request: Request) -> TenantId | None:
     return TenantId(named) if named else None
 
 
-def _machine_credential(request: Request) -> RunnerPrincipal | HostPrincipal | None:
+def _machine_credential(request: Request, machine: MachineCredentials) -> RunnerPrincipal | HostPrincipal | None:
     """The runner or host bearer token ``request`` carries, verified — in every auth mode."""
-    runner = RunnerAuth.of(request).principal
+    runner = RunnerAuth.of(request, machine).principal
     if runner is not None:
         return runner
-    return HostAuth.of(request).principal
+    return HostAuth.of(request, machine).principal
 
 
 def _served(request: Request, open_tenants: OpenTenants, tenant: TenantId, identity: Principal) -> AdmittedTenant:
@@ -387,11 +413,16 @@ def require_hub(permission: Permission) -> Callable[..., ResolvedIdentity]:
     resolves the person — ``401`` without a session under oauth — and raises ``403`` unless they
     hold the hub-level ``permission``."""
 
-    def _hub_dependency(request: Request) -> ResolvedIdentity:
+    @inject_sync
+    def _hub_dependency(
+        request: Request,
+        sessions: FromDishka[IReadSessionRepository | None],
+        auth: FromDishka[AuthService | None],
+    ) -> ResolvedIdentity:
         if request.app.state.config.auth.mode == AUTH_MODE_NONE:
             annotate_caller("operator")
             return implicit_operator(None)
-        identity = resolve_identity(request)
+        identity = resolve_identity(request, sessions, auth)
         if identity is None:
             raise ProblemHTTPException(
                 partial(problems.authentication_required_problem, detail="authentication required")

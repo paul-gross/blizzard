@@ -310,6 +310,7 @@ _RAISED_FACTORIES = {
             "graph_definition_invalid_problem",
             "host_retired_problem",
             "hub_store_unavailable_problem",
+            "idp_disabled_problem",
             "lease_ownership_problem",
             "login_disabled_problem",
             "login_provider_unknown_problem",

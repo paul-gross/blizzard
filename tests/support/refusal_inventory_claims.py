@@ -98,7 +98,7 @@ DEPENDENCY_PRODUCERS = {
         "ProblemHTTPException(problems.authentication_revoked_problem)",
         "ProblemHTTPException(problem)",
     },
-    "resolve_tenant": {
+    "tenant_for_request": {
         "ProblemHTTPException(problems.tenant_credential_mismatch_problem)",
     },
     # _served calls _no_such_tenant if the credential's tenant is no longer open.

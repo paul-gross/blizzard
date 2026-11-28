@@ -291,6 +291,52 @@ def test_a_traced_runner_request_resolves_its_token_once(tmp_path: Path) -> None
     assert len(resolutions) == 1
 
 
+def test_trace_gate_follows_process_replacement(tmp_path: Path) -> None:
+    from fastapi import Request
+
+    from blizzard.hub.api.trace_continuation import TraceGatedFastAPI
+    from tests.support.store_free_process import store_free
+
+    config = _config(tmp_path)
+    app = build_hosted_hub_app(config)
+    assert isinstance(app, TraceGatedFastAPI)
+    with TestClient(app):
+        token = _registered_runner_token(config, "runner-a")
+
+        def resolves() -> bool:
+            request = Request({"type": "http", "headers": [(b"authorization", f"Bearer {token}".encode())], "app": app})
+            return app.principal_check(request)
+
+        assert resolves()
+        with store_free(app):
+            assert not resolves()
+        assert resolves()
+
+
+def test_store_free_none_mode_serves_identity_and_hub_operator_with_trace_headers(tmp_path: Path) -> None:
+    from fastapi import Depends
+
+    from blizzard.auth_core import Permission
+    from blizzard.hub.api.auth_session import require_hub
+    from blizzard.hub.app import create_app
+    from tests.support.flag_guard import flags_for
+
+    app = create_app(_config(tmp_path), flags=flags_for("hub"))
+
+    @app.get("/test-operator", dependencies=[Depends(require_hub(Permission.TENANT_ADMIN))])
+    def operator() -> dict[str, bool]:
+        return {"ok": True}
+
+    # The app's frontend catch-all was mounted during construction.
+    app.router.routes.insert(0, app.router.routes.pop())
+    with TestClient(app) as client:
+        me = client.get("/api/me", headers=_TRACEPARENT)
+        operator_response = client.get("/test-operator", headers=_TRACEPARENT)
+    assert me.status_code == 200
+    assert me.json()["username"] == "operator"
+    assert operator_response.status_code == 200
+
+
 @pytest.mark.parametrize("credential", ["anonymous", "unknown", "revoked"])
 def test_an_unresolved_runner_credential_starts_a_fresh_root(tmp_path: Path, credential: str) -> None:
     exporter = InMemorySpanExporter()

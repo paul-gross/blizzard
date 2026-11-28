@@ -17,7 +17,7 @@ _HOST_AUTH = {
 }
 
 _TENANT = {
-    "auth_session.resolve_tenant": {
+    "auth_session.tenant_for_request": {
         "ProblemHTTPException(problems.tenant_credential_mismatch_problem)",
         "ProblemHTTPException(partial(problems.authentication_required_problem, detail='authentication required'))",
     },
@@ -44,14 +44,11 @@ _HELD_HOST = {
 DIRECT_PRODUCERS = {
     ("GET", "/api/auth/jwks.json"): {
         "idp.jwks": {"problem_response(problems.idp_disabled_problem(instance=request.url.path))"},
-        "idp.IdpSurface._absent": {
-            'HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="the IdP surface is not enabled")',
-        },
+        "idp.idp_enabled": {"ProblemHTTPException(problems.idp_disabled_problem)"},
     },
     ("GET", "/api/auth/authorize"): {
-        "idp.IdpSurface._absent": {
-            'HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="the IdP surface is not enabled")',
-        },
+        "idp.idp_enabled": {"ProblemHTTPException(problems.idp_disabled_problem)"},
+        "idp._required": {"ProblemHTTPException(problems.hub_store_unavailable_problem)"},
         "idp.authorize": {
             "problem_response(problems.idp_disabled_problem(instance=request.url.path))",
             "problem_response(problems.federation_response_mode_problem(response_mode, instance=request.url.path))",

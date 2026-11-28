@@ -14,7 +14,7 @@ SHARED_PRODUCERS = {
         "JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={'detail': str(exc)})",
         "declared_problem_response(request, problems.runner_retired_problem(exc, instance=request.url.path))",
     },
-    "auth_session.resolve_tenant": {
+    "auth_session.tenant_for_request": {
         "ProblemHTTPException(problems.tenant_credential_mismatch_problem)",
     },
     "auth_session._no_such_tenant": {

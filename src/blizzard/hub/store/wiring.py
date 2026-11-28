@@ -12,7 +12,7 @@ engine and the connections are borrowed process values the entrypoint supplies."
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -25,6 +25,7 @@ from blizzard.foundation.store import factories as store_factories
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.store.status import IStoreStatusReader
+from blizzard.hub.auth.credential_reads import MachineCredentialReads
 from blizzard.hub.auth.invitations import IInvitationTokenReads
 from blizzard.hub.auth.service import InvitationWriters
 from blizzard.hub.config import HubConfig
@@ -453,11 +454,15 @@ def invitation_writers() -> InvitationWriters:
     return InvitationStore
 
 
-def register_process(registry: Registry) -> Ref[HubEventLogStore]:
+def register_process(
+    registry: Registry, *, credential_reads: Callable[[HubScopedReads], MachineCredentialReads]
+) -> Ref[HubEventLogStore]:
     """Declare every hub-level adapter once per process — the open-tenant read, and the store status reader and the
     readiness over it among them — handing back the hub event log's ``Ref``, which the observability area's hub event
     log ports alias."""
     registry.factory(build_hub_scoped_reads, lifetime=Lifetime.PROCESS)
+    credentials = registry.factory(credential_reads, lifetime=Lifetime.PROCESS)
+    registry.optional(port(MachineCredentialReads), credentials, lifetime=Lifetime.PROCESS)
     registry.factory(usage_corpus, lifetime=Lifetime.PROCESS)
     registry.factory(flow_lines_corpus, lifetime=Lifetime.PROCESS)
     for corpus in (close_intent_corpus, cadence_corpus, derivation_corpus, work_refs_corpus):
@@ -474,6 +479,7 @@ def register_process_absent(registry: Registry) -> None:
     """Declare every hub-level adapter absent, for the store-free graph."""
     for missing in _PROCESS_KEYS:
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+    registry.optional(port(MachineCredentialReads), None, lifetime=Lifetime.PROCESS)
     # A callable alias keys the opener, so it is named as its key rather than as a class.
     registry.absent(port(cast("type[Any]", InvitationWriters)), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
 

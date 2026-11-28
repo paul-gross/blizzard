@@ -13,15 +13,16 @@ import re
 import secrets
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from dishka.integrations.fastapi import FromDishka, inject_sync
+from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.registry.scopes import Resolver
 from blizzard.foundation.roles import dto
 from blizzard.hub.api import problems
 from blizzard.hub.api.auth import (
@@ -29,22 +30,31 @@ from blizzard.hub.api.auth import (
     MachineCredentials,
     RunnerSigningIn,
     host_signing_in,
+    machine_credentials,
     reject_runner_principal,
     runner_signing_in,
 )
 from blizzard.hub.api.auth_session import require_hub, resolve_identity
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problem_rendering import problem_response
-from blizzard.hub.api.resolution import request_resolver
 from blizzard.hub.auth.memberships import IReadMembershipRepository
 from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
 from blizzard.hub.auth.service import CLI_CLIENT_ID, AuthService
+from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import AUTH_MODE_NONE
 from blizzard.hub.domain.runners.federation import FederationClient, UnknownFederationClient
 from blizzard.wire.cli_token import CliTokenResponse
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+def idp_enabled(request: Request) -> None:
+    """Refuse the whole IdP before any route or authentication dependencies resolve."""
+    if request.app.state.config.auth.mode == AUTH_MODE_NONE:
+        raise ProblemHTTPException(problems.idp_disabled_problem)
+
+
+router = APIRouter(prefix="/api/auth", tags=["auth"], dependencies=[Depends(idp_enabled)])
 
 #: The minted JWT's lifetime — the issue's own ceiling (``exp <= 60s``).
 JWT_TTL = timedelta(seconds=60)
@@ -72,53 +82,10 @@ class CliRedirect:
         return self.out_of_band or bool(_CLI_LOOPBACK_REDIRECT_RE.match(self.uri))
 
 
-class IdpSurface:
-    """The hub's own IdP, resolved for one request — absent, and so a ``404``, without an
-    oauth-mode hub and a signing keypair. Each service it names is resolved from the request's resolver
-    once the mode check has passed, so an unwired store answers only an oauth-mode request."""
-
-    def __init__(self, resolver: Resolver) -> None:
-        self.resolver = resolver
-
-    @classmethod
-    def of(cls, request: Request) -> IdpSurface:
-        if request.app.state.config.auth.mode == AUTH_MODE_NONE:
-            raise cls._absent()
-        return cls(request_resolver(request))
-
-    @property
-    def keys(self) -> SigningKeyService | None:
-        return self.resolver.get(SigningKeyService | None)
-
-    def signing(self) -> SigningKeyService:
-        keys = self.keys
-        if keys is None:
-            raise self._absent()
-        return keys
-
-    @property
-    def providers(self) -> IOAuthProviderRegistry:
-        return self.resolver.get(IOAuthProviderRegistry)
-
-    @property
-    def users(self) -> IReadUserRepository:
-        return self.resolver.get(IReadUserRepository)
-
-    @property
-    def memberships(self) -> IReadMembershipRepository:
-        return self.resolver.get(IReadMembershipRepository)
-
-    @property
-    def auth(self) -> AuthService:
-        return self.resolver.get(AuthService)
-
-    @property
-    def clock(self) -> IClock:
-        return self.resolver.get(IClock)
-
-    @staticmethod
-    def _absent() -> HTTPException:
-        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="the IdP surface is not enabled")
+def _required[T](service: T | None) -> T:
+    if service is None:
+        raise ProblemHTTPException(problems.hub_store_unavailable_problem)
+    return service
 
 
 @dto
@@ -215,8 +182,17 @@ class FormPostToken(Delivery):
 
 
 @router.get("/authorize", response_model=None)
+@inject_sync
 def authorize(
     request: Request,
+    signing: FromDishka[SigningKeyService | None],
+    providers: FromDishka[IOAuthProviderRegistry | None],
+    users: FromDishka[IReadUserRepository | None],
+    memberships: FromDishka[IReadMembershipRepository | None],
+    auth: FromDishka[AuthService | None],
+    sessions: FromDishka[IReadSessionRepository | None],
+    clock: FromDishka[IClock],
+    machine: Annotated[MachineCredentials, Depends(machine_credentials)],
     client: str,
     redirect_uri: str,
     state: str,
@@ -224,13 +200,8 @@ def authorize(
     code_challenge: str | None = None,
     code_challenge_method: str | None = None,
 ) -> HTMLResponse | RedirectResponse | JSONResponse:
-    try:
-        surface = IdpSurface.of(request)
-    except HTTPException:
-        return problem_response(problems.idp_disabled_problem(instance=request.url.path))
     if response_mode not in _RESPONSE_MODES:
         return problem_response(problems.federation_response_mode_problem(response_mode, instance=request.url.path))
-    signing = surface.keys
     if signing is None:
         return problem_response(problems.idp_disabled_problem(instance=request.url.path))
 
@@ -245,7 +216,6 @@ def authorize(
         # One undifferentiated 400 for an unknown client and an unregistered redirect URI, so a caller cannot
         # fingerprint client ids by probing.
         # A runner id and a host id are both hub-minted, so the client alone settles which it names.
-        machine = MachineCredentials.of(request)
         resolved = runner_signing_in(machine, client) or host_signing_in(machine, client)
         if resolved is None:
             return _unknown_client(request)
@@ -255,33 +225,35 @@ def authorize(
         except UnknownFederationClient:
             return _unknown_client(request)
 
-    identity = resolve_identity(request)
+    identity = resolve_identity(request, sessions, auth)
     if identity is None:
-        providers = surface.providers.list()
-        if not providers:
+        available_providers = _required(providers).list()
+        if not available_providers:
             return problem_response(problems.federation_no_provider_problem(instance=request.url.path))
         return_to = request.url.path
         if request.url.query:
             return_to = f"{return_to}?{request.url.query}"
-        if len(providers) == 1:
+        if len(available_providers) == 1:
             # Single-provider fast path (AC): no chooser hop — the dance lands the
             # browser back on this exact URL with a session.
-            return RedirectResponse(f"/api/auth/{providers[0].name}/authorize?return_to={quote(return_to, safe='')}")
+            return RedirectResponse(
+                f"/api/auth/{available_providers[0].name}/authorize?return_to={quote(return_to, safe='')}"
+            )
         # Two or more providers: no single dance to auto-run, so hand the
         # browser to a chooser carrying this pending request as its return target.
         return RedirectResponse(f"/login?return_to={quote(return_to, safe='')}")
 
-    user = surface.users.get(identity.user_id)
+    user = _required(users).get(identity.user_id)
     if is_cli:
         assert user is not None, f"resolved identity {identity.user_id!r} has no backing user row"
         assert code_challenge is not None  # already validated above
-        code = surface.auth.mint_cli_code(user, code_challenge=code_challenge, redirect_uri=redirect_uri)
+        code = _required(auth).mint_cli_code(user, code_challenge=code_challenge, redirect_uri=redirect_uri)
         return Delivery.cli_code(redirect_uri=redirect_uri, code=code, state=state).response()
 
     assert federation_client is not None  # every client but cli resolved its runner or host above
     # The client's tenant settles the sign-in, never a header. Past the redirect and the membership, only a member can
     # tell a retired client apart (403, the app handler's).
-    role = surface.memberships.role_in(federation_client.tenant, identity.user_id)
+    role = _required(memberships).role_in(federation_client.tenant, identity.user_id)
     try:
         role = federation_client.federate(redirect_uri, role=role)
     except UnknownFederationClient:
@@ -295,7 +267,7 @@ def authorize(
         "aud": client,
         "jti": secrets.token_urlsafe(18),
     }
-    token = signing.sign(claims, now=surface.clock.now(), ttl=JWT_TTL)
+    token = signing.sign(claims, now=clock.now(), ttl=JWT_TTL)
     delivery = Delivery.federation_token(
         redirect_uri=redirect_uri, token=token, state=state, response_mode=response_mode
     )
@@ -316,12 +288,8 @@ def _unknown_client(request: Request) -> JSONResponse:
 
 
 @router.get("/jwks.json", response_model=dict[str, object])
-def jwks(request: Request) -> dict[str, object] | JSONResponse:
-    try:
-        surface = IdpSurface.of(request)
-    except HTTPException:
-        return problem_response(problems.idp_disabled_problem(instance=request.url.path))
-    signing = surface.keys
+@inject_sync
+def jwks(request: Request, signing: FromDishka[SigningKeyService | None]) -> dict[str, object] | JSONResponse:
     if signing is None:
         return problem_response(problems.idp_disabled_problem(instance=request.url.path))
     return signing.public_jwks()
@@ -336,16 +304,17 @@ class CliTokenRequest(BaseModel):
 
 
 @router.post("/cli/token", response_model=CliTokenResponse)
-def cli_token(request: Request, body: CliTokenRequest) -> CliTokenResponse | JSONResponse:
+@inject_sync
+def cli_token(
+    request: Request, body: CliTokenRequest, auth: FromDishka[AuthService | None]
+) -> CliTokenResponse | JSONResponse:
     """Redeem a ``client=cli`` authorize code for a hub session token.
 
     Public plane — there is no session yet; this route is what mints one. One
     undifferentiated 400 covers every failure, telling a caller nothing about which."""
-    try:
-        surface = IdpSurface.of(request)
-    except HTTPException:
-        return problem_response(problems.idp_disabled_problem(instance=request.url.path))
-    token = surface.auth.exchange_cli_code(body.code, code_verifier=body.code_verifier, redirect_uri=body.redirect_uri)
+    token = _required(auth).exchange_cli_code(
+        body.code, code_verifier=body.code_verifier, redirect_uri=body.redirect_uri
+    )
     if token is None:
         return problem_response(problems.cli_token_refused_problem(instance=request.url.path))
     return CliTokenResponse(token=token)
@@ -354,10 +323,14 @@ def cli_token(request: Request, body: CliTokenRequest) -> CliTokenResponse | JSO
 @router.post(
     "/rotate-signing-key",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
     dependencies=[Depends(reject_runner_principal), Depends(require_hub(Permission.HUB_ADMIN_GRANT))],
 )
-def rotate_signing_key(request: Request) -> Response:
+@inject_sync
+def rotate_signing_key(signing: FromDishka[SigningKeyService | None]) -> Response:
     """Mint a fresh current signing key, demoting the old current to previous.
     Human-plane, gated on the hub-level ``hub-admin:grant`` and closed to a runner bearer token."""
-    IdpSurface.of(request).signing().rotate()
+    if signing is None:
+        raise ProblemHTTPException(problems.idp_disabled_problem)
+    signing.rotate()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

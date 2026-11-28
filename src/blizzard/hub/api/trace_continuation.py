@@ -4,6 +4,7 @@ wraps it. The hub's app also documents the tenant header its routes read, once, 
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -11,28 +12,36 @@ from starlette.concurrency import run_in_threadpool
 from starlette.types import Receive, Scope, Send
 
 from blizzard.foundation.registry.interface import ServiceAbsent
-from blizzard.hub.api.auth import RunnerAuth
-from blizzard.hub.api.auth_session import TENANT_HEADER_COMPONENT, TENANT_HEADER_PARAMETER, resolve_identity
-from blizzard.hub.config import AUTH_MODE_NONE
+from blizzard.hub.api.auth_session import TENANT_HEADER_COMPONENT, TENANT_HEADER_PARAMETER
 
 _TRACE_HEADERS = frozenset({b"traceparent", b"tracestate", b"baggage"})
 
 
-def resolves_to_principal(request: Request) -> bool:
-    """Under ``auth.mode = none`` only a runner bearer is verified, so only it resolves."""
-    if getattr(request.app.state, "hub_process", None) is None:
-        return False
-    try:
-        if RunnerAuth.of(request).principal is not None:
-            return True
-        if request.app.state.config.auth.mode == AUTH_MODE_NONE:
+PrincipalCheck = Callable[[Request], bool]
+
+
+def principal_check(
+    runner_resolves: PrincipalCheck, identity_resolves: PrincipalCheck, *, none_mode: bool
+) -> PrincipalCheck:
+    """Build the pre-routing gate from named auth capabilities, without retaining a resolver.
+
+    In none mode the implicit operator is not a verified credential: only a runner can continue a trace.
+    An unavailable auth service likewise starts a fresh trace.
+    """
+
+    def check(request: Request) -> bool:
+        try:
+            return runner_resolves(request) or (not none_mode and identity_resolves(request))
+        except ServiceAbsent:
             return False
-        return resolve_identity(request) is not None
-    except ServiceAbsent:
-        return False
+
+    return check
 
 
 class TraceGatedFastAPI(FastAPI):
+    #: Installed at composition and replaced alongside the process in the process-replacement test seam.
+    principal_check: PrincipalCheck
+
     def openapi(self) -> dict[str, Any]:
         """The spec, documenting the tenant header once, under ``components.parameters``."""
         if self.openapi_schema is None:
@@ -51,7 +60,7 @@ class TraceGatedFastAPI(FastAPI):
 
     def _resolves(self, scope: Scope) -> bool:
         with self.state.platform_tracing.suppressed():
-            return resolves_to_principal(Request(scope))
+            return self.principal_check(Request(scope))
 
 
 def _carries_trace_headers(scope: Scope) -> bool:

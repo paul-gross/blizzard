@@ -196,10 +196,11 @@ class FleetRequest:
         request: Request,
         principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
         tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)],
+        config: Annotated[HubConfig, Depends(request_config)],
     ) -> FleetRequest:
         return cls(
             principal,
-            request_config(request),
+            config,
             tenant.scope,
             tenant.name,
             getattr(request.app.state, "hub_settings", None) is not None,
@@ -211,10 +212,11 @@ class FleetRequest:
         request: Request,
         principal: Annotated[RunnerPrincipal, Depends(require_runner_principal_even_if_retired)],
         tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)],
+        config: Annotated[HubConfig, Depends(request_config)],
     ) -> FleetRequest:
         return cls(
             principal,
-            request_config(request),
+            config,
             tenant.scope,
             tenant.name,
             getattr(request.app.state, "hub_settings", None) is not None,
