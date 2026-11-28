@@ -29,7 +29,11 @@ _ROUTE_EDGES = (("hub", "api"), ("runner", "api"))
 _ROUTE_EDGE_DISHKA = "dishka.integrations.fastapi"
 
 #: The CLI's command roots, relative to the source root; they compose areas and register nothing themselves.
-CLI_ROOTS: tuple[Path, ...] = (Path("cli/command_root.py"), Path("hub/cli/command.py"))
+CLI_ROOTS: tuple[Path, ...] = (
+    Path("cli/command_root.py"),
+    Path("hub/cli/command.py"),
+    Path("runner/cli/container_command.py"),
+)
 
 #: The hub's, the CLI's and the runner host's roots, relative to the source root, which the wiring boundary exempts.
 PROCESS_ROOTS: frozenset[Path] = frozenset(

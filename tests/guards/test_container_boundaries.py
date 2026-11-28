@@ -344,10 +344,12 @@ def test_the_area_root_gate_fails_a_registration_planted_in_each_cli_root(tmp_pa
     planted = {
         Path("cli/command_root.py"): "def build(registry):\n    registry.context(port(IRole), lifetime=1)\n",
         Path("hub/cli/command.py"): "def build(registry):\n    registry.factory(build, lifetime=1)\n",
+        Path("runner/cli/container_command.py"): "def build(registry):\n    registry.service(Store, lifetime=1)\n",
     }
     assert set(planted) == set(CLI_ROOTS)
     root = _plant(tmp_path, {str(relative): text for relative, text in planted.items()})
     assert root_registration_violations(root, CLI_ROOTS) == [
         "cli/command_root.py:2: calls .context(...)",
         "hub/cli/command.py:2: calls .factory(...)",
+        "runner/cli/container_command.py:2: calls .service(...)",
     ]
