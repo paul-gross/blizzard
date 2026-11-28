@@ -13,9 +13,10 @@ import pytest
 from blizzard.foundation.clock import SystemClock
 from blizzard.runner.app import HostedApp, build_hosted_app
 from blizzard.runner.cli.runtime import seed_host, seed_runners
-from blizzard.runner.composition import HostProcess, build_host_process
+from blizzard.runner.composition import HostProcess
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.runner_fakes import make_store

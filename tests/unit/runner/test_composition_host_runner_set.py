@@ -118,13 +118,7 @@ def _no_startup_steps(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _start(rig: Rig, start: _Start) -> None:
-    start_runner(
-        cast("HostConfig", object()),
-        cast("HostProcess", rig.host),
-        built_runner("rn_1"),
-        _seams(start),
-        rig.root.runners,
-    )
+    start_runner(built_runner("rn_1"), _seams(start), rig.root.runners)
 
 
 def test_a_drain_closes_the_child_then_the_wiring_once() -> None:

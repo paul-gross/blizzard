@@ -66,6 +66,7 @@ from blizzard.runner.composition import (
     IHostedRunnerSource,
     IRunnerDrivers,
     NoDrivers,
+    RunnerCompose,
     RunnerProcess,
     RunnerStartFailed,
     SeedingStore,
@@ -1374,24 +1375,26 @@ def start(
     broker = EventBroker()
     with click_exception_on(ConfigError):
         process = collaborators.build_host_process(
-            config,
-            runners,
-            halted=halted,
-            events=broker,
-            publish_bundles=True,
-            trace_platform=True,
-            tcp_socket=tcp_socket,
+            config, halted=halted, events=broker, trace_platform=True, tcp_socket=tcp_socket
         )
     try:
-        for runner in process.runners:
-            if snapshot := runner.harness_sets.current.bundle:
-                click.echo(snapshot.summary())
         # The app is built over the host's own keys, never a runner's.
         shared = config.host_view()
         source: IHostedRunnerSource | None = StoreHostedRunners.over(config, process) if store_is_hosts else None
-        # A configured-but-missing prompt file raises while the steppers are built, before any socket binds.
+        # A runner's bad entry, or a configured-but-missing prompt file, raises while the app composes and wires its
+        # runners, before any socket binds. The boot publishes each runner's harness bundle; a later start does not.
         with click_exception_on(ConfigError):
-            hosted = build_hosted_app(shared, process, host_config=config, source=source)
+            hosted = build_hosted_app(
+                shared,
+                process,
+                host_config=config,
+                source=source,
+                boot=runners,
+                compose=RunnerCompose(publish=frozenset(built.id for built in runners)),
+            )
+        for live in hosted.runners.live():
+            if snapshot := live.runner.harness_sets.current.bundle:
+                click.echo(snapshot.summary())
         # The host's record resolved into ``config`` at its seed: its entry, else the file's, else the default.
         tick_seconds = config.tick_seconds if config.tick_seconds is not None else DEFAULT_TICK_SECONDS
         try:

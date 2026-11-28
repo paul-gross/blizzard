@@ -28,7 +28,7 @@ from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli.runtime import host_tick_driver
-from blizzard.runner.composition import HostProcess, build_host_process
+from blizzard.runner.composition import HostProcess
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.host_config import BuiltRunner
@@ -36,6 +36,7 @@ from blizzard.runner.hub.sealed_tokens import StoredToken
 from blizzard.runner.loop_wiring import PeriodicDriver
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from blizzard.runner.throttle.floor import FLOOR_UNCONFIRMED_GRACE
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import init_host
 from tests.support.host_files import host_config_of
 from tests.support.runner_fakes import FakeSubscriptionSampler, usage_limit_mark

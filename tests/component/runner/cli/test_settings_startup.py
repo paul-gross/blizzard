@@ -12,7 +12,7 @@ from blizzard.foundation.secrets.sealing import SealedValue
 from blizzard.foundation.secrets.value import SecretValue
 from blizzard.foundation.settings_record.vocabulary import Change, Entry
 from blizzard.runner.cli.runtime import seed_runners
-from blizzard.runner.composition import build_host_process, build_runner_admission
+from blizzard.runner.composition import build_runner_admission
 from blizzard.runner.harness.adapter import HarnessVersionChangedError
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID, ClaudeCodeSection
 from blizzard.runner.harness.harness_set import HarnessAssemblyKey, HarnessSet, HarnessSets, WorkerInvocation
@@ -30,6 +30,7 @@ from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.store.internal.host_hosted_runner_store import HostHostedRunnerStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, UnresolvableSettings, write_minimal_host
 from tests.support.hub_tokens import host_hub_tokens

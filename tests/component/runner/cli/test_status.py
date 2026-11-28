@@ -24,7 +24,6 @@ from blizzard.foundation.credential_renewal import RenewalFailureReason, Renewal
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import RunnerDaemon
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.host_config import BuiltRunner, HaltedRunner
@@ -33,6 +32,7 @@ from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.listeners import Uds
 from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import load_runner_config
 from tests.support.runner_cli_home import (

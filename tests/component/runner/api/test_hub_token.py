@@ -25,7 +25,7 @@ from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.auth.session import CookieNames, RunnerSession, SessionCookie
 from blizzard.runner.cli.runtime import seed_runners
-from blizzard.runner.composition import RunnerProcess, build_host_process
+from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.host_config import HostConfig
 from blizzard.runner.host_keys import ENV_HOST_SECRET_KEY
 from blizzard.runner.host_layout import HostLayout
@@ -34,6 +34,7 @@ from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.sealed_tokens import StoredToken
 from blizzard.runner.lifecycle.identity_check import IdentityCheck
 from blizzard.runner.loop_wiring import RunnerStepper
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import load_host_config
 from tests.support.hub_tokens import host_hub_tokens
 from tests.support.runner_fakes import migrated_store_at

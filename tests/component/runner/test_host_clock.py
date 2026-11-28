@@ -13,10 +13,11 @@ from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import ControlledClock, SystemClock
 from blizzard.runner.app import build_hosted_app
-from blizzard.runner.composition import HostProcess, build_host_process, build_runner_process
+from blizzard.runner.composition import HostProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import BuiltRunner
 from blizzard.runner.host_layout import HostLayout
+from tests.support.composed_host import build_host_process
 from tests.support.host_files import host_config_of
 from tests.support.runner_fakes import migrated_store_at
 

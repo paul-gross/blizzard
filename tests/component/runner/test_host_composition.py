@@ -20,9 +20,12 @@ import blizzard.runner.composition as composition
 import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.foundation.registry.interface import ScopeClosed
+from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli.runtime import host_tick_driver
-from blizzard.runner.composition import HostProcess, RunnerProcess, add_runner, build_host_process
+from blizzard.runner.composition import HostProcess, RunnerProcess
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
+from blizzard.runner.config_table import ConfigError
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.harness_set import (
     HarnessAssemblyInputs,
@@ -50,6 +53,7 @@ from blizzard.runner.store.schema import host_outbound_buffer
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, ExternalSubscriptionUsageSnapshot
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass
+from tests.support.composed_host import build_host_process
 from tests.support.harness_bundle import bundle as harness_bundle
 from tests.support.harness_bundle import runtime as harness_runtime
 from tests.support.host_files import host_config_of
@@ -421,8 +425,8 @@ def test_one_runners_blocked_tick_delays_neither_the_other_runner_nor_the_host_t
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = _config(tmp_path)
-    host = _host(config, "rn_a")
-    blocked, free = host.runners[0], add_runner(dataclasses.replace(config, runner_id="rn_b"), host, runner_id="rn_b")
+    host = _host(config, "rn_a", "rn_b")
+    blocked, free = host.runners
     release = threading.Event()
     entered = threading.Event()
     ticks: dict[int, int] = {id(blocked.stores): 0, id(free.stores): 0}
@@ -680,8 +684,7 @@ def test_a_host_tick_renews_credentials_before_sampling_and_drains_after_samplin
 
 def test_a_hosts_close_shuts_every_runners_executor_down_waiting_before_it_disposes_the_engine(tmp_path: Path) -> None:
     config = _config(tmp_path)
-    host = _host(config, "rn_a")
-    add_runner(dataclasses.replace(config, runner_id="rn_b"), host, runner_id="rn_b")
+    host = _host(config, "rn_a", "rn_b")
     order: list[str] = []
     for runner in host.runners:
         shutdown = runner.executor.shutdown
@@ -754,3 +757,63 @@ def test_the_host_graphs_tool_env_follows_the_host_tool_profile_not_the_first_ru
 
     path = launched[0].current().variables["PATH"].split(":")
     assert "/opt/host" in path and "/opt/first" not in path
+
+
+def test_the_boot_composes_each_runner_as_its_child_opens_and_closes_child_then_wiring_then_nothing_of_the_host(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    host = composition.build_host_process(host_config_of(config))
+    assert host.runners == ()
+    hosted = build_hosted_app(
+        config,
+        host,
+        host_config=host_config_of(config),
+        boot=[BuiltRunner(rid, dataclasses.replace(config, runner_id=rid)) for rid in ("rn_a", "rn_b")],
+    )
+    try:
+        live = hosted.runners.live()
+        assert [runner.runner_id for runner in host.runners] == ["rn_a", "rn_b"]
+        for runner in live:
+            assert runner.child is not None and runner.child.owner == runner.runner_id
+            assert runner.child.resolver.get(RunnerProcess) is runner.runner
+    finally:
+        hosted.close()
+    for runner in live:
+        assert runner.child is not None
+        with pytest.raises(ScopeClosed):
+            runner.child.resolver.get(RunnerProcess)
+        assert runner.runner.identity_client.is_closed
+    with host.engine.connect():
+        pass
+    host.close()
+
+
+def test_a_boot_compose_failure_fails_the_host_start_and_leaves_no_child_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    compose = composition.compose_runner
+    opened: list[RunnerProcess] = []
+
+    def refusing(host_config: Any, host: HostProcess, built: BuiltRunner, **kwargs: Any) -> RunnerProcess:
+        if built.id == "rn_b":
+            raise ConfigError("runner rn_b: a bad entry")
+        runner = compose(host_config, host, built, **kwargs)
+        opened.append(runner)
+        return runner
+
+    monkeypatch.setattr(composition, "compose_runner", refusing)
+    host = composition.build_host_process(host_config_of(config))
+    try:
+        with pytest.raises(ConfigError, match="a bad entry"):
+            build_hosted_app(
+                config,
+                host,
+                host_config=host_config_of(config),
+                boot=[BuiltRunner(rid, dataclasses.replace(config, runner_id=rid)) for rid in ("rn_a", "rn_b")],
+            )
+        [first] = opened
+        assert first.identity_client.is_closed
+    finally:
+        host.close()

@@ -16,7 +16,6 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.runtime import seed_host, seed_runners
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.loop_wiring import RunnerStepper
@@ -24,6 +23,7 @@ from blizzard.runner.settings.authoring import RunnerSettingsAuthoring
 from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import create_runner_app, load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.runner_client import runner_seams

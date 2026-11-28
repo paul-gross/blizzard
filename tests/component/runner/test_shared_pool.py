@@ -15,7 +15,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import AcquiredEnvironment, WorktreeTarget
 from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
@@ -25,6 +24,7 @@ from blizzard.runner.hub.client import ClaimRequest, HubClientError, QueueEntry,
 from blizzard.runner.lifecycle.claim import ReadyQueue
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.tick import tick
+from tests.support.composed_host import build_host_process
 from tests.support.host_files import host_config_of
 from tests.support.runner_fakes import (
     FIXTURE_PROJECT_ID,

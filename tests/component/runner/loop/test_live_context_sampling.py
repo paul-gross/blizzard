@@ -13,7 +13,6 @@ from blizzard.foundation.fact_kinds import EVENT_RECORDED
 from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.foundation.sweep_passes import SweepPassOutcome
 from blizzard.runner.cli.runtime import seed_runners
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.identity import SessionReference
@@ -23,6 +22,7 @@ from blizzard.runner.lifecycle.context_sample import ContextSampleSweep
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import RunnerStepper
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.runner_fakes import (

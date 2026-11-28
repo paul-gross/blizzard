@@ -13,7 +13,6 @@ from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.foundation.sweep_passes import SweepPassOutcome
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli.runtime import seed_runners
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.harness.harness_set import HarnessAssemblyKey, HarnessSet, HarnessSets
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.hub.identity import RunnerIdentity
@@ -24,6 +23,7 @@ from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.throttle.gate import ThrottleGate
 from blizzard.runner.throttle.pause import USAGE_LIMIT_PARK_CAUSE, PausePark
 from blizzard.runner.throttle.release import releases_between_steps, releases_usage_limited
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.runner_fakes import make_store, record_usage

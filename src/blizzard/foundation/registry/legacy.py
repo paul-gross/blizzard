@@ -2,8 +2,9 @@
 
 A leaf is one legacy-constructed value an adopted provider may depend on; a bag assembles legacy state out of adopted
 providers and leaves. Both are built as factories, but each is recorded as its own kind so the inventory of what the
-legacy side still owns can be counted. They live here, not on ``Registry``, so area wiring cannot reach them; no
-process's wiring holds a ``LegacyRegistry``, and the hub's graph declares neither kind."""
+legacy side still owns can be counted. They live here, not on ``Registry``, so area wiring cannot reach them: only a
+process root holds a ``LegacyRegistry`` — the runner host's, whose leaves stand over its borrowed host and compose
+its runner children — and the hub's graph declares neither kind."""
 
 from __future__ import annotations
 

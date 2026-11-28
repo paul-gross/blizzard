@@ -24,13 +24,14 @@ from blizzard.runner.cli.runtime import (
     seed_runners,
     tick_interval,
 )
-from blizzard.runner.composition import HostProcess, build_host_process
+from blizzard.runner.composition import HostProcess
 from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import RunnerStepper
 from blizzard.runner.settings.authoring import HostSettingsAuthoring
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.runner_fakes import make_store

@@ -15,7 +15,6 @@ import pytest
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.runner.cli.runtime import seed_runners
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
@@ -27,6 +26,7 @@ from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.loop_wiring import RunnerStepper
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from tests.support.child_launch import wait_for_exit
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.opencode_adapter import preamble as opencode_preamble

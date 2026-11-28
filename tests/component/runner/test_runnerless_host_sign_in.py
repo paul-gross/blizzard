@@ -21,12 +21,13 @@ import blizzard.runner.app as runner_app
 from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.auth.session import CookieNames
-from blizzard.runner.composition import HostProcess, build_host_process
+from blizzard.runner.composition import HostProcess
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import HaltedRunner, ResolvedToken, TokenSource
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.hub.host_registration import HostRegistrationStatus
+from tests.support.composed_host import build_host_process
 from tests.support.host_files import host_config_of
 from tests.support.runner_fakes import migrated_store_at
 

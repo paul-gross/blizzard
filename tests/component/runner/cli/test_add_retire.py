@@ -32,7 +32,6 @@ from blizzard.runner.cli.store_guard import host_roster, resolve_runner
 from blizzard.runner.composition import (
     RunnerProcess,
     RunnerStoreFiles,
-    build_host_process,
     build_host_stores,
     build_running_host_runner_service,
     build_settings_stores,
@@ -51,6 +50,7 @@ from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import LoopWiring, RunnerStepper
 from blizzard.runner.store.schema import hosted_runner_facts, hosted_runners, lease_spawns
 from tests.support.child_launch import wait_for_exit
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import UnresolvableSettings
 from tests.support.hub_tokens import host_hub_tokens

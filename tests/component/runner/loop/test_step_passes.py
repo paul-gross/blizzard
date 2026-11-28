@@ -18,7 +18,6 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.sweep_passes import SweepPassOutcome
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runtime
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import BuiltRunner
 from blizzard.runner.host_layout import HostLayout
@@ -27,6 +26,7 @@ from blizzard.runner.loop.host_tick import HostTick
 from blizzard.runner.loop.mode import LoopMode
 from blizzard.runner.loop.step_passes import HostPassStepper, PassResult, TickInProgress
 from blizzard.runner.loop_wiring import RunnerStepper
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import create_runner_app
 from tests.support.host_files import host_config_of, one_workspace
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, loop_graph, migrated_store_at

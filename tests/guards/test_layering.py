@@ -272,7 +272,8 @@ _SINGLE_SIDE_KERNEL_ALLOWLIST: dict[str, str] = {
         "only the hub reaches it until the host rotates the key its runners' tokens are sealed under"
     ),
     "blizzard.foundation.registry.legacy": (
-        "the leaf-and-bag vocabulary for legacy-built state; no daemon's wiring declares through it"
+        "the leaf-and-bag vocabulary for legacy-built state; only the runner host's root declares through it, while "
+        "its runner children hold legacy leaves and the hub's graph holds none"
     ),
     "blizzard.foundation.platform_tracing.wiring": (
         "the platform tracing registration; only the hub reaches it until the runner registers its own handle"

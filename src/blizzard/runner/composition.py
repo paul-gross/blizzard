@@ -937,34 +937,56 @@ def stored_hub_token(engine: Engine, root: Path, runner_id: str, *, environ: Map
     return StoredToken.of(_hub_token_store(engine).sealed(runner_id), None if keys is None else secret_cipher(keys))
 
 
+@dataclass(frozen=True)
+class RunnerCompose:
+    """What a host composes each runner child with beyond its :class:`BuiltRunner`, for the host's lifetime.
+
+    ``publish`` names the runners whose harness bundle the composition publishes — the boot's — so a runner a later
+    reconcile starts publishes none. ``bundles`` are the harness-config snapshots and ``selections`` the bindings each
+    runner chose, by runner id. ``environ`` decides whether tracing is enabled; ``trace_exporter`` replaces the OTLP
+    binding an enabled sweep would otherwise build."""
+
+    publish: frozenset[str] = frozenset()
+    bundles: Mapping[str, BundleSnapshot | None] = field(default_factory=dict[str, BundleSnapshot | None])
+    selections: Mapping[str, BindingSelection] = field(default_factory=dict[str, BindingSelection])
+    environ: Mapping[str, str] | None = None
+    trace_exporter: ITraceExporter | None = None
+
+    def runner(self, host_config: HostConfig, host: HostProcess, built: BuiltRunner) -> RunnerProcess:
+        """``built`` composed over ``host`` under these options."""
+        return compose_runner(
+            host_config,
+            host,
+            built,
+            bundle=self.bundles.get(built.id),
+            selection=self.selections.get(built.id),
+            publish_bundle=built.id in self.publish,
+            environ=self.environ,
+            trace_exporter=self.trace_exporter,
+        )
+
+
 def build_host_process(
     host: HostConfig,
-    runners: Sequence[BuiltRunner] = (),
     *,
     halted: Sequence[HaltedRunner] = (),
     events: EventBroker | None = None,
-    bundles: Mapping[str, BundleSnapshot | None] | None = None,
-    selections: Mapping[str, BindingSelection] | None = None,
-    publish_bundles: bool = False,
     environ: Mapping[str, str] | None = None,
-    trace_exporter: ITraceExporter | None = None,
     platform_tracing: IPlatformTracing | None = None,
     received_telemetry: IReceivedTelemetryExport | None = None,
     trace_platform: bool = False,
     tcp_socket: socket.socket | None = None,
     monotonic_clock: IMonotonicClock | None = None,
 ) -> HostProcess:
-    """Construct the host graph from its file, and one runner over it for each of ``runners`` — each bound to its
-    configured id before anything runs. ``halted`` are the runners left unbuilt; the host keeps them to report.
-    Disposes partial resources on failure.
+    """Construct the host graph from its file, with no runner on it yet: its runners are composed as children of the
+    host root opened over it. ``halted`` are the runners left unbuilt; the host keeps them to report. Its records are
+    reconciled before any runner resumes. Disposes partial resources on failure.
 
-    ``environ`` decides whether tracing is enabled; ``trace_exporter`` replaces the OTLP binding an enabled sweep would
-    otherwise build. ``trace_platform`` builds the platform-tracing and received-telemetry handles the config and
-    environment decide, stamped from the host's runners; otherwise ``platform_tracing`` and ``received_telemetry`` are
-    used as given. ``bundles`` are the harness-config snapshots each runner published, and ``selections`` the bindings
-    each chose, by runner id. ``tcp_socket``
-    is a TCP listener already bound at ``host``'s port, adopted rather than bound again. ``monotonic_clock`` is what
-    every runner measures its deadlines on, the system's when absent."""
+    ``environ`` decides whether tracing is enabled. ``trace_platform`` builds the platform-tracing and
+    received-telemetry handles the config and environment decide; otherwise ``platform_tracing`` and
+    ``received_telemetry`` are used as given. ``tcp_socket`` is a TCP listener already bound at ``host``'s port,
+    adopted rather than bound again. ``monotonic_clock`` is what every runner measures its deadlines on, the system's
+    when absent."""
     graph = _build_host_graph(
         host.host_view(),
         subscriptions=host.subscriptions,
@@ -1002,20 +1024,6 @@ def build_host_process(
         graph.telemetry_receiver = replace(
             graph.telemetry_receiver, tracing=graph.host_settings.reader.live(_receiver_tracing)
         )
-        for built in runners:
-            graph.runners = (
-                *graph.runners,
-                compose_runner(
-                    host,
-                    graph,
-                    built,
-                    bundle=(bundles or {}).get(built.id),
-                    selection=(selections or {}).get(built.id),
-                    publish_bundle=publish_bundles,
-                    environ=environ,
-                    trace_exporter=trace_exporter,
-                ),
-            )
         graph.halted = tuple(halted)
         graph.readiness = HostReadiness(
             reader=graph.readiness.reader,
@@ -1119,35 +1127,6 @@ def compose_runner(
     )
     seed = reader.seeder(runner.stores.settings) if entry.authored is not None else None
     return replace(runner, settings_reader=reader, settings_seed=seed)
-
-
-def add_runner(
-    config: RunnerConfig,
-    host: HostProcess,
-    *,
-    runner_id: str,
-    bundle: BundleSnapshot | None = None,
-    selection: BindingSelection | None = None,
-    publish_bundle: bool = False,
-    environ: Mapping[str, str] | None = None,
-    trace_exporter: ITraceExporter | None = None,
-) -> RunnerProcess:
-    """Host one more runner on ``host``, bound to ``runner_id``."""
-    runner = _build_runner(
-        config,
-        host,
-        bundle=bundle,
-        selection=selection,
-        publish_bundle=publish_bundle,
-        environ=environ,
-        trace_exporter=trace_exporter,
-        identity=None,
-        runner_id=runner_id,
-        token=None,
-        closes_host=False,
-    )
-    host.runners = (*host.runners, runner)
-    return runner
 
 
 class IRunnerResume(Protocol):
@@ -1508,24 +1487,16 @@ class StartingRunner[W: IWiredRunner, R: IRunnerResume]:
 
 
 def start_runner[W: IWiredRunner, R: IRunnerResume](
-    host_config: HostConfig,
-    host: HostProcess,
-    built: BuiltRunner,
-    start: IRunnerStart[W, R],
-    runners: HostRunnerSet[W, R],
-    *,
-    publish_bundle: bool = False,
-    environ: Mapping[str, str] | None = None,
-    trace_exporter: ITraceExporter | None = None,
+    built: BuiltRunner, start: IRunnerStart[W, R], runners: HostRunnerSet[W, R]
 ) -> StartingRunner[W, R]:
-    """Open ``built``'s child, compose it over ``host``, run its startup steps, and place it among the host's
+    """Open ``built``'s child, which composes its runner, run its startup steps, and place it among the host's
     runners. Raises :class:`RunnerStartFailed` naming the step, with nothing of the runner left behind."""
     with _start_step(built.id, "compose"):
         child = runners.open_runner(built)
+        if child is None:
+            raise RuntimeError(f"runner {built.id}: the host's runners open no child")
         try:
-            runner = compose_runner(
-                host_config, host, built, publish_bundle=publish_bundle, environ=environ, trace_exporter=trace_exporter
-            )
+            runner = child.resolver.get(RunnerProcess)
         except BaseException as failure:
             _close_after(functools.partial(runners.close_graph, None, child), failure)
             raise
@@ -1580,14 +1551,11 @@ class HostRunnerReconcile[W: IWiredRunner, R: IRunnerResume]:
     sealed token is deleted. A runner that fails to start is held in ``failures`` and left unstarted, and its
     neighbours keep ticking."""
 
-    host_config: HostConfig
     host: HostProcess
     runners: HostRunnerSet[W, R]
     start: IRunnerStart[W, R]
     source: IHostedRunnerSource
     failures: RunnerStartFailures = field(default_factory=RunnerStartFailures)
-    publish_bundle: bool = False
-    environ: Mapping[str, str] | None = None
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def run(self) -> None:
@@ -1634,15 +1602,7 @@ class HostRunnerReconcile[W: IWiredRunner, R: IRunnerResume]:
                 built = self.source.built(runner_id)
                 if isinstance(built, HaltedRunner):
                     raise RunnerStartFailed(runner_id, "seed", "; ".join(built.errors))
-            return start_runner(
-                self.host_config,
-                self.host,
-                built,
-                self.start,
-                self.runners,
-                publish_bundle=self.publish_bundle,
-                environ=self.environ,
-            )
+            return start_runner(built, self.start, self.runners)
         except RunnerStartFailed as exc:
             self._failed(runner_id, exc)
             return None

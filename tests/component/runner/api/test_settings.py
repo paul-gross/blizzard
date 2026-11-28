@@ -14,7 +14,6 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.api.settings import SettingsProblem
 from blizzard.runner.auth.session import CookieNames, RunnerSession, SessionCookie
 from blizzard.runner.cli.runtime import seed_runners
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.hub.identity import RunnerIdentity
@@ -24,6 +23,7 @@ from blizzard.runner.settings.authoring import RunnerSettingsAuthoring
 from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import create_runner_app, load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, UnresolvableSettings, write_minimal_host
 from tests.support.runner_client import runner_client, runner_seams

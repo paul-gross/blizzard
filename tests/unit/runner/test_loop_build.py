@@ -29,7 +29,7 @@ from blizzard.foundation.platform_tracing.handle import build_platform_tracing
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.runner.app import build_hosted_app
-from blizzard.runner.composition import build_runner_process
+from blizzard.runner.composition import RunnerCompose, build_runner_process
 from blizzard.runner.config import (
     ConfigError,
     RunnerConfig,
@@ -67,6 +67,7 @@ from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPI
 from blizzard.runner.tracing.bounded_export import BoundedTraceExporter
 from blizzard.runner.tracing.config import RunnerTracingConfig
 from blizzard.runner.transcripts.transcript_pump import TranscriptPump
+from tests.support import composed_host
 from tests.support.config_inputs import create_runner_app
 from tests.support.harness_sections import sections
 from tests.support.host_files import (
@@ -1145,16 +1146,17 @@ def test_host_runners_share_the_injected_exporter_guard(tmp_path: Path, monkeypa
     config = RunnerConfig(root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
     env = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318"}
     transport = HeldExporter()
-    host = composition.build_host_process(
+    host = composed_host.build_host_process(
         host_config_of(config),
         [BuiltRunner(rid, replace(config, runner_id=rid)) for rid in ("rn_a", "rn_b")],
         environ=env,
         trace_exporter=transport,
     )
+    root = composed_host.serving_root(
+        host_config_of(config), host, RunnerCompose(environ=env, trace_exporter=transport)
+    )
     try:
-        composition.add_runner(
-            replace(config, runner_id="rn_c"), host, runner_id="rn_c", environ=env, trace_exporter=transport
-        )
+        composed_host.start_on(root, BuiltRunner("rn_c", replace(config, runner_id="rn_c")))
         assert len(exporters) == 3
         assert exporters[0] is exporters[1] is exporters[2]
         results: list[bool] = []
@@ -1171,6 +1173,7 @@ def test_host_runners_share_the_injected_exporter_guard(tmp_path: Path, monkeypa
         assert not thread.is_alive()
         assert results == [True]
     finally:
+        root.close()
         host.close()
 
 

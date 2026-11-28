@@ -11,12 +11,13 @@ import pytest
 
 import blizzard.runner.composition as composition
 from blizzard.foundation.secrets.value import SecretValue
-from blizzard.runner.composition import HostProcess, add_runner, build_host_process
+from blizzard.runner.composition import HostProcess, RunnerStartFailed
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import BuiltRunner
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hosting.retirement import HubNoticedRetirement
 from blizzard.runner.hub.identity import RunnerIdentity
+from tests.support.composed_host import build_host_process, serving_root, start_on
 from tests.support.host_files import host_config_of
 from tests.support.hub_tokens import host_hub_tokens
 from tests.support.runner_fakes import migrated_store_at
@@ -36,6 +37,10 @@ def _config(tmp_path: Path) -> RunnerConfig:
 def _host(config: RunnerConfig) -> HostProcess:
     built = BuiltRunner(_RUNNER_ID, dataclasses.replace(config, runner_id=_RUNNER_ID))
     return build_host_process(host_config_of(config), [built])
+
+
+def _second(config: RunnerConfig, **changes: object) -> BuiltRunner:
+    return BuiltRunner("rn_b", dataclasses.replace(config, runner_id="rn_b", **changes))
 
 
 def _retired_answer(request: httpx2.Request, seen: list[str]) -> httpx2.Response:
@@ -88,15 +93,12 @@ def test_one_instrumented_client_serves_every_identity_call_and_presents_the_rep
 
     monkeypatch.setattr(composition.httpx2, "Client", recording_client)
     host = _host(config)
+    root = serving_root(host_config_of(config), host)
     try:
         monkeypatch.setattr(host.platform_tracing, "instrument_client", instrumented.append)
         built.clear()
-        add_runner(
-            dataclasses.replace(config, runner_id="rn_b", hub_token=""),
-            host,
-            runner_id="rn_b",
-        )
-        runner = host.runners[-1]
+        runner = start_on(root, _second(config, hub_token=""))
+        assert host.runners[-1] is runner
         assert built == [runner.identity_client] == instrumented
         record = RunnerIdentity(runner_id="rn_b", runner_name="b", registered_at=datetime(2026, 1, 1, tzinfo=UTC))
         runner.stores.identity.record_runner_identity(record)
@@ -108,15 +110,19 @@ def test_one_instrumented_client_serves_every_identity_call_and_presents_the_rep
         assert seen == ["Bearer old", "Bearer new"]
         assert built == [runner.identity_client]
     finally:
+        root.close()
         host.close()
 
 
 def test_a_hosts_close_and_a_runners_close_each_close_its_identity_client(tmp_path: Path) -> None:
     config = _config(tmp_path)
     host = _host(config)
-    add_runner(dataclasses.replace(config, runner_id="rn_b"), host, runner_id="rn_b")
+    root = serving_root(host_config_of(config), host)
+    start_on(root, _second(config))
     clients = [runner.identity_client for runner in host.runners]
     assert len(clients) == 2 and all(not client.is_closed for client in clients)
+    root.close()
+    assert [client.is_closed for client in clients] == [False, True]
     host.close()
     assert all(client.is_closed for client in clients)
 
@@ -148,12 +154,14 @@ def test_a_build_that_fails_after_the_client_opens_closes_it_and_leaves_the_host
 
     monkeypatch.setattr(composition.httpx2, "Client", recording_client)
     monkeypatch.setattr(composition, "RetiredRunnerWatch", failing)
+    root = serving_root(host_config_of(config), host)
     try:
-        with pytest.raises(RuntimeError, match="build failed"):
-            add_runner(dataclasses.replace(config, runner_id="rn_b"), host, runner_id="rn_b")
+        with pytest.raises(RunnerStartFailed, match="build failed"):
+            start_on(root, _second(config))
         assert opened and all(client.is_closed for client in opened)
         assert not any(runner.identity_client.is_closed for runner in host.runners)
         with host.engine.connect():
             pass
     finally:
+        root.close()
         host.close()

@@ -14,8 +14,8 @@ from structlog.typing import EventDict
 from blizzard.hub.config import HubConfig
 from blizzard.hub.settings.wiring import build_hub_flags
 from blizzard.runner.app import build_hosted_app
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.host_config import BuiltRunner
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import load_host_config
 from tests.support.flag_registry import (
     _TOKEN,  # pyright: ignore[reportPrivateUsage]

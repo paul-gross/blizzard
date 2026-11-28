@@ -7,7 +7,6 @@ from typing import Any, cast
 
 import pytest
 
-import blizzard.runner.composition as composition
 import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.settings_record.vocabulary import Change
@@ -19,6 +18,7 @@ from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import RunnerStepper
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
+from tests.support import composed_host
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.runner_fakes import make_store
@@ -43,7 +43,7 @@ def test_registration_holds_name_capacity_and_bindings_through_inflight_edit_and
     )
     ready, halted = seed_runners(host_config, clock=SystemClock())
     assert not halted
-    host = composition.build_host_process(host_config, ready)
+    host = composed_host.build_host_process(host_config, ready)
     runner = host.runners[0]
     reader = runner.settings_reader
     assert reader is not None

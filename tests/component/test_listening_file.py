@@ -19,7 +19,6 @@ import pytest
 from fastapi import FastAPI
 
 from blizzard.cli.runtime import bound_port, bound_tcp, build_early_shutdown_server, publish_listening_file
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.harness_shared import build_identity_env
@@ -28,6 +27,7 @@ from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.listeners import AdoptedTcp, Uds
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.process.child_env import AllowlistedEnv
+from tests.support.composed_host import build_host_process
 from tests.support.host_files import host_config_of
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, FakeHub, migrated_store_at
 

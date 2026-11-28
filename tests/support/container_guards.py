@@ -24,20 +24,23 @@ from blizzard.hub.scopes.tenants import TenantContainers
 
 _INTERFACE = "blizzard.foundation.registry.interface"
 _REGISTRY_PACKAGE = ("foundation", "registry")
-#: The one dishka module a route edge may import: the FastAPI integration's ``FromDishka`` and ``inject_sync``.
-_ROUTE_EDGE = ("hub", "api")
+#: The route edges, the hub's and the runner host's, and the one dishka module each may import: the FastAPI
+#: integration's ``FromDishka`` and ``inject_sync``.
+_ROUTE_EDGES = (("hub", "api"), ("runner", "api"))
 _ROUTE_EDGE_DISHKA = "dishka.integrations.fastapi"
 
 #: The CLI's command roots, relative to the source root; they compose areas and register nothing themselves.
 CLI_ROOTS: tuple[Path, ...] = (Path("cli/command_root.py"), Path("hub/cli/container_command.py"))
 
-#: The roots that compose adapters and areas, so the wiring boundary exempts them.
+#: The roots that compose adapters and areas, so the wiring boundary exempts them: the CLI's, the hub's process root and
+#: hosted app, and the runner host's root, composition and hosted app.
 PROCESS_ROOTS: frozenset[Path] = frozenset(
     {
         Path("hub/process_root.py"),
         Path("hub/app.py"),
         Path("runner/composition.py"),
         Path("runner/host_root.py"),
+        Path("runner/app.py"),
         *CLI_ROOTS,
     }
 )
@@ -139,13 +142,13 @@ def _defaulted(entry: Registration) -> Iterable[str]:
 
 def dishka_importers(source_root: Path) -> list[str]:
     """Modules under ``source_root`` that import dishka from outside ``foundation/registry/internal/``; a route edge
-    module under ``hub/api/`` may import ``dishka.integrations.fastapi`` and nothing else of dishka."""
+    module under ``hub/api/`` or ``runner/api/`` may import ``dishka.integrations.fastapi`` and nothing else of dishka."""
     problems: list[str] = []
     for path in sorted(source_root.rglob("*.py")):
         relative = path.relative_to(source_root).parts
         if relative[:3] == (*_REGISTRY_PACKAGE, "internal"):
             continue
-        edge = relative[:2] == _ROUTE_EDGE
+        edge = relative[:2] in _ROUTE_EDGES
         if any(_is_dishka(name) and not (edge and _is_route_edge_dishka(name)) for name in _imports(path)):
             problems.append(str(path.relative_to(source_root)))
     return problems

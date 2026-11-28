@@ -20,13 +20,13 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.runtime import seed_runners
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.host_config import HostConfig
 from blizzard.runner.host_keys import ENV_HOST_SECRET_KEY
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.sealed_tokens import StoredToken
 from blizzard.runner.listeners import Listeners, Uds
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import load_host_config
 from tests.support.hub_tokens import host_hub_tokens
 from tests.support.runner_cli_home import (

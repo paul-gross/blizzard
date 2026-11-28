@@ -18,12 +18,12 @@ import uvicorn
 from blizzard.foundation.clock import SystemClock
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli.runtime import StoreHostedRunners, read_host_stores, seed_runners
-from blizzard.runner.composition import build_host_process
 from blizzard.runner.host_config import HostConfig
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
+from tests.support.composed_host import build_host_process
 from tests.support.config_inputs import load_host_config
 from tests.support.runner_add_retire import (
     _registered,  # pyright: ignore[reportPrivateUsage]

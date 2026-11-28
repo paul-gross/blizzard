@@ -25,7 +25,7 @@ from blizzard.runner.cli.runtime import (
     _reconcile_host_scratch,  # pyright: ignore[reportPrivateUsage]
     reconcile_scratch_roots,
 )
-from blizzard.runner.composition import HostProcess, RunnerProcess, build_host_process
+from blizzard.runner.composition import HostProcess, RunnerProcess
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import BuiltRunner
 from blizzard.runner.host_layout import WORKER_SCRATCH_DIRNAME, HostLayout
@@ -42,6 +42,7 @@ from blizzard.runner.tracing.platform import (
 )
 from blizzard.runner.tracing.received_export import build_received_telemetry_export
 from tests.support import claude_code_telemetry
+from tests.support.composed_host import build_host_process
 from tests.support.host_files import host_config_of
 from tests.support.runner_fakes import REGISTERED_AT, FakeHub, migrated_store_at
 from tests.support.runner_mint import new_mint
