@@ -40,6 +40,8 @@ from blizzard.foundation.platform_tracing.handle import (
     build_platform_tracing,
 )
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
+from blizzard.foundation.registry.interface import Lifetime, port
+from blizzard.foundation.registry.scopes import OwnedChild, ScopeValues, open_child, supply
 from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.foundation.runner_start_step import RunnerStartStep
 from blizzard.foundation.secrets.factories import secret_cipher
@@ -1243,6 +1245,8 @@ class LiveRunner[W: IWiredRunner, R: IRunnerResume]:
     resume: R
     wired: W | None = None
     drivers: IRunnerDrivers | None = None
+    #: Its child scope; ``None`` under a set bound to no parent scope.
+    child: OwnedChild | None = None
     #: Whether its startup steps ran, so its shutdown marks its in-flight leases.
     started_up: bool = False
 
@@ -1253,12 +1257,53 @@ class LiveRunner[W: IWiredRunner, R: IRunnerResume]:
 
 class HostRunnerSet[W: IWiredRunner, R: IRunnerResume]:
     """The host's live runners. Every change to ``host.runners``, the app's registry and each runner's drivers and
-    clients goes through here, under one lock, so the host tick and a request never see a runner half-placed."""
+    clients goes through here, under one lock, so the host tick and a request never see a runner half-placed.
+
+    It alone opens and closes runner children. Bound to no parent scope, it opens none."""
 
     def __init__(self, host: HostProcess) -> None:
         self.host = host
         self._lock = threading.RLock()
         self._live: dict[str, LiveRunner[W, R]] = {}
+        self._parent: OwnedChild | None = None
+        self._eager: tuple[type[Any], ...] = ()
+        self._closed = False
+
+    def bind(self, parent: OwnedChild, *, eager: Sequence[type[Any]] = ()) -> None:
+        """Open runner children beneath the borrowed ``parent`` from now on, building ``eager`` as each opens."""
+        self._parent = parent
+        self._eager = tuple(eager)
+
+    def open_runner(self, built: BuiltRunner) -> OwnedChild | None:
+        """A new child scope for ``built``, owned by its runner id, with the eager types built; ``None`` when unbound.
+
+        A child whose eager types fail is closed before the failure is raised. Refused after :meth:`close_all`."""
+        with self._lock:
+            if self._closed:
+                raise RuntimeError(f"runner {built.id}: the host's runners are closed")
+        if self._parent is None:
+            return None
+        child = open_child(
+            self._parent,
+            lifetime=Lifetime.RUNNER,
+            owner=built.id,
+            values=ScopeValues((supply(port(BuiltRunner), built),)),
+        )
+        try:
+            for dependency_type in self._eager:
+                child.resolver.get(dependency_type)
+        except BaseException as failure:
+            _close_after(functools.partial(child.close, failure), failure)
+            raise
+        return child
+
+    def close_graph(self, runner: RunnerProcess, child: OwnedChild | None) -> None:
+        """Close one runner's graph, in reverse construction order: its process graph, then its child."""
+        try:
+            runner.close_runner()
+        finally:
+            if child is not None:
+                child.close()
 
     def live(self) -> tuple[LiveRunner[W, R], ...]:
         """Every live runner, in the host's runner order."""
@@ -1299,15 +1344,16 @@ class HostRunnerSet[W: IWiredRunner, R: IRunnerResume]:
 
     def abandon(self, runner_id: str, start: IRunnerStart[W, R]) -> None:
         """Undo a start that failed after its runner was placed: withdraw it, stop and close what it got, and drop it
-        from the host's runners. Its sealed token stays — it is not retired."""
+        from the host's runners. Its graph closes before its wiring. Its sealed token stays — it is not retired."""
         start.withdraw(runner_id)
         live = self.remove(runner_id)
         if live is None:
             return
+        # Unwound last-registered first: the drivers, then the graph, then the wiring.
         with contextlib.ExitStack() as closing:
-            closing.callback(live.runner.close_runner)
             if live.wired is not None:
                 closing.callback(live.wired.close)
+            closing.callback(self.close_graph, live.runner, live.child)
             if live.drivers is not None:
                 closing.callback(live.drivers.stop)
 
@@ -1323,8 +1369,8 @@ class HostRunnerSet[W: IWiredRunner, R: IRunnerResume]:
 
     def stop_all(self, *, mark: bool) -> list[str]:
         """Stop every live runner's drivers, wait out its in-flight pass, then — with ``mark`` — mark its in-flight
-        leases for restart-resume and drain their workers; the shutdown's messages. Its graph and clients stay for
-        :meth:`close_all` and the host's close."""
+        leases for restart-resume and drain their workers; the shutdown's messages. Its graph and wiring stay for
+        :meth:`close_all`."""
         said: list[str] = []
         live = self.live()
         for runner in reversed(live):
@@ -1340,11 +1386,25 @@ class HostRunnerSet[W: IWiredRunner, R: IRunnerResume]:
         return said
 
     def close_all(self) -> None:
-        """Close every live runner's stepper and route clients."""
+        """Close every live runner's graph, then its wiring, attempting each, and refuse further opens. Later calls do
+        nothing."""
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
         with contextlib.ExitStack() as closing:
-            for runner in self.live():
-                if runner.wired is not None:
-                    closing.callback(runner.wired.close)
+            for live in self.live():
+                if live.wired is not None:
+                    closing.callback(live.wired.close)
+                closing.callback(self.close_graph, live.runner, live.child)
+
+
+def _close_after(close: Callable[[], None], failure: BaseException) -> None:
+    """Close what ``failure`` abandoned; a cleanup error is noted on it rather than raised over it."""
+    try:
+        close()
+    except Exception as cleanup:
+        failure.add_note(f"closing the runner after it also failed: {cleanup!r}")
 
 
 class RunnerStartFailed(Exception):
@@ -1453,17 +1513,23 @@ def start_runner[W: IWiredRunner, R: IRunnerResume](
     environ: Mapping[str, str] | None = None,
     trace_exporter: ITraceExporter | None = None,
 ) -> StartingRunner[W, R]:
-    """Compose ``built`` over ``host``, run its startup steps, and place it among the host's runners. Raises
-    :class:`RunnerStartFailed` naming the step, with nothing of the runner left behind."""
+    """Open ``built``'s child, compose it over ``host``, run its startup steps, and place it among the host's
+    runners. Raises :class:`RunnerStartFailed` naming the step, with nothing of the runner left behind."""
     with _start_step(built.id, "compose"):
-        runner = compose_runner(
-            host_config, host, built, publish_bundle=publish_bundle, environ=environ, trace_exporter=trace_exporter
-        )
+        child = runners.open_runner(built)
+        try:
+            runner = compose_runner(
+                host_config, host, built, publish_bundle=publish_bundle, environ=environ, trace_exporter=trace_exporter
+            )
+        except BaseException as failure:
+            if child is not None:
+                _close_after(child.close, failure)
+            raise
     try:
-        live = LiveRunner[W, R](runner, start.resume(runner))
+        live = LiveRunner[W, R](runner, start.resume(runner), child=child)
         run_startup_steps(live, start)
-    except BaseException:
-        runner.close_runner()
+    except BaseException as failure:
+        _close_after(functools.partial(runners.close_graph, runner, child), failure)
         raise
     runners.place(live)
     return StartingRunner(live, runners, start)
@@ -1473,7 +1539,7 @@ def drain_runner[W: IWiredRunner, R: IRunnerResume](
     host: HostProcess, runners: HostRunnerSet[W, R], start: IRunnerStart[W, R], runner_id: str
 ) -> bool:
     """Remove one retired runner, touching no other: withdraw its routes, stop its drivers, wait out its in-flight
-    pass, mark and drain its workers, close its graph and hub clients, drop it from the host's runners, then delete its
+    pass, mark and drain its workers, close its graph then its wiring, drop it from the host's runners, then delete its
     sealed token. Its identity and settings rows stay. Whether it was running."""
     live = runners.get(runner_id)
     if live is None:
@@ -1489,7 +1555,7 @@ def drain_runner[W: IWiredRunner, R: IRunnerResume](
         draining.callback(runners.remove, runner_id)
         if live.wired is not None:
             draining.callback(live.wired.close)
-        draining.callback(live.runner.close_runner)
+        draining.callback(runners.close_graph, live.runner, live.child)
         if live.started_up:
             live.resume.on_shutdown()
     get_logger("blizzard.runner.host").info("drained a retired runner", runner_id=runner_id)
@@ -1546,7 +1612,12 @@ class HostRunnerReconcile[W: IWiredRunner, R: IRunnerResume]:
                 try:
                     prepared.run()
                 except RunnerStartFailed as exc:
-                    self.runners.abandon(prepared.runner_id, self.start)
+                    try:
+                        self.runners.abandon(prepared.runner_id, self.start)
+                    except Exception:  # the start failure is the one held; its siblings still start
+                        get_logger("blizzard.runner.host").exception(
+                            "closing a runner that failed to start also failed", runner_id=prepared.runner_id
+                        )
                     self._failed(prepared.runner_id, exc)
                 else:
                     self.failures.clear(prepared.runner_id)

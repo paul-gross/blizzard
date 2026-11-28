@@ -28,9 +28,12 @@ _REGISTRY_PACKAGE = ("foundation", "registry")
 _ROUTE_EDGE = ("hub", "api")
 _ROUTE_EDGE_DISHKA = "dishka.integrations.fastapi"
 
-#: The hub's process roots, relative to the source root: the process root and the hosted app over it. Each composes
-#: adapters and areas, so the wiring boundary exempts it.
-PROCESS_ROOTS: frozenset[Path] = frozenset({Path("hub/process_root.py"), Path("hub/app.py")})
+#: The process roots, relative to the source root: the hub's process root and the hosted app over it, and the runner
+#: host's root and the composition whose runner set opens its child scopes. Each composes adapters and areas, so the
+#: wiring boundary exempts it.
+PROCESS_ROOTS: frozenset[Path] = frozenset(
+    {Path("hub/process_root.py"), Path("hub/app.py"), Path("runner/composition.py"), Path("runner/host_root.py")}
+)
 
 #: The hub's roots, relative to the source root: they compose areas and orchestrate lifecycles, and register nothing
 #: themselves.

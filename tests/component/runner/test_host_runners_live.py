@@ -15,6 +15,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import blizzard.foundation.store.engine as store_engine
+import blizzard.runner.app as runner_app
 import blizzard.runner.cli.runtime as cli_runtime
 import blizzard.runner.composition as composition
 import blizzard.runner.loop_wiring as loop_wiring
@@ -392,3 +393,53 @@ def test_a_hub_side_retirement_stops_the_runners_threads_in_the_tick_that_notice
     assert world.served() == set()
     assert host.host_stores.hosted_runners.retired() == {TEST_RUNNER_ID}
     assert not world.sealed(TEST_RUNNER_ID)
+
+
+def _record_closes(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
+    """Each runner graph and wiring close as it happens, by runner id."""
+    closed: list[tuple[str, str]] = []
+    wired_type = cast(Any, runner_app)._WiredRunner
+    close_graph, close_wiring = RunnerProcess.close_runner, wired_type.close
+
+    def graph(runner: RunnerProcess) -> None:
+        closed.append(("graph", runner.runner_id))
+        close_graph(runner)
+
+    def wiring(wired: Any) -> None:
+        closed.append(("wiring", wired.served.runner_id))
+        close_wiring(wired)
+
+    monkeypatch.setattr(RunnerProcess, "close_runner", graph)
+    monkeypatch.setattr(wired_type, "close", wiring)
+    return closed
+
+
+def test_abandoning_a_start_that_failed_after_placement_closes_the_graph_before_the_wiring(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(runner: RunnerProcess, stepper: RunnerStepper) -> composition.IRunnerDrivers:
+        raise RuntimeError("no drivers")
+
+    world.hosted.start.serving(drivers=refuse, scratch=lambda _runner: None, said=lambda _note: None)
+    world.add()
+    closed = _record_closes(monkeypatch)
+
+    world.host_pass()
+
+    assert world.served() == {TEST_RUNNER_ID}
+    assert closed == [("graph", _ADDED), ("wiring", _ADDED)]
+
+
+def test_host_stop_closes_each_runners_graph_before_its_wiring(world: _World, monkeypatch: pytest.MonkeyPatch) -> None:
+    world.add()
+    world.host_pass()
+    closed = _record_closes(monkeypatch)
+
+    world.hosted.runners.stop_all(mark=False)
+    assert closed == []
+    world.hosted.close()
+    before_host_close = list(closed)
+    world.host.close()
+
+    for runner_id in (TEST_RUNNER_ID, _ADDED):
+        assert [kind for kind, closed_id in before_host_close if closed_id == runner_id] == ["graph", "wiring"]
