@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -16,7 +17,11 @@ def test_locked_decision_rejects_unlocked_transaction(tmp_path: Path) -> None:
         "    repo.declare('a', 'b', by='test', at=at, transaction=unlocked)\n"
     )
     result = subprocess.run(
-        ["pyright", "--outputjson", str(fixture)], capture_output=True, text=True, timeout=120, check=False
+        [sys.executable, "-m", "pyright", "--outputjson", str(fixture)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
     )
     report = json.loads(result.stdout)
     errors = [item for item in report["generalDiagnostics"] if item["severity"] == "error"]
