@@ -27,6 +27,7 @@ from blizzard.wire.route import MalformedCursorProblem, PinnedGraphMissingProble
 from blizzard.wire.runner import RunnerRetiredProblem
 from blizzard.wire.tenant import TenantCredentialMismatchProblem, TenantNotFoundProblem
 from tests.support.credential_runners import seed_credential_runners
+from tests.support.direct_auth import admission_for, machine_for
 from tests.support.hub_request_auth import bearer
 from tests.support.refusal_observation import RefusalObservation, coverage_mismatches, observe_refusal
 from tests.support.scaffolding import (
@@ -114,10 +115,10 @@ def test_chunk_read_problem_variants_are_aggregated(
         observe(client.get(url, headers=bearer(live)), 503, HubStoreUnavailableProblem)
 
     def close_before_resolution(request: Request) -> AdmittedTenant:
-        principal = RunnerAuth.of(request).demand()
+        principal = RunnerAuth.of(request, machine_for(hub.process)).demand()
         close_tenant(hub.engine, principal.tenant_id)
         hub.resolve_hub(OpenTenants).refresh()
-        return resolve_tenant(request)
+        return admission_for(request, hub.process)
 
     hub.app.dependency_overrides[resolve_tenant] = close_before_resolution
     observe(client.get(url, headers=bearer(live)), 404, TenantNotFoundProblem)

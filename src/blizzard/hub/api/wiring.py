@@ -11,6 +11,7 @@ from typing import Any, cast
 
 from blizzard.foundation.clock import ControlledClock
 from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
+from blizzard.hub.api.auth import MachineCredentials, TenantHostRegistries, TenantRunnerRegistries
 from blizzard.hub.api.chunk_events import AnnouncedTurns, announce_minted
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.chunk_views import ChunkViewAssembler
@@ -86,6 +87,13 @@ def register_version_window(registry: Registry) -> Ref[HubVersionWindow]:
 def register_version_window_absent(registry: Registry) -> None:
     """Declare the hub's version window absent, for a root that supplies none."""
     registry.absent(port(HubVersionWindow), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+
+
+def register_machine_credentials(registry: Registry) -> None:
+    """Declare the credential capability and typed tenant accessors bound by the process root."""
+    registry.service(TenantRunnerRegistries, lifetime=Lifetime.PROCESS)
+    registry.service(TenantHostRegistries, lifetime=Lifetime.PROCESS)
+    registry.service(MachineCredentials, lifetime=Lifetime.PROCESS)
 
 
 def register_clock_controls(registry: Registry, *, controlled: bool) -> None:

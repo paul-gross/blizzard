@@ -11,6 +11,8 @@ REVIEWED = {
     **ME,
     ("GET", "/api/auth/authorize"): {
         _PROBLEM,
+        ("blizzard.hub.api.idp.idp_enabled", "ProblemHTTPException(problems.idp_disabled_problem)"),
+        ("blizzard.hub.api.idp._required", "ProblemHTTPException(problems.hub_store_unavailable_problem)"),
         (
             "blizzard.hub.api.idp._unknown_client",
             "problem_response(problems.federation_client_refused_problem(instance=request.url.path))",
@@ -37,12 +39,13 @@ REVIEWED = {
         ),
         (
             "blizzard.hub.api.idp.authorize",
-            "RedirectResponse(f'/api/auth/{providers[0].name}/authorize?return_to={quote(return_to, safe='')}')",
+            "RedirectResponse(f'/api/auth/{available_providers[0].name}/authorize?return_to={quote(return_to, safe='')}')",
         ),
         ("blizzard.hub.api.idp.authorize", "RedirectResponse(f'/login?return_to={quote(return_to, safe='')}')"),
     },
     ("GET", "/api/auth/jwks.json"): {
         _PROBLEM,
+        ("blizzard.hub.api.idp.idp_enabled", "ProblemHTTPException(problems.idp_disabled_problem)"),
         (
             "blizzard.hub.api.idp.jwks",
             "problem_response(problems.idp_disabled_problem(instance=request.url.path))",
@@ -71,11 +74,11 @@ REVIEWED = {
             "ProblemHTTPException(partial(problems.permission_required_problem, permission))",
         ),
         (
-            "blizzard.hub.api.auth_session.resolve_tenant",
+            "blizzard.hub.api.auth_session.tenant_for_request",
             "ProblemHTTPException(problems.tenant_credential_mismatch_problem)",
         ),
         (
-            "blizzard.hub.api.auth_session.resolve_tenant",
+            "blizzard.hub.api.auth_session.tenant_for_request",
             "ProblemHTTPException(partial(problems.authentication_required_problem, detail='authentication required'))",
         ),
         (

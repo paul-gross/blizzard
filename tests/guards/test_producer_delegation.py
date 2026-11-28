@@ -211,14 +211,14 @@ def test_real_class_factory_is_traversed() -> None:
     assert any("RunnerAuth.demand" in item and "HTTPException" in item for item in found)
     assert not any(item.endswith("unresolved call RunnerAuth.of") for item in unknown)
     assert any("RunnerAuth.of" in item and "unresolved call cls" in item for item in unknown)
-    assert any("unresolved call RunnerAuth.of(request).demand" in item for item in unknown)
+    assert any("unresolved call RunnerAuth.of(request, machine).demand" in item for item in unknown)
     for function, method in (
         (reject_runner_principal, "RunnerAuth.refuse_runner"),
         (require_host_principal, "HostAuth.demand"),
     ):
         found, unknown = delegation_candidates(function)
         assert any(method in item and "HTTPException" in item for item in found)
-        assert any("unresolved call" in item and ".of(request)." in item for item in unknown)
+        assert any("unresolved call" in item and ".of(request, machine)." in item for item in unknown)
 
 
 def test_auth_factory_candidates_are_additive_and_static(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -480,7 +480,7 @@ def test_real_operation_detects_new_transitive_module_refusal(tmp_path: Path, mo
     helper = tmp_path / "helper.py"
     helper.write_text("from fastapi import HTTPException\ndef refuse():\n raise HTTPException(409)\n")
     delegate = tmp_path / "delegate.py"
-    delegate.write_text("import blizzard.hub.planted_helper as helper\ndef call():\n helper.refuse()\n")
+    delegate.write_text("import blizzard.hub.planted_helper as helper\ndef call(*args):\n helper.refuse()\n")
     names = ("blizzard.hub.planted_helper", "blizzard.hub.planted_delegate")
     modules: list[ModuleType] = []
     for name, path in zip(names, (helper, delegate), strict=True):
@@ -491,7 +491,8 @@ def test_real_operation_detects_new_transitive_module_refusal(tmp_path: Path, mo
         spec.loader.exec_module(module)
         modules.append(module)
     endpoint = _me_endpoint()
-    monkeypatch.setitem(endpoint.__globals__, "request_resolver", vars(modules[1])["call"])
+    original = getattr(endpoint, "__dishka_orig_func__", endpoint)
+    monkeypatch.setitem(original.__globals__, "resolve_identity", vars(modules[1])["call"])
     routes, _ = route_inventory(create_app_for_export(packaged_flag_registry()))
     failures = _boundary_failures(("GET", "/api/me"), operation_evidence(routes[("GET", "/api/me")]))
     assert any("planted_helper.refuse" in failure and "409" in failure for failure in failures)

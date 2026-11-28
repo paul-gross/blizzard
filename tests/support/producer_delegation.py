@@ -39,6 +39,9 @@ def delegation_candidates(function: FunctionType, instance: object = None) -> tu
         if key in seen:
             continue
         seen.add(key)
+        original = getattr(current, "__dishka_orig_func__", None)
+        if isinstance(original, FunctionType):
+            pending.append((original, receiver))
         name = f"{current.__module__}.{current.__qualname__}"
         if not current.__module__.startswith("blizzard.hub."):
             unresolved.add(f"external callable: {name}")

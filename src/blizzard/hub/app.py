@@ -52,8 +52,9 @@ from blizzard.hub.api.admin_invariants import router as admin_invariants_router
 from blizzard.hub.api.admin_settings import router as admin_settings_router
 from blizzard.hub.api.admin_tenants import router as admin_tenants_router
 from blizzard.hub.api.analytics import router as analytics_router
+from blizzard.hub.api.auth import MachineCredentials, RunnerAuth
 from blizzard.hub.api.auth_login import router as auth_login_router
-from blizzard.hub.api.auth_session import refuse_closed_tenant
+from blizzard.hub.api.auth_session import refuse_closed_tenant, resolve_identity
 from blizzard.hub.api.cadences import project_router as project_cadences_router
 from blizzard.hub.api.cadences import router as cadences_router
 from blizzard.hub.api.chunk_dependencies import router as chunk_dependencies_router
@@ -100,7 +101,7 @@ from blizzard.hub.api.questions import router as questions_router
 from blizzard.hub.api.queue import router as queue_router
 from blizzard.hub.api.readiness import router as readiness_router
 from blizzard.hub.api.repositories import router as repositories_router
-from blizzard.hub.api.request_config import request_config
+from blizzard.hub.api.request_config import config_for_request, request_config_services
 from blizzard.hub.api.resolution import process_request, refuse_absent_service
 from blizzard.hub.api.routines import project_router as project_routines_router
 from blizzard.hub.api.routines import router as routines_router
@@ -114,7 +115,7 @@ from blizzard.hub.api.spend import router as spend_router
 from blizzard.hub.api.sweeps import admin_router as admin_sweeps_router
 from blizzard.hub.api.sweeps import router as sweeps_router
 from blizzard.hub.api.test_flow_control import flow_control_router
-from blizzard.hub.api.trace_continuation import TraceGatedFastAPI
+from blizzard.hub.api.trace_continuation import PrincipalCheck, TraceGatedFastAPI, principal_check
 from blizzard.hub.api.traces import router as traces_router
 from blizzard.hub.api.transcripts import router as transcripts_router
 from blizzard.hub.api.urgencies import router as urgencies_router
@@ -128,6 +129,7 @@ from blizzard.hub.auth.identities import IReadIdentityRepository
 from blizzard.hub.auth.memberships import MembershipRoleRefused
 from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
 from blizzard.hub.auth.service import AuthService
+from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.throttle import LiveIpThrottle
 from blizzard.hub.composition import (
@@ -138,6 +140,7 @@ from blizzard.hub.composition import (
     open_hub_store,
 )
 from blizzard.hub.config import (
+    AUTH_MODE_NONE,
     ConfigError,
     HubConfig,
     StoreUrl,
@@ -623,15 +626,17 @@ def _resolved_or_none[T](process: HubProcess, dependency_type: type[T]) -> T | N
         return None
 
 
-async def _bind_request_config(request: Request) -> AsyncGenerator[None, None]:
-    throttle = _resolved_or_none(request.app.state.hub_process, LiveIpThrottle)
+async def _bind_request_config(
+    request: Request, services: tuple[HubConfigSource, LiveIpThrottle | None] = Depends(request_config_services)
+) -> AsyncGenerator[None, None]:
+    source, throttle = services
     if throttle is None:
-        with bind_pass_config(request_config(request)):
+        with bind_pass_config(config_for_request(request, source)):
             yield
         return
 
     def read_config() -> tuple[HubConfig, tuple[bool, int, float]]:
-        config = request_config(request)
+        config = config_for_request(request, source)
         login = config.auth.login_throttle
         return config, (login.enabled, login.capacity, login.refill_seconds)
 
@@ -639,6 +644,19 @@ async def _bind_request_config(request: Request) -> AsyncGenerator[None, None]:
         request.state.auth_throttle_generation = generation
         with bind_pass_config(config):
             yield
+
+
+def trace_principal_check(process: HubProcess, config: HubConfig) -> PrincipalCheck:
+    """Assemble the pre-routing checker from this process's canonical collaborators."""
+    resolver = process.resolver
+    machine = resolver.get(MachineCredentials)
+    sessions = resolver.get(IReadSessionRepository | None)
+    auth = resolver.get(AuthService | None)
+    return principal_check(
+        lambda request: RunnerAuth(request, machine).principal is not None,
+        lambda request: resolve_identity(request, sessions, auth) is not None,
+        none_mode=config.auth.mode == AUTH_MODE_NONE,
+    )
 
 
 def create_app(
@@ -682,6 +700,7 @@ def create_app(
             actions=build_hub_actions(os.environ),
         )
     )
+    app.principal_check = trace_principal_check(app.state.hub_process, config)
     if process is not None:
         # Resolved at build, so a disabled login throttle warns at hub start, not on the first request.
         process.resolver.get(LiveIpThrottle)

@@ -25,9 +25,11 @@ from blizzard.foundation.roles import collaborator
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub.api import wiring as api
+from blizzard.hub.api.auth import TenantHostRegistries, TenantRunnerRegistries
 from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.auth import wiring as auth
+from blizzard.hub.auth.credential_reads import MachineCredentialReads
 from blizzard.hub.auth.wiring import BorrowedOAuthClient
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery import wiring as delivery
@@ -51,6 +53,8 @@ from blizzard.hub.domain.observability.tracing.repository import StepHydration, 
 from blizzard.hub.domain.operations import wiring as operations_area
 from blizzard.hub.domain.projects import wiring as projects
 from blizzard.hub.domain.runners import wiring as runners
+from blizzard.hub.domain.runners.host import IReadHostRegistry
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.sweeps import wiring as sweeps
 from blizzard.hub.domain.tenancy import wiring as tenancy
 from blizzard.hub.domain.tenancy.teardown import ClosedTenantForgetting, TenantTeardownSweep
@@ -98,17 +102,17 @@ class HubProcess:
         """The process scope's guarded resolver."""
         return self.owner.resolver
 
-    @property
-    def credentials(self):
-        """The hub-scoped credential reads: which tenant a runner or host token, or id, belongs to."""
-        return self.resolver.get(HubScopedReads).credentials
-
     def close(self) -> None:
         """Close every tenant scope, then the process scope, attempting the second when the first fails."""
         try:
             self.tenants.close()
         finally:
             self.owner.close()
+
+
+def machine_credential_reads(reads: HubScopedReads) -> MachineCredentialReads:
+    """The aggregate's canonical pre-admission credential reads."""
+    return reads.credentials
 
 
 def register_hub(
@@ -132,11 +136,12 @@ def register_hub(
     settings_wiring.register_boot(registry)
     forge.register_process(registry)
     api.register_clock_controls(registry, controlled=controlled_clock)
+    api.register_machine_credentials(registry)
     if store_backed:
         delivery.register(registry)
         scopes.register_tenants(registry)
         chunk_operations = store.register_chunk_operations(registry)
-        hub_events = store.register_process(registry)
+        hub_events = store.register_process(registry, credential_reads=machine_credential_reads)
         invitations = store.register_tenant(registry)
         delivery.register_tenant(registry)
         delivery_area.register(registry, flows=chunk_operations.flows)
@@ -500,6 +505,8 @@ def store_backed_process(owner: OwnedChild) -> HubProcess:
         raise
     process = _process(owner, confirm_open=reads.tenants.confirm_open, open_tenants=reads.tenants.open_tenants)
     tenants = process.tenants
+    resolver.get(TenantRunnerRegistries).bind(lambda tenant: tenants.resolve(StoreScope(tenant), IReadRunnerRegistry))
+    resolver.get(TenantHostRegistries).bind(lambda tenant: tenants.resolve(StoreScope(tenant), IReadHostRegistry))
     hydrations.bind(lambda tenant: tenants.resolve(StoreScope(tenant), StepHydration))
     reconciliations.bind(lambda tenant: tenants.resolve(StoreScope(tenant), GraphReconciliation))
     drainers.bind(lambda tenant: tenants.resolve(StoreScope(tenant), CloseIntentDrainer))
@@ -548,7 +555,14 @@ def build_store_free(
         system_artifacts=system_artifacts,
     )
     owner = build_container(registry, HUB_LIFETIMES, owner=HUB_OWNER, values=_scoped(values))
-    return _process(owner, confirm_open=_no_tenant, open_tenants=tuple)
+    process = _process(owner, confirm_open=_no_tenant, open_tenants=tuple)
+    owner.resolver.get(TenantRunnerRegistries).bind(
+        lambda tenant: process.tenants.resolve(StoreScope(tenant), IReadRunnerRegistry)
+    )
+    owner.resolver.get(TenantHostRegistries).bind(
+        lambda tenant: process.tenants.resolve(StoreScope(tenant), IReadHostRegistry)
+    )
+    return process
 
 
 def open_store_backed(

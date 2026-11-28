@@ -17,6 +17,7 @@ from sqlalchemy import Engine, event
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.api.auth import MachineCredentials, runner_signing_in
+from blizzard.hub.auth.credential_reads import MachineCredentialReads
 from blizzard.hub.domain.runners.host import HostAddition, HostTokenRotation
 from blizzard.hub.domain.runners.registration import RunnerAddition, TokenRotation
 from blizzard.hub.process_root import HubProcess
@@ -32,6 +33,7 @@ from blizzard.hub.store.tenant_guard import (
     install_tenant_guard,
 )
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
+from tests.support.direct_auth import machine_for
 from tests.support.scaffolding import close_tenant, configured_core, default_tenant, migrate_to
 
 _AT = datetime(2026, 10, 8, tzinfo=UTC)
@@ -74,7 +76,15 @@ def _two_tenants(tmp_path: Path) -> tuple[HubProcess, Engine, TenantId]:
 
 def _machine(process: HubProcess) -> MachineCredentials:
     """The credential seams over ``process``: its credential reads, and its tenant containers."""
-    return MachineCredentials(process)
+    return machine_for(process)
+
+
+def test_machine_credential_port_is_the_canonical_aggregate_member(tmp_path: Path) -> None:
+    core, _, _ = _two_tenants(tmp_path)
+    reads = core.resolver.get(MachineCredentialReads | None)
+
+    assert reads is core.resolver.get(HubScopedReads).credentials
+    assert _machine(core).credentials is reads
 
 
 def test_a_runner_token_resolves_to_its_own_tenants_runner(tmp_path: Path) -> None:

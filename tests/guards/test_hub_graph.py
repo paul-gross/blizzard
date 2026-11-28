@@ -26,6 +26,7 @@ from blizzard.foundation.registry.scopes import OwnedChild, Resolver, ScopeValue
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
+from blizzard.hub.api.auth import MachineCredentials
 from blizzard.hub.api.auth_session import tenant_bound
 from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.version_window import HubVersionWindow
@@ -33,8 +34,12 @@ from blizzard.hub.app import create_app_for_export
 from blizzard.hub.auth.hub_admins import HubAdministrators
 from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.auth.invitations import InvitationService
-from blizzard.hub.auth.memberships import TenantMembers
+from blizzard.hub.auth.memberships import IReadMembershipRepository, TenantMembers
+from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
+from blizzard.hub.auth.service import AuthService
+from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.sign_in import SignIn
+from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.wiring import BorrowedOAuthClient
 from blizzard.hub.composition import build_hub_settings
 from blizzard.hub.config import HubConfig
@@ -348,6 +353,14 @@ def test_every_routes_container_dependencies_resolve_at_the_lifetime_it_runs_in(
         and any(each.route.split(" ")[1] == p or each.route.split(" ")[1].startswith(f"{p}/") for p in hub_only)
     ] == []
     assert {(each.route, each.dependency) for each in _hub_routes} >= {
+        ("GET /api/auth/authorize", SigningKeyService | None),
+        ("GET /api/auth/jwks.json", SigningKeyService | None),
+        ("POST /api/auth/cli/token", AuthService | None),
+        ("POST /api/auth/rotate-signing-key", SigningKeyService | None),
+        ("GET /api/auth/providers", IOAuthProviderRegistry | None),
+        ("POST /api/auth/logout", IReadSessionRepository | None),
+        ("GET /api/me", IReadSessionRepository | None),
+        ("GET /api/me", OpenTenants | None),
         ("GET /api/fleet/identity", OpenTenants),
         ("PUT /api/admin/hub-admins/{user_id}", HubAdministrators),
         ("GET /api/auth/{name}/callback", SignIn),
@@ -392,10 +405,12 @@ def test_the_every_route_gate_fails_a_planted_unregistered_and_a_tenant_service_
     planted = [
         RouteDependency("GET /planted/unregistered", tenant=True, dependency=_Unregistered),
         RouteDependency("GET /planted/hub-level", tenant=False, dependency=FindingExitService),
+        RouteDependency("GET /planted/optional", tenant=False, dependency=_Unregistered | None),
     ]
     assert unresolved_route_dependencies(planted, _process) == [
         "GET /planted/unregistered: _Unregistered in a tenant request: NoFactoryError",
         "GET /planted/hub-level: FindingExitService in the process: NoFactoryError",
+        f"GET /planted/optional: {_Unregistered | None} in the process: NoFactoryError",
     ]
 
 
@@ -417,6 +432,11 @@ def test_the_every_route_walk_finds_a_container_dependency_on_a_planted_route() 
     assert route_dependencies(app) == [
         RouteDependency("GET /planted/process", tenant=False, dependency=HubScopedReads),
         RouteDependency("GET /planted/tenant", tenant=True, dependency=FindingExitService),
+        RouteDependency("GET /planted/tenant", tenant=True, dependency=OpenTenants),
+        RouteDependency("GET /planted/tenant", tenant=True, dependency=IReadMembershipRepository),
+        RouteDependency("GET /planted/tenant", tenant=True, dependency=IReadSessionRepository | None),
+        RouteDependency("GET /planted/tenant", tenant=True, dependency=AuthService | None),
+        RouteDependency("GET /planted/tenant", tenant=True, dependency=MachineCredentials),
     ]
 
 

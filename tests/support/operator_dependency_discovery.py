@@ -47,13 +47,15 @@ def _calls(dependant: Any) -> Iterator[Any]:
         yield from _calls(dependency)
 
 
-def _made_by(call: Any, factory: Any) -> bool:
+def made_by(call: Any, factory: Any) -> bool:
+    call = getattr(call, "__dishka_orig_func__", call)
     code = getattr(call, "__code__", None)
     return code is not None and code in factory.__code__.co_consts
 
 
-def _gate_permissions(call: Any) -> set[Permission] | None:
-    outer = next((names for factory, names in _PERMISSION_GATES if _made_by(call, factory)), None)
+def gate_permissions(call: Any) -> set[Permission] | None:
+    call = getattr(call, "__dishka_orig_func__", call)
+    outer = next((names for factory, names in _PERMISSION_GATES if made_by(call, factory)), None)
     if outer is None:
         return None
     nonlocals = inspect.getclosurevars(call).nonlocals
@@ -88,13 +90,13 @@ def operator_dependencies(app: Any) -> OperatorDependencies:
             store.add(operation)  # it resolves the open tenants, which a store-free hub declares absent
             tenant.add(operation)
             authentication.add(operation)
-        gates = [permissions for call in calls if (permissions := _gate_permissions(call)) is not None]
-        if any(_made_by(call, auth_session.require_hub) for call in calls):
+        gates = [permissions for call in calls if (permissions := gate_permissions(call)) is not None]
+        if any(made_by(call, auth_session.require_hub) for call in calls):
             authentication.add(operation)
             store.add(operation)  # it resolves the session reader, which a store-free hub declares absent
         if any(not permissions <= floor for permissions in gates):
             permission.add(operation)
-        if any(_made_by(call, flag_guard.flag_guard) for call in calls):
+        if any(made_by(call, flag_guard.flag_guard) for call in calls):
             flag.add(operation)
         evidence, _ = transitive_dispatch(route, app)
         if _PROJECT_REQUIRED_HANDLER in evidence:

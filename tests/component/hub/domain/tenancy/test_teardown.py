@@ -43,6 +43,7 @@ from blizzard.hub.store.scoped import is_tenant_owned
 from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.wire.tenant import TENANT_NOT_FOUND
+from tests.support.direct_auth import admission_for
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
@@ -183,7 +184,7 @@ def _closing_after_resolution(hub: HubHarness, tenant: TenantId, rows: dict[str,
     torn = hub.resolve_hub(TenantTeardown)
 
     def resolving_then_closing(request: Request) -> AdmittedTenant:
-        resolved = resolve_tenant(request)
+        resolved = admission_for(request, hub.process)
         torn.close(tenant, by="usr_closer")
         rows["closed"] = _rows_of(hub, tenant)
         return resolved
@@ -241,7 +242,7 @@ def _deleting_after_resolution(hub: HubHarness, tenant: TenantId, states: list[T
     torn = hub.resolve_hub(TenantTeardown)
 
     def resolving_then_deleting(request: Request) -> AdmittedTenant:
-        resolved = resolve_tenant(request)
+        resolved = admission_for(request, hub.process)
         states.append(torn.delete(tenant, by="usr_deleter").state)
         return resolved
 

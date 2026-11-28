@@ -221,15 +221,24 @@ def register(registry: Registry, *, invitations: Ref[IWriteInvitationRepository]
     memberships = registry.service(MembershipRepository, lifetime=Lifetime.PROCESS)
     transactions = registry.factory(identity_transactions, lifetime=Lifetime.PROCESS)
     registry.factory(auth_facts, lifetime=Lifetime.PROCESS)
-    registry.factory(auth_service, lifetime=Lifetime.PROCESS)
+    auth = registry.factory(auth_service, lifetime=Lifetime.PROCESS)
     registry.factory(tenant_members, lifetime=Lifetime.PROCESS)
     registry.factory(hub_administrators, lifetime=Lifetime.PROCESS)
     registry.service(SignIn, lifetime=Lifetime.PROCESS)
     registry.resource(open_oauth_client, lifetime=Lifetime.PROCESS)
-    registry.factory(oauth_registry, lifetime=Lifetime.PROCESS)
+    providers = registry.factory(oauth_registry, lifetime=Lifetime.PROCESS)
     registry.factory(signing_keys, lifetime=Lifetime.PROCESS)
-    registry.factory(login_throttle, lifetime=Lifetime.PROCESS)
+    throttle = registry.factory(login_throttle, lifetime=Lifetime.PROCESS)
     registry.factory(trusted_proxies, lifetime=Lifetime.PROCESS)
+    for key, ref in (
+        (AuthService, auth),
+        (LiveIpThrottle, throttle),
+        (IOAuthProviderRegistry, providers),
+        (IReadMembershipRepository, memberships),
+        (IReadSessionRepository, sessions),
+        (IReadUserRepository, users),
+    ):
+        registry.optional(port(key), ref, lifetime=Lifetime.PROCESS)
     registry.alias(port(IReadUserRepository), users)
     registry.alias(port(IReadMembershipRepository), memberships)
     registry.alias(port(IIdentityTransactions), transactions)
@@ -243,5 +252,14 @@ def register_absent(registry: Registry) -> None:
     """Declare the identity area absent, for the store-free graph."""
     for missing in _PROCESS_KEYS:
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+    for missing in (
+        AuthService,
+        LiveIpThrottle,
+        IOAuthProviderRegistry,
+        IReadMembershipRepository,
+        IReadSessionRepository,
+        IReadUserRepository,
+    ):
+        registry.optional(port(missing), None, lifetime=Lifetime.PROCESS)
     for missing in (InvitationService, IWriteInvitationRepository):
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)

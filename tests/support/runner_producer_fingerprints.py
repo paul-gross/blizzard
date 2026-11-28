@@ -7,7 +7,7 @@ src/blizzard/hub/api/admin_tenants.py 9 dfc8f084e6dfd45c2a25ef48955ce4f58b6eabd1
 src/blizzard/hub/api/analytics.py 12 2734bfe63ccfd2ebc48a7e817329581f9463a86ca09f93a2dd21ecd88792d697
 src/blizzard/hub/api/auth.py 5 12ac8948923033da98c0be3f084798ab23f1f1be9f9306a73736ad0eac3db863
 src/blizzard/hub/api/auth_login.py 7 912c53b4df487d79b83b459afe8882d0714bb921dba130a636c78b1466caeb03
-src/blizzard/hub/api/auth_session.py 14 0f07ee5a634cb06f08fbc135a55bb39e9f1b6503498249ed1b095a2784fbc4da
+src/blizzard/hub/api/auth_session.py 14 9f5b01bc2009c7e173c66f4dfd1131dd85f012154ec5d23e530c716746f7f31e
 src/blizzard/hub/api/cadences.py 6 94f2b47eb904eb173cc61d9f32ace4db2dd20be89ff32d1090826c04b4929077
 src/blizzard/hub/api/chunk_dependencies.py 7 e78b85b8bd0c0a0f4c73eeec2f7d4deb04393b576231fb849bd586c3b82573f6
 src/blizzard/hub/api/chunk_edit.py 3 b78147f9b8c131e7db259cd48ffa5488234ffa1f2e6c9b40973d73807dbd0d29
@@ -38,7 +38,7 @@ src/blizzard/hub/api/graphs.py 8 c5d141d3365312d774a06270b98a8e795f116a5d27a168f
 src/blizzard/hub/api/health.py 1 a8213336f8c34db34352c309e78bfbf29e149932f2928defbb879cada9b2e18e
 src/blizzard/hub/api/hosts.py 21 9c22a5146cffbc6a0156924bbeab91dfb4368f7a323bbea8532b5351d3f8bd6b
 src/blizzard/hub/api/hub_admins.py 2 a7e5df759cc996a9ca1d6643e2ec44ed982d67230778c4bd8e18c4bf1cf9cd1e
-src/blizzard/hub/api/idp.py 18 986466eccd4a962b71587b9b54638868689bbea7eeb9dafd070fcacf5aae84b6
+src/blizzard/hub/api/idp.py 17 7192fae69e02e41a9408c5744439c591aaeb03f27f4864469195e5b9672f59fa
 src/blizzard/hub/api/invitations.py 4 64c412b992af31293238c5a0d9668dccd042fdff74144eb2a1a7c736b32c5a96
 src/blizzard/hub/api/me.py 2 00f7cc4e738edfa6637e860199acc40c44acb6cda141e74eb7ae1eed64e49bfc
 src/blizzard/hub/api/members.py 4 0ea0afa8741794756325ec88ead8dca616866109b6740e299660fcdfcbd44509

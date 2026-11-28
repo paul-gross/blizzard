@@ -82,7 +82,6 @@ POST /api/fleet/chunks/{chunk_id}/artifact-check
 
 HTTP_HANDLER = "blizzard.hub.api.problem_exceptions.problem_http_exception"
 PROBLEM_EXCEPTION = "blizzard.hub.api.problem_exceptions.ProblemHTTPException"
-TENANT = f"blizzard.hub.api.auth_session.resolve_tenant raises {PROBLEM_EXCEPTION}"
 DIRECT_ENDPOINTS = {
     ("POST", "/api/fleet/chunks/{chunk_id}/artifact-check"): ("check_artifact", PROBLEM_EXCEPTION),
     ("POST", "/api/fleet/chunks/{chunk_id}/hub-advance"): ("hub_advance", PROBLEM_EXCEPTION),
@@ -99,15 +98,17 @@ DIRECT_ENDPOINTS = {
     ("POST", "/api/fleet/chunks/{chunk_id}/completions"): ("submit_completion", PROBLEM_EXCEPTION),
 }
 DIRECT_DISPATCH: dict[tuple[str, str], dict[str, set[str]]] = {
-    operation: {
-        HTTP_HANDLER: {TENANT}
-        | (
-            {f"blizzard.hub.api.fleet.{DIRECT_ENDPOINTS[operation][0]} raises {DIRECT_ENDPOINTS[operation][1]}"}
-            if operation in DIRECT_ENDPOINTS
-            else set()
-        )
+    operation: {HTTP_HANDLER: {f"blizzard.hub.api.fleet.{name} raises {exception}"}}
+    for operation, (name, exception) in DIRECT_ENDPOINTS.items()
+}
+DIRECT_DISPATCH.update(
+    {
+        operation: {HTTP_HANDLER: {f"blizzard.hub.api.idp.idp_enabled raises {PROBLEM_EXCEPTION}"}}
+        for operation in (("GET", "/api/auth/authorize"), ("GET", "/api/auth/jwks.json"))
     }
-    for operation in OPERATIONS
-    if (operation[1].startswith("/api/fleet/") or operation == ("POST", "/api/hosts"))
-    and operation != ("GET", "/api/fleet/identity")
+)
+DIRECT_DISPATCH[("GET", "/api/me")] = {
+    "blizzard.hub.api.resolution.refuse_absent_service": {
+        "blizzard.hub.api.me.me raises blizzard.foundation.registry.interface.ServiceAbsent"
+    }
 }

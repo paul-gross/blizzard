@@ -8,6 +8,7 @@ from fastapi import Request
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
 from blizzard.wire.auth import AUTHENTICATION_UNRESOLVED, AuthenticationUnresolvedProblem
 from blizzard.wire.tenant import TENANT_NOT_FOUND, TenantNotFoundProblem
+from tests.support.direct_auth import admission_for
 from tests.support.hub_request_auth import bearer
 from tests.support.refusal_observation import RefusalObservation, refusal_mismatches
 from tests.support.scaffolding import build_hub, close_tenant, seed_runner
@@ -23,7 +24,7 @@ def test_closure_after_resolution_refuses_the_write(tmp_path: Path, operation: s
     resolved: list[str] = []
 
     def close_after_resolution(request: Request) -> AdmittedTenant:
-        tenant = resolve_tenant(request)
+        tenant = admission_for(request, hub.process)
         resolved.append(tenant.scope.tenant)
         close_tenant(hub.engine, tenant.scope.tenant)
         return tenant

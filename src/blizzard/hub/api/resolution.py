@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 from fastapi import Request
 from starlette.responses import Response
@@ -58,3 +58,8 @@ async def refuse_absent_service(request: Request, exc: Exception) -> Response:
     """Answer a resolution of a service the store-free graph lacks as the store's unavailability."""
     assert isinstance(exc, ServiceAbsent)
     return await problem_http_exception(request, ProblemHTTPException(problems.hub_store_unavailable_problem))
+
+
+def unavailable_service(label: str) -> NoReturn:
+    """Refuse a branch that needs a service the process did not open."""
+    raise ServiceAbsent(label)

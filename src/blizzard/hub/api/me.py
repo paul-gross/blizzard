@@ -9,6 +9,7 @@ directly."""
 
 from __future__ import annotations
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -17,10 +18,10 @@ from blizzard.foundation.registry.interface import ServiceAbsent
 from blizzard.hub.api.auth_session import TENANT_HEADER, implicit_operator, resolve_identity
 from blizzard.hub.api.problem_rendering import problem_response
 from blizzard.hub.api.problems import authentication_required_problem
-from blizzard.hub.api.resolution import request_resolver
 from blizzard.hub.auth.memberships import IReadMembershipRepository, Membership
 from blizzard.hub.auth.permissions import permissions_for
-from blizzard.hub.auth.service import ASSIGNABLE_ROLES
+from blizzard.hub.auth.service import ASSIGNABLE_ROLES, AuthService
+from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.config import AUTH_MODE_NONE
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.tenancy import TenantId
@@ -30,25 +31,35 @@ router = APIRouter(prefix="/api", tags=["auth"])
 
 
 @router.get("/me", response_model=MeResponse)
-def me(request: Request) -> MeResponse | JSONResponse:
+@inject_sync
+def me(
+    request: Request,
+    memberships_reader: FromDishka[IReadMembershipRepository | None],
+    open_tenants: FromDishka[OpenTenants | None],
+    sessions: FromDishka[IReadSessionRepository | None],
+    auth: FromDishka[AuthService | None],
+) -> MeResponse | JSONResponse:
     """Under ``auth.mode = "none"`` the implicit operator, a member of every open tenant; under
     ``oauth`` with a resolving session, the session's person; under ``oauth`` with none, 401.
     A header naming a tenant the caller cannot enter resolves no tenant — never a 404 here."""
     mode = request.app.state.config.auth.mode
     # An unwired store answers before anything is asked of the caller's session.
-    memberships_reader = None if mode == AUTH_MODE_NONE else request_resolver(request).get(IReadMembershipRepository)
-    identity = resolve_identity(request)
+    if mode != AUTH_MODE_NONE and memberships_reader is None:
+        raise ServiceAbsent("membership repository")
+    identity = resolve_identity(request, sessions, auth)
     if identity is None:
         return problem_response(
             authentication_required_problem(instance=request.url.path, detail="not authenticated"),
         )
     if mode == AUTH_MODE_NONE:
-        tenants = _operator_tenants(request)
+        tenants = _operator_tenants(open_tenants)
         only = tenants[0] if len(tenants) == 1 else None
     else:
         assert memberships_reader is not None  # oauth resolved the reader above
         memberships = memberships_reader.memberships_for(identity.user_id)
-        tenants = _open(request_resolver(request).get(OpenTenants), memberships, hub_admin=identity.hub_admin)
+        if open_tenants is None:
+            raise ServiceAbsent("open tenants")
+        tenants = _open(open_tenants, memberships, hub_admin=identity.hub_admin)
         # A headerless tenant route settles on the one membership in force, a closed tenant's counted.
         only = tenants[0] if len(memberships) == 1 and len(tenants) == 1 else None
     named = request.headers.get(TENANT_HEADER)
@@ -70,11 +81,9 @@ def _tenant(tenant: TenantId, name: str, role: Role, *, hub_admin: bool) -> MeTe
     return MeTenant(tenant_id=tenant, name=name, role=role, permissions=[*sorted(permissions_for(role, hub_admin))])
 
 
-def _operator_tenants(request: Request) -> list[MeTenant]:
+def _operator_tenants(open_tenants: OpenTenants | None) -> list[MeTenant]:
     """The implicit operator's: an ``admin`` membership in every open tenant."""
-    try:
-        open_tenants = request_resolver(request).get(OpenTenants)
-    except ServiceAbsent:
+    if open_tenants is None:
         return []
     operator = implicit_operator(None)
     every = open_tenants.every()

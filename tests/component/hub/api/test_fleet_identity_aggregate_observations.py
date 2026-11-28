@@ -11,9 +11,11 @@ from pydantic import BaseModel
 from blizzard.hub.api.auth import RunnerAuth, RunnerPrincipal, require_runner_principal
 from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
 from blizzard.hub.api.fleet import FleetRequest
+from blizzard.hub.api.request_config import config_for_request
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.open_tenants import OpenTenants
+from blizzard.hub.settings.source import HubConfigSource
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
     AuthenticationRevokedProblem,
@@ -31,6 +33,7 @@ from blizzard.wire.runner import (
 )
 from blizzard.wire.tenant import TenantCredentialMismatchProblem, TenantNotFoundProblem
 from tests.support.credential_runners import seed_credential_runners
+from tests.support.direct_auth import admission_for, machine_for
 from tests.support.hub_request_auth import bearer
 from tests.support.refusal_observation import RefusalObservation, coverage_mismatches, observe_refusal
 from tests.support.scaffolding import build_hub, close_tenant
@@ -125,7 +128,9 @@ def test_runner_registration_and_reads_problem_variants(
                 principal: RunnerPrincipal = Depends(require_runner_principal),
                 tenant: AdmittedTenant = Depends(resolve_tenant),
             ) -> FleetRequest:
-                fleet = FleetRequest.of(request, principal, tenant)
+                fleet = FleetRequest.of(
+                    request, principal, tenant, config_for_request(request, hub.resolve_hub(HubConfigSource))
+                )
 
                 def missing_runner(_runner_id: str) -> None:
                     return None
@@ -141,10 +146,10 @@ def test_runner_registration_and_reads_problem_variants(
         observe(request(bearer(live)), 503, HubStoreUnavailableProblem)
 
     def close_before_resolution(request: Request) -> AdmittedTenant:
-        principal = RunnerAuth.of(request).demand()
+        principal = RunnerAuth.of(request, machine_for(hub.process)).demand()
         close_tenant(hub.engine, principal.tenant_id)
         hub.resolve_hub(OpenTenants).refresh()
-        return resolve_tenant(request)
+        return admission_for(request, hub.process)
 
     hub.app.dependency_overrides[resolve_tenant] = close_before_resolution
     observe(request(bearer(live)), 404, TenantNotFoundProblem)

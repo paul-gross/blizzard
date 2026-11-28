@@ -44,13 +44,15 @@ def register(registry: Registry) -> None:
 def register_tenants(registry: Registry) -> None:
     """Declare the open tenants held in memory over the store's open-tenant read — what a request's tenant is resolved
     against — and the notice a change to the tenant set gives them."""
-    registry.factory(open_tenants, lifetime=Lifetime.PROCESS)
+    tenants = registry.factory(open_tenants, lifetime=Lifetime.PROCESS)
+    registry.optional(port(OpenTenants), tenants, lifetime=Lifetime.PROCESS)
     registry.factory(tenant_set_changed, lifetime=Lifetime.PROCESS)
 
 
 def register_tenants_absent(registry: Registry) -> None:
     """Declare the open tenants and their notice absent, for the store-free graph."""
     registry.absent(port(OpenTenants), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+    registry.optional(port(OpenTenants), None, lifetime=Lifetime.PROCESS)
     registry.absent(port(cast("type[Any]", TenantSetChanged)), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
 
 

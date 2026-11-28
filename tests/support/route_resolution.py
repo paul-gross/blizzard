@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from types import UnionType
 from typing import Annotated, Any, cast, get_args, get_origin, get_type_hints
 
 from dishka import FromDishka
@@ -34,7 +35,7 @@ class RouteDependency:
 
     route: str
     tenant: bool
-    dependency: type[Any]
+    dependency: type[Any] | UnionType
 
 
 def _calls(dependant: Dependant) -> Iterator[Callable[..., Any]]:
@@ -44,7 +45,7 @@ def _calls(dependant: Dependant) -> Iterator[Callable[..., Any]]:
         yield from _calls(child)
 
 
-def _container_types(call: Callable[..., Any]) -> Iterator[type[Any]]:
+def _container_types(call: Callable[..., Any]) -> Iterator[type[Any] | UnionType]:
     original = getattr(call, "__dishka_orig_func__", None)
     if original is None:
         return
@@ -60,7 +61,7 @@ def route_dependencies(app: FastAPI) -> list[RouteDependency]:
         calls = list(_calls(route.dependant))
         tenant = tenant_request in calls
         name = f"{sorted(route.methods or ())[0]} {route.path}"
-        seen: set[type[Any]] = set()
+        seen: set[type[Any] | UnionType] = set()
         for call in calls:
             for dependency in _container_types(call):
                 if dependency not in seen:
@@ -86,7 +87,8 @@ def unresolved_route_dependencies(dependencies: list[RouteDependency], process: 
                 resolver.get(each.dependency)
             except Exception as error:  # every refusal is a finding this gate reports
                 where = "a tenant request" if each.tenant else "the process"
-                problems.append(f"{each.route}: {each.dependency.__qualname__} in {where}: {type(error).__name__}")
+                name = str(each.dependency) if isinstance(each.dependency, UnionType) else each.dependency.__qualname__
+                problems.append(f"{each.route}: {name} in {where}: {type(error).__name__}")
     finally:
         request.close()
         tenant.close()

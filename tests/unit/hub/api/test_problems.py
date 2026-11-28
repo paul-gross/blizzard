@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any, cast
 from unittest.mock import MagicMock
 
@@ -314,10 +315,16 @@ def test_real_idp_refusals_render_their_declared_problems() -> None:
     request = MagicMock()
     request.url.path = "/api/auth/jwks.json"
     request.app.state.config.auth.mode = "none"
-    disabled = idp.jwks(request)
+    request.state.dishka_container.get.return_value = None
+    # Dishka removes injected arguments from the runtime wrapper's call signature.
+    jwks = cast(Callable[..., Any], idp.jwks)
+    authorize = cast(Callable[..., Any], idp.authorize)
+    disabled = jwks(request=request)
     request.url.path = "/api/auth/authorize"
     request.app.state.config.auth.mode = "oauth"
-    response_mode = idp.authorize(request, client="r", redirect_uri="/callback", state="s", response_mode="invalid")
+    response_mode = authorize(
+        request=request, machine=MagicMock(), client="r", redirect_uri="/callback", state="s", response_mode="invalid"
+    )
     assert isinstance(disabled, JSONResponse)
     assert isinstance(response_mode, JSONResponse)
     assert (

@@ -9,21 +9,24 @@ through that tenant's own registry.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import Annotated
 
-from fastapi import Request
+from dishka.integrations.fastapi import FromDishka, inject_sync
+from fastapi import Depends, Request
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.attributes import CALLER, annotate
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.api import problems
 from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.problem_exceptions import ProblemFactory, ProblemHTTPException
-from blizzard.hub.api.resolution import hub_process
+from blizzard.hub.api.resolution import unavailable_service
+from blizzard.hub.auth.credential_reads import MachineCredentialReads
 from blizzard.hub.domain.observability.tracing.attributes import RUNNER_ID, RUNNER_NAME
 from blizzard.hub.domain.runners.host import Host, IReadHostRegistry
 from blizzard.hub.domain.runners.registration import (
@@ -32,10 +35,7 @@ from blizzard.hub.domain.runners.registration import (
     RunnerTokenRefused,
     refuse_runner_token,
 )
-from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
-
-if TYPE_CHECKING:
-    from blizzard.hub.process_root import HubProcess
+from blizzard.hub.tenancy import STORE_UNAVAILABLE, TenantClosed, TenantId, UnknownTenant
 
 _log = get_logger("blizzard.hub.auth")
 
@@ -80,40 +80,71 @@ def resolved_runner(request: Request) -> RunnerPrincipal | None:
     return request.scope.get(_PRINCIPAL_SCOPE_KEY)
 
 
+class TenantRunnerRegistries:
+    """Opens the canonical runner read registry of a tenant."""
+
+    def __init__(self) -> None:
+        self._open: Callable[[TenantId], IReadRunnerRegistry] | None = None
+
+    def bind(self, open: Callable[[TenantId], IReadRunnerRegistry]) -> None:
+        self._open = open
+
+    def __call__(self, tenant: TenantId) -> IReadRunnerRegistry:
+        assert self._open is not None
+        return self._open(tenant)
+
+
+class TenantHostRegistries:
+    """Opens the canonical host read registry of a tenant."""
+
+    def __init__(self) -> None:
+        self._open: Callable[[TenantId], IReadHostRegistry] | None = None
+
+    def bind(self, open: Callable[[TenantId], IReadHostRegistry]) -> None:
+        self._open = open
+
+    def __call__(self, tenant: TenantId) -> IReadHostRegistry:
+        assert self._open is not None
+        return self._open(tenant)
+
+
+@collaborator
 @dataclass(frozen=True)
 class MachineCredentials:
-    """The seams a runner or host bearer token resolves through: the hub process's credential reads, which span
-    tenants and name a token's tenant, and its tenant containers, which the registration is then read from."""
+    """Hub credential reads and the two typed tenant registry accessors."""
 
-    process: HubProcess
-
-    @classmethod
-    def of(cls, request: Request) -> MachineCredentials:
-        """The credential seams of the hub process ``request`` reached, resolved from its process scope."""
-        return cls(hub_process(request))
+    reads: MachineCredentialReads | None
+    runners: TenantRunnerRegistries
+    hosts: TenantHostRegistries
 
     @property
     def credentials(self):
-        """The hub-scoped credential reads, spanning tenants."""
-        return self.process.credentials
+        """The hub-scoped credential reads, or the store's unavailability."""
+        return self._require_reads()
+
+    def _require_reads(self) -> MachineCredentialReads:
+        if self.reads is None:
+            unavailable_service(STORE_UNAVAILABLE)
+        return self.reads
 
     def runner(self, tenant: TenantId, runner_id: str) -> RunnerRegistration | None:
-        """``runner_id``'s registration, read through the registry of ``tenant`` — the tenant a credential resolved it
-        to — or ``None`` when that tenant has no registration of it or no stores to open."""
         try:
-            registry = self.process.tenants.resolve(StoreScope(tenant), IReadRunnerRegistry)
+            return self.runners(tenant).get_runner(runner_id)
         except (UnknownTenant, TenantClosed):
             return None
-        return registry.get_runner(runner_id)
 
     def host(self, tenant: TenantId, host_id: str) -> Host | None:
-        """``host_id``'s record, read through the host registry of ``tenant`` — the tenant a credential resolved it
-        to — or ``None`` when that tenant has no such host or no stores to open."""
         try:
-            registry = self.process.tenants.resolve(StoreScope(tenant), IReadHostRegistry)
+            return self.hosts(tenant).get_host(host_id)
         except (UnknownTenant, TenantClosed):
             return None
-        return registry.get_host(host_id)
+
+
+@inject_sync
+def machine_credentials(
+    machine: FromDishka[MachineCredentials],
+) -> MachineCredentials:
+    return machine
 
 
 @dataclass(frozen=True)
@@ -124,8 +155,8 @@ class RunnerAuth:
     machine: MachineCredentials
 
     @classmethod
-    def of(cls, request: Request) -> RunnerAuth:
-        return cls(request, MachineCredentials.of(request))
+    def of(cls, request: Request, machine: MachineCredentials) -> RunnerAuth:
+        return cls(request, machine)
 
     @property
     def principal(self) -> RunnerPrincipal | None:  # ast-grep-ignore: bzh:property-delegates
@@ -169,8 +200,8 @@ class RunnerAuth:
             if registration is not None and not allow_retired:
                 registration.refuse_if_retired(action="fleet call")
             return principal
-        token = presented_bearer(self.request)
         credentials = self.machine.credentials
+        token = presented_bearer(self.request)
         if token is not None and credentials.revoked_token_runner(TokenHash(token).hex) is not None:
             _log.warning("revoked runner token presented", path=self.request.url.path)
             raise ProblemHTTPException(problems.authentication_revoked_problem)
@@ -235,8 +266,8 @@ class HostAuth:
     machine: MachineCredentials
 
     @classmethod
-    def of(cls, request: Request) -> HostAuth:
-        return cls(request, MachineCredentials.of(request))
+    def of(cls, request: Request, machine: MachineCredentials) -> HostAuth:
+        return cls(request, machine)
 
     @property
     def principal(self) -> HostPrincipal | None:  # ast-grep-ignore: bzh:property-delegates
@@ -270,8 +301,8 @@ class HostAuth:
             if host is not None:
                 host.refuse_if_retired(action="host call")
             return principal
-        token = presented_bearer(self.request)
         credentials = self.machine.credentials
+        token = presented_bearer(self.request)
         if token is not None and credentials.revoked_token_host(TokenHash(token).hex) is not None:
             _log.warning("revoked host token presented", path=self.request.url.path)
             raise ProblemHTTPException(problems.authentication_revoked_problem)
@@ -331,18 +362,26 @@ def host_signing_in(machine: MachineCredentials, client: str) -> HostSigningIn |
     return None if host is None else HostSigningIn(resolved.tenant, host)
 
 
-def require_runner_principal(request: Request) -> RunnerPrincipal:
-    return RunnerAuth.of(request).demand()
+def require_runner_principal(
+    request: Request, machine: Annotated[MachineCredentials, Depends(machine_credentials)]
+) -> RunnerPrincipal:
+    return RunnerAuth.of(request, machine).demand()
 
 
-def require_runner_principal_even_if_retired(request: Request) -> RunnerPrincipal:
+def require_runner_principal_even_if_retired(
+    request: Request, machine: Annotated[MachineCredentials, Depends(machine_credentials)]
+) -> RunnerPrincipal:
     """The runner principal without the retirement refusal: a retired runner's token still resolves."""
-    return RunnerAuth.of(request).demand(allow_retired=True)
+    return RunnerAuth.of(request, machine).demand(allow_retired=True)
 
 
-def reject_runner_principal(request: Request) -> None:
-    RunnerAuth.of(request).refuse_runner()
+def reject_runner_principal(
+    request: Request, machine: Annotated[MachineCredentials, Depends(machine_credentials)]
+) -> None:
+    RunnerAuth.of(request, machine).refuse_runner()
 
 
-def require_host_principal(request: Request) -> HostPrincipal:
-    return HostAuth.of(request).demand()
+def require_host_principal(
+    request: Request, machine: Annotated[MachineCredentials, Depends(machine_credentials)]
+) -> HostPrincipal:
+    return HostAuth.of(request, machine).demand()
