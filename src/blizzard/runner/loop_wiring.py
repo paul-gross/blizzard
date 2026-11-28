@@ -20,8 +20,8 @@ from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.foundation.roles import collaborator, domain_model
-from blizzard.runner.composition import HostProcess, RunnerProcess
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.composition import HostRecordsReconcile, RunnerProcess
+from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.environments.internal.git import SubprocessEnvGit
 from blizzard.runner.environments.internal.subprocess_worktree_git import WORKTREE_GIT_TIMEOUT, SubprocessWorktreeGit
 from blizzard.runner.events.broker import EventBroker
@@ -43,6 +43,8 @@ from blizzard.runner.host_layout import (
     WORKER_STDOUT_DIRNAME,
 )
 from blizzard.runner.host_root import build_runner_process
+from blizzard.runner.host_settings_reader import HostSettingsInForce
+from blizzard.runner.hosting.retirement import RetirementNotices
 from blizzard.runner.hub.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.hub.client import BindingDeclaration, IHubClient, ITokenIdentityReader
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHubClient
@@ -59,6 +61,7 @@ from blizzard.runner.lifecycle.session_reconcile import SessionReconcile
 from blizzard.runner.lifecycle.shutdown_drain import ShutdownDrain
 from blizzard.runner.lifecycle.takeover import TakeoverRecovery
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription, lease_transcript_source
+from blizzard.runner.loop.host_tick import HostTickInForce
 from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.loop.step_passes import HostPassStepper, PassResult, StepLock, TickInProgress, ended
 from blizzard.runner.loop.tick import tick
@@ -740,31 +743,39 @@ class RunnerStepper:
             return self._ctx
 
 
-def host_pass_stepper(host: HostProcess, reconcile: Callable[[], None] | None = None) -> HostPassStepper:
+def host_pass_stepper(
+    tick_in_force: HostTickInForce[SubscriptionDeclaration],
+    *,
+    clock: IClock,
+    settings: HostSettingsInForce | None,
+    records: HostRecordsReconcile | None,
+    retirements: RetirementNotices,
+    reconcile: Callable[[], None] | None = None,
+) -> HostPassStepper:
     """The host's pass: the host record's snapshot and the reconcile of its workspaces and subscriptions with it, then
     ``reconcile`` of its live runners against its hosted ones, then the host tick — reconciling again right after
     the registration step whenever that step recorded a runner retired, so a hub-side retirement drains in the pass
     that notices it."""
 
     def after_report() -> None:
-        if reconcile is not None and host.retirements.take():
+        if reconcile is not None and retirements.take():
             reconcile()
 
     def run() -> None:
         # The host record's snapshot first: its tool profile is in force for every tool child this pass launches.
-        if host.host_settings is not None:
-            effective = host.host_settings.take()
-            taken = host.host_settings.taken
+        if settings is not None:
+            effective = settings.take()
+            taken = settings.taken
             # Then the host's workspaces and subscriptions, so this pass's report and every runner's next tick
             # read them as the records stand.
-            if host.records_reconcile is not None and taken is not None:
-                host.records_reconcile.run(effective, taken)
+            if records is not None and taken is not None:
+                records.run(effective, taken)
         if reconcile is not None:
-            host.retirements.take()
+            retirements.take()
             reconcile()
-        host.host_tick.run(after_report)
+        tick_in_force.current().run(after_report)
 
-    return HostPassStepper(run, clock=host.clock, log=get_logger("blizzard.runner.subscriptions"), label="host tick")
+    return HostPassStepper(run, clock=clock, log=get_logger("blizzard.runner.subscriptions"), label="host tick")
 
 
 class PeriodicDriver:

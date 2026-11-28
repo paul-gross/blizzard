@@ -321,6 +321,10 @@ def test_no_hub_root_registers_anything_itself() -> None:
     assert root_registration_violations(_SRC) == []
 
 
+def test_host_root_composes_without_registering() -> None:
+    assert root_registration_violations(_SRC, (Path("runner/host_root.py"),)) == []
+
+
 def test_the_area_root_gate_fails_a_registration_planted_in_each_root(tmp_path: Path) -> None:
     planted = {
         Path("hub/process_root.py"): "def register_hub(registry):\n    registry.service(Store, lifetime=1)\n",

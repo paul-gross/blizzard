@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
-from blizzard.foundation.registry.interface import Ref, Registry, port
+from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
 from blizzard.runner.lifecycle.artifacts import IReadGraphArtifactRepository, IWriteGraphArtifactRepository
 from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository, IWriteDaemonLivenessRepository
+from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain, host_lane_drain
+
+
+def register_host_infrastructure(registry: Registry, *, registered: bool) -> None:
+    drain = registry.factory(host_lane_drain, lifetime=Lifetime.PROCESS) if registered else None
+    registry.optional(port(HostLaneDrain), drain, lifetime=Lifetime.PROCESS)
 
 
 def register_host_store_ports(

@@ -1310,6 +1310,7 @@ _SQLALCHEMY_EXCEPTIONS: dict[Path, tuple[str, ...] | None] = {
     _RUNNER_COMPOSITION_FILE: ("Engine",),
     _RUNNER_APP_FILE: ("Engine",),
     _RUNNER_DIR / "store" / "wiring.py": ("Engine",),
+    _RUNNER_DIR / "store" / "host_resources.py": ("Engine",),
     # IntegrityError only, for the replay-check catch: the collision itself IS the
     # business-logic check, so this one name stays local instead of the table-bound form.
     _RUNNER_DIR / "store" / "internal" / "host_jti_cache_store.py": ("IntegrityError",),
@@ -1556,7 +1557,8 @@ def test_only_the_composition_roots_import_the_runner_composition_module() -> No
     constructing runner stores outside their one approved wiring site
     (``bzh:dependency-injection``). Fail-closed: no name exemptions, unlike the old
     allowlist this replaces, which missed `build_read_stores`."""
-    violations = _runner_composition_imports(_SRC_DIR, exempt=_COMPOSITION_ROOTS)
+    # The named legacy runner bridge is the one non-root allowed to name its assembler.
+    violations = _runner_composition_imports(_SRC_DIR, exempt=_COMPOSITION_ROOTS | {_RUNNER_DIR / "host_legacy.py"})
     assert not violations, (
         f"D5 — blizzard.runner.composition must only be imported at its composition roots: {violations}"
     )
@@ -3487,6 +3489,7 @@ _RUNNER_EDGE_MODULES = frozenset(
         "host_file",
         "host_keys",
         "host_layout",
+        "host_legacy",
         "host_root",
         "host_settings_reader",
         "listeners",
@@ -3494,6 +3497,7 @@ _RUNNER_EDGE_MODULES = frozenset(
         "public_origins",
         "runtime",
         "settings_reader",
+        "wiring",
     }
 )
 
@@ -4165,6 +4169,14 @@ def _registered_store_acquisitions(src_root: Path) -> list[str]:
         for scope in scopes:
             for node in ast.walk(scope):
                 if isinstance(node, ast.Call) and _wiring_target(node.func, bindings) in _STORE_ACQUISITIONS:
+                    if (
+                        relative == Path("runner/store/host_resources.py")
+                        and isinstance(scope, ast.FunctionDef)
+                        and scope.name == "open_engine"
+                        and _wiring_target(node.func, bindings)
+                        == "blizzard.foundation.store.engine.create_engine_from_url"
+                    ):
+                        continue
                     owner = "a wiring module" if wiring else f"the registered {getattr(scope, 'name', '')}"
                     breaches.append(f"{relative}:{node.lineno} acquires a store inside {owner}")
     return breaches

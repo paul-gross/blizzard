@@ -72,6 +72,16 @@ class Borrowed:
     runners: tuple[RunnerProcess, ...] = ()
     halted: tuple[HaltedRunner, ...] = ()
 
+    @property
+    def clock(self) -> object:
+        return object()
+
+    @property
+    def host_stores(self) -> object:
+        from types import SimpleNamespace
+
+        return SimpleNamespace(usage_limits=object())
+
     def close(self) -> None:
         self.journal.note("close:borrowed-host")
 

@@ -423,14 +423,14 @@ _OTEL_ENABLEMENT = (
 )
 
 
-def _refuse_construction(**_: object) -> None:
+def _refuse_construction(*args: object, **kwargs: object) -> None:
     raise AssertionError("no trace exporter may be built while tracing is off")
 
 
 def test_the_hosted_app_builds_no_exporter_without_an_endpoint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     for name in _OTEL_ENABLEMENT:
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr(hub_app, "OtlpTraceExporter", _refuse_construction)
+    monkeypatch.setattr(hub_app, "otlp_trace_exporter", _refuse_construction)
 
     app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
 
@@ -445,11 +445,11 @@ def test_the_hosted_app_wires_the_sweep_when_an_endpoint_enables_tracing(
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:9")
     built: list[InMemoryTraceExporter] = []
 
-    def construct(**_: object) -> InMemoryTraceExporter:
+    def construct(*args: object, **kwargs: object) -> InMemoryTraceExporter:
         built.append(InMemoryTraceExporter())
         return built[-1]
 
-    monkeypatch.setattr(hub_app, "OtlpTraceExporter", construct)
+    monkeypatch.setattr(hub_app, "otlp_trace_exporter", construct)
 
     app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
 

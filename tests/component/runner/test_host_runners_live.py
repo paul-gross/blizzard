@@ -196,7 +196,7 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[_World]:
     monkeypatch.setattr(loop_wiring, "tick", ticks)
     config, host, hosted = _boot(tmp_path)
     registration = _Registration()
-    host.host_tick = HostTick(registration=cast(Any, registration))
+    host.tick_in_force.hold(HostTick(registration=cast(Any, registration)), host.tick_in_force.subscriptions())
     world = _World(tmp_path, url, config, host, hosted, ticks, registration)
     try:
         yield world

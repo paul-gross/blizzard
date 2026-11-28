@@ -1662,7 +1662,7 @@ def _serve_host(
 
         # Report once before any runner ticks, so a runner the hub released under this host never claims across a
         # restart; a report that fails or times out starts the runners anyway.
-        host.host_tick.report()
+        host.tick_in_force.current().report()
         reconciled = True
         for live in hosted.runners.live():
             if live.wired is not None and live.drivers is None:
@@ -1693,7 +1693,16 @@ def host_tick_driver(
     interval it waits between passes, and ``stepper`` the host pass it
     drives, else one built over the host's tick."""
     return PeriodicPassDriver(
-        (stepper or host_pass_stepper(host)).timed,
+        (
+            stepper
+            or host_pass_stepper(
+                host.tick_in_force,
+                clock=host.clock,
+                settings=host.host_settings,
+                records=host.records_reconcile,
+                retirements=host.retirements,
+            )
+        ).timed,
         name="blizzard-host-tick",
         label="host tick",
         log=get_logger("blizzard.runner.subscriptions"),

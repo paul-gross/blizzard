@@ -15,3 +15,9 @@ class ITraceExporter(Protocol):
     def export(self, spans: Sequence[FinishedSpan]) -> bool:
         """Send one batch; ``True`` only when the backend accepted it."""
         ...
+
+
+class IOwnedTraceExporter(ITraceExporter, Protocol):
+    """A trace transport created for, and closed by, its owning scope."""
+
+    def close(self) -> None: ...

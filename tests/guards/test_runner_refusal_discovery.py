@@ -419,6 +419,14 @@ def test_real_boundary_rejects_new_http_adapter_and_escaped_transport(tmp_path: 
     adapter.write_text(original + "\ndef planted():\n return httpx2.Client()\n")
     _, unknown = runner_boundary(tmp_path)
     assert any("http_hub.py" in item and "HTTP client construction count changed" in item for item in unknown)
+    adapter.write_text(original)
+    host_transport = runner / "hub/internal/host_infrastructure.py"
+    host_original = host_transport.read_text()
+    host_transport.write_text(host_original + "\ndef planted():\n return httpx2.Client()\n")
+    _, unknown = runner_boundary(tmp_path)
+    assert any(
+        "host_infrastructure.py" in item and "HTTP client construction count changed" in item for item in unknown
+    )
 
 
 def test_renamed_proxy_and_client_receivers_and_unknown_receiver_are_visible() -> None:

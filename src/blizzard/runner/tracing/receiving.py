@@ -65,6 +65,19 @@ class ReceiverTracing:
     mapped_services: Mapping[str, str] = field(default_factory=dict[str, str])
 
 
+class ReceiverTracingInForce:
+    """The live tracing settings read by the one host receiver."""
+
+    def __init__(self, read: Callable[[], ReceiverTracing]) -> None:
+        self._read = read
+
+    def current(self) -> ReceiverTracing:
+        return self._read()
+
+    def hold(self, read: Callable[[], ReceiverTracing]) -> None:
+        self._read = read
+
+
 @dataclass(frozen=True)
 class TelemetryReceiver:
     """One worker telemetry export's orchestration, over the host's limiters and tallies. Each call names its

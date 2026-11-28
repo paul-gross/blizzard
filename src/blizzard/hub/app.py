@@ -43,7 +43,7 @@ from blizzard.foundation.secrets.rotation import RotationResult
 from blizzard.foundation.secrets.sealing import IRotatableKeyProvider
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.trace_attributes import CHUNK_ID
-from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
+from blizzard.foundation.trace_export import otlp_trace_exporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.web import Frontend, install_schema_components
 from blizzard.hub.api import problems
@@ -837,8 +837,8 @@ def build_hosted_app(
             oauth_http_client=oauth_http_client,
             # No exporter is built unless OpenTelemetry's own variables enable tracing.
             trace_exporter=(
-                OtlpTraceExporter(
-                    resource=resource_attributes(os.environ, __version__),
+                otlp_trace_exporter(
+                    resource_attributes(os.environ, __version__),
                     scope=INSTRUMENTATION_SCOPE,
                     scope_version=INSTRUMENTATION_SCOPE_VERSION,
                 )

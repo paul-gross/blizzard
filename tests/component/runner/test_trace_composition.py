@@ -20,6 +20,7 @@ from blizzard.runner.host_root import build_runner_process
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.tracing.config import RunnerTracingConfig
+from blizzard.runner.tracing.runner_export import RunnerTraceExport
 from blizzard.runner.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
 from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -30,7 +31,7 @@ from tests.support.runner_fakes import (
 )
 from tests.support.runner_trace_leases import closed_lease
 from tests.support.scaffolding import InMemoryTraceExporter
-from tests.support.standalone import standalone_of, standalone_runner
+from tests.support.standalone import open_standalone_of, standalone_of, standalone_runner
 
 _ENDPOINT = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}
 
@@ -114,6 +115,26 @@ def test_an_endpoint_without_an_injected_exporter_binds_otlp(tmp_path: Path) -> 
         assert isinstance(graph.trace_sweep, LeaseTraceSweep)
     finally:
         graph.close()
+
+
+@pytest.mark.parametrize(("enabled", "injected"), [(False, False), (True, False), (True, True)])
+def test_runner_uses_its_registered_trace_binding(tmp_path: Path, enabled: bool, injected: bool) -> None:
+    config, _ = _config(tmp_path)
+    opened = open_standalone_of(
+        config,
+        runner_id=FIXTURE_RUNNER_ID,
+        environ=_ENDPOINT if enabled else {},
+        trace_exporter=InMemoryTraceExporter() if injected else None,
+    )
+    try:
+        (runner,) = opened.runners
+        (child,) = opened.children
+        trace = child.resolver.get(RunnerTraceExport)
+        assert runner.trace_export is trace
+        assert (trace.exporter is not None) is enabled
+        assert (runner.trace_sweep is not None) is enabled
+    finally:
+        opened.close()
 
 
 def test_runner_tick_never_drives_the_sweep(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

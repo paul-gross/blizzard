@@ -821,6 +821,7 @@ def outbound_seam_unknowns(runner: Path) -> list[str]:
         "auth/internal/http_hub_auth_mode.py",
         "auth/internal/http_jwks_cache.py",
         "hub/internal/http_hub.py",
+        "hub/internal/host_infrastructure.py",
         "transcripts/internal/http_archived_transcript_repository.py",
         "subscriptions/internal/usage_http_client.py",
         "subscriptions/internal/anthropic_subscription_sampler.py",
@@ -838,7 +839,8 @@ def outbound_seam_unknowns(runner: Path) -> list[str]:
     # Counts intentionally flag a new constructor even in an existing owner file.
     client_constructors = {
         "app.py": 5,
-        "composition.py": 2,
+        "composition.py": 1,
+        "hub/internal/host_infrastructure.py": 1,
         "loop_wiring.py": 2,
         "subscriptions/internal/usage_http_client.py": 1,
     }

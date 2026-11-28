@@ -26,10 +26,9 @@ from blizzard.foundation.clock import (
     IMonotonicClock,
     SystemClock,
     SystemMonotonicClock,
-    local_zone,
     resolve_clock,
 )
-from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags, warn_held_keys, warn_ignored_flags
+from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import (
     DisabledPlatformTracing,
@@ -38,6 +37,7 @@ from blizzard.foundation.platform_tracing.handle import (
 )
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
 from blizzard.foundation.registry.interface import Lifetime, port
+from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import OwnedChild, ScopeValues, open_child, supply
 from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.foundation.runner_start_step import RunnerStartStep
@@ -45,12 +45,10 @@ from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.sealing import ISecretCipher, SealedValue
 from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.foundation.store.factories import store_status_reader
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.foundation.store.readiness import Readiness, ReadinessService
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
-from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.config import (
     HostWorkspace,
@@ -161,18 +159,15 @@ from blizzard.runner.hub.sealed_tokens import (
     StoredTokenState,
 )
 from blizzard.runner.hub.served_projects import ServedProjectsAnswer
-from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain
 from blizzard.runner.lifecycle.registration import ISeedRunnerSettings
 from blizzard.runner.listeners import Listeners
-from blizzard.runner.loop.host_tick import HostTick
+from blizzard.runner.loop.host_tick import HostTick, HostTickInForce
 from blizzard.runner.loop.wake import WakeSignals
 from blizzard.runner.process.child_env import ChildEnv, IToolProfile, ToolProfileHolder
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 from blizzard.runner.runtime import (
     StoreResetRefused,
-    migration_runner,
     runner_store_migrations,
     set_aside_sqlite,
     sqlite_store_file,
@@ -222,7 +217,7 @@ from blizzard.runner.store.internal.usage_limit_store import RunnerUsageLimitSto
 from blizzard.runner.store.internal.usage_store import UsageStore
 from blizzard.runner.store.runner_guard import install_runner_guard
 from blizzard.runner.store.scoped import RunnerStoreConnections
-from blizzard.runner.store.wiring import build_host_stores, runner_invariant_checker
+from blizzard.runner.store.wiring import build_host_stores
 from blizzard.runner.store.wiring import host_stores as _build_host_stores
 from blizzard.runner.stores import HostReadStores, HostStores, IRunnerAudit, RunnerReadStores, RunnerStores
 from blizzard.runner.subscriptions.internal.credential_renewer_factory import select_renewer
@@ -230,12 +225,8 @@ from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import S
 from blizzard.runner.subscriptions.internal.subscription_sampler_factory import select_sampler
 from blizzard.runner.subscriptions.internal.usage_http_client import LazyUsageHttpClient
 from blizzard.runner.throttle.resample import FloorResampleTriggers
-from blizzard.runner.tracing.attributes import (
-    INSTRUMENTATION_SCOPE,
-    INSTRUMENTATION_SCOPE_VERSION,
-    resource_attributes,
-)
-from blizzard.runner.tracing.bounded_export import BoundedTraceExporter
+from blizzard.runner.tracing.attributes import resource_attributes
+from blizzard.runner.tracing.internal.runner_export import RunnerTraceExportFactory
 from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
@@ -248,8 +239,9 @@ from blizzard.runner.tracing.received_export import (
     build_received_telemetry_export,
 )
 from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
-from blizzard.runner.tracing.receiving import ReceiverTracing, TelemetryReceiver
+from blizzard.runner.tracing.receiving import ReceiverTracing, ReceiverTracingInForce, TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
+from blizzard.runner.tracing.runner_export import RunnerTraceExport, RunnerTraceOptions
 from blizzard.runner.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
 from blizzard.runner.transfer.host_files import IHostFiles
 from blizzard.runner.transfer.hosts import (
@@ -273,6 +265,7 @@ from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, Rene
 from blizzard.runner.usage.external_usage_sample import (
     ExternalUsageAttemptLane,
     ExternalUsageSamplePass,
+    IAttemptLaneRunner,
     SampledSubscription,
 )
 from blizzard.runner.usage.repository import IWriteExternalUsageAttemptRepository
@@ -296,19 +289,29 @@ class SeedingStore:
     tokens: Callable[[], HubTokens]
 
 
+class HostRunnerRoster:
+    """The runners currently held by a host, read by host-scoped passes."""
+
+    def __init__(self) -> None:
+        self._runners: tuple[RunnerProcess, ...] = ()
+
+    def current(self) -> tuple[RunnerProcess, ...]:
+        return self._runners
+
+    def hold(self, runners: tuple[RunnerProcess, ...]) -> None:
+        self._runners = runners
+
+
 @dataclass
 class HostProcess:
     """The per-host graph: the pieces one daemon shares across every runner it hosts, and the runners themselves.
 
-    The host reaches a runner only through :attr:`runners`; a runner reaches the host it was built over. Close after
-    every serving thread has stopped: closing the host closes each runner first, then disposes the engine and shuts
-    tracing down, so a runner's spawner thread and resume drain finish before the engine they write through goes.
+    The host reaches a runner only through :attr:`runners`; a runner reaches the host it was built over. Stop every
+    serving thread before closing; runner graphs close before the process scope and its owned resources.
     """
 
     engine: Engine
     readiness: ReadinessService
-    #: The host's own connections, never bound to a runner; ``host_stores`` runs over them.
-    connections: RunnerStoreConnections
     host_stores: HostStores
     listeners: Listeners
     #: The one holder of the host's workspace registry in force, and of the pool locks that outlive each rebuild.
@@ -325,18 +328,8 @@ class HostProcess:
     #: The worker telemetry receiver over the host's limiters, tallies and export — one per host, so every reader and
     #: writer of those counters shares them; each export names the runner it arrived under.
     telemetry_receiver: TelemetryReceiver
-    #: The span receiver's per-lease rate bound and its received/dropped tally, one of each per host.
-    span_limiter: SpanRateLimiter
-    receiver_counter: ReceiverCounter
-    #: The harness bindings' spans alone, counted apart from the shared span tally above.
-    harness_span_counter: ReceiverCounter
-    #: The metrics and logs receivers' own bound and tally, counted in data points and log records.
-    metric_bounds: ReceiverBounds
-    log_bounds: ReceiverBounds
-    #: What every declared binding's telemetry arrives under, which the receiver admits and routes by.
-    harness_telemetry_names: tuple[HarnessTelemetryNames, ...]
-    #: The pass the host's own thread runs: usage sampling and credential renewal.
-    host_tick: HostTick
+    #: The current host pass and subscriptions in force.
+    tick_in_force: HostTickInForce[SubscriptionDeclaration]
     #: The runner half of the invariant checker over every runner on the host, one run at a time.
     invariants: HostInvariantCheck
     #: The one HTTP client every declared subscription's sampler shares, built on first use and closed with the host.
@@ -344,15 +337,14 @@ class HostProcess:
     #: Every flag the fleet declares, and the host's own resolved answer — what its ``GET /api/flags`` publishes.
     flag_registry: FlagRegistry
     flags: Flags
+    infrastructure: OwnedChild = field(repr=False)
     #: Platform spans — disabled unless a handle is supplied; every collaborator opens spans through it.
     platform_tracing: IPlatformTracing = field(default_factory=DisabledPlatformTracing)
     #: Where admitted metrics and logs leave — disabled unless a handle is supplied.
     received_telemetry: IReceivedTelemetryExport = field(default_factory=DisabledReceivedTelemetryExport)
-    runners: tuple[RunnerProcess, ...] = ()
+    runner_roster: HostRunnerRoster = field(default_factory=HostRunnerRoster)
     #: The runners the host file declares that were left unbuilt by their own errors; the host serves without them.
     halted: tuple[HaltedRunner, ...] = ()
-    #: The subscriptions the host serves, set again by the host tick whenever a subscription record moves.
-    subscriptions: tuple[SubscriptionDeclaration, ...] = ()
     #: The host tick's per-pass reconcile of its workspaces and subscriptions; ``None`` for a host keeping no records.
     records_reconcile: HostRecordsReconcile | None = None
     #: Who this host is at its hub; seeded from the store at boot, and handed the identity once it is first recorded.
@@ -361,8 +353,6 @@ class HostProcess:
     host_registration: HostRegistrationHolder = field(
         default_factory=lambda: HostRegistrationHolder.for_host(registered=False)
     )
-    #: The client the host's own hub calls go through, under its host token — ``None`` on a host with none.
-    host_hub_http_client: httpx2.Client | None = None
     #: The host's own hub calls over that client — ``None`` on a host with no host token.
     host_hub: IHostHubClient | None = None
     #: The tool profile every host tool child launches under — the workspaces' ``git`` and ``winter``, credential
@@ -382,44 +372,34 @@ class HostProcess:
     hub_tokens: HubTokens | None = None
     #: Whether the host tick's registration step recorded a runner retired, so the same pass drains it.
     retirements: RetirementNotices = field(default_factory=RetirementNotices)
-    _trace_exporters: list[tuple[ITraceExporter, BoundedTraceExporter]] = field(
-        default_factory=list[tuple[ITraceExporter, BoundedTraceExporter]], repr=False
-    )
-    _trace_exporters_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
-
-    def bounded_trace_exporter(self, exporter: ITraceExporter) -> BoundedTraceExporter:
-        """Share one transport guard for each injected exporter across this host's runners."""
-        with self._trace_exporters_lock:
-            for injected, bounded in self._trace_exporters:
-                if injected is exporter:
-                    return bounded
-            bounded = BoundedTraceExporter(exporter)
-            self._trace_exporters.append((exporter, bounded))
-            return bounded
+    root_managed: bool = field(default=False, repr=False)
+    infrastructure_transferred: bool = field(default=False, repr=False)
 
     def registered(self) -> bool:
         """Whether the host holds a host token: it reports itself, and its roster with it, so its runners declare
         no subscriptions of their own."""
         return self.host_registration.current().registered()
 
-    def current_subscriptions(self) -> tuple[SubscriptionDeclaration, ...]:
-        """The subscriptions the host serves now — read on each call, since the host tick sets them."""
-        return self.subscriptions
+    @property
+    def runners(self) -> tuple[RunnerProcess, ...]:
+        return self.runner_roster.current()
+
+    @runners.setter
+    def runners(self, runners: tuple[RunnerProcess, ...]) -> None:
+        self.runner_roster.hold(runners)
 
     def halted_runners(self) -> tuple[HaltedRunner, ...]:
         """The runners halted now — read on each call, since a host's runner set changes while it runs."""
         return self.halted
 
     def close(self) -> None:
+        if self.infrastructure_transferred:
+            return
         with contextlib.ExitStack() as closing:
-            closing.callback(self.platform_tracing.shutdown, PLATFORM_TRACING_SHUTDOWN_SECONDS)
-            closing.callback(self.received_telemetry.shutdown, PLATFORM_TRACING_SHUTDOWN_SECONDS)
-            closing.callback(self.engine.dispose)
-            closing.callback(self.usage_http_client.close)
-            if self.host_hub_http_client is not None:
-                closing.callback(self.host_hub_http_client.close)
-            for runner in self.runners:
-                closing.callback(runner.close_runner)
+            closing.callback(self.infrastructure.close)
+            if not self.root_managed:
+                for runner in self.runners:
+                    closing.callback(runner.close_runner)
 
 
 @dataclass(frozen=True)
@@ -443,6 +423,8 @@ class RunnerProcess:
     executor: ThreadPoolExecutor
     #: Whether OpenTelemetry's own variables enable lease tracing, read once for this runner.
     trace_settings: TracingSettings
+    #: The runner-owned trace-export binding, or the borrowed export's non-owning handle.
+    trace_export: RunnerTraceExport
     #: The lease-trace sweep — ``None`` unless tracing is enabled.
     trace_sweep: LeaseTraceSweep | None
     #: The operator's replay over the same assembly and exporter.
@@ -528,27 +510,27 @@ class RunnerProcess:
 
     @property
     def span_limiter(self) -> SpanRateLimiter:
-        return self.host.span_limiter
+        return self.host.telemetry_receiver.span_limiter
 
     @property
     def receiver_counter(self) -> ReceiverCounter:
-        return self.host.receiver_counter
+        return self.host.telemetry_receiver.span_counter
 
     @property
     def harness_span_counter(self) -> ReceiverCounter:
-        return self.host.harness_span_counter
+        return self.host.telemetry_receiver.harness_span_counter
 
     @property
     def metric_bounds(self) -> ReceiverBounds:
-        return self.host.metric_bounds
+        return self.host.telemetry_receiver.metric_bounds
 
     @property
     def log_bounds(self) -> ReceiverBounds:
-        return self.host.log_bounds
+        return self.host.telemetry_receiver.log_bounds
 
     @property
     def harness_telemetry_names(self) -> tuple[HarnessTelemetryNames, ...]:
-        return self.host.harness_telemetry_names
+        return self.host.telemetry_receiver.telemetry_names
 
     def close_runner(self) -> None:
         """Shut the spawner executor down, waiting for its running work, then close the identity client. Idempotent."""
@@ -558,7 +540,10 @@ class RunnerProcess:
             try:
                 self.identity_client.close()
             finally:
-                self.harness_sets.clear()
+                try:
+                    self.harness_sets.clear()
+                finally:
+                    self.trace_export.close()
 
     def close(self) -> None:
         try:
@@ -698,7 +683,7 @@ def _external_usage_sample_pass(
     host_stores: HostStores,
     clock: IClock,
     http_client: LazyUsageHttpClient,
-    runners: Callable[[], tuple[RunnerProcess, ...]],
+    runners: Callable[[], Sequence[IAttemptLaneRunner]],
     *,
     registration: ICurrentHostRegistration,
 ) -> ExternalUsageSamplePass | None:
@@ -713,7 +698,7 @@ def _sample_pass(
     sampled: Sequence[SampledSubscription],
     host_stores: HostStores,
     clock: IClock,
-    runners: Callable[[], tuple[RunnerProcess, ...]],
+    runners: Callable[[], Sequence[IAttemptLaneRunner]],
     *,
     registration: ICurrentHostRegistration,
 ) -> ExternalUsageSamplePass | None:
@@ -736,13 +721,29 @@ class HostRecordsReconcile:
 
     def __init__(
         self,
-        host: HostProcess,
         root: Path,
         *,
+        workspaces: HostWorkspaces,
+        children: IChildProcesses,
+        tool_profile: ToolProfileHolder,
+        stores: HostStores,
+        clock: IClock,
+        usage_http_client: LazyUsageHttpClient,
+        tick_in_force: HostTickInForce[SubscriptionDeclaration],
+        runners: Callable[[], Sequence[IAttemptLaneRunner]],
+        registration: ICurrentHostRegistration,
         retired_workspaces: Callable[[HostSettingsSnapshot], tuple[HostWorkspace, ...]],
     ) -> None:
-        self._host = host
         self._root = root
+        self._workspaces = workspaces
+        self._children = children
+        self._tool_profile = tool_profile
+        self._stores = stores
+        self._clock = clock
+        self._usage_http_client = usage_http_client
+        self._tick_in_force = tick_in_force
+        self._runners = runners
+        self._registration = registration
         self._retired_workspaces = retired_workspaces
         self._log = get_logger("blizzard.runner.loop")
         self._workspaces_at: tuple[tuple[str, int], ...] | None = None
@@ -769,20 +770,19 @@ class HostRecordsReconcile:
         at = tuple((record.key, record.revision) for record in (*records.workspaces, *records.retired_workspaces))
         if at == self._workspaces_at:
             return
-        host = self._host
-        current = host.workspaces.current()
+        current = self._workspaces.current()
         registry = build_workspaces(
             effective.workspaces,
             self._root,
-            launch=WorkspaceLaunch(children=host.children, env=host.tool_profile),
-            audit=host.host_stores.runner_audit,
-            locks=host.workspaces.locks,
+            launch=WorkspaceLaunch(children=self._children, env=self._tool_profile),
+            audit=self._stores.runner_audit,
+            locks=self._workspaces.locks,
             revisions=dict(at),
             # The registry the host was composed with carries no record revisions, so the first pass builds each anew.
             keep=current if self._workspaces_at is not None else None,
             retired=self._retired_workspaces(snapshot),
         )
-        host.workspaces.set(registry)
+        self._workspaces.set(registry)
         if self._workspaces_at is not None:
             self._log.info("host workspaces rebuilt", workspaces=list(registry.ids()))
         self._workspaces_at = at
@@ -791,9 +791,8 @@ class HostRecordsReconcile:
         at = {record.key: record.revision for record in records.subscriptions}
         if at == self._subscriptions_at:
             return
-        host = self._host
         declared = {declaration.slug: declaration for declaration in effective.subscriptions}
-        subprocess = SubprocessOneShotProcess(host.children)
+        subprocess = SubprocessOneShotProcess(self._children)
         sampled: dict[str, SampledSubscription] = {}
         renewable: dict[str, RenewableSubscription | None] = {}
         for slug, declaration in declared.items():
@@ -804,29 +803,31 @@ class HostRecordsReconcile:
             ):
                 sampled[slug], renewable[slug] = self._sampled[slug], self._renewable.get(slug)
                 continue
-            sampled[slug] = sampled_subscription(declaration, host.clock, host.usage_http_client)
+            sampled[slug] = sampled_subscription(declaration, self._clock, self._usage_http_client)
             renewable[slug] = renewable_subscription(
-                declaration, host.clock, subprocess=subprocess, env=host.tool_profile
+                declaration, self._clock, subprocess=subprocess, env=self._tool_profile
             )
         first = self._subscriptions_at is None
-        self._sampled, self._renewable, self._subscriptions_at = sampled, renewable, at
-        if first and tuple(declared) == tuple(s.slug for s in host.subscriptions):
+        old_tick, old_subscriptions = self._tick_in_force.snapshot()
+        if first and tuple(declared) == tuple(s.slug for s in old_subscriptions):
             # The pass the host was composed with already serves these declarations.
+            self._sampled, self._renewable, self._subscriptions_at = sampled, renewable, at
             return
-        host.subscriptions = tuple(declared.values())
-        host.host_tick = replace(
-            host.host_tick,
+        tick = replace(
+            old_tick,
             external_usage_sample=_sample_pass(
                 tuple(sampled.values()),
-                host.host_stores,
-                host.clock,
-                lambda: host.runners,
-                registration=host.host_registration,
+                self._stores,
+                self._clock,
+                self._runners,
+                registration=self._registration,
             ),
             credential_renewal=_renewal_pass(
-                tuple(r for r in renewable.values() if r is not None), host.host_stores, host.clock
+                tuple(r for r in renewable.values() if r is not None), self._stores, self._clock
             ),
         )
+        self._tick_in_force.hold(tick, tuple(declared.values()))
+        self._sampled, self._renewable, self._subscriptions_at = sampled, renewable, at
         self._log.info("host subscriptions rebuilt", subscriptions=list(declared))
 
 
@@ -943,7 +944,14 @@ class RunnerCompose:
     #: Whether each runner gets its settings reader; a standalone one's settings-reading verb attaches its own.
     settings: bool = True
 
-    def runner(self, host_config: HostConfig, host: HostProcess, built: BuiltRunner) -> RunnerProcess:
+    def runner(
+        self,
+        host_config: HostConfig,
+        host: HostProcess,
+        built: BuiltRunner,
+        *,
+        runner_trace_export: RunnerTraceExport | None = None,
+    ) -> RunnerProcess:
         """``built`` composed over ``host`` under these options."""
         return compose_runner(
             host_config,
@@ -954,6 +962,7 @@ class RunnerCompose:
             publish_bundle=built.id in self.publish,
             environ=self.environ,
             trace_exporter=self.trace_exporter,
+            runner_trace_export=runner_trace_export,
             settings=self.settings,
         )
 
@@ -969,6 +978,8 @@ def build_host_process(
     trace_platform: bool = False,
     tcp_socket: socket.socket | None = None,
     monotonic_clock: IMonotonicClock | None = None,
+    extend: Callable[[LegacyRegistry], None] | None = None,
+    extra_values: ScopeValues | None = None,
 ) -> HostProcess:
     """The host graph from its file, with no runner yet, its records reconciled; ``halted`` it keeps to report.
     ``trace_platform`` builds the tracing handles config and ``environ`` decide, else the given ones are used.
@@ -986,6 +997,8 @@ def build_host_process(
         trace_platform=trace_platform,
         host_token=host.host_token.value,
         tcp_socket=tcp_socket,
+        extend=extend,
+        extra_values=extra_values,
     )
     try:
         graph.host_settings = HostSettingsInForce(
@@ -1000,7 +1013,17 @@ def build_host_process(
         graph.host_settings_application = build_host_settings_application(graph, graph.host_settings.reader)
         if graph.host_settings.reader.records is not None:
             graph.records_reconcile = HostRecordsReconcile(
-                graph, host.root, retired_workspaces=graph.host_settings.reader.retired_workspaces
+                host.root,
+                workspaces=graph.workspaces,
+                children=graph.children,
+                tool_profile=graph.tool_profile,
+                stores=graph.host_stores,
+                clock=graph.clock,
+                usage_http_client=graph.usage_http_client,
+                tick_in_force=graph.tick_in_force,
+                runners=graph.runner_roster.current,
+                registration=graph.host_registration,
+                retired_workspaces=graph.host_settings.reader.retired_workspaces,
             )
         if graph.readiness.evaluate().ready:
             effective = graph.host_settings.take()
@@ -1008,8 +1031,8 @@ def build_host_process(
             if graph.records_reconcile is not None and graph.host_settings.taken is not None:
                 graph.records_reconcile.run(effective, graph.host_settings.taken)
         # Host entries read on use: each worker export is admitted under the host record's current revision.
-        graph.telemetry_receiver = replace(
-            graph.telemetry_receiver, tracing=graph.host_settings.reader.live(_receiver_tracing)
+        graph.infrastructure.resolver.get(ReceiverTracingInForce).hold(
+            graph.host_settings.reader.live(_receiver_tracing)
         )
         graph.halted = tuple(halted)
         graph.readiness = HostReadiness(
@@ -1018,8 +1041,11 @@ def build_host_process(
             halted=graph.halted_runners,
         )
         return graph
-    except BaseException:
-        graph.close()
+    except BaseException as failure:
+        try:
+            graph.close()
+        except BaseException as cleanup:
+            failure.add_note(f"closing the host after initialization also failed: {cleanup!r}")
         raise
 
 
@@ -1033,6 +1059,8 @@ def build_host_of_one(
     received_telemetry: IReceivedTelemetryExport | None = None,
     host_token: str = "",
     monotonic_clock: IMonotonicClock | None = None,
+    extend: Callable[[LegacyRegistry], None] | None = None,
+    extra_values: ScopeValues | None = None,
 ) -> HostProcess:
     """The host a standalone command builds for one runner, from that runner's ``config``, with no runner on it yet;
     ``host_token`` is the host's own credential. The other arguments are :func:`build_host_process`'s."""
@@ -1047,6 +1075,8 @@ def build_host_of_one(
         received_telemetry=received_telemetry,
         trace_platform=False,
         host_token=host_token,
+        extend=extend,
+        extra_values=extra_values,
     )
 
 
@@ -1060,6 +1090,7 @@ def compose_runner(
     publish_bundle: bool = False,
     environ: Mapping[str, str] | None = None,
     trace_exporter: ITraceExporter | None = None,
+    runner_trace_export: RunnerTraceExport | None = None,
     settings: bool = True,
 ) -> RunnerProcess:
     """One runner composed over ``host`` and bound to ``built``'s id — its graph, its harness set, and, with
@@ -1072,6 +1103,7 @@ def compose_runner(
         publish_bundle=publish_bundle,
         environ=environ,
         trace_exporter=trace_exporter,
+        runner_trace_export=runner_trace_export,
         runner_id=built.id,
         token=built.token,
     )
@@ -1207,12 +1239,17 @@ class HostRunnerSet[W: IWiredRunner, R: IRunnerResume]:
         self._live: dict[str, LiveRunner[W, R]] = {}
         self._parent: OwnedChild | None = None
         self._eager: tuple[type[Any], ...] = ()
+        self._child_values = ScopeValues()
         self._closed = False
+        self._closed_graphs: dict[int, RunnerProcess] = {}
 
-    def bind(self, parent: OwnedChild, *, eager: Sequence[type[Any]] = ()) -> None:
+    def bind(
+        self, parent: OwnedChild, *, eager: Sequence[type[Any]] = (), child_values: ScopeValues | None = None
+    ) -> None:
         """Open runner children beneath the borrowed ``parent`` from now on, building ``eager`` as each opens."""
         self._parent = parent
         self._eager = tuple(eager)
+        self._child_values = child_values or ScopeValues()
 
     def open_runner(self, built: BuiltRunner) -> OwnedChild | None:
         """A new child scope for ``built``, owned by its runner id, with the eager types built; ``None`` when unbound.
@@ -1227,7 +1264,7 @@ class HostRunnerSet[W: IWiredRunner, R: IRunnerResume]:
             self._parent,
             lifetime=Lifetime.RUNNER,
             owner=built.id,
-            values=ScopeValues((supply(port(BuiltRunner), built),)),
+            values=ScopeValues((supply(port(BuiltRunner), built), *self._child_values.items)),
         )
         try:
             for dependency_type in self._eager:
@@ -1251,10 +1288,22 @@ class HostRunnerSet[W: IWiredRunner, R: IRunnerResume]:
     def close_graph(self, runner: RunnerProcess | None, child: OwnedChild | None) -> None:
         """Close one runner's graph, in reverse construction order: its process graph, then its child. ``runner`` is
         ``None`` for a child opened for a runner that was never composed."""
+        if runner is not None:
+            with self._lock:
+                if id(runner) in self._closed_graphs:
+                    return
+                self._closed_graphs[id(runner)] = runner
         try:
             if runner is not None:
                 runner.close_runner()
-        finally:
+        except BaseException as failure:
+            if child is not None:
+                try:
+                    child.close()
+                except BaseException as cleanup:
+                    failure.add_note(f"closing the runner scope after it also failed: {cleanup!r}")
+            raise
+        else:
             if child is not None:
                 child.close()
 
@@ -1348,11 +1397,21 @@ class HostRunnerSet[W: IWiredRunner, R: IRunnerResume]:
             if self._closed:
                 return
             self._closed = True
-        with contextlib.ExitStack() as closing:
-            for live in self.live():
-                if live.wired is not None:
-                    closing.callback(live.wired.close)
-                closing.callback(self.close_graph, live.runner, live.child)
+        failure: BaseException | None = None
+        for live in reversed(self.live()):
+            closers: list[Callable[[], None]] = [functools.partial(self.close_graph, live.runner, live.child)]
+            if live.wired is not None:
+                closers.append(live.wired.close)
+            for close in closers:
+                try:
+                    close()
+                except BaseException as cleanup:
+                    if failure is None:
+                        failure = cleanup
+                    else:
+                        failure.add_note(f"closing another runner resource also failed: {cleanup!r}")
+        if failure is not None:
+            raise failure
 
 
 def close_after(close: Callable[[], None], failure: BaseException) -> None:
@@ -1545,7 +1604,7 @@ class HostRunnerReconcile[W: IWiredRunner, R: IRunnerResume]:
             if not starting:
                 return
             # One report between preparing the batch and running it: a runner the hub released claims nothing.
-            self.host.host_tick.report()
+            self.host.tick_in_force.current().report()
             for prepared in starting:
                 try:
                     prepared.run()
@@ -1597,6 +1656,8 @@ def _build_host_graph(
     trace_platform: bool,
     host_token: str = "",
     tcp_socket: socket.socket | None = None,
+    extend: Callable[[LegacyRegistry], None] | None = None,
+    extra_values: ScopeValues | None = None,
 ) -> HostProcess:
     """The host's own graph, with no runner on it yet. ``config`` carries the host's keys — listeners, tracing, the
     workspaces, its hub — and ``subscriptions`` are the host's declarations, which its credential renewal covers.
@@ -1604,41 +1665,44 @@ def _build_host_graph(
     Its flags are the resolution ``config``'s load made, or — for a config built in code — the registry it carries
     at its defaults under its overrides; each override it ignores is warned of here, once."""
     install_runner_guard()
-    engine = create_engine_from_url(config.db_url)
-    host_hub_http_client: httpx2.Client | None = None
+    from blizzard.runner.host_root import open_host_infrastructure
+    from blizzard.runner.hub.host_options import HostHubOptions
+    from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain
+    from blizzard.runner.tracing.host_options import HostTracingOptions
+    from blizzard.runner.wiring import HostRuntimeOptions
+
+    env = os.environ if environ is None else environ
+    roster = HostRunnerRoster()
+    tick_in_force = HostTickInForce(HostTick(), tuple(subscriptions))
+    held_workspaces: list[HostWorkspaces] = []
+    owner = open_host_infrastructure(
+        config,
+        clock,
+        monotonic_clock,
+        HostRuntimeOptions(env, events, tcp_socket),
+        HostHubOptions(
+            config.hub_url,
+            host_token,
+            lambda: host_report(config, held_workspaces[0], tick_in_force.subscriptions()),
+            roster.current,
+        ),
+        HostTracingOptions(
+            config.tracing, env, declared_telemetry_names(), platform_tracing, received_telemetry, trace_platform
+        ),
+        tick_in_force=tick_in_force,
+        extend=extend,
+        extra_values=extra_values,
+    )
     try:
-        built: list[HostProcess] = []
-
-        def runners() -> tuple[RunnerProcess, ...]:
-            return built[0].runners if built else ()
-
-        if trace_platform:
-            platform_tracing = build_runner_platform_tracing(config, environ)
-            received_telemetry = build_runner_received_telemetry(config, monotonic_clock, environ)
-        platform_tracing = platform_tracing or DisabledPlatformTracing()
-        received_telemetry = received_telemetry or DisabledReceivedTelemetryExport()
-        resolution = config.flag_resolution or resolve_flags(config.flag_registry, "runner", config.flags)
-        log = get_logger("blizzard.runner")
-        warn_ignored_flags(log, resolution)
-        warn_held_keys(log, config.held_keys)
-        platform_tracing.instrument_engine(engine)
-        readiness = ReadinessService(
-            reader=store_status_reader(engine), expected_revision=migration_runner(config).script_head()
-        )
-        errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
-        connections = RunnerStoreConnections(engine, errors)
-        host_stores = _build_host_stores(connections, clock)
-        usage_http_client = LazyUsageHttpClient()
-        span_limiter = SpanRateLimiter(clock)
-        receiver_counter = ReceiverCounter()
-        harness_span_counter = ReceiverCounter()
-        metric_bounds = ReceiverBounds.fresh(clock)
-        log_bounds = ReceiverBounds.fresh(clock)
-        telemetry_names = declared_telemetry_names()
-        children = SubprocessChildProcesses(monotonic_clock)
-        tool_profile = ToolProfileHolder(
-            config.tool_env(TracingSettings.of(os.environ if environ is None else environ))
-        )
+        resolver = owner.resolver
+        engine = resolver.get(Engine)
+        platform_tracing = resolver.get(IPlatformTracing)
+        received_telemetry = resolver.get(IReceivedTelemetryExport)
+        readiness = resolver.get(ReadinessService)
+        host_stores = resolver.get(HostStores)
+        usage_http_client = resolver.get(LazyUsageHttpClient)
+        children = resolver.get(IChildProcesses)
+        tool_profile = resolver.get(ToolProfileHolder)
         workspaces = HostWorkspaces(
             build_workspaces(
                 config.workspaces,
@@ -1647,103 +1711,61 @@ def _build_host_graph(
                 audit=host_stores.runner_audit,
             )
         )
-        host_identity = HostIdentityHolder()
-        # The one place a host's registration is derived: everything after reads it from the holder.
-        host_registration = HostRegistrationHolder.for_host(registered=bool(host_token))
-        host_hub: HttpHostHubClient | None = None
-        if host_registration.current().registered():
-            host_hub_http_client = httpx2.Client(base_url=config.hub_url, timeout=_HOST_HUB_TIMEOUT_SECONDS)
-            platform_tracing.instrument_client(host_hub_http_client)
-            host_hub = HttpHostHubClient(host_hub_http_client, token=host_token)
-        process = LinuxProcessProbe()
+        held_workspaces.append(workspaces)
+        host_identity = resolver.get(HostIdentityHolder)
+        host_registration = resolver.get(HostRegistrationHolder)
+        host_hub = resolver.get(HttpHostHubClient | None)
+        process = resolver.get(LinuxProcessProbe)
         host = HostProcess(
             engine=engine,
             readiness=readiness,
-            connections=connections,
             host_stores=host_stores,
-            listeners=Listeners.of(config, tcp=tcp_socket),
+            listeners=resolver.get(Listeners),
             workspaces=workspaces,
-            events=events,
+            events=resolver.get(EventBroker | None),
             clock=clock,
             monotonic_clock=monotonic_clock,
-            zone=local_zone(os.environ if environ is None else environ),
+            zone=resolver.get(tzinfo),
             process=process,
             children=children,
-            invariants=HostInvariantCheck(runner_invariant_checker(host_stores.runner_audit, process)),
+            invariants=resolver.get(HostInvariantCheck),
             hub_tokens=build_hub_tokens(
                 host_stores.hub_tokens, config.root, environ=os.environ if environ is None else environ, clock=clock
             ),
-            telemetry_receiver=TelemetryReceiver(
-                platform_tracing=platform_tracing,
-                received_telemetry=received_telemetry,
-                span_limiter=span_limiter,
-                span_counter=receiver_counter,
-                harness_span_counter=harness_span_counter,
-                telemetry_names=telemetry_names,
-                metric_bounds=metric_bounds,
-                log_bounds=log_bounds,
-                clock=clock,
-                tracing=functools.partial(_receiver_tracing, config),
-            ),
-            span_limiter=span_limiter,
-            receiver_counter=receiver_counter,
-            harness_span_counter=harness_span_counter,
-            metric_bounds=metric_bounds,
-            log_bounds=log_bounds,
-            harness_telemetry_names=telemetry_names,
-            host_tick=HostTick(
-                registration=(
-                    HostRegistration(
-                        client=host_hub,
-                        # Built at each report from what the host serves then, which the host tick reconciles
-                        # from its records first.
-                        report=lambda: host_report(
-                            config, workspaces, built[0].subscriptions if built else tuple(subscriptions)
-                        ),
-                        identities=host_stores.host_identity,
-                        identity=host_identity,
-                        status=host_registration,
-                        runners=runners,
-                        clock=clock,
-                    )
-                    if host_hub is not None
-                    else None
-                ),
-                external_usage_sample=_external_usage_sample_pass(
-                    subscriptions, host_stores, clock, usage_http_client, runners, registration=host_registration
-                ),
-                lane_drain=(
-                    HostLaneDrain(
-                        client=host_hub, lane=host_stores.host_lane, registration=host_registration, clock=clock
-                    )
-                    if host_hub is not None
-                    else None
-                ),
-                credential_renewal=credential_renewal_pass(
-                    subscriptions, host_stores, clock, children=children, env=tool_profile
-                ),
-            ),
+            telemetry_receiver=resolver.get(TelemetryReceiver),
+            tick_in_force=tick_in_force,
+            runner_roster=roster,
             usage_http_client=usage_http_client,
-            flag_registry=config.flag_registry,
-            flags=resolution.flags,
-            subscriptions=tuple(subscriptions),
+            flag_registry=resolver.get(FlagRegistry),
+            flags=resolver.get(Flags),
             platform_tracing=platform_tracing,
             received_telemetry=received_telemetry,
             host_identity=host_identity,
             host_registration=host_registration,
-            host_hub_http_client=host_hub_http_client,
             host_hub=host_hub,
             tool_profile=tool_profile,
+            retirements=resolver.get(RetirementNotices),
+            infrastructure=owner,
         )
-        # Seeded only from a store at the code's schema head: a store mid-migration fails readiness, not boot.
-        if readiness.evaluate().ready and (recorded := host_stores.host_identity.host_identity()) is not None:
-            host.host_identity.hold(recorded)
-        built.append(host)
+        tick_in_force.hold(
+            HostTick(
+                registration=resolver.get(HostRegistration | None),
+                external_usage_sample=_external_usage_sample_pass(
+                    subscriptions, host_stores, clock, usage_http_client, roster.current, registration=host_registration
+                ),
+                lane_drain=resolver.get(HostLaneDrain | None),
+                credential_renewal=credential_renewal_pass(
+                    subscriptions, host_stores, clock, children=children, env=tool_profile
+                ),
+            ),
+            tuple(subscriptions),
+        )
         return host
-    except BaseException:
-        if host_hub_http_client is not None:
-            host_hub_http_client.close()
-        engine.dispose()
+    except BaseException as failure:
+        try:
+            owner.close()
+        except BaseException as cleanup:
+            failure.add_note(f"closing the host scope after initialization also failed: {cleanup!r}")
         raise
 
 
@@ -1809,6 +1831,7 @@ def _build_runner(
     publish_bundle: bool,
     environ: Mapping[str, str] | None,
     trace_exporter: ITraceExporter | None,
+    runner_trace_export: RunnerTraceExport | None,
     runner_id: str,
     token: StoredToken | None,
 ) -> RunnerProcess:
@@ -1820,6 +1843,7 @@ def _build_runner(
     platform_tracing = host.platform_tracing
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
     identity_client: httpx2.Client | None = None
+    trace = runner_trace_export
     try:
         # Seeded only from a store at the code's schema head: a store mid-migration fails readiness, not boot.
         ready = host.readiness.evaluate().ready
@@ -2005,13 +2029,11 @@ def _build_runner(
                 )
             )
 
-        exporter = (
-            host.bounded_trace_exporter(trace_exporter)
-            if tracing.enabled() and trace_exporter is not None
-            else BoundedTraceExporter(_otlp_exporter(environ))
-            if tracing.enabled()
-            else None
-        )
+        if trace is None:
+            trace = host.infrastructure.resolver.get(RunnerTraceExportFactory).build(
+                RunnerTraceOptions(runner_environ, trace_exporter)
+            )
+        exporter = trace.exporter
         trace_sweep = (
             LeaseTraceSweep(
                 leases=stores.lease_traces,
@@ -2050,6 +2072,7 @@ def _build_runner(
             harness_sets=harness_sets,
             executor=executor,
             trace_settings=tracing,
+            trace_export=trace,
             trace_sweep=trace_sweep,
             trace_replay=trace_replay,
             identity=identity,
@@ -2068,21 +2091,18 @@ def _build_runner(
             flags=FlagsHolder(resolve_flags(host.flag_registry, "runner", config.flags).flags),
             harness_key=key_for,
         )
-    except BaseException:
+    except BaseException as failure:
         try:
             if identity_client is not None:
                 identity_client.close()
         finally:
             executor.shutdown(wait=True)
+            if trace is not None:
+                try:
+                    trace.close()
+                except BaseException as cleanup:
+                    failure.add_note(f"closing the runner trace exporter after opening also failed: {cleanup!r}")
         raise
-
-
-def _otlp_exporter(environ: Mapping[str, str] | None) -> OtlpTraceExporter:
-    return OtlpTraceExporter(
-        resource=resource_attributes(os.environ if environ is None else environ, __version__),
-        scope=INSTRUMENTATION_SCOPE,
-        scope_version=INSTRUMENTATION_SCOPE_VERSION,
-    )
 
 
 def build_host_settings_application(host: HostProcess, reader: HostSettingsReader) -> HostSettingsApplication:

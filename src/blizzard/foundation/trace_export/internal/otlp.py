@@ -47,6 +47,10 @@ class OtlpTraceExporter:
     def export(self, spans: Sequence[FinishedSpan]) -> bool:
         return self._exporter.export([self._readable(span) for span in spans]) is SpanExportResult.SUCCESS
 
+    def close(self) -> None:
+        """Release the exporter this adapter owns."""
+        self._exporter.shutdown()
+
     def _resource_of(self, span: FinishedSpan) -> Resource:
         if span.service_name is None:
             return self._resource

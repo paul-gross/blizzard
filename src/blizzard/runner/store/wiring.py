@@ -118,6 +118,7 @@ class HostStoreRefs:
     workspaces: Ref[HostWorkspaceStore]
     subscriptions: Ref[HostSubscriptionStore]
     runner_audit: Ref[RunnerAudit]
+    invariants: Ref[RunnerInvariants]
     bundle: Ref[HostStores]
 
 
@@ -139,7 +140,7 @@ def register_host_stores(registry: Registry) -> HostStoreRefs:
     subscriptions = registry.service(HostSubscriptionStore, lifetime=Lifetime.PROCESS)
     runner_audit = registry.factory(build_runner_audit, lifetime=Lifetime.PROCESS)
     registry.alias(port(IRunnerAudit), runner_audit)
-    registry.factory(runner_invariant_checker, lifetime=Lifetime.PROCESS)
+    checker = registry.factory(runner_invariant_checker, lifetime=Lifetime.PROCESS)
     bundle = registry.factory(assemble_host_stores, lifetime=Lifetime.PROCESS)
     return HostStoreRefs(
         workspace_prompt=workspace_prompt,
@@ -157,6 +158,7 @@ def register_host_stores(registry: Registry) -> HostStoreRefs:
         workspaces=workspaces,
         subscriptions=subscriptions,
         runner_audit=runner_audit,
+        invariants=checker,
         bundle=bundle,
     )
 

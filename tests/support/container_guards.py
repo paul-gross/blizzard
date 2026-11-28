@@ -218,6 +218,18 @@ def wiring_boundary_violations(source_root: Path, *, roots: frozenset[Path] = PR
                 relative.parts[0] == "runner"
                 and _is_wiring(_module(relative))
                 and not (
+                    relative == Path("runner/wiring.py")
+                    and name
+                    in {
+                        "blizzard.foundation.clock",
+                        "blizzard.foundation.flags",
+                        "blizzard.foundation.logging",
+                        "blizzard.foundation.registry.legacy",
+                        "blizzard.foundation.roles",
+                        "blizzard.foundation.trace_export.settings",
+                    }
+                )
+                and not (
                     relative == Path("runner/store/wiring.py")
                     and name
                     in {

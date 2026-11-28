@@ -365,7 +365,7 @@ def test_worker_config_change_rebuilds_and_republishes_bundle(tmp_path: Path, mo
 
 
 def _reachable_runner_owned(root: object) -> list[str]:
-    """The paths from ``root`` to a runner-owned object, never walking through ``HostProcess.runners``."""
+    """The paths from ``root`` to a runner-owned object, never walking through the host's runner roster."""
     found: list[str] = []
     seen: set[int] = set()
 
@@ -384,7 +384,7 @@ def _reachable_runner_owned(root: object) -> list[str]:
                 walk(item, f"{path}[{key!r}]")
         elif dataclasses.is_dataclass(value) and not isinstance(value, type):
             for member in dataclasses.fields(value):
-                if isinstance(value, HostProcess) and member.name == "runners":
+                if isinstance(value, HostProcess) and member.name == "runner_roster":
                     continue
                 walk(getattr(value, member.name), f"{path}.{member.name}")
         elif type(value).__module__.startswith("blizzard") and hasattr(value, "__dict__"):
@@ -440,7 +440,7 @@ def test_one_runners_blocked_tick_delays_neither_the_other_runner_nor_the_host_t
 
     monkeypatch.setattr(loop_wiring, "tick", tick)
     renewal: Any = _CountingRenewal()
-    host.host_tick = HostTick(credential_renewal=renewal)
+    host.tick_in_force.hold(HostTick(credential_renewal=renewal), host.tick_in_force.subscriptions())
     drivers = [
         PeriodicDriver(config, interval=lambda: 0.01, process_graph=runner, clock=SystemMonotonicClock())
         for runner in (blocked, free)
@@ -532,7 +532,7 @@ def test_two_runners_spending_one_subscription_share_one_sample_per_cadence(
     try:
         _register(host.runners[0])
         for _ in range(4):
-            host.host_tick.run()
+            host.tick_in_force.current().run()
         assert samplers["anthropic"].sample_calls == 1
         assert host.host_stores.external_usage.latest_external_usage_attempt("anthropic") is not None
     finally:
@@ -544,7 +544,7 @@ def test_a_subscription_no_runner_spends_is_still_sampled(tmp_path: Path, monkey
     host = _host(_sampling_config(tmp_path), "rn_a")
     try:
         _register(host.runners[0])
-        host.host_tick.run()
+        host.tick_in_force.current().run()
         assert samplers["spare"].sample_calls == 1
         assert host.host_stores.external_usage.latest_external_usage_attempt("spare") is not None
     finally:
@@ -564,7 +564,7 @@ def test_an_unregistered_hosts_sample_reaches_its_runners_outbound_buffer_and_is
     )
     try:
         _register(host.runners[0])
-        host.host_tick.run()
+        host.tick_in_force.current().run()
         runner = host.runners[0]
         pending = runner.stores.outbound.pending_outbound()
         assert [fact.kind for fact in pending] == [_SAMPLED_KIND, _SAMPLED_KIND]
@@ -585,6 +585,28 @@ def _registered_host(config: RunnerConfig) -> HostProcess:
     return build_host_process(file, [BuiltRunner("rn_a", dataclasses.replace(config, runner_id="rn_a"))])
 
 
+def test_host_report_reads_the_holder_and_current_runner_roster(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_samplers(monkeypatch)
+    host = _registered_host(_sampling_config(tmp_path))
+    runners = host.runners
+    try:
+        holder = host.tick_in_force
+        tick = holder.current()
+        registration = tick.registration
+        assert registration is not None
+        assert [item.slug for item in registration.report().subscriptions] == ["anthropic", "spare"]
+        assert tuple(registration.runners()) == host.runners
+        holder.hold(tick, ())
+        assert registration.report().subscriptions == ()
+        host.runners = ()
+        assert tuple(registration.runners()) == ()
+    finally:
+        host.runners = runners
+        host.close()
+
+
 def test_a_host_identity_row_without_a_host_token_leaves_the_host_unregistered(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -597,7 +619,7 @@ def test_a_host_identity_row_without_a_host_token_leaves_the_host_unregistered(
     try:
         assert host.host_identity.current() == HostIdentity("hs_1", "tn_1", _SAMPLED_AT)
         _register(host.runners[0])
-        host.host_tick.run()
+        host.tick_in_force.current().run()
         assert [fact.kind for fact in host.runners[0].stores.outbound.pending_outbound()] == [_SAMPLED_KIND] * 2
         with host.engine.connect() as conn:
             assert conn.execute(select(func.count()).select_from(host_outbound_buffer)).scalar_one() == 0
@@ -613,7 +635,7 @@ def test_a_registered_hosts_sample_reaches_its_own_outbound_lane_and_no_runners(
     host = _registered_host(_sampling_config(tmp_path))
     try:
         assert host.host_identity.current() is None
-        host.host_tick.run()
+        host.tick_in_force.current().run()
         assert host.runners[0].stores.outbound.pending_outbound() == []
         with host.engine.connect() as conn:
             lane = conn.execute(select(host_outbound_buffer).order_by(host_outbound_buffer.c.seq)).all()
@@ -634,7 +656,7 @@ def test_an_unregistered_hosts_sample_is_recorded_under_the_first_runner_that_ha
     host = _host(config, "rn_a", "rn_b")
     try:
         _register(host.runners[1])
-        host.host_tick.run()
+        host.tick_in_force.current().run()
         assert host.runners[0].stores.outbound.pending_outbound() == []
         assert [fact.kind for fact in host.runners[1].stores.outbound.pending_outbound()] == [_SAMPLED_KIND] * 2
     finally:
@@ -648,13 +670,13 @@ def test_an_unregistered_hosts_sample_is_not_recorded_while_no_runner_has_regist
     samplers = _fake_samplers(monkeypatch)
     host = _host(_sampling_config(tmp_path), "rn_a")
     try:
-        host.host_tick.run()
+        host.tick_in_force.current().run()
         runner = host.runners[0]
         assert runner.stores.outbound.pending_outbound() == []
         assert host.host_stores.external_usage.latest_external_usage_attempt("anthropic") is None
 
         _register(runner)
-        host.host_tick.run()
+        host.tick_in_force.current().run()
 
         assert [fact.kind for fact in runner.stores.outbound.pending_outbound()] == [_SAMPLED_KIND] * 2
         assert samplers["anthropic"].sample_calls == 2

@@ -385,7 +385,7 @@ def test_a_stepped_host_starts_no_timer_yet_reconciles_reports_once_and_marks_at
     host.runners = (dataclasses.replace(host.runners[0], settings_reader=None),)
     opened = dataclasses.replace(opened, runners=host.runners)
     registration = _Registration()
-    host.host_tick = HostTick(registration=cast(Any, registration))
+    host.tick_in_force.hold(HostTick(registration=cast(Any, registration)), host.tick_in_force.subscriptions())
 
     def no_listeners() -> list[object]:
         return []

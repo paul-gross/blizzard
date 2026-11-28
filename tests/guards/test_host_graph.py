@@ -15,20 +15,26 @@ from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import FastAPI
 
 from blizzard.cli.config_inputs import packaged_flag_registry
-from blizzard.foundation.clock import IClock
+from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.registry.interface import Lifetime, Registry, port
+from blizzard.foundation.registry.internal.recording import Kind
 from blizzard.foundation.registry.internal.translation import HOST_LIFETIMES
 from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import OwnedChild, ScopeValues, supply
 from blizzard.runner import composition
+from blizzard.runner import wiring as runner_wiring
 from blizzard.runner.app import create_app_for_export
 from blizzard.runner.composition import HostProcess, RunnerCompose
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.host_config import HostConfig
-from blizzard.runner.host_root import HostRoot, open_host_free, register_host
+from blizzard.runner.host_root import HostRoot, open_host_free, register_host, register_host_infrastructure
+from blizzard.runner.hub.host_options import HostHubOptions
+from blizzard.runner.loop.host_tick import HostTick, HostTickInForce
 from blizzard.runner.throttle import wiring as throttle
 from blizzard.runner.throttle.floor_clear import IRecordSubscriptionFloorClear, SubscriptionFloorClearService
 from blizzard.runner.throttle.usage_limits import IWriteSubscriptionUsageLimitRepository
+from blizzard.runner.tracing.host_options import HostTracingOptions
+from blizzard.runner.tracing.runner_export import RunnerTraceExport, RunnerTraceOptions
 from tests.support.container_guards import (
     alias_identity_violations,
     default_factory_violations,
@@ -54,6 +60,8 @@ _VALUES = ScopeValues(
         supply(port(HostProcess), object()),
         supply(port(HostConfig), object()),
         supply(port(RunnerCompose), RunnerCompose()),
+        supply(port(IClock), object()),
+        supply(port(IWriteSubscriptionUsageLimitRepository), object()),
     )
 )
 
@@ -102,10 +110,41 @@ def test_the_host_graph_builds_and_keeps_every_registration_rule() -> None:
 
 
 def test_the_host_graph_inventories_the_legacy_leaves_over_its_borrowed_host() -> None:
-    assert legacy_registrations(_host()) == [
+    assert legacy_registrations(_host()) == ["RunnerProcess is a legacy leaf"]
+
+
+@pytest.mark.parametrize("registered", [False, True])
+def test_production_host_graph_inventory_and_validation(registered: bool) -> None:
+    registry = LegacyRegistry()
+    runner_wiring.register_infrastructure_contexts(registry)
+    register_host_infrastructure(registry, registered=registered)
+    values = ScopeValues(
+        (
+            supply(port(RunnerConfig), object()),
+            supply(port(IClock), object()),
+            supply(port(IMonotonicClock), object()),
+            supply(port(runner_wiring.HostRuntimeOptions), object()),
+            supply(port(HostHubOptions), object()),
+            supply(port(HostTracingOptions), object()),
+            supply(port(HostTickInForce[SubscriptionDeclaration]), object()),
+        )
+    )
+    assert graph_builds(registry, HOST_LIFETIMES, values) == []
+    assert duplicate_owners(registry) == []
+    assert lifetime_violations(registry, HOST_LIFETIMES) == []
+    assert role_key_violations(registry) == []
+    assert default_factory_violations(registry) == []
+    assert legacy_registrations(registry) == [
+        "HostProcess is a legacy leaf",
+        "HostRunnerSet is a legacy leaf",
         "RunnerProcess is a legacy leaf",
-        "IWriteSubscriptionUsageLimitRepository is a legacy leaf",
-        "IClock is a legacy leaf",
+    ]
+    assert not any(entry.key is HostTick for entry in registry.entries)
+    assert [(entry.kind, entry.lifetime) for entry in registry.entries if entry.key is RunnerTraceOptions] == [
+        (Kind.CONTEXT, Lifetime.RUNNER)
+    ]
+    assert [(entry.kind, entry.lifetime) for entry in registry.entries if entry.key is RunnerTraceExport] == [
+        (Kind.RESOURCE, Lifetime.RUNNER)
     ]
 
 

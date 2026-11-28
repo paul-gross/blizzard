@@ -5,9 +5,11 @@ step blocked on a vendor CLI holds neither a runner's tick nor another runner's.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from blizzard.foundation.registry.interface import Lifetime, Registry, port
 from blizzard.runner.hub.host_registration import HostRegistration
 from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass
@@ -42,3 +44,30 @@ class HostTick:
             self.external_usage_sample.run()
         if self.lane_drain is not None:
             self.lane_drain.run()
+
+
+class HostTickInForce[T]:
+    """The current host tick and the subscriptions it serves, replaced together after a successful rebuild."""
+
+    def __init__(self, tick: HostTick, subscriptions: tuple[T, ...]) -> None:
+        self._lock = threading.Lock()
+        self._state = (tick, subscriptions)
+
+    def snapshot(self) -> tuple[HostTick, tuple[T, ...]]:
+        with self._lock:
+            return self._state
+
+    def current(self) -> HostTick:
+        return self.snapshot()[0]
+
+    def subscriptions(self) -> tuple[T, ...]:
+        return self.snapshot()[1]
+
+    def hold(self, tick: HostTick, subscriptions: tuple[T, ...]) -> None:
+        with self._lock:
+            self._state = (tick, subscriptions)
+
+
+def register_host_tick[T](registry: Registry, key: type[HostTickInForce[T]]) -> None:
+    """Declare the supplied host-lifetime holder under its subscription type."""
+    registry.context(port(key), lifetime=Lifetime.PROCESS)

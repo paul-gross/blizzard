@@ -9,7 +9,7 @@ from datetime import datetime
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.host_config import HostConfig
+from blizzard.runner.config import RunnerConfig
 from exemplar.runner.disk.probe import IDiskProbe
 
 
@@ -25,10 +25,10 @@ class DiskReading:
 class HostDiskReader:
     """Reads the free space on the filesystem holding the host's root."""
 
-    def __init__(self, probe: IDiskProbe, clock: IClock, host_config: HostConfig) -> None:
+    def __init__(self, probe: IDiskProbe, clock: IClock, config: RunnerConfig) -> None:
         self._probe = probe
         self._clock = clock
-        self._root = host_config.root
+        self._root = config.root
 
     def read(self) -> DiskReading:
         """Raises :class:`~exemplar.runner.disk.probe.DiskUnreadable` when the filesystem cannot be read."""

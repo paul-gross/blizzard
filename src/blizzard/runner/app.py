@@ -777,11 +777,16 @@ class HostedApp:
         return tuple(client for wired in _served(self.runners) for client in wired.clients)
 
     def close(self) -> None:
-        with contextlib.ExitStack() as closing:
-            if self.opened is not None:
-                closing.callback(self.opened.close)
-            closing.callback(self.root.close)
-            closing.callback(self.hub_http_client.close)
+        try:
+            self.hub_http_client.close()
+        except BaseException as failure:
+            try:
+                (self.opened.close if self.opened is not None else self.root.close)()
+            except BaseException as cleanup:
+                failure.add_note(f"closing the host after the app client also failed: {cleanup!r}")
+            raise
+        else:
+            (self.opened.close if self.opened is not None else self.root.close)()
 
 
 def _served(runners: HostRunnerSet[_WiredRunner, ResumeMarking]) -> tuple[_WiredRunner, ...]:
@@ -950,7 +955,14 @@ def _wire_hosted_app(
     reconcile = (
         HostRunnerReconcile(host, runners, start, source) if host_config is not None and source is not None else None
     )
-    host_stepper = host_pass_stepper(host, reconcile.run if reconcile is not None else None)
+    host_stepper = host_pass_stepper(
+        host.tick_in_force,
+        clock=host.clock,
+        settings=host.host_settings,
+        records=host.records_reconcile,
+        retirements=host.retirements,
+        reconcile=reconcile.run if reconcile is not None else None,
+    )
     # The real, network-reaching hub client — only `host` wires one.
     hub_http_client = startup.enter_context(httpx2.Client(base_url=config.hub_url, timeout=5.0))
     host.platform_tracing.instrument_client(hub_http_client)
@@ -958,7 +970,7 @@ def _wire_hosted_app(
         config,
         runners=(),
         halted=host.halted,
-        subscriptions=host.current_subscriptions,
+        subscriptions=host.tick_in_force.subscriptions,
         platform_tracing=host.platform_tracing,
         identity=_FirstServedIdentity(registry),
         readiness=host.readiness,
@@ -1165,7 +1177,7 @@ def _wire_runner_clients(
                 host_stores=graph.host.host_stores,
                 config=initial_gate_config,
                 clock=clock,
-                subscriptions=host.subscriptions,
+                subscriptions=host.tick_in_force.subscriptions(),
             )
         ),
         throttle=config.throttle,
@@ -1226,12 +1238,12 @@ def _wire_runner_clients(
             settings=graph.trace_settings,
             leases=read_stores.lease_traces,
             clock=clock,
-            receiver=host.receiver_counter,
+            receiver=host.telemetry_receiver.span_counter,
             replay_max_window=config.tracing.replay_max_window,
             harness_telemetry=graph.harness_telemetry,
-            harness_span_receiver=host.harness_span_counter,
-            metric_receiver=host.metric_bounds.counter,
-            log_receiver=host.log_bounds.counter,
+            harness_span_receiver=host.telemetry_receiver.harness_span_counter,
+            metric_receiver=host.telemetry_receiver.metric_bounds.counter,
+            log_receiver=host.telemetry_receiver.log_bounds.counter,
         ),
         trace_replay=graph.trace_replay,
         takeover=takeover,

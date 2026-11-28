@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.store.readiness import ReadinessService
 
 
 @domain_model
@@ -101,6 +102,12 @@ class HostIdentityHolder:
         """Answer ``identity`` from now on — called after the store records it, never before."""
         with self._lock:
             self._identity = identity
+
+
+def seeded_host_identity(readiness: ReadinessService, identities: IReadHostIdentityRepository) -> HostIdentityHolder:
+    """Seed only from a store at schema head; an unmigrated store remains a readiness failure."""
+    recorded = identities.host_identity() if readiness.evaluate().ready else None
+    return HostIdentityHolder(recorded)
 
 
 _current_host_identity_conforms: type[ICurrentHostIdentity] = HostIdentityHolder

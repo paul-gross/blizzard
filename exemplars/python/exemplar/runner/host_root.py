@@ -1,22 +1,46 @@
-"""A stand-in for the runner host's root: the host's own registration, with the disk area added.
+"""Stand-ins for the runner host's infrastructure and serving roots, with the disk area added."""
 
-It opens the root over a host its caller built and runs no runner, so the served app over it has only host routes."""
-
-# exemplar: bzh:dependency-injection — production adds the area's ``register`` call to ``register_host`` itself.
+# exemplar: bzh:dependency-injection — production adds the area's registration to its host infrastructure.
 
 from __future__ import annotations
 
-from blizzard.foundation.registry.legacy import LegacyRegistry
-from blizzard.runner.composition import HostProcess
+from blizzard.foundation.clock import IClock, IMonotonicClock
+from blizzard.foundation.registry.scopes import OwnedChild
+from blizzard.runner import wiring as runner_wiring
+from blizzard.runner.composition import build_host_process
+from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.host_config import HostConfig
-from blizzard.runner.host_root import OpenedHost, open_host, register_host
+from blizzard.runner.host_root import OpenedHost, open_host, open_host_infrastructure
+from blizzard.runner.hub.host_options import HostHubOptions
+from blizzard.runner.loop.host_tick import HostTickInForce
+from blizzard.runner.tracing.host_options import HostTracingOptions
 from exemplar.runner.disk import wiring as disk
 
 
-def open_serving(host: HostProcess, host_config: HostConfig) -> OpenedHost:
-    """The host root over ``host`` with the disk area, opened for a served app; closing it closes the root, then
-    ``host``."""
-    registry = LegacyRegistry()
-    register_host(registry)
-    disk.register(registry)
-    return open_host(host, host_config, registry=registry)
+def open_infrastructure(
+    config: RunnerConfig,
+    clock: IClock,
+    monotonic_clock: IMonotonicClock,
+    runtime: runner_wiring.HostRuntimeOptions,
+    hub_options: HostHubOptions,
+    tracing_options: HostTracingOptions,
+    *,
+    tick_in_force: HostTickInForce[SubscriptionDeclaration],
+) -> OwnedChild:
+    """Open the host infrastructure with the disk area over the caller's borrowed inputs."""
+    return open_host_infrastructure(
+        config,
+        clock,
+        monotonic_clock,
+        runtime,
+        hub_options,
+        tracing_options,
+        tick_in_force=tick_in_force,
+        extend=disk.register,
+    )
+
+
+def open_serving(host_config: HostConfig) -> OpenedHost:
+    """Open the host with the disk area and transfer its infrastructure to the serving root."""
+    host = build_host_process(host_config, extend=disk.register)
+    return open_host(host, host_config)

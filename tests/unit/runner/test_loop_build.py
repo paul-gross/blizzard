@@ -214,7 +214,7 @@ def test_loop_wiring_threads_a_declarations_credentials_path_and_cadence_into_it
         assert isinstance(ctx.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID), ClaudeCodeAdapter)
         assert [s.slug for s in ctx.subscriptions] == ["anthropic"]
         assert ctx.subscriptions[0].sample_interval_seconds == 123
-        sampling = graph.host.host_tick.external_usage_sample
+        sampling = graph.host.tick_in_force.current().external_usage_sample
         assert sampling is not None
         (sampled,) = sampling.subscriptions
         assert sampled.sample_interval_seconds == 123
@@ -251,7 +251,7 @@ def test_the_hosts_declared_subscriptions_share_one_host_owned_http_client(tmp_p
     )
 
     with loop_graph(config) as graph:
-        sampling = graph.host.host_tick.external_usage_sample
+        sampling = graph.host.tick_in_force.current().external_usage_sample
         assert sampling is not None
         assert [s.slug for s in sampling.subscriptions] == ["anthropic", "codex"]
         first_sampler, second_sampler = (s.sampler for s in sampling.subscriptions)
@@ -298,7 +298,7 @@ def test_a_tick_with_an_openai_subscription_never_invokes_a_renewer(
         assert (
             graph.host.host_stores.external_usage.last_external_usage_attempt_at("codex") is None
         )  # sampling is the host's
-        assert graph.host.host_tick.credential_renewal is not None  # composed for `runner host` alone
+        assert graph.host.tick_in_force.current().credential_renewal is not None  # composed for `runner host` alone
 
     assert calls == []
 
@@ -312,7 +312,7 @@ def test_no_renewal_pass_is_composed_when_no_provider_binds_a_renewer(tmp_path: 
     )
 
     with loop_graph(config) as graph:
-        assert graph.host.host_tick.credential_renewal is None
+        assert graph.host.tick_in_force.current().credential_renewal is None
 
 
 def test_the_hosts_usage_http_client_is_not_built_merely_by_composing_the_host(tmp_path: Path) -> None:
@@ -1104,7 +1104,6 @@ def test_process_graph_builds_the_trace_sweep_over_its_exporter_without_boot_tra
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     built: list[dict[str, object]] = []
-    wrapped: list[tuple[object, BoundedTraceExporter]] = []
 
     def record(**kwargs: object) -> object:
         built.append(kwargs)
@@ -1112,13 +1111,6 @@ def test_process_graph_builds_the_trace_sweep_over_its_exporter_without_boot_tra
 
     monkeypatch.setattr(composition, "LeaseTraceSweep", record)
 
-    def bound(exporter: object) -> BoundedTraceExporter:
-        assert isinstance(exporter, InMemoryTraceExporter)
-        result = BoundedTraceExporter(exporter)
-        wrapped.append((exporter, result))
-        return result
-
-    monkeypatch.setattr(composition, "BoundedTraceExporter", bound)
     config = RunnerConfig(
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
@@ -1137,9 +1129,8 @@ def test_process_graph_builds_the_trace_sweep_over_its_exporter_without_boot_tra
         # The sweep takes its tracing settings from each pass's snapshot, never from its construction.
         assert "config" not in kwargs
         assert graph.config.tracing is config.tracing
-        assert len(wrapped) == 1
-        assert wrapped[0][0] is exporter
-        assert kwargs["exporter"] is wrapped[0][1]
+        assert graph.trace_export.exporter is not None
+        assert kwargs["exporter"] is graph.trace_export.exporter
     finally:
         graph.close()
 

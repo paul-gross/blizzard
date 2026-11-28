@@ -40,3 +40,20 @@ class BoundedTraceExporter:
             return result.result(timeout=self._timeout)
         except TimeoutError:
             return False
+
+
+class BoundedTraceExporters:
+    """One transport guard per injected exporter, shared by the host's runners."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._exporters: list[tuple[ITraceExporter, BoundedTraceExporter]] = []
+
+    def for_exporter(self, exporter: ITraceExporter) -> BoundedTraceExporter:
+        with self._lock:
+            for injected, bounded in self._exporters:
+                if injected is exporter:
+                    return bounded
+            bounded = BoundedTraceExporter(exporter)
+            self._exporters.append((exporter, bounded))
+            return bounded

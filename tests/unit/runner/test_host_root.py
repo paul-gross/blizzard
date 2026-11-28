@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.registry.interface import Lifetime, ScopeClosed, port
 from blizzard.foundation.registry.internal.recording import RecordingRegistry
 from blizzard.foundation.registry.internal.translation import HOST_LIFETIMES
@@ -17,6 +18,7 @@ from blizzard.foundation.registry.scopes import OwnedChild, ScopeValues, supply
 from blizzard.runner.composition import HostProcess, HostRunnerSet, RunnerCompose
 from blizzard.runner.host_config import HostConfig
 from blizzard.runner.host_root import register_host
+from blizzard.runner.throttle.usage_limits import IWriteSubscriptionUsageLimitRepository
 from tests.support.container_guards import graph_builds
 from tests.support.host_runner_graph import HostResource, RunnerService, host_rig
 
@@ -29,6 +31,8 @@ def test_the_host_root_declares_a_graph_that_builds_under_strict_validation() ->
             supply(port(HostProcess), object()),
             supply(port(HostConfig), object()),
             supply(port(RunnerCompose), RunnerCompose()),
+            supply(port(IClock), object()),
+            supply(port(IWriteSubscriptionUsageLimitRepository), object()),
         )
     )
 

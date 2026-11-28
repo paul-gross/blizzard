@@ -176,7 +176,9 @@ def test_every_reader_sees_a_created_workspace_at_the_next_tick(host: _Host, tmp
     assert reader is not None
     rebound = dataclasses.replace(reader.snapshot_pair()[1], bindings=(ProjectBinding("q", "ws-b"),))
     assert composition.bound_spawn_roots(rebound, host.process.workspaces) == (root,)
-    report = host_report(host.process.runners[0].config, host.process.workspaces, host.process.subscriptions)
+    report = host_report(
+        host.process.runners[0].config, host.process.workspaces, host.process.tick_in_force.subscriptions()
+    )
     assert [w.workspace_id for w in report.workspaces] == [_HOME, "ws-b"]
 
 
@@ -192,7 +194,9 @@ def test_a_host_with_no_workspace_runs_and_claims_nothing(host: _Host, monkeypat
     assert host.process.workspaces.ids() == ()
     assert ctx.workspaces.acquisition_provider(_HOME) is None
     assert not ctx.free_environments.has_free_environment(_HOME)
-    report = host_report(host.process.runners[0].config, host.process.workspaces, host.process.subscriptions)
+    report = host_report(
+        host.process.runners[0].config, host.process.workspaces, host.process.tick_in_force.subscriptions()
+    )
     assert report.workspaces == ()
     served = TestClient(host.app.app).get("/api/host/environments").json()["workspaces"]
     assert served == []
@@ -278,7 +282,7 @@ def test_a_retired_subscription_leaves_its_runner_unthrottled_by_it_and_declarin
         assert ctx.config.subscription == "team" and [s.slug for s in ctx.subscriptions] == ["team"]
         # Unsampled, its pace says no.
         assert not ThrottleGate(ctx).verdict().admits_claim
-        assert host.process.host_tick.external_usage_sample is not None
+        assert host.process.tick_in_force.current().external_usage_sample is not None
         sampled_at = datetime.now(UTC)
         host.process.runners[0].external_usage_attempts.record_external_usage_attempt(
             slug="team", sampled_at=sampled_at, payload=None, report_kind="", report_payload=""
@@ -291,10 +295,12 @@ def test_a_retired_subscription_leaves_its_runner_unthrottled_by_it_and_declarin
         assert ctx.config.subscription is None and ctx.subscriptions == ()
         # No subscription's usage throttles it: its pace is not asked.
         assert ThrottleGate(ctx).verdict().levers == ()
-        assert host.process.subscriptions == ()
-        assert host.process.host_tick.external_usage_sample is None
+        assert host.process.tick_in_force.subscriptions() == ()
+        assert host.process.tick_in_force.current().external_usage_sample is None
         assert TestClient(host.app.app).get("/api/host/subscriptions").json()["items"] == []
-        report = host_report(host.process.runners[0].config, host.process.workspaces, host.process.subscriptions)
+        report = host_report(
+            host.process.runners[0].config, host.process.workspaces, host.process.tick_in_force.subscriptions()
+        )
         assert report.subscriptions == ()
         # Its samples stay.
         assert host.process.host_stores.external_usage.last_external_usage_attempt_at("team") == sampled_at
@@ -304,4 +310,26 @@ def test_a_retired_subscription_leaves_its_runner_unthrottled_by_it_and_declarin
         )
         host.tick()
         assert host.context().config.subscription == "team"
-        assert host.process.host_tick.external_usage_sample is not None
+        assert host.process.tick_in_force.current().external_usage_sample is not None
+
+
+def test_failed_subscription_pass_rebuild_keeps_old_state_and_retries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, providers: _Providers
+) -> None:
+    for host in _host(tmp_path, monkeypatch, providers, top=_SUBSCRIPTION):
+        old_tick = host.process.tick_in_force.current()
+        old_subscriptions = host.process.tick_in_force.subscriptions()
+        _retire(host.records(RecordKind.SUBSCRIPTION), "team")
+
+        def fail(*args: object, **kwargs: object) -> None:
+            raise RuntimeError("cannot rebuild")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(composition, "_sample_pass", fail)
+            host.tick()
+        assert host.process.tick_in_force.current() is old_tick
+        assert host.process.tick_in_force.subscriptions() == old_subscriptions
+
+        host.tick()
+        assert host.process.tick_in_force.subscriptions() == ()
+        assert host.process.tick_in_force.current().external_usage_sample is None

@@ -16,7 +16,7 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.hub.client import HostFactPushAck, HostRefused, HubClientError, IHostFactPusher, PushedFact
 from blizzard.runner.hub.host_registration import ICurrentHostRegistration
-from blizzard.runner.usage.repository import IWriteHostLaneMarkRepository
+from blizzard.runner.usage.repository import IWriteHostLaneMarkRepository, IWriteHostLaneRepository
 
 _log = get_logger("blizzard.runner.host")
 
@@ -72,3 +72,10 @@ class HostLaneDrain:
             _log.error("hub rejected a buffered host fact", seq=seq)
         mark = host_lane_mark(ack)
         self.lane.record_host_high_water(seq=mark, at=self.clock.now())
+
+
+def host_lane_drain(
+    client: IHostFactPusher, lane: IWriteHostLaneRepository, registration: ICurrentHostRegistration, clock: IClock
+) -> HostLaneDrain:
+    """Construct the shared host lane drain over its wider host-store port."""
+    return HostLaneDrain(client, lane, registration, clock)
