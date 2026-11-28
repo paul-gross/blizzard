@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any, cast
 
@@ -11,7 +11,8 @@ from blizzard.foundation.registry.interface import Lifetime
 from blizzard.foundation.registry.internal.recording import RecordingRegistry
 from blizzard.foundation.registry.scopes import OwnedChild
 from blizzard.runner.composition import HostProcess, IRunnerDrivers, LiveRunner, RunnerProcess
-from blizzard.runner.host_config import BuiltRunner
+from blizzard.runner.config import RunnerConfig
+from blizzard.runner.host_config import BuiltRunner, HaltedRunner
 from blizzard.runner.host_root import HostRoot, register_host
 
 
@@ -67,8 +68,8 @@ class Borrowed:
     """The host the root borrows: only what the runner set reads and writes, and a close it must never call."""
 
     journal: Journal
-    runners: tuple[Any, ...] = ()
-    halted: tuple[Any, ...] = ()
+    runners: tuple[RunnerProcess, ...] = ()
+    halted: tuple[HaltedRunner, ...] = ()
 
     def close(self) -> None:
         self.journal.note("close:borrowed-host")
@@ -130,10 +131,14 @@ class Rig:
 
 
 def built_runner(runner_id: str) -> BuiltRunner:
-    return BuiltRunner(runner_id, cast(Any, object()))
+    return BuiltRunner(runner_id, cast("RunnerConfig", object()))
 
 
-def host_rig(*, eager: tuple[type[Any], ...] = (RunnerResource,), extra: Any = None) -> Rig:
+def host_rig(
+    *,
+    eager: tuple[type[Any], ...] = (RunnerResource,),
+    extra: Callable[[RecordingRegistry], None] | None = None,
+) -> Rig:
     """The host root over a journalled graph; ``extra`` adds registrations before the build."""
     journal = Journal()
     registry = RecordingRegistry()

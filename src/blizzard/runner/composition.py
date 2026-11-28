@@ -1297,10 +1297,12 @@ class HostRunnerSet[W: IWiredRunner, R: IRunnerResume]:
             raise
         return child
 
-    def close_graph(self, runner: RunnerProcess, child: OwnedChild | None) -> None:
-        """Close one runner's graph, in reverse construction order: its process graph, then its child."""
+    def close_graph(self, runner: RunnerProcess | None, child: OwnedChild | None) -> None:
+        """Close one runner's graph, in reverse construction order: its process graph, then its child. ``runner`` is
+        ``None`` for a child opened for a runner that was never composed."""
         try:
-            runner.close_runner()
+            if runner is not None:
+                runner.close_runner()
         finally:
             if child is not None:
                 child.close()
@@ -1319,9 +1321,12 @@ class HostRunnerSet[W: IWiredRunner, R: IRunnerResume]:
             return frozenset(self._live)
 
     def place(self, live: LiveRunner[W, R]) -> None:
-        """Hold ``live`` live, its runner among the host's runners."""
+        """Hold ``live`` live, its runner among the host's runners. Refused after :meth:`close_all`, which would
+        never close it: its caller still owns it."""
         runner = live.runner
         with self._lock:
+            if self._closed:
+                raise RuntimeError(f"runner {runner.runner_id}: the host's runners are closed")
             self._live[runner.runner_id] = live
             if all(held.runner_id != runner.runner_id for held in self.host.runners):
                 self.host.runners = (*self.host.runners, runner)
@@ -1522,16 +1527,16 @@ def start_runner[W: IWiredRunner, R: IRunnerResume](
                 host_config, host, built, publish_bundle=publish_bundle, environ=environ, trace_exporter=trace_exporter
             )
         except BaseException as failure:
-            if child is not None:
-                _close_after(child.close, failure)
+            _close_after(functools.partial(runners.close_graph, None, child), failure)
             raise
     try:
         live = LiveRunner[W, R](runner, start.resume(runner), child=child)
         run_startup_steps(live, start)
+        with _start_step(built.id, "serve"):
+            runners.place(live)
     except BaseException as failure:
         _close_after(functools.partial(runners.close_graph, runner, child), failure)
         raise
-    runners.place(live)
     return StartingRunner(live, runners, start)
 
 

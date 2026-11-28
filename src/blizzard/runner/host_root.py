@@ -47,8 +47,11 @@ class HostRoot[W: IWiredRunner, R: IRunnerResume]:
         try:
             runners = cast("HostRunnerSet[W, R]", owner.resolver.get(HostRunnerSet))
             runners.bind(owner, eager=eager)
-        except BaseException:
-            owner.close()
+        except BaseException as failure:
+            try:
+                owner.close()
+            except Exception as cleanup:  # the opening failure is the one reported
+                failure.add_note(f"closing the process scope after it also failed: {cleanup!r}")
             raise
         return cls(owner, runners)
 

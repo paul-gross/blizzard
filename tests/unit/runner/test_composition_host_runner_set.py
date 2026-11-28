@@ -1,19 +1,33 @@
-"""``HostRunnerSet``'s runner children: opened by it alone, and closed before each runner's wiring (unit tier)."""
+"""``HostRunnerSet``'s runner children: each closed once, before its runner's wiring (unit tier)."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import NoReturn, cast
 
 import pytest
 
 import blizzard.runner.composition as composition
 from blizzard.foundation.registry.interface import Lifetime, ScopeClosed
-from blizzard.runner.composition import HostRunnerSet, RunnerStartFailed, drain_runner, start_runner
+from blizzard.foundation.registry.internal.recording import RecordingRegistry
+from blizzard.runner.composition import (
+    HostProcess,
+    HostRunnerSet,
+    IRunnerStart,
+    LiveRunner,
+    RunnerProcess,
+    RunnerStartFailed,
+    drain_runner,
+    start_runner,
+)
+from blizzard.runner.host_config import BuiltRunner, HostConfig
 from tests.support.host_runner_graph import (
     Borrowed,
     FakeResume,
     FakeRunner,
+    FakeWiring,
     Journal,
     Rig,
     RunnerResource,
@@ -23,34 +37,49 @@ from tests.support.host_runner_graph import (
 )
 
 
+@dataclass
+class _Fuse:
+    """Whether :class:`_Bomb` fails to initialize."""
+
+    armed: bool = True
+
+
 class _Bomb:
-    """What fails to initialize while ``armed``."""
-
-    armed = True
+    """What fails to initialize while its fuse is armed."""
 
 
-def _open_bomb() -> _Bomb:
-    if _Bomb.armed:
-        raise RuntimeError("initialization failed")
-    return _Bomb()
+def _with_bomb(fuse: _Fuse) -> Callable[[RecordingRegistry], None]:
+    def open_bomb() -> _Bomb:
+        if fuse.armed:
+            raise RuntimeError("initialization failed")
+        return _Bomb()
 
+    def register(registry: RecordingRegistry) -> None:
+        registry.factory(open_bomb, lifetime=Lifetime.RUNNER)
 
-def _with_bomb(registry: Any) -> None:
-    registry.factory(_open_bomb, lifetime=Lifetime.RUNNER)
+    return register
 
 
 class _Start:
     """The start seams a closure path reaches."""
 
-    def __init__(self, journal: Journal, resume: Any = None) -> None:
+    def __init__(self, journal: Journal) -> None:
         self.journal = journal
-        self._resume = resume or FakeResume()
 
-    def resume(self, runner: Any) -> Any:
-        return self._resume
+    def resume(self, runner: RunnerProcess) -> FakeResume:
+        return FakeResume()
 
     def withdraw(self, runner_id: str) -> None:
         self.journal.note(f"withdraw:{runner_id}")
+
+
+class _RefusingResume(_Start):
+    def resume(self, runner: RunnerProcess) -> NoReturn:
+        raise ValueError("no resume")
+
+
+def _seams(start: _Start) -> IRunnerStart[FakeWiring, FakeResume]:
+    return cast("IRunnerStart[FakeWiring, FakeResume]", start)
 
 
 class _Drivers:
@@ -65,18 +94,37 @@ class _Drivers:
         self.journal.note(f"drivers:{self.runner_id}")
 
 
-def _compose_fake(journal: Journal, monkeypatch: pytest.MonkeyPatch) -> None:
-    def compose(host_config: Any, host: Any, built: Any, **kwargs: Any) -> Any:
-        return SimpleNamespace(
-            runner_id=built.id,
-            close_runner=FakeRunner(built.id, journal).close_runner,
-        )
+def _compose_with(
+    monkeypatch: pytest.MonkeyPatch, runner_for: Callable[[str], object], then: Callable[[], None] = lambda: None
+) -> None:
+    """Compose each built runner as ``runner_for`` its id, running ``then`` first."""
+
+    def compose(host_config: HostConfig, host: HostProcess, built: BuiltRunner, **kwargs: object) -> object:
+        then()
+        return runner_for(built.id)
 
     monkeypatch.setattr(composition, "compose_runner", compose)
 
 
-def _start(rig: Rig, start: Any) -> None:
-    start_runner(cast(Any, object()), cast(Any, rig.host), built_runner("rn_1"), start, rig.root.runners)
+def _compose_fake(journal: Journal, monkeypatch: pytest.MonkeyPatch) -> None:
+    _compose_with(monkeypatch, lambda runner_id: FakeRunner(runner_id, journal))
+
+
+def _no_startup_steps(monkeypatch: pytest.MonkeyPatch) -> None:
+    def no_steps(live: LiveRunner[FakeWiring, FakeResume], start: IRunnerStart[FakeWiring, FakeResume]) -> None:
+        return None
+
+    monkeypatch.setattr(composition, "run_startup_steps", no_steps)
+
+
+def _start(rig: Rig, start: _Start) -> None:
+    start_runner(
+        cast("HostConfig", object()),
+        cast("HostProcess", rig.host),
+        built_runner("rn_1"),
+        _seams(start),
+        rig.root.runners,
+    )
 
 
 def test_a_drain_closes_the_child_then_the_wiring_once() -> None:
@@ -85,7 +133,7 @@ def test_a_drain_closes_the_child_then_the_wiring_once() -> None:
     dropped: list[str] = []
     host = SimpleNamespace(host_stores=SimpleNamespace(hub_tokens=SimpleNamespace(drop=dropped.append)))
 
-    assert drain_runner(cast(Any, host), rig.root.runners, cast(Any, _Start(rig.journal)), "rn_1")
+    assert drain_runner(cast("HostProcess", host), rig.root.runners, _seams(_Start(rig.journal)), "rn_1")
     rig.root.close()
 
     assert rig.journal.of("rn_1") == ["withdraw:rn_1", "drivers:rn_1", "graph:rn_1", "child:rn_1", "wiring:rn_1"]
@@ -95,7 +143,7 @@ def test_an_abandon_closes_the_child_then_the_wiring_once() -> None:
     rig = host_rig()
     rig.place("rn_1", _Drivers(rig.journal, "rn_1"))
 
-    rig.root.runners.abandon("rn_1", cast(Any, _Start(rig.journal)))
+    rig.root.runners.abandon("rn_1", _seams(_Start(rig.journal)))
     rig.root.close()
 
     assert rig.journal.of("rn_1") == ["withdraw:rn_1", "drivers:rn_1", "graph:rn_1", "child:rn_1", "wiring:rn_1"]
@@ -112,21 +160,21 @@ def test_an_open_after_close_all_is_refused() -> None:
 
 
 def test_a_set_bound_to_no_parent_scope_opens_no_child() -> None:
-    runners = HostRunnerSet[Any, Any](cast(Any, Borrowed(Journal())))
+    runners = HostRunnerSet[FakeWiring, FakeResume](cast("HostProcess", Borrowed(Journal())))
 
     assert runners.open_runner(built_runner("rn_1")) is None
 
 
 def test_a_child_whose_eager_types_fail_is_closed_and_the_next_attempt_opens_a_new_one() -> None:
-    rig = host_rig(eager=(RunnerResource, _Bomb), extra=_with_bomb)
-    _Bomb.armed = True
+    fuse = _Fuse()
+    rig = host_rig(eager=(RunnerResource, _Bomb), extra=_with_bomb(fuse))
 
     with pytest.raises(RuntimeError, match="initialization failed"):
         rig.root.runners.open_runner(built_runner("rn_1"))
     assert rig.journal.of("rn_1") == ["child:rn_1"]
     assert rig.root.runners.live() == ()
 
-    _Bomb.armed = False
+    fuse.armed = False
     child = rig.open("rn_1")
 
     child.resolver.get(RunnerService)
@@ -135,9 +183,8 @@ def test_a_child_whose_eager_types_fail_is_closed_and_the_next_attempt_opens_a_n
 
 
 def test_a_start_whose_eager_types_fail_fails_compose_and_places_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
-    rig = host_rig(eager=(RunnerResource, _Bomb), extra=_with_bomb)
+    rig = host_rig(eager=(RunnerResource, _Bomb), extra=_with_bomb(_Fuse()))
     _compose_fake(rig.journal, monkeypatch)
-    _Bomb.armed = True
 
     with pytest.raises(RunnerStartFailed) as failed:
         _start(rig, _Start(rig.journal))
@@ -151,10 +198,10 @@ def test_a_start_whose_eager_types_fail_fails_compose_and_places_nothing(monkeyp
 def test_a_failed_composition_closes_the_child_alone(monkeypatch: pytest.MonkeyPatch) -> None:
     rig = host_rig()
 
-    def compose(*args: Any, **kwargs: Any) -> Any:
+    def refuse() -> None:
         raise RuntimeError("bad entry")
 
-    monkeypatch.setattr(composition, "compose_runner", compose)
+    _compose_with(monkeypatch, lambda runner_id: None, then=refuse)
 
     with pytest.raises(RunnerStartFailed) as failed:
         _start(rig, _Start(rig.journal))
@@ -168,37 +215,37 @@ def test_a_start_failing_before_placement_closes_the_graph_then_the_child(monkey
     rig = host_rig()
     _compose_fake(rig.journal, monkeypatch)
 
-    def resume(runner: Any) -> Any:
-        raise ValueError("no resume")
-
-    start = _Start(rig.journal)
-    monkeypatch.setattr(start, "resume", resume)
-
     with pytest.raises(ValueError, match="no resume"):
-        _start(rig, start)
+        _start(rig, _RefusingResume(rig.journal))
     rig.root.close()
 
     assert rig.journal.of("rn_1") == ["graph:rn_1", "child:rn_1"]
 
 
+def test_a_start_that_loses_to_close_all_is_refused_at_placement_and_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    rig = host_rig()
+    _compose_with(monkeypatch, lambda runner_id: FakeRunner(runner_id, rig.journal), then=rig.root.runners.close_all)
+    _no_startup_steps(monkeypatch)
+
+    with pytest.raises(RunnerStartFailed) as failed:
+        _start(rig, _Start(rig.journal))
+
+    assert failed.value.step == "serve"
+    assert rig.root.runners.live() == ()
+    assert rig.journal.of("rn_1") == ["graph:rn_1", "child:rn_1"]
+    rig.root.close()
+
+
 def test_a_cleanup_failure_does_not_mask_the_start_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     rig = host_rig()
 
-    def compose(host_config: Any, host: Any, built: Any, **kwargs: Any) -> Any:
-        def close_runner() -> None:
-            raise OSError("close refused")
+    def close_runner() -> None:
+        raise OSError("close refused")
 
-        return SimpleNamespace(runner_id=built.id, close_runner=close_runner)
-
-    def resume(runner: Any) -> Any:
-        raise ValueError("no resume")
-
-    monkeypatch.setattr(composition, "compose_runner", compose)
-    start = _Start(rig.journal)
-    monkeypatch.setattr(start, "resume", resume)
+    _compose_with(monkeypatch, lambda runner_id: SimpleNamespace(runner_id=runner_id, close_runner=close_runner))
 
     with pytest.raises(ValueError, match="no resume") as failed:
-        _start(rig, start)
+        _start(rig, _RefusingResume(rig.journal))
 
     assert "close refused" in "".join(failed.value.__notes__)
     assert rig.journal.of("rn_1") == ["child:rn_1"]
@@ -208,11 +255,7 @@ def test_a_cleanup_failure_does_not_mask_the_start_failure(monkeypatch: pytest.M
 def test_a_started_runner_holds_its_child_and_a_closed_one_refuses_lookups(monkeypatch: pytest.MonkeyPatch) -> None:
     rig = host_rig()
     _compose_fake(rig.journal, monkeypatch)
-
-    def no_steps(live: Any, start: Any) -> None:
-        return None
-
-    monkeypatch.setattr(composition, "run_startup_steps", no_steps)
+    _no_startup_steps(monkeypatch)
 
     _start(rig, _Start(rig.journal))
     live = rig.root.runners.get("rn_1")

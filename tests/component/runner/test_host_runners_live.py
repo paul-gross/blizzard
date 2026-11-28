@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+import structlog
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
@@ -443,3 +444,38 @@ def test_host_stop_closes_each_runners_graph_before_its_wiring(world: _World, mo
 
     for runner_id in (TEST_RUNNER_ID, _ADDED):
         assert [kind for kind, closed_id in before_host_close if closed_id == runner_id] == ["graph", "wiring"]
+
+
+def test_a_failing_abandon_keeps_the_start_failure_and_its_sibling_still_starts(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def drivers(runner: RunnerProcess, stepper: RunnerStepper) -> composition.IRunnerDrivers:
+        if runner.runner_id == _ADDED:
+            raise RuntimeError("no drivers")
+        return composition.NoDrivers()
+
+    world.hosted.start.serving(drivers=drivers, scratch=lambda _runner: None, said=lambda _note: None)
+    wired_type = cast(Any, runner_app)._WiredRunner
+    close_wiring = wired_type.close
+
+    def refusing(wired: Any) -> None:
+        close_wiring(wired)
+        if wired.served.runner_id == _ADDED:
+            raise OSError("wiring would not close")
+
+    monkeypatch.setattr(wired_type, "close", refusing)
+    world.add()
+    world.add("rn_night2", "night-2")
+
+    with structlog.testing.capture_logs() as logs:
+        world.host_pass()
+
+    reconcile = world.hosted.reconcile
+    assert reconcile is not None
+    failure = reconcile.failures.of(_ADDED)
+    assert failure is not None and (failure.step, failure.error) == ("serve", "no drivers")
+    assert world.served() == {TEST_RUNNER_ID, "rn_night2"}
+    assert world.resolves(_ADDED) == 503
+    assert [
+        entry["runner_id"] for entry in logs if entry["event"] == "closing a runner that failed to start also failed"
+    ] == [_ADDED]
