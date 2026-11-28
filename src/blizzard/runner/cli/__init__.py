@@ -48,7 +48,7 @@ _COMMANDS = {
     "takeover": f"{_CLI}.control:takeover",
     "requeue": f"{_CLI}.control:requeue",
     "selftest": f"{_CLI}.control:selftest",
-    "opencode": f"{_CLI}.opencode:opencode_group",
+    "opencode": f"{_CLI}.opencode_group:opencode_group",
 }
 
 

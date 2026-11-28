@@ -12,7 +12,7 @@ from tests.support.repo_files import repo_root
 
 _OPENCODE_COMMAND = "src/blizzard/runner/cli/opencode.py"
 _NEW_COMMAND = "src/blizzard/runner/cli/a_new_command.py"
-_CARRIER = "src/blizzard/runner/cli/children.py"
+_WIRING = "src/blizzard/runner/harness/opencode_v2/transport_wiring.py"
 
 _USES = {
     "direct import": (
@@ -71,8 +71,8 @@ def test_a_command_module_cannot_reach_the_urllib_service_transport(path: str, u
 
 
 @pytest.mark.parametrize("use", sorted(_USES))
-def test_the_carrier_may_build_the_urllib_service_transport(use: str) -> None:
-    result = _lint(_CARRIER, _USES[use])
+def test_the_adapter_wiring_may_build_the_urllib_service_transport(use: str) -> None:
+    result = _lint(_WIRING, _USES[use])
     assert "TID251" not in result.stdout, result.stdout
 
 

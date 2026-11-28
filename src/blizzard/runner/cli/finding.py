@@ -8,7 +8,8 @@ from urllib.parse import quote
 import click
 
 from blizzard.cli.get_group import GetGroup
-from blizzard.runner.cli.worker_call import WorkerCall
+from blizzard.runner.cli.container_command import ContainerWorkerCommand
+from blizzard.runner.cli.worker_call import WorkerCall, WorkerPolicy
 
 
 @click.group("finding", cls=GetGroup)
@@ -17,21 +18,23 @@ def finding_group() -> None:
     this chunk's work items answer."""
 
 
-@finding_group.command("list")
-def finding_list() -> None:
+@finding_group.command(
+    "list", cls=ContainerWorkerCommand, collaborators={"worker": WorkerCall}, policy=WorkerPolicy("finding list")
+)
+def finding_list(worker: WorkerCall) -> None:
     """Worker: list the findings the accepted, minted garden proposals behind
     this chunk's work items answer, as JSON."""
-    worker = WorkerCall.of("finding list")
     resp = worker.get(worker.leased("findings"), failure="could not read the answered findings")
     click.echo(resp.text)
 
 
-@finding_group.command("get")
+@finding_group.command(
+    "get", cls=ContainerWorkerCommand, collaborators={"worker": WorkerCall}, policy=WorkerPolicy("finding get")
+)
 @click.argument("finding_id")
-def finding_get(finding_id: str) -> None:
+def finding_get(finding_id: str, worker: WorkerCall) -> None:
     """Worker: read one finding within the set this chunk's work items answer by FINDING_ID, as
     JSON — a key within the worker's own brief, the way ``artifact get NAME`` is a key
     within its own node-step."""
-    worker = WorkerCall.of("finding get")
     resp = worker.get(worker.leased(f"findings/{quote(finding_id, safe='')}"), failure=f"could not read {finding_id!r}")
     click.echo(resp.text)
