@@ -9,8 +9,9 @@ from fastapi.testclient import TestClient
 from httpx2 import Response
 from pydantic import BaseModel
 
-from blizzard.auth_core import Role
+from blizzard.auth_core import Permission, Role
 from blizzard.cli.config_inputs import packaged_flag_registry
+from blizzard.hub.api.auth_session import require, require_either, require_hub
 from blizzard.hub.api.problem_declarations import OPERATOR_DEPENDENCY_DECLARATIONS
 from blizzard.hub.app import create_app_for_export
 from blizzard.wire.auth import AuthenticationRequiredProblem, PermissionRequiredProblem
@@ -19,7 +20,7 @@ from blizzard.wire.problem import HubStoreUnavailableProblem
 from blizzard.wire.project import ProjectRequiredProblem
 from blizzard.wire.tenant import TenantCredentialMismatchProblem, TenantNotFoundProblem, TenantRequiredProblem
 from tests.support.hub_request_auth import bearer, cookie
-from tests.support.operator_dependency_discovery import operator_dependencies
+from tests.support.operator_dependency_discovery import gate_permissions, made_by, operator_dependencies
 from tests.support.refusal_observation import RefusalObservation, observe_refusal, refusal_mismatches
 from tests.support.scaffolding import HubHarness, build_hub, link_project, seed_project, seed_session, seed_user
 from tests.support.store_free_process import store_free
@@ -80,6 +81,17 @@ def test_each_dependency_declares_exactly_the_operations_reaching_it() -> None:
     assert _declaring(422, ProjectRequiredProblem) == reached.project
     assert _declaring(404, FlagOffProblem) == reached.flag
     assert _declaring(503, HubStoreUnavailableProblem) == reached.store
+
+
+def test_gate_discovery_reads_the_injected_hub_gate_and_its_permission() -> None:
+    permission = Permission.USER_MANAGE
+    alternative = Permission.MEMBERSHIP_GRANT_ANY
+    hub_gate = require_hub(permission)
+    assert made_by(hub_gate, require_hub)
+    assert gate_permissions(hub_gate) == {permission}
+    assert gate_permissions(require(permission)) == {permission}
+    assert gate_permissions(require_either(permission, alternative)) == {permission, alternative}
+    assert gate_permissions(lambda: None) is None
 
 
 def test_authentication_refusals_match_each_operation(tmp_path: Path) -> None:
